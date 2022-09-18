@@ -2,17 +2,18 @@ package com.georgv.audioworkstation
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import com.georgv.audioworkstation.databinding.MainFragmentBinding
 import com.georgv.audioworkstation.ui.main.MainFragment
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var binding: MainFragmentBinding
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.main_activity)
-        if (savedInstanceState == null) {
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.container, MainFragment.newInstance())
-                .commitNow()
-        }
+        binding = MainFragmentBinding.inflate(layoutInflater)
+        val view = binding.root
+        setContentView(view)
     }
+
 }
