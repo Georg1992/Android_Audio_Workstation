@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Audio Workstation</string>
     <string name="REC">Record</string>
+    <string name="PlayTrackButton">PlayTrackButton</string>
 </resources>

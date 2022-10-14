@@ -1,6 +1,25 @@
 package com.georgv.audioworkstation.data
 
-import android.graphics.drawable.Drawable
-import android.media.AudioTrack
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.PrimaryKey
 
-data class Track(val instrument:String)
+@Entity(
+    tableName = "tracks",
+    foreignKeys = [ForeignKey(
+        entity = Song::class,
+        parentColumns = ["id"],
+        childColumns = ["songID"]
+    )]
+)
+data class Track(
+    @PrimaryKey(autoGenerate = true)
+    val id:Long,
+    var isRecording:Boolean?,
+    var trackName:String,
+    val filePath:String,
+    val timeStampStart:Long,
+    var timeStampStop:Long?,
+    var duration:Long?,
+    val songID: Long
+    )
