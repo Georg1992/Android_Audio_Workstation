@@ -10,6 +10,14 @@
         android:name="com.georgv.audioworkstation.ui.main.MainFragment"
         android:label="Main_Fragment"
         tools:layout="@layout/main_fragment">
+        <action
+            android:id="@+id/action_titleFragment_to_libraryFragment"
+            app:destination="@id/libraryFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/libraryFragment"
+        android:name="com.georgv.audioworkstation.ui.main.LibraryFragment"
+        android:label="LibraryFragment">
 
     </fragment>
 

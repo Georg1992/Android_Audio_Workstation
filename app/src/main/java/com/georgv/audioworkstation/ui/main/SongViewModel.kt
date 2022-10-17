@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.main
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
@@ -12,18 +13,27 @@ import kotlinx.coroutines.*
 import java.util.*
 
 
-
 class SongViewModel(application: Application) : AndroidViewModel(application) {
-    private var db: SongDB = SongDB.get(application,viewModelScope)
+    private var db: SongDB = SongDB.get(application, viewModelScope)
 
     private val _songList: LiveData<List<Song>> = db.songDao().getAllSongs()
     val songList: LiveData<List<Song>>
         get() = _songList
 
-    private var songId: Long = 1
+    private var songId: Long = 0
 
     init {
-        createNewSong()
+        runBlocking {
+            val job = GlobalScope.async {
+                val lastsong: Song? = db.songDao().getLastSong()
+                when (lastsong != null) {
+                    true -> songId = lastsong.id
+                    false -> createNewSong()
+                }
+            }
+            job.await()
+        }
+
     }
 
     private val _trackList: LiveData<List<Track>> = db.trackDao().getTracksBySongId(songId)
@@ -34,7 +44,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     fun createNewSong() {
         val newSong = Song(0, null, true, "Song")
         runBlocking {
-            val job = viewModelScope.async (Dispatchers.IO) {
+            val job = viewModelScope.async(Dispatchers.IO) {
                 insertSongToDb(newSong)
             }
             songId = job.await()
@@ -42,7 +52,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     }
 
-    fun recordTrack(name: String,filepath:String) {
+    fun recordTrack(name: String, filepath: String) {
         val newTrack = Track(
             0,
             true,
@@ -53,16 +63,18 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             null,
             songId
         )
-        viewModelScope.launch(Dispatchers.IO){ insertTrackToDb(newTrack) }
+        viewModelScope.launch(Dispatchers.IO) { insertTrackToDb(newTrack) }
     }
 
 
-    fun stopRecordTrack(){
+    fun stopRecordTrack() {
         val timestamp: Long = TypeConverter.dateToTimestamp(Date())
-        viewModelScope.launch (Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO) {
             val job = db.trackDao().getTrackInEdit()
-            val duration = timestamp - job.timeStampStart
-            updateTrackToDb(false,timestamp,duration,job.id)
+            if (job != null) {
+                val duration = timestamp - job.timeStampStart
+                updateTrackToDb(false, timestamp, duration, job.id)
+            }
 
         }
     }
@@ -75,7 +87,12 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         return db.trackDao().insert(track)
     }
 
-    private fun updateTrackToDb(isRecording:Boolean,timeStampStop:Long?,duration:Long?,id:Long){
-        db.trackDao().trackUpdate(isRecording,timeStampStop,duration,id)
+    private fun updateTrackToDb(
+        isRecording: Boolean,
+        timeStampStop: Long?,
+        duration: Long?,
+        id: Long
+    ) {
+        db.trackDao().trackUpdate(isRecording, timeStampStop, duration, id)
     }
 }

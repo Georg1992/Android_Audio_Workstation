@@ -19,6 +19,9 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE inEditMode = :bool")
     fun getSongInEdit(bool: Boolean):LiveData<Song>
 
+    @Query("SELECT * FROM songs ORDER BY id DESC LIMIT 1")
+    fun getLastSong():Song?
+
 }
 @Dao
 interface TrackDao{
@@ -32,6 +35,6 @@ interface TrackDao{
     fun trackUpdate(isRecording: Boolean?, timeStampStop: Long?,duration:Long?, id: Long)
 
     @Query("SELECT * FROM tracks WHERE isRecording = 1")
-    fun getTrackInEdit():Track
+    fun getTrackInEdit():Track?
 
 }

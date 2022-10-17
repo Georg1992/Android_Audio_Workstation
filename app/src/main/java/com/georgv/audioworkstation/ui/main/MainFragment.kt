@@ -1,57 +1,74 @@
 package com.georgv.audioworkstation.ui.main
-
-import android.media.MediaPlayer
-import android.media.MediaRecorder
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat.getColor
+import androidx.core.view.isNotEmpty
+import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.databinding.MainFragmentBinding
 import androidx.lifecycle.Observer
+import androidx.navigation.findNavController
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.customHandlers.AudioController
+import com.georgv.audioworkstation.customHandlers.AudioController.isRecordingAudio
+import com.georgv.audioworkstation.customHandlers.AudioController.playTracks
+import com.georgv.audioworkstation.customHandlers.AudioController.startRecording
+import com.georgv.audioworkstation.customHandlers.AudioController.stopPlay
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import java.io.IOException
 
-class MainFragment : Fragment(),TrackListAdapter.OnItemClickListener,TrackListAdapter.OnPlayListener {
+
+class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: MainFragmentBinding
-    private lateinit var recorder: MediaRecorder
-    private lateinit var player:MediaPlayer
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        AudioController.fragmentActivitySender = requireActivity()
         binding = MainFragmentBinding.inflate(inflater, container, false)
-        player = MediaPlayer()
         val layoutManager = LinearLayoutManager(context)
         val mRecyclerView = binding.trackListRecyclerView
         mRecyclerView.layoutManager = layoutManager
         setDefaultView()
 
-        val adapter = TrackListAdapter(this,this)
+        val adapter = TrackListAdapter(this)
         mRecyclerView.adapter = adapter
 
-
-        binding.recordButton.setOnClickListener {
-            startRecording()
-            setRecView()
+        binding.playButton.setOnClickListener {
+            if(mRecyclerView.isNotEmpty()){
+                playTracks(mRecyclerView)
+                setBusyView()
+            }
         }
 
-        binding.stopRecordButton.setOnClickListener{
-            stopRecording()
+        binding.recordButton.setOnClickListener {
+            val fileName = "track${viewModel.trackList.value?.count()?.plus(1)}"
+            val dir = "${context?.filesDir?.absolutePath}/$fileName.wav"
+            isRecordingAudio = true
+            viewModel.recordTrack(fileName, dir)
+            startRecording(dir)
+            setBusyView()
+            playTracks(mRecyclerView)
+        }
+
+        binding.stopButton.setOnClickListener {
+            isRecordingAudio = false
+            viewModel.stopRecordTrack()
+            stopPlay()
             setDefaultView()
+            AudioController.recordingThread = null
+        }
+
+        binding.saveSongButton.setOnClickListener { view: View ->
+            view.findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
         }
 
 
@@ -69,49 +86,19 @@ class MainFragment : Fragment(),TrackListAdapter.OnItemClickListener,TrackListAd
     }
 
 
-    private fun startRecording(){
-        recorder = MediaRecorder()
-        val dir = "${context?.externalCacheDir?.absolutePath}/"
-        val fileName = "track ${viewModel.trackList.value?.count()?.plus(1)}"
-        recorder.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioEncodingBitRate(128000)
-            setAudioSamplingRate(48000)
-            setOutputFile("$dir$fileName.mp3")
-
-            try {
-                prepare()
-            }catch (e: IOException){}
-            start()
-        }
-        viewModel.recordTrack(fileName,dir)
-    }
-
-    private fun stopRecording(){
-        recorder.stop()
-        recorder.release()
-        viewModel.stopRecordTrack()
-    }
-
-    private fun setRecView() {
+    private fun setBusyView() {
         binding.recordButton.visibility = View.GONE
-        binding.stopRecordButton.visibility = View.VISIBLE
+        binding.stopButton.visibility = View.VISIBLE
+        binding.playButton.visibility = View.GONE
     }
 
-    private fun setDefaultView(){
+    private fun setDefaultView() {
         binding.recordButton.visibility = View.VISIBLE
-        binding.stopRecordButton.visibility = View.GONE
+        binding.stopButton.visibility = View.GONE
+        binding.playButton.visibility = View.VISIBLE
     }
 
     override fun onItemClick(position: Int, trackID: Long) {
         TODO("Not yet implemented")
     }
-
-    override fun onPlay() {
-
-    }
-
-
 }
