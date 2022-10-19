@@ -1,50 +1,39 @@
 package com.georgv.audioworkstation
-
-import android.content.Context
 import android.graphics.Color
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.ImageButton
 import android.widget.TextView
-import androidx.cardview.widget.CardView
-import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.getColor
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.data.Song
-import com.georgv.audioworkstation.data.SongDB
+import com.georgv.audioworkstation.customHandlers.AudioController
 import com.georgv.audioworkstation.data.Track
-import com.georgv.audioworkstation.database.TrackDao
 import com.georgv.audioworkstation.ui.main.MainFragment
 
 
-class TrackListAdapter(
-    private val itemClickListener: OnItemClickListener
-) : ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()) {
+class TrackListAdapter() : ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()) {
+
+
 
     init {
         setHasStableIds(true)
     }
 
+
     inner class TrackViewHolder(trackView: View) : RecyclerView.ViewHolder(trackView),
-        View.OnClickListener, OnPlayListener {
+        View.OnClickListener {
         init {
             itemView.setOnClickListener(this)
         }
+
         var selected: Boolean = false
         val instrumentName: TextView = trackView.findViewById(R.id.instrumentText)
-        var directory: String = ""
         override fun onClick(p0: View?) {
-            selected = !selected
-            onBindViewHolder(this, adapterPosition)
-        }
-
-        override fun getTrackData(): String {
-            return getItem(adapterPosition).filePath
+            if(AudioController.controllerState == AudioController.ControllerState.STOP){
+                selected = !selected
+                onBindViewHolder(this, adapterPosition)
+            }
         }
     }
 
@@ -55,23 +44,25 @@ class TrackListAdapter(
     }
 
     override fun onBindViewHolder(holder: TrackViewHolder, position: Int) {
-
         val item = getItem(position)
-        when (item.isRecording) {
+        holder.instrumentName.text = item.trackName
+
+        if (item.isRecording == true) {
+            holder.itemView.setBackgroundResource(R.color.redTransparent)
+            holder.selected = false
+            return
+        }
+        when (holder.selected) {
             true -> {
-                holder.itemView.setBackgroundColor(Color.RED)
-                holder.selected = false
+                holder.itemView.setBackgroundResource(R.color.green)
+                AudioController.readyToPlayTrackList.add(item)
             }
-            else -> {
-                when (holder.selected) {
-                    true -> holder.itemView.setBackgroundColor(Color.GREEN)
-                    false -> holder.itemView.setBackgroundColor(Color.GRAY)
-                }
+            false -> {
+                holder.itemView.setBackgroundResource(R.color.blue)
+                AudioController.readyToPlayTrackList.remove(item)
             }
         }
-        holder.instrumentName.text = item.trackName
-        holder.directory = item.filePath
-
+        MainFragment.setPlayButton()
     }
 
 
@@ -93,11 +84,13 @@ class TrackListAdapter(
         }
     }
 
+
 }
 
 interface OnPlayListener {
     fun getTrackData(): String
 }
+
 
 
 

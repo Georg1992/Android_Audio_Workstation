@@ -9,112 +9,148 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.app.ActivityCompat
-import androidx.core.view.iterator
 import androidx.fragment.app.FragmentActivity
-import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.TrackListAdapter
+import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.ui.main.MainFragment
 import java.io.*
 import kotlin.concurrent.thread
 
 object AudioController {
-    lateinit var fragmentActivitySender:FragmentActivity
+    enum class ControllerState {
+        REC,
+        PLAY,
+        PLAYREC,
+        STOP,
+        PAUSE
+    }
+
+    lateinit var fragmentActivitySender: FragmentActivity
     private lateinit var recorder: AudioRecord
     private lateinit var player: MediaPlayer
-    private var playerList: MutableList<MediaPlayer> = mutableListOf()
-    val SAMPLE_RATE = 44100
-    val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
+    private val SAMPLE_RATE = 44100
+    private val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
+
     //for raw audio can use
-    val RAW_AUDIO_SOURCE = MediaRecorder.AudioSource.UNPROCESSED
-    val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_STEREO
-    val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
-    val BUFFER_SIZE_RECORDING = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-    var recordingThread: Thread? = null
-    var isRecordingAudio:Boolean = false
+    private val RAW_AUDIO_SOURCE = MediaRecorder.AudioSource.UNPROCESSED
+    private val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_STEREO
+    private val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+    private val BUFFER_SIZE_RECORDING =
+        AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+    private var recordingThread: Thread? = null
+
+    var controllerState: ControllerState = ControllerState.STOP//NOT GOOD
+    lateinit var lastRecorded:Track //NOT GOOD
+
+    val readyToPlayTrackList:MutableList<Track> = mutableListOf()
+    val playerList: MutableList<MediaPlayer> = mutableListOf()
 
 
-    fun startRecording(dir: String) {
-        isRecordingAudio = true
-        //Permissions().askForPermissions("RECORD_AUDIO", fragmentActivitySender)
+    private fun startRecording() {
         if (ActivityCompat.checkSelfPermission(
                 fragmentActivitySender,
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
             return
         }
-        recorder = AudioRecord(AUDIO_SOURCE,SAMPLE_RATE,CHANNEL_CONFIG,AUDIO_FORMAT,BUFFER_SIZE_RECORDING)
-        recordingThread = thread(true) {
-            writeAudioDataToFile(dir)
-        }
-    }
-
-
-    fun stopPlay() {
-        if(this::recorder.isInitialized){
-            isRecordingAudio = false
-            recorder.release()
-        }
-        for(player in playerList){
-            if(this::player.isInitialized){
-                player.stop()
-                player.release()
-            }
-        }
-        playerList.clear()
-    }
-
-    fun playTracks(mRecyclerView: RecyclerView) {
-        for (view in mRecyclerView) {
-            val holder =
-                mRecyclerView.findContainingViewHolder(view) as TrackListAdapter.TrackViewHolder
-            if (holder.selected) {
-                player = MediaPlayer()
-                player.apply {
-                    setDataSource(holder.directory)
-                }
-                playerList.add(player)
-                try {
-                    player.prepare()
-                    player.start()
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                }
+        recorder = AudioRecord(
+            AUDIO_SOURCE, SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT,
+            BUFFER_SIZE_RECORDING
+        )
+        if (this::recorder.isInitialized) {
+            recorder.startRecording()
+            recordingThread = thread(true) {
+                writeAudioDataToFile(lastRecorded)
             }
         }
     }
 
-    private fun writeAudioDataToFile(dir:String) {
-        val data = ByteArray(BUFFER_SIZE_RECORDING / 2)
+    private fun writeAudioDataToFile(track: Track) {
+        val audioBuffer = ByteArray(BUFFER_SIZE_RECORDING)
         val outputStream: FileOutputStream?
         try {
-            outputStream = FileOutputStream(dir)
+            outputStream = FileOutputStream(track.pcmDir)
         } catch (e: FileNotFoundException) {
             return
         }
-        while (isRecordingAudio) {
-            val read = recorder.read(data, 0, data.size)
+        while (controllerState == ControllerState.REC || controllerState == ControllerState.PLAYREC) {
+            recorder.read(audioBuffer, 0, BUFFER_SIZE_RECORDING)
             try {
-                outputStream.write(data, 0, read)
+                outputStream.write(audioBuffer)
                 // clean up file writing operations
             } catch (e: IOException) {
                 e.printStackTrace()
             }
         }
-        val file = File(dir)
-        TypeConverter.PCMToWAV(file,file, 2, SAMPLE_RATE, SAMPLE_RATE,16)
         try {
             outputStream.flush()
             outputStream.close()
         } catch (e: IOException) {
             Log.e(ContentValues.TAG, "exception while closing output stream $e")
             e.printStackTrace()
+        }
+        val inputFile = File(track.pcmDir)
+        val outputFile = File(track.wavDir)
+        TypeConverter.PCMToWAV(
+            inputFile, outputFile, 2, SAMPLE_RATE, SAMPLE_RATE, 16
+        )
+    }
+
+
+    private fun stop() {
+        if (this::recorder.isInitialized) {
+            recorder.release()
+        }
+        for (player in playerList) {
+            if (this::player.isInitialized) {
+                player.stop()
+                player.release()
+            }
+        }
+        playerList.clear()
+        recordingThread = null
+    }
+
+    private fun playTrack(track:Track) {
+        player = MediaPlayer()
+        player.apply {
+            setDataSource(track.wavDir)
+        }
+        playerList.add(player)
+        try {
+            player.prepare()
+            player.start()
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+
+
+    fun changeState(audioControllerState: ControllerState) {
+        controllerState = audioControllerState
+        when (audioControllerState) {
+            ControllerState.PLAY -> {
+                for(track in readyToPlayTrackList){
+                    playTrack(track)
+                }
+                MainFragment.setPlayView()
+            }
+            ControllerState.PLAYREC -> {
+                startRecording()
+                for(track in readyToPlayTrackList){
+                    playTrack(track)
+                }
+                MainFragment.setRecView()
+            }
+            ControllerState.REC -> {
+                startRecording()
+                MainFragment.setRecView()
+            }
+            ControllerState.STOP -> {
+                stop()
+                MainFragment.setStopView()
+            }
+            ControllerState.PAUSE -> TODO()
         }
     }
 

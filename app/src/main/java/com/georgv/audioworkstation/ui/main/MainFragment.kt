@@ -1,11 +1,14 @@
 package com.georgv.audioworkstation.ui.main
+
 import android.os.Bundle
+import android.util.Log
+import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.isNotEmpty
-import androidx.fragment.app.FragmentActivity
+import android.widget.ImageButton
+import androidx.core.view.iterator
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.georgv.audioworkstation.TrackListAdapter
@@ -14,12 +17,14 @@ import androidx.lifecycle.Observer
 import androidx.navigation.findNavController
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.customHandlers.AudioController
-import com.georgv.audioworkstation.customHandlers.AudioController.isRecordingAudio
-import com.georgv.audioworkstation.customHandlers.AudioController.playTracks
-import com.georgv.audioworkstation.customHandlers.AudioController.startRecording
-import com.georgv.audioworkstation.customHandlers.AudioController.stopPlay
+import com.georgv.audioworkstation.customHandlers.AudioController.changeState
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
+import com.google.android.material.snackbar.Snackbar
+import android.widget.FrameLayout
+
+
+
 
 
 class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener {
@@ -34,37 +39,46 @@ class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener {
     ): View {
         AudioController.fragmentActivitySender = requireActivity()
         binding = MainFragmentBinding.inflate(inflater, container, false)
+        ButtonController.binding = this.binding
         val layoutManager = LinearLayoutManager(context)
         val mRecyclerView = binding.trackListRecyclerView
         mRecyclerView.layoutManager = layoutManager
-        setDefaultView()
-
-        val adapter = TrackListAdapter(this)
+        val adapter = TrackListAdapter()
         mRecyclerView.adapter = adapter
+        setEmptySongView()
 
         binding.playButton.setOnClickListener {
-            if(mRecyclerView.isNotEmpty()){
-                playTracks(mRecyclerView)
-                setBusyView()
-            }
+            changeState(AudioController.ControllerState.PLAY)
         }
 
         binding.recordButton.setOnClickListener {
-            val fileName = "track${viewModel.trackList.value?.count()?.plus(1)}"
-            val dir = "${context?.filesDir?.absolutePath}/$fileName.wav"
-            isRecordingAudio = true
-            viewModel.recordTrack(fileName, dir)
-            startRecording(dir)
-            setBusyView()
-            playTracks(mRecyclerView)
+            if(viewModel.trackList.value?.size!! < 8){
+                val fileName = "track${viewModel.trackList.value?.count()?.plus(1)}"
+                val pcmdir = "${context?.filesDir?.absolutePath}/$fileName.pcm"
+                val wavdir = "${context?.filesDir?.absolutePath}/$fileName.wav"
+                viewModel.recordTrack(fileName, pcmdir,wavdir)
+                if(AudioController.readyToPlayTrackList.isEmpty()){
+                    changeState(AudioController.ControllerState.REC)
+                }else{
+                    changeState(AudioController.ControllerState.PLAYREC)
+                }
+            }else{
+                val snack = Snackbar.make(
+                     mRecyclerView,
+                    "TOO MANY TRACKS",
+                    Snackbar.LENGTH_SHORT
+                )
+                val view = snack.view
+                val params = view.layoutParams as FrameLayout.LayoutParams
+                params.gravity = Gravity.CENTER
+                view.setBackgroundResource(R.color.redTransparent)
+                snack.show()
+            }
         }
 
         binding.stopButton.setOnClickListener {
-            isRecordingAudio = false
+            changeState(AudioController.ControllerState.STOP)
             viewModel.stopRecordTrack()
-            stopPlay()
-            setDefaultView()
-            AudioController.recordingThread = null
         }
 
         binding.saveSongButton.setOnClickListener { view: View ->
@@ -86,19 +100,54 @@ class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener {
     }
 
 
-    private fun setBusyView() {
-        binding.recordButton.visibility = View.GONE
-        binding.stopButton.visibility = View.VISIBLE
-        binding.playButton.visibility = View.GONE
+    companion object ButtonController {
+        private lateinit var binding: MainFragmentBinding
+
+        fun setEmptySongView(){
+            setAllButtonsInvisible()
+            binding.recordButton.visibility = View.VISIBLE
+        }
+
+        fun setStopView(){
+            setAllButtonsInvisible()
+            setPlayButton()
+            binding.recordButton.visibility = View.VISIBLE
+            binding.saveSongButton.visibility = View.VISIBLE
+        }
+
+        fun setPlayView(){
+            setAllButtonsInvisible()
+            binding.stopButton.visibility = View.VISIBLE
+            binding.pauseButton.visibility = View.VISIBLE
+        }
+
+        fun setRecView(){
+            setAllButtonsInvisible()
+            binding.stopButton.visibility = View.VISIBLE
+        }
+
+        fun setPlayButton(){
+            when(AudioController.readyToPlayTrackList.isNotEmpty()){
+                true -> binding.playButton.visibility = View.VISIBLE
+                false -> binding.playButton.visibility = View.GONE
+            }
+        }
+
+
+        private fun setAllButtonsInvisible() {
+            for (button: View in binding.buttonView) {
+                if (button is ImageButton) {
+                    button.visibility = View.GONE
+                }
+            }
+        }
     }
 
-    private fun setDefaultView() {
-        binding.recordButton.visibility = View.VISIBLE
-        binding.stopButton.visibility = View.GONE
-        binding.playButton.visibility = View.VISIBLE
-    }
 
     override fun onItemClick(position: Int, trackID: Long) {
         TODO("Not yet implemented")
     }
+
+
 }
+

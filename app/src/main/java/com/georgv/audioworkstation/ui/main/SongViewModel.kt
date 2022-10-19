@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
+import com.georgv.audioworkstation.customHandlers.AudioController
 import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.SongDB
@@ -52,17 +53,19 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     }
 
-    fun recordTrack(name: String, filepath: String) {
+    fun recordTrack(name: String,pcmDir:String,wavDir:String) {
         val newTrack = Track(
             0,
             true,
             name,
-            filepath,
+            pcmDir,
+            wavDir,
             TypeConverter.dateToTimestamp(Date()),
             null,
             null,
             songId
         )
+        AudioController.lastRecorded = newTrack
         viewModelScope.launch(Dispatchers.IO) { insertTrackToDb(newTrack) }
     }
 

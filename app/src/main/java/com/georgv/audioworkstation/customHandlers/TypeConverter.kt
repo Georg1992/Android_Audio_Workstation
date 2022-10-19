@@ -26,8 +26,7 @@ object TypeConverter {
      * @see [soundfile.sapp.org/doc/WaveFormat](http://soundfile.sapp.org/doc/WaveFormat/)
      */
     @Throws(IOException::class)
-    fun PCMToWAV(input: File, output: File?, channelCount: Int, originSampleRate: Int, sampleRate: Int, bitsPerSample: Int) {
-
+    fun PCMToWAV(input: File, output: File, channelCount: Int, originSampleRate: Int, sampleRate: Int, bitsPerSample: Int) {
         val inputSize = input.length().toInt()
         val sampleFactor : Float = sampleRate.toFloat() / originSampleRate.toFloat()
 
@@ -114,8 +113,8 @@ object TypeConverter {
 
     @Throws(IOException::class)
     fun writeToOutput(output: OutputStream, data: String) {
-        for (i in 0 until data.length) {
-            output.write(data[i].code)
+        for (element in data) {
+            output.write(element.code)
         }
     }
 

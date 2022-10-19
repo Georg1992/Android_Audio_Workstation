@@ -24,7 +24,7 @@ class LibraryFragment:Fragment(),TrackListAdapter.OnItemClickListener{
     ): View {
         binding = LibraryFragmentBinding.inflate(inflater,container,false)
         val songRecyclerView = binding.songsRecyclerView
-        songRecyclerView.adapter = TrackListAdapter(this)
+        songRecyclerView.adapter = TrackListAdapter()
 
         return binding.root
     }
