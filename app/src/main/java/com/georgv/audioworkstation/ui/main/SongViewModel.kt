@@ -98,4 +98,10 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         db.trackDao().trackUpdate(isRecording, timeStampStop, duration, id)
     }
+
+    fun deleteTrackFromDb(track: Track){
+        viewModelScope.launch (Dispatchers.IO){
+            db.trackDao().delete(track)
+        }
+    }
 }

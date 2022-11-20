@@ -13,6 +13,9 @@
         <action
             android:id="@+id/action_titleFragment_to_libraryFragment"
             app:destination="@id/libraryFragment" />
+        <action
+                android:id="@+id/action_titleFragment_to_effectFragment"
+                app:destination="@id/effectFragment" />
     </fragment>
     <fragment
         android:id="@+id/libraryFragment"
@@ -20,5 +23,10 @@
         android:label="LibraryFragment">
 
     </fragment>
+    <fragment
+            android:id="@+id/effectFragment"
+            android:name="com.georgv.audioworkstation.ui.main.EffectFragment"
+            android:label="fragment_effect"
+            tools:layout="@layout/fragment_effect" />
 
 </navigation>

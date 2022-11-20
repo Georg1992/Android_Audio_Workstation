@@ -1,10 +1,7 @@
 package com.georgv.audioworkstation.database
 
 import androidx.lifecycle.LiveData
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
+import androidx.room.*
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 
@@ -36,5 +33,8 @@ interface TrackDao{
 
     @Query("SELECT * FROM tracks WHERE isRecording = 1")
     fun getTrackInEdit():Track?
+
+    @Delete
+    fun delete(track:Track)
 
 }

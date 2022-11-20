@@ -6,8 +6,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.OnPlayListener
 import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.LibraryFragmentBinding
@@ -24,7 +22,7 @@ class LibraryFragment:Fragment(),TrackListAdapter.OnItemClickListener{
     ): View {
         binding = LibraryFragmentBinding.inflate(inflater,container,false)
         val songRecyclerView = binding.songsRecyclerView
-        songRecyclerView.adapter = TrackListAdapter()
+        //songRecyclerView.adapter = TrackListAdapter()
 
         return binding.root
     }

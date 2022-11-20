@@ -40,5 +40,26 @@
             app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_baseline_music_note_24" />
 
+        <ImageView
+                android:id="@+id/deleteButton"
+                android:layout_width="50dp"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_baseline_delete_24"
+                app:layout_constraintEnd_toEndOf="@+id/instrumentText" />
+
+        <ImageView
+                android:id="@+id/effectsButton"
+                android:layout_width="50dp"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_icon_effects"
+                app:layout_constraintVertical_bias="0.0"
+                app:layout_constraintEnd_toStartOf="@+id/deleteButton"
+                android:layout_marginEnd="15dp" />
+
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

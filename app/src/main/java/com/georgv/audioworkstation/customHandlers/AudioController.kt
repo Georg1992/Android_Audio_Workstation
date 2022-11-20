@@ -19,6 +19,7 @@ object AudioController {
     enum class ControllerState {
         REC,
         PLAY,
+        CONTINUE,
         PLAYREC,
         STOP,
         PAUSE
@@ -26,7 +27,6 @@ object AudioController {
 
     lateinit var fragmentActivitySender: FragmentActivity
     private lateinit var recorder: AudioRecord
-    private lateinit var player: MediaPlayer
     private val SAMPLE_RATE = 44100
     private val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
 
@@ -36,13 +36,13 @@ object AudioController {
     private val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     private val BUFFER_SIZE_RECORDING =
         AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-    private var recordingThread: Thread? = null
+
 
     var controllerState: ControllerState = ControllerState.STOP//NOT GOOD
-    lateinit var lastRecorded:Track //NOT GOOD
+    lateinit var lastRecorded: Track //NOT GOOD
 
-    val readyToPlayTrackList:MutableList<Track> = mutableListOf()
     val playerList: MutableList<MediaPlayer> = mutableListOf()
+
 
 
     private fun startRecording() {
@@ -59,9 +59,10 @@ object AudioController {
         )
         if (this::recorder.isInitialized) {
             recorder.startRecording()
-            recordingThread = thread(true) {
+            val recordingThread = thread(true) {
                 writeAudioDataToFile(lastRecorded)
             }
+            recordingThread.interrupt()
         }
     }
 
@@ -73,7 +74,7 @@ object AudioController {
         } catch (e: FileNotFoundException) {
             return
         }
-        while (controllerState == ControllerState.REC || controllerState == ControllerState.PLAYREC) {
+        while (controllerState in setOf(ControllerState.REC,ControllerState.PLAYREC)) {
             recorder.read(audioBuffer, 0, BUFFER_SIZE_RECORDING)
             try {
                 outputStream.write(audioBuffer)
@@ -102,27 +103,30 @@ object AudioController {
             recorder.release()
         }
         for (player in playerList) {
-            if (this::player.isInitialized) {
+            if (player.isPlaying) {
                 player.stop()
-                player.release()
             }
         }
-        playerList.clear()
-        recordingThread = null
     }
 
-    private fun playTrack(track:Track) {
-        player = MediaPlayer()
-        player.apply {
-            setDataSource(track.wavDir)
-        }
-        playerList.add(player)
+
+
+    private fun playTrack(player: MediaPlayer) {
         try {
-            player.prepare()
-            player.start()
+            val playingThread = thread(true) {
+                player.prepare()
+            }
+            player.setOnPreparedListener{
+                playingThread.interrupt()
+                player.start()
+            }
         } catch (e: IOException) {
             e.printStackTrace()
         }
+    }
+
+    private fun allTracksComplete():Boolean{
+        return playerList.all { !it.isPlaying }
     }
 
 
@@ -130,15 +134,21 @@ object AudioController {
         controllerState = audioControllerState
         when (audioControllerState) {
             ControllerState.PLAY -> {
-                for(track in readyToPlayTrackList){
-                    playTrack(track)
+                for (player in playerList) {
+                    playTrack(player)
+                    player.setOnCompletionListener {
+                        it.stop()
+                        if(allTracksComplete()){
+                            changeState(ControllerState.STOP)
+                        }
+                    }
                 }
                 MainFragment.setPlayView()
             }
             ControllerState.PLAYREC -> {
                 startRecording()
-                for(track in readyToPlayTrackList){
-                    playTrack(track)
+                for (player in playerList) {
+                    playTrack(player)
                 }
                 MainFragment.setRecView()
             }
@@ -150,8 +160,20 @@ object AudioController {
                 stop()
                 MainFragment.setStopView()
             }
-            ControllerState.PAUSE -> TODO()
+            ControllerState.PAUSE -> {
+                for (player in playerList) {
+                    player.pause()
+                }
+                MainFragment.setPauseView()
+            }
+            ControllerState.CONTINUE -> {
+                for(player in playerList){
+                    player.start()
+
+                }
+                MainFragment.setPlayView()
+            }
         }
     }
-
 }
+
