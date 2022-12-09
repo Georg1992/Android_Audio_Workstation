@@ -27,6 +27,14 @@
             android:id="@+id/effectFragment"
             android:name="com.georgv.audioworkstation.ui.main.EffectFragment"
             android:label="fragment_effect"
-            tools:layout="@layout/fragment_effect" />
+            tools:layout="@layout/fragment_effect" >
+        <action
+                android:id="@+id/action_effectFragment_to_titleFragment"
+                app:destination="@id/titleFragment" />
+
+        <argument
+                android:name="selectedTrack"
+                app:argType="com.georgv.audioworkstation.data.Track" />
+    </fragment>
 
 </navigation>

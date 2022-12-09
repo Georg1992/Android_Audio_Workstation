@@ -2,12 +2,7 @@ package com.georgv.audioworkstation.ui.main
 
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
-import android.app.AlertDialog
-import android.app.Dialog
-import android.content.DialogInterface
-import android.graphics.Color
 import android.os.Bundle
-import android.util.Log
 import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -22,23 +17,23 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.databinding.MainFragmentBinding
 import androidx.lifecycle.Observer
-import com.georgv.audioworkstation.customHandlers.AudioController
-import com.georgv.audioworkstation.customHandlers.AudioController.changeState
+import com.georgv.audioworkstation.audioprocessing.AudioController
+import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
-import androidx.fragment.app.DialogFragment
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.UiListener
-import kotlinx.android.synthetic.main.main_fragment.*
 import kotlinx.android.synthetic.main.main_fragment.view.*
-import java.lang.IllegalStateException
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
 
 
-class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener,View.OnClickListener {
+class MainFragment : Fragment(), View.OnClickListener {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: MainFragmentBinding
@@ -157,9 +152,6 @@ class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener,View.OnCli
 
     }
 
-    override fun onItemClick(position: Int, trackID: Long) {
-        TODO("Not yet implemented")
-    }
 
 
 
@@ -215,6 +207,15 @@ class MainFragment : Fragment(), TrackListAdapter.OnItemClickListener,View.OnCli
 
         }
         uiListener.uiCallback()
+    }
+
+    fun deleteTrack(trackId:Long, filePath:String){
+        viewModel.deleteTrackFromDb(trackId)
+        try{
+            Files.delete(Paths.get(filePath))
+        } catch (e:IOException){
+            e.printStackTrace()
+        }
     }
 
 

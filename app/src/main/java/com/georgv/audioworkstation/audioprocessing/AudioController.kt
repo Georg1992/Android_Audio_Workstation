@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.customHandlers
+package com.georgv.audioworkstation.audioprocessing
 
 import android.Manifest
 import android.content.ContentValues
@@ -10,6 +10,7 @@ import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
+import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.MainFragment
 import java.io.*
@@ -27,13 +28,13 @@ object AudioController {
 
     lateinit var fragmentActivitySender: FragmentActivity
     private lateinit var recorder: AudioRecord
-    private val SAMPLE_RATE = 44100
     private val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
+    private lateinit var recordingThread:Thread
 
     //for raw audio can use
-    private val RAW_AUDIO_SOURCE = MediaRecorder.AudioSource.UNPROCESSED
     private val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_STEREO
-    private val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+    const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+    const val SAMPLE_RATE = 44100
     private val BUFFER_SIZE_RECORDING =
         AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
 
@@ -59,7 +60,7 @@ object AudioController {
         )
         if (this::recorder.isInitialized) {
             recorder.startRecording()
-            val recordingThread = thread(true) {
+            recordingThread = thread(true) {
                 writeAudioDataToFile(lastRecorded)
             }
             recordingThread.interrupt()
@@ -74,7 +75,7 @@ object AudioController {
         } catch (e: FileNotFoundException) {
             return
         }
-        while (controllerState in setOf(ControllerState.REC,ControllerState.PLAYREC)) {
+        while (controllerState in setOf(ControllerState.REC, ControllerState.PLAYREC)) {
             recorder.read(audioBuffer, 0, BUFFER_SIZE_RECORDING)
             try {
                 outputStream.write(audioBuffer)
@@ -87,12 +88,12 @@ object AudioController {
             outputStream.flush()
             outputStream.close()
         } catch (e: IOException) {
-            Log.e(ContentValues.TAG, "exception while closing output stream $e")
             e.printStackTrace()
         }
         val inputFile = File(track.pcmDir)
         val outputFile = File(track.wavDir)
-        TypeConverter.PCMToWAV(
+
+        TypeConverter.pcmToWav(
             inputFile, outputFile, 2, SAMPLE_RATE, SAMPLE_RATE, 16
         )
     }
@@ -117,13 +118,21 @@ object AudioController {
                 player.prepare()
             }
             player.setOnPreparedListener{
+
                 playingThread.interrupt()
+                player.setOnCompletionListener {
+                    it.stop()
+                    if(allTracksComplete() && controllerState != ControllerState.PLAYREC){
+                        changeState(ControllerState.STOP)
+                    }
+                }
                 player.start()
             }
         } catch (e: IOException) {
             e.printStackTrace()
         }
     }
+
 
     private fun allTracksComplete():Boolean{
         return playerList.all { !it.isPlaying }
@@ -136,12 +145,6 @@ object AudioController {
             ControllerState.PLAY -> {
                 for (player in playerList) {
                     playTrack(player)
-                    player.setOnCompletionListener {
-                        it.stop()
-                        if(allTracksComplete()){
-                            changeState(ControllerState.STOP)
-                        }
-                    }
                 }
                 MainFragment.setPlayView()
             }

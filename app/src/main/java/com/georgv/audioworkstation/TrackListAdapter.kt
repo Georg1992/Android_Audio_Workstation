@@ -1,30 +1,22 @@
 package com.georgv.audioworkstation
-
-
-import android.annotation.SuppressLint
-import android.app.AlertDialog
-import android.app.Dialog
-import android.content.DialogInterface
 import android.media.MediaPlayer
 import android.os.Bundle
-import android.util.Log
 import android.view.*
 import android.widget.TextView
-import androidx.core.view.GestureDetectorCompat
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
-import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.customHandlers.AudioController
+import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.ui.main.EffectFragment
 import com.georgv.audioworkstation.ui.main.MainFragment
-import com.georgv.audioworkstation.ui.main.MainFragment.ButtonController.blink
 import com.georgv.audioworkstation.ui.main.MainFragment.ButtonController.colorBlink
+import com.georgv.audioworkstation.ui.main.MainFragmentDirections
 import kotlinx.android.synthetic.main.track_view.view.*
-import kotlinx.coroutines.NonDisposableHandle.parent
-import java.lang.IllegalStateException
+
 
 private const val DEBUG_TAG = "Gestures"
 
@@ -36,33 +28,45 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
 
     private val viewHolders: MutableList<TrackViewHolder> = mutableListOf()
 
-    @SuppressLint("ClickableViewAccessibility")
+
     inner class TrackViewHolder(trackView: View) : RecyclerView.ViewHolder(trackView),
         View.OnClickListener {
-        private val mDetector: GestureDetectorCompat
-
-        init {
-            itemView.setOnClickListener(this)
-            mDetector = GestureDetectorCompat(trackView.context, MyGestureListener())
-            itemView.setOnTouchListener { v, event ->
-                mDetector.onTouchEvent(event)
-                true
-            }
-
-            itemView.effectsButton.setOnClickListener {
-                findNavController(parentFragment).navigate(R.id.action_titleFragment_to_effectFragment)
-            }
-
-            itemView.deleteButton.setOnClickListener {
-
-            }
-        }
-
+        //private val mDetector: GestureDetectorCompat
+        lateinit var track: Track
+        var trackId:Long = 0
         lateinit var player: MediaPlayer
-        fun isPlayerInitialized() = ::player.isInitialized
 
         var selected: Boolean = false
         val instrumentName: TextView = itemView.instrumentText
+        var wavPath:String = ""
+        var pcmPath:String = ""
+
+
+        init {
+            itemView.setOnClickListener(this)
+            itemView.effectsButton.setOnClickListener {
+                if(AudioController.controllerState == AudioController.ControllerState.STOP){
+                    val action = MainFragmentDirections.actionTitleFragmentToEffectFragment(track)
+                    findNavController(parentFragment).navigate(action)
+                }
+
+            }
+
+//            mDetector = GestureDetectorCompat(trackView.context, MyGestureListener())
+//            itemView.setOnTouchListener { v, event ->
+//                mDetector.onTouchEvent(event)
+//                true
+//            }
+
+            itemView.deleteButton.setOnClickListener {
+                if(AudioController.controllerState == AudioController.ControllerState.STOP){
+                    parentFragment.deleteTrack(this.trackId, this.pcmPath)
+                }
+            }
+        }
+
+        fun isPlayerInitialized() = ::player.isInitialized
+
 
         override fun onClick(p0: View?) {
             if (AudioController.controllerState == AudioController.ControllerState.STOP) {
@@ -71,28 +75,29 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
             }
         }
 
-        private inner class MyGestureListener : GestureDetector.SimpleOnGestureListener() {
 
-            override fun onDown(event: MotionEvent): Boolean {
-                return true
-            }
-
-            override fun onSingleTapUp(e: MotionEvent): Boolean {
-                itemView.performClick()
-                return super.onSingleTapUp(e)
-            }
-
-            override fun onFling(
-                event1: MotionEvent,
-                event2: MotionEvent,
-                velocityX: Float,
-                velocityY: Float
-            ): Boolean {
-                Log.d(DEBUG_TAG, "onFling: $event1 $event2")
-                return true
-            }
-        }
-    }
+//        private inner class MyGestureListener : GestureDetector.SimpleOnGestureListener() {
+//
+//            override fun onDown(event: MotionEvent): Boolean {
+//                return true
+//            }
+//
+//            override fun onSingleTapUp(e: MotionEvent): Boolean {
+//                itemView.performClick()
+//                return super.onSingleTapUp(e)
+//            }
+//
+//            override fun onFling(
+//                event1: MotionEvent,
+//                event2: MotionEvent,
+//                velocityX: Float,
+//                velocityY: Float
+//            ): Boolean {
+//                Log.d(DEBUG_TAG, "onFling: $event1 $event2")
+//                return true
+//            }
+//        }
+}
 
     override fun onCreateViewHolder(parent: ViewGroup, position: Int): TrackViewHolder {
         val layoutInflater = LayoutInflater.from(parent.context)
@@ -102,7 +107,11 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
 
     override fun onBindViewHolder(holder: TrackViewHolder, position: Int) {
         val item = getItem(position)
+        holder.track = item
         holder.instrumentName.text = item.trackName
+        holder.trackId = item.id
+        holder.pcmPath = item.pcmDir
+        holder.wavPath = item.wavDir
         viewHolders.add(holder)
         if (item.isRecording == true) {
             holder.itemView.setBackgroundResource(R.color.redTransparent)

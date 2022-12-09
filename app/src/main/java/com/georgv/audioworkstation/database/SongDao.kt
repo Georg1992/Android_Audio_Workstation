@@ -34,6 +34,12 @@ interface TrackDao{
     @Query("SELECT * FROM tracks WHERE isRecording = 1")
     fun getTrackInEdit():Track?
 
+    @Query("SELECT * FROM tracks WHERE id = :id")
+    fun getTrackByID(id: Long):LiveData<Track>
+
+    @Query("DELETE FROM tracks WHERE id = :id")
+    fun deleteById(id:Long)
+
     @Delete
     fun delete(track:Track)
 

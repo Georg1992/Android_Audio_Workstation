@@ -1,9 +1,12 @@
 package com.georgv.audioworkstation.data
 
+import android.os.Parcelable
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
+import kotlinx.android.parcel.Parcelize
 
+@Parcelize
 @Entity(
     tableName = "tracks",
     foreignKeys = [ForeignKey(
@@ -22,5 +25,6 @@ data class Track(
     val timeStampStart:Long,
     var timeStampStop:Long?,
     var duration:Long?,
-    val songID: Long
-    )
+    val songID: Long,
+    val effecs: String?
+    ):Parcelable

@@ -4,4 +4,8 @@
     <string name="PlayTrackButton">PlayTrackButton</string>
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="okEffect">OK</string>
+    <string name="applyeffects">applyEffects</string>
+    <string name="reverb">REVERB</string>
+    <string name="applyeffect">ApplyEffect</string>
 </resources>

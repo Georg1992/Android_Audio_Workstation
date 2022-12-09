@@ -3,6 +3,14 @@ package com.georgv.audioworkstation.customHandlers
 import androidx.room.TypeConverter
 import java.io.*
 import java.util.*
+import com.google.gson.Gson
+
+import com.google.gson.reflect.TypeToken
+
+
+
+
+private const val TRANSFER_BUFFER_SIZE = 10 * 1024
 
 object TypeConverter {
     @TypeConverter
@@ -15,31 +23,37 @@ object TypeConverter {
         return date.time
     }
 
-    /**
-     * @param input         raw PCM data
-     * limit of file size for wave file: < 2^(2*4) - 36 bytes (~4GB)
-     * @param output        file to encode to in wav format
-     * @param channelCount  number of channels: 1 for mono, 2 for stereo, etc.
-     * @param sampleRate    sample rate of PCM audio
-     * @param bitsPerSample bits per sample, i.e. 16 for PCM16
-     * @throws IOException in event of an error between input/output files
-     * @see [soundfile.sapp.org/doc/WaveFormat](http://soundfile.sapp.org/doc/WaveFormat/)
-     */
+    @TypeConverter
+    fun fromString(value: String?): ArrayList<String?>? {
+        val listType = object : TypeToken<ArrayList<String?>?>() {}.type
+        return Gson().fromJson(value, listType)
+    }
+
+    @TypeConverter
+    fun fromArrayList(list: ArrayList<String?>?): String? {
+        val gson = Gson()
+        return gson.toJson(list)
+    }
+
+
     @Throws(IOException::class)
-    fun PCMToWAV(input: File, output: File, channelCount: Int, originSampleRate: Int, sampleRate: Int, bitsPerSample: Int) {
+    fun pcmToWav(
+        input: File,
+        output: File,
+        channelCount: Int,
+        originSampleRate: Int,
+        sampleRate: Int,
+        bitsPerSample: Int
+    ) {
         val inputSize = input.length().toInt()
-        val sampleFactor : Float = sampleRate.toFloat() / originSampleRate.toFloat()
+        val sampleFactor: Float = sampleRate.toFloat() / originSampleRate.toFloat()
 
         FileOutputStream(output).use { encoded ->
-
             // WAVE RIFF header
-
             writeToOutput(encoded, "RIFF") // chunk id
             writeToOutput(encoded, 36 + (inputSize.toFloat() * sampleFactor).toInt()) // chunk size
             writeToOutput(encoded, "WAVE") // format
-
             // SUB CHUNK 1 (FORMAT)
-
             writeToOutput(encoded, "fmt ") // subchunk 1 id
             writeToOutput(encoded, 16) // subchunk 1 size
             writeToOutput(encoded, 1.toShort()) // audio format (1 = PCM)
@@ -50,66 +64,41 @@ object TypeConverter {
             writeToOutput(encoded, bitsPerSample.toShort()) // bits per sample
 
             // SUB CHUNK 2 (AUDIO DATA)
-
             if (originSampleRate == sampleRate) {
-
                 writeToOutput(encoded, "data") // subchunk 2 id
                 writeToOutput(encoded, inputSize) // subchunk 2 size
                 copy(FileInputStream(input), encoded)
-
-            } else {
-
-                // SUB CHUNK 2 (AUDIO DATA) - UPSAMPLE
-
-                writeToOutput(encoded, "data") // subchunk 2 id
-                writeToOutput(encoded, (inputSize.toFloat() * sampleFactor).toInt()) // subchunk 2 size
-
-                val inputStream = FileInputStream(input)
-                val buffer = ByteArray(2)
-                var len: Int = inputStream.read(buffer)
-
-                var overFlow = 0
-
-                while (len != -1) {
-
-                    for (i in 0 until (sampleFactor * 1000F).toInt()) {
-
-                        overFlow += 1
-
-                        if (overFlow >= 1000) {
-
-                            encoded.write(buffer, 0, len)
-                            overFlow = 0
-
-                        }
-
-                    }
-
-                    len = inputStream.read(buffer)
-
-                }
-
-                inputStream.close()
-
             }
+
+            ///We might need samplerate convertion in the future
+//            else {
+//                writeToOutput(encoded, "data") // subchunk 2 id
+//                writeToOutput(
+//                    encoded,
+//                    (inputSize.toFloat() * sampleFactor).toInt()
+//                ) // subchunk 2 size
+//
+//                val inputStream = FileInputStream(input)
+//                val buffer = ByteArray(2)
+//                var len: Int = inputStream.read(buffer)
+//                var overFlow = 0
+//                while (len != -1) {
+//                    for (i in 0 until (sampleFactor * 1000F).toInt()) {
+//                        overFlow += 1
+//                        if (overFlow >= 1000) {
+//                            encoded.write(buffer, 0, len)
+//                            overFlow = 0
+//                        }
+//                    }
+//                    len = inputStream.read(buffer)
+//                }
+//                inputStream.close()
+//            }
 
         }
 
     }
 
-
-    /**
-     * Size of buffer used for transfer, by default
-     */
-    private const val TRANSFER_BUFFER_SIZE = 10 * 1024
-
-    /**
-     * Writes string in big endian form to an output stream
-     *
-     * @param output stream
-     * @param data   string
-     * @throws IOException
-     */
 
     @Throws(IOException::class)
     fun writeToOutput(output: OutputStream, data: String) {
@@ -148,4 +137,7 @@ object TypeConverter {
         }
         return read
     }
+
+
+
 }

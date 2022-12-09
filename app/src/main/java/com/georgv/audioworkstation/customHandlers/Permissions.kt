@@ -9,14 +9,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 
-class Permissions {
+object Permissions {
     fun askForPermissions(perms: String?, activity: FragmentActivity) {
         if(perms == "RECORD_AUDIO") {
             activity.let {
                 Log.d("perms 0", "asking for perms: ACCESS_FINE_LOCATION + ACTIVITY_RECOGNITION")
                 if (ActivityCompat.checkSelfPermission(
                         it,
-                        Manifest.permission.RECORD_AUDIO
+                        Manifest.permission.RECORD_AUDIO,
                     ) !=
                     PackageManager.PERMISSION_GRANTED
                 ) {
