@@ -14,7 +14,7 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.databinding.FragmentEffectBinding
 
 
-class EffectFragment() : Fragment() {
+class EffectFragment : Fragment() {
 
 
     private lateinit var binding:FragmentEffectBinding
@@ -30,6 +30,8 @@ class EffectFragment() : Fragment() {
         val track = args.selectedTrack
         val reverbSwitch:Switch = binding.switch2
         val applyAllButton:ImageButton = binding.applyAllEffect
+        val trackName = binding.trackName
+        trackName.text = track.trackName
 
 
 
@@ -40,7 +42,7 @@ class EffectFragment() : Fragment() {
 
 
         applyAllButton.setOnClickListener{
-            NavHostFragment.findNavController(this).navigate(R.id.action_effectFragment_to_titleFragment)
+            NavHostFragment.findNavController(this).navigate(R.id.action_effectFragment_to_trackListFragment)
         }
         // Inflate the layout for this fragment
         return binding.root

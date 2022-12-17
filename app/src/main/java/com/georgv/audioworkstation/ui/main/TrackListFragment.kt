@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.main
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -15,7 +16,6 @@ import androidx.core.view.iterator
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.georgv.audioworkstation.TrackListAdapter
-import com.georgv.audioworkstation.databinding.MainFragmentBinding
 import androidx.lifecycle.Observer
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
@@ -24,21 +24,23 @@ import com.georgv.audioworkstation.data.Track
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.UiListener
-import kotlinx.android.synthetic.main.main_fragment.view.*
+import com.georgv.audioworkstation.databinding.TrackListFragmentBinding
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 
 
-class MainFragment : Fragment(), View.OnClickListener {
+class TrackListFragment : Fragment(), View.OnClickListener {
 
     private val viewModel: SongViewModel by activityViewModels()
-    private lateinit var binding: MainFragmentBinding
+    private lateinit var binding: TrackListFragmentBinding
     private lateinit var uiListener: UiListener
     private lateinit var mRecyclerView:RecyclerView
+    private val args:TrackListFragmentArgs by navArgs()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -46,7 +48,7 @@ class MainFragment : Fragment(), View.OnClickListener {
         savedInstanceState: Bundle?
     ): View {
         AudioController.fragmentActivitySender = requireActivity()
-        binding = MainFragmentBinding.inflate(inflater, container, false)
+        binding = TrackListFragmentBinding.inflate(inflater, container, false)
         ButtonController.binding = this.binding
         val layoutManager = LinearLayoutManager(context)
         mRecyclerView = binding.trackListRecyclerView
@@ -56,6 +58,7 @@ class MainFragment : Fragment(), View.OnClickListener {
         uiListener = adapter
         setEmptySongView()
 
+        binding.songName.text = args.selectedSong.songName
         binding.playButton.setOnClickListener(this)
         binding.recordButton.setOnClickListener (this)
         binding.stopButton.setOnClickListener(this)
@@ -64,13 +67,10 @@ class MainFragment : Fragment(), View.OnClickListener {
 
         val trackListObserver = Observer<List<Track>> {
             adapter.submitList(viewModel.trackList.value)
+            Log.d("OBSERVER TRIGGERED", viewModel.trackList.value?.size.toString())
         }
         viewModel.trackList.observe(viewLifecycleOwner, trackListObserver)
 
-        val songlistObserver = Observer<List<Song>> {
-
-        }
-        viewModel.songList.observe(viewLifecycleOwner, songlistObserver)
 
 
         return binding.root
@@ -80,7 +80,7 @@ class MainFragment : Fragment(), View.OnClickListener {
 
 
     companion object ButtonController {
-        private lateinit var binding: MainFragmentBinding
+        private lateinit var binding: TrackListFragmentBinding
 
         fun setEmptySongView(){
             setAllButtonsInvisible()
@@ -97,7 +97,7 @@ class MainFragment : Fragment(), View.OnClickListener {
         fun setPauseView(){
             setAllButtonsInvisible()
             setPlayButton()
-            binding.buttonView.playButton.blink()
+            binding.playButton.blink()
         }
 
         fun setPlayView(){

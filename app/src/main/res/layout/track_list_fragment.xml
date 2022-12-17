@@ -16,6 +16,16 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <TextView
+                android:text=""
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:id="@+id/songName"
+                android:gravity = "center"
+                android:layout_marginStart="16dp"
+                app:lineHeight="80dp"
+                />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/trackListRecyclerView"
             android:layout_width="match_parent"

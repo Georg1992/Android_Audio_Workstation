@@ -1,19 +1,29 @@
 package com.georgv.audioworkstation.ui.main
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
 import androidx.fragment.app.Fragment
-import com.georgv.audioworkstation.TrackListAdapter
-import com.georgv.audioworkstation.data.Track
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.NavHostFragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.georgv.audioworkstation.SongListAdapter
+import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.databinding.LibraryFragmentBinding
-import com.georgv.audioworkstation.databinding.MainFragmentBinding
+import kotlinx.coroutines.launch
 
-class LibraryFragment:Fragment(),TrackListAdapter.OnItemClickListener{
+class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener{
 
     private lateinit var binding: LibraryFragmentBinding
+    private val viewModel: SongViewModel by activityViewModels()
+
+    init {
+
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -21,14 +31,39 @@ class LibraryFragment:Fragment(),TrackListAdapter.OnItemClickListener{
         savedInstanceState: Bundle?
     ): View {
         binding = LibraryFragmentBinding.inflate(inflater,container,false)
+        binding.plusButton.setOnClickListener {
+            lifecycleScope.launch{
+                viewModel.createNewSong()
+                val song = viewModel.currentSong
+                if(song != null){
+                    navigateToTheSong(song)
+                }
+            }
+        }
+        val layoutManager = LinearLayoutManager(context)
         val songRecyclerView = binding.songsRecyclerView
-        //songRecyclerView.adapter = TrackListAdapter()
+        songRecyclerView.layoutManager = layoutManager
+        val adapter = SongListAdapter(this)
+        songRecyclerView.adapter = adapter
+
+        val songListObserver = Observer<List<Song>>{
+            adapter.submitList(viewModel.songList.value)
+        }
+        viewModel.songList.observe(viewLifecycleOwner,songListObserver)
 
         return binding.root
     }
 
-    override fun onItemClick(position: Int, trackID: Long) {
-        TODO("Not yet implemented")
+    private fun navigateToTheSong(song: Song){
+        viewModel.updateSongOnNavigate(song)
+        val action = LibraryFragmentDirections.actionLibraryFragmentToTrackListFragment(song)
+        NavHostFragment.findNavController(this).navigate(action)
+    }
+
+
+    override fun onItemClick(position: Int, song: Song) {
+        navigateToTheSong(song)
+        Log.d("ITEM CLICKED","FRAGMENT LISTENS")
     }
 
 }

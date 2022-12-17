@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.ui.main
+package com.georgv.audioworkstation.ui.main.dialogs
 
 
 import android.app.Dialog

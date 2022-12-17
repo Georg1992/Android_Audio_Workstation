@@ -4,24 +4,32 @@
     android:id="@+id/navigation"
     xmlns:tools="http://schemas.android.com/tools"
     android:label="nav"
-    app:startDestination="@id/titleFragment">
+    app:startDestination="@id/libraryFragment">
     <fragment
-        android:id="@+id/titleFragment"
-        android:name="com.georgv.audioworkstation.ui.main.MainFragment"
-        android:label="Main_Fragment"
-        tools:layout="@layout/main_fragment">
+        android:id="@+id/trackListFragment"
+        android:name="com.georgv.audioworkstation.ui.main.TrackListFragment"
+        android:label="Track_List_Fragment"
+        tools:layout="@layout/track_list_fragment">
         <action
             android:id="@+id/action_titleFragment_to_libraryFragment"
             app:destination="@id/libraryFragment" />
         <action
                 android:id="@+id/action_titleFragment_to_effectFragment"
                 app:destination="@id/effectFragment" />
+        <argument
+                android:name="selected_song"
+                app:argType="com.georgv.audioworkstation.data.Song" />
     </fragment>
     <fragment
         android:id="@+id/libraryFragment"
         android:name="com.georgv.audioworkstation.ui.main.LibraryFragment"
-        android:label="LibraryFragment">
+        android:label="LibraryFragment"
+            tools:layout="@layout/library_fragment">
 
+        <action
+                android:id="@+id/action_libraryFragment_to_trackListFragment"
+                app:destination="@id/trackListFragment">
+        </action>
     </fragment>
     <fragment
             android:id="@+id/effectFragment"
@@ -29,11 +37,11 @@
             android:label="fragment_effect"
             tools:layout="@layout/fragment_effect" >
         <action
-                android:id="@+id/action_effectFragment_to_titleFragment"
-                app:destination="@id/titleFragment" />
-
+                android:id="@+id/action_effectFragment_to_trackListFragment"
+                app:destination="@id/trackListFragment">
+        </action>
         <argument
-                android:name="selectedTrack"
+                android:name="selected_track"
                 app:argType="com.georgv.audioworkstation.data.Track" />
     </fragment>
 

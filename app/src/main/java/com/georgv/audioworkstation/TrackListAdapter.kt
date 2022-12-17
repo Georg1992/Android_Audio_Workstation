@@ -1,26 +1,25 @@
 package com.georgv.audioworkstation
+
 import android.media.MediaPlayer
-import android.os.Bundle
+import android.util.Log
 import android.view.*
 import android.widget.TextView
-import androidx.core.os.bundleOf
-import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.data.Track
-import com.georgv.audioworkstation.ui.main.EffectFragment
-import com.georgv.audioworkstation.ui.main.MainFragment
-import com.georgv.audioworkstation.ui.main.MainFragment.ButtonController.colorBlink
-import com.georgv.audioworkstation.ui.main.MainFragmentDirections
-import kotlinx.android.synthetic.main.track_view.view.*
+import com.georgv.audioworkstation.databinding.TrackHolderViewBinding
+import com.georgv.audioworkstation.ui.main.TrackListFragment
+import com.georgv.audioworkstation.ui.main.TrackListFragment.ButtonController.colorBlink
+import com.georgv.audioworkstation.ui.main.TrackListFragmentDirections
 
 
 private const val DEBUG_TAG = "Gestures"
 
-class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()),
+
+class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()),
     UiListener {
     init {
         setHasStableIds(true)
@@ -29,7 +28,7 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
     private val viewHolders: MutableList<TrackViewHolder> = mutableListOf()
 
 
-    inner class TrackViewHolder(trackView: View) : RecyclerView.ViewHolder(trackView),
+    inner class TrackViewHolder(binding: TrackHolderViewBinding) : RecyclerView.ViewHolder(binding.root),
         View.OnClickListener {
         //private val mDetector: GestureDetectorCompat
         lateinit var track: Track
@@ -37,16 +36,16 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
         lateinit var player: MediaPlayer
 
         var selected: Boolean = false
-        val instrumentName: TextView = itemView.instrumentText
+        val instrumentName: TextView = binding.instrumentText
         var wavPath:String = ""
         var pcmPath:String = ""
 
 
         init {
             itemView.setOnClickListener(this)
-            itemView.effectsButton.setOnClickListener {
+            binding.effectsButton.setOnClickListener {
                 if(AudioController.controllerState == AudioController.ControllerState.STOP){
-                    val action = MainFragmentDirections.actionTitleFragmentToEffectFragment(track)
+                    val action = TrackListFragmentDirections.actionTitleFragmentToEffectFragment(track)
                     findNavController(parentFragment).navigate(action)
                 }
 
@@ -58,7 +57,7 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
 //                true
 //            }
 
-            itemView.deleteButton.setOnClickListener {
+            binding.deleteButton.setOnClickListener {
                 if(AudioController.controllerState == AudioController.ControllerState.STOP){
                     parentFragment.deleteTrack(this.trackId, this.pcmPath)
                 }
@@ -97,12 +96,11 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
 //                return true
 //            }
 //        }
-}
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, position: Int): TrackViewHolder {
-        val layoutInflater = LayoutInflater.from(parent.context)
-        val view = layoutInflater.inflate(R.layout.track_view, parent, false)
-        return TrackViewHolder(view)
+        val itemBinding = TrackHolderViewBinding.inflate(LayoutInflater.from(parent.context),parent,false)
+        return TrackViewHolder(itemBinding)
     }
 
     override fun onBindViewHolder(holder: TrackViewHolder, position: Int) {
@@ -135,7 +133,7 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
                 holder.itemView.setBackgroundResource(R.color.blue)
             }
         }
-        MainFragment.setPlayButton()
+        TrackListFragment.setPlayButton()
     }
 
 
@@ -179,6 +177,7 @@ class TrackListAdapter(val parentFragment: MainFragment) : ListAdapter<Track, Tr
 interface UiListener {
     fun uiCallback()
 }
+
 
 
 

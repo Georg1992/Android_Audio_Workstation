@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.main
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.customHandlers.TypeConverter
@@ -20,42 +21,32 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     val songList: LiveData<List<Song>>
         get() = _songList
 
-    lateinit var selectedTrack:LiveData<Track>
+    private var _currentSong: Song? = null
+    val currentSong: Song?
+        get() = _currentSong
 
-    private var songId: Long = 0
-
-
-    init {
-        runBlocking {
-            val job = GlobalScope.async {
-                val lastSong: Song? = db.songDao().getLastSong()
-                when (lastSong != null) {
-                    true -> songId = lastSong.id
-                    false -> createNewSong()
-                }
-            }
-            job.await()
-        }
-
-    }
-
-    private val _trackList: LiveData<List<Track>> = db.trackDao().getTracksBySongId(songId)
+    private var songID: Long = 0
+    private var _trackList: MutableLiveData<List<Track>> = MutableLiveData(listOf())
     val trackList: LiveData<List<Track>>
         get() = _trackList
 
 
-    private fun createNewSong() {
-        val newSong = Song(0, null, true, "Song")
-        runBlocking {
-            val job = viewModelScope.async(Dispatchers.IO) {
-                insertSongToDb(newSong)
-            }
-            songId = job.await()
+    suspend fun createNewSong() {
+        val newSong = Song(0, null, true, "Song ${songList.value?.size?.plus(1)}")
+        val job = viewModelScope.async() {
+            db.songDao().insert(newSong)
         }
-
+        songID = job.await()
+        _currentSong = getSongById(songID)
     }
 
-    fun recordTrack(name: String,pcmDir:String,wavDir:String) {
+    fun updateSongOnNavigate(song: Song){
+        _currentSong = song
+        songID = song.id
+    }
+
+
+    fun recordTrack(name: String, pcmDir: String, wavDir: String) {
         val newTrack = Track(
             0,
             true,
@@ -65,52 +56,48 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             TypeConverter.dateToTimestamp(Date()),
             null,
             null,
-            songId,
+            songID,
             ""
         )
         AudioController.lastRecorded = newTrack
-        viewModelScope.launch(Dispatchers.IO) { insertTrackToDb(newTrack) }
+        viewModelScope.launch {
+            db.trackDao().insert(newTrack)
+            _trackList.value = db.trackDao().getTracksBySongId(songID)
+        }
     }
 
 
     fun stopRecordTrack() {
         val timestamp: Long = TypeConverter.dateToTimestamp(Date())
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             val job = db.trackDao().getTrackInEdit()
             if (job != null) {
                 val duration = timestamp - job.timeStampStart
-                updateTrackToDb(false, timestamp, duration, job.id)
+                db.trackDao().trackUpdate(false, timestamp, duration, job.id)
+                _trackList.value = db.trackDao().getTracksBySongId(songID)
             }
-
         }
     }
 
-    fun getTrackById(id:Long){
-        viewModelScope.launch(Dispatchers.IO) {
-             selectedTrack = db.trackDao().getTrackByID(id)
-        }
-    }
 
-    private suspend fun insertSongToDb(thisSong: Song): Long {
-        return db.songDao().insert(thisSong)
-    }
 
-    private suspend fun insertTrackToDb(track: Track): Long {
-        return db.trackDao().insert(track)
-    }
-
-    private fun updateTrackToDb(
-        isRecording: Boolean,
-        timeStampStop: Long?,
-        duration: Long?,
-        id: Long
-    ) {
-        db.trackDao().trackUpdate(isRecording, timeStampStop, duration, id)
-    }
-
-    fun deleteTrackFromDb(id: Long){
-        viewModelScope.launch (Dispatchers.IO){
+    fun deleteTrackFromDb(id: Long) {
+        viewModelScope.launch() {
             db.trackDao().deleteById(id)
+            _trackList.value = db.trackDao().getTracksBySongId(songID)
         }
     }
+
+
+    private suspend fun getSongById(id: Long): Song {
+        return db.songDao().getSongByID(id)
+    }
+
+
+    fun deleteSongFromDB(id: Long) {
+        viewModelScope.launch {
+            db.songDao().deleteById(id)
+        }
+    }
+
 }

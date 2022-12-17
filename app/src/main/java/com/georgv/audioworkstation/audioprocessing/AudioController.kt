@@ -1,18 +1,16 @@
 package com.georgv.audioworkstation.audioprocessing
 
 import android.Manifest
-import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
-import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.data.Track
-import com.georgv.audioworkstation.ui.main.MainFragment
+import com.georgv.audioworkstation.ui.main.TrackListFragment
 import java.io.*
 import kotlin.concurrent.thread
 
@@ -146,35 +144,35 @@ object AudioController {
                 for (player in playerList) {
                     playTrack(player)
                 }
-                MainFragment.setPlayView()
+                TrackListFragment.setPlayView()
             }
             ControllerState.PLAYREC -> {
                 startRecording()
                 for (player in playerList) {
                     playTrack(player)
                 }
-                MainFragment.setRecView()
+                TrackListFragment.setRecView()
             }
             ControllerState.REC -> {
                 startRecording()
-                MainFragment.setRecView()
+                TrackListFragment.setRecView()
             }
             ControllerState.STOP -> {
                 stop()
-                MainFragment.setStopView()
+                TrackListFragment.setStopView()
             }
             ControllerState.PAUSE -> {
                 for (player in playerList) {
                     player.pause()
                 }
-                MainFragment.setPauseView()
+                TrackListFragment.setPauseView()
             }
             ControllerState.CONTINUE -> {
                 for(player in playerList){
                     player.start()
 
                 }
-                MainFragment.setPlayView()
+                TrackListFragment.setPlayView()
             }
         }
     }

@@ -13,8 +13,8 @@ object AudioProcessor {
         floatBuffer:Int
     ): FloatArray {
         val samples = FloatArray(floatBuffer)
-        val bitsPerSample: Int = 16
-        val bytesPerSample: Int = 2
+        val bitsPerSample = 16
+        val bytesPerSample = 2
         val fullScale = fullScale(bitsPerSample)
         var i = 0
         var s = 0
