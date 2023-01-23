@@ -33,16 +33,12 @@ class EffectFragment : Fragment() {
         val trackName = binding.trackName
         trackName.text = track.trackName
 
-
-
-
-
-
-
-
-
         applyAllButton.setOnClickListener{
-            NavHostFragment.findNavController(this).navigate(R.id.action_effectFragment_to_trackListFragment)
+            val song = viewModel.currentSong
+            if(song != null){
+                val action = EffectFragmentDirections.actionEffectFragmentToTrackListFragment(song)
+                NavHostFragment.findNavController(this).navigate(action)
+            }
         }
         // Inflate the layout for this fragment
         return binding.root

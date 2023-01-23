@@ -6,8 +6,7 @@ import java.util.*
 import com.google.gson.Gson
 
 import com.google.gson.reflect.TypeToken
-
-
+import org.apache.commons.io.FileUtils
 
 
 private const val TRANSFER_BUFFER_SIZE = 10 * 1024
@@ -137,6 +136,7 @@ object TypeConverter {
         }
         return read
     }
+
 
 
 

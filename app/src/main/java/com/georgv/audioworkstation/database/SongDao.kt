@@ -14,9 +14,6 @@ interface SongDao {
     @Query("SELECT * FROM songs ORDER BY id ASC")
     fun getAllSongs():LiveData<List<Song>>
 
-    @Query("SELECT * FROM songs WHERE inEditMode = :bool")
-    fun getSongInEdit(bool: Boolean):LiveData<Song>
-
     @Query("SELECT * FROM songs ORDER BY id DESC LIMIT 1")
     fun getLastSong():Song?
 
@@ -24,10 +21,8 @@ interface SongDao {
     suspend fun getSongByID(id: Long):Song
 
     @Query("DELETE FROM songs WHERE id = :id")
-    fun deleteById(id:Long)
+    suspend fun deleteById(id:Long)
 
-    @Delete
-    fun delete(song:Song)
 
 }
 @Dao
@@ -36,10 +31,20 @@ interface TrackDao{
     suspend fun insert(track: Track):Long
 
     @Query("SELECT * FROM tracks WHERE songID = :id")
+    fun getLiveDataTracksBySongId(id:Long): LiveData<List<Track>>
+
+    @Query("SELECT * FROM tracks WHERE songID = :id")
     suspend fun getTracksBySongId(id:Long): List<Track>
+
+    @Query("DELETE FROM tracks WHERE songID = :id")
+    suspend fun deleteTracksBySongId(id:Long)
+
 
     @Query("UPDATE tracks SET isRecording=:isRecording, timeStampStop=:timeStampStop, duration=:duration WHERE id=:id")
     suspend fun trackUpdate(isRecording: Boolean?, timeStampStop: Long?,duration:Long?, id: Long)
+
+    @Query("UPDATE tracks SET volume=:volume WHERE id=:id")
+    suspend fun trackVolumeUpdate(volume:Float, id: Long)
 
     @Query("SELECT * FROM tracks WHERE isRecording = 1")
     suspend fun getTrackInEdit():Track?
@@ -50,7 +55,5 @@ interface TrackDao{
     @Query("DELETE FROM tracks WHERE id = :id")
     suspend fun deleteById(id:Long)
 
-    @Delete
-    fun delete(track:Track)
 
 }

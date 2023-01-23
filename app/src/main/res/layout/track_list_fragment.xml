@@ -1,111 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/trackListFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:layout_weight="1">
 
 
     <LinearLayout
-        android:id="@+id/linearLayout"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:orientation="vertical"
-        app:layout_constraintBottom_toTopOf="@+id/buttonView"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center">
 
         <TextView
                 android:text=""
-                android:layout_width="match_parent"
+                android:textSize="22sp"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:id="@+id/songName"
-                android:gravity = "center"
-                android:layout_marginStart="16dp"
-                app:lineHeight="80dp"
-                />
+                android:layout_marginEnd="15dp"
+                android:layout_weight="0.9"
+                android:gravity="center" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/trackListRecyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+        <ImageButton
+                android:id="@+id/saveSongButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_baseline_save_24"
+                app:layout_constrainedHeight="false"
+                app:layout_constrainedWidth="false"
+                android:contentDescription="@string/SaveButton" />
+
     </LinearLayout>
 
+    <LinearLayout
+            android:id="@+id/linearLayout"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.9"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toTopOf="@+id/buttonView"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:gravity="center">
+
+        <ProgressBar
+                android:id="@+id/indeterminateBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:layout_gravity="center" />
+
+        <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/trackListRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="visible">
+
+        </androidx.recyclerview.widget.RecyclerView>
+
+    </LinearLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/buttonView"
-        android:layout_width="match_parent"
-        android:layout_height="100dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/linearLayout">
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:id="@+id/buttonLayout"
+            android:layout_weight="0.1">
 
         <ImageButton
-            android:id="@+id/recordButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:minHeight="48dp"
-            android:src="@drawable/ic_baseline_fiber_manual_record_24"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
+                android:id="@+id/pauseButton"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:minHeight="48dp"
+                android:src="@drawable/ic_baseline_pause_24"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/recordButton"
+                android:layout_marginEnd="15dp"
+                android:visibility="invisible"
+                android:contentDescription="@string/PAUSE"/>
 
         <ImageButton
-            android:id="@+id/saveSongButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:minHeight="48dp"
-            android:src="@drawable/ic_baseline_save_24"
-            app:layout_constrainedHeight="false"
-            app:layout_constrainedWidth="false"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/recordButton"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:ignore="SpeakableTextPresentCheck" />
+                android:id="@+id/recordButton"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:minHeight="48dp"
+                android:src="@drawable/ic_baseline_fiber_manual_record_24"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:visibility="visible"
+                android:contentDescription="@string/REC" />
 
         <ImageButton
-            android:id="@+id/stopButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:minHeight="48dp"
-            android:src="@drawable/ic_baseline_stop_24"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.5"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:ignore="SpeakableTextPresentCheck" />
-
-
-        <ImageButton
-            android:id="@+id/playButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:minHeight="48dp"
-            android:src="@drawable/ic_baseline_play_arrow_24"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/recordButton"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
+                android:id="@+id/stopButton"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:minHeight="48dp"
+                android:src="@drawable/ic_baseline_stop_24"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                android:visibility="invisible"
+                android:contentDescription="@string/STOP" />
 
         <ImageButton
-            android:id="@+id/pauseButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:minHeight="48dp"
-            android:src="@drawable/ic_baseline_pause_24"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/stopButton"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
+                android:id="@+id/playButton"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:minHeight="60dp"
+                app:flow_horizontalAlign="center"
+                android:src="@drawable/ic_baseline_play_arrow_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/recordButton"
+                android:layout_marginStart="15dp"
+                android:visibility="invisible"
+                android:contentDescription="@string/PLAY" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+
+</LinearLayout>

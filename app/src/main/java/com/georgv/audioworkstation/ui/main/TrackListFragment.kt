@@ -19,149 +19,74 @@ import com.georgv.audioworkstation.TrackListAdapter
 import androidx.lifecycle.Observer
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
-import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
+import androidx.core.view.isVisible
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.UiListener
+import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.databinding.TrackListFragmentBinding
+import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 
 
-class TrackListFragment : Fragment(), View.OnClickListener {
+class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: TrackListFragmentBinding
     private lateinit var uiListener: UiListener
-    private lateinit var mRecyclerView:RecyclerView
-    private val args:TrackListFragmentArgs by navArgs()
+    private lateinit var mRecyclerView: RecyclerView
+    private val args: TrackListFragmentArgs by navArgs()
+
+    init {
+        AudioController.playerList.clear()
+        AudioController.audioListener = this
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+
         AudioController.fragmentActivitySender = requireActivity()
         binding = TrackListFragmentBinding.inflate(inflater, container, false)
-        ButtonController.binding = this.binding
         val layoutManager = LinearLayoutManager(context)
         mRecyclerView = binding.trackListRecyclerView
         mRecyclerView.layoutManager = layoutManager
         val adapter = TrackListAdapter(this)
         mRecyclerView.adapter = adapter
         uiListener = adapter
-        setEmptySongView()
 
         binding.songName.text = args.selectedSong.songName
         binding.playButton.setOnClickListener(this)
-        binding.recordButton.setOnClickListener (this)
+        binding.recordButton.setOnClickListener(this)
         binding.stopButton.setOnClickListener(this)
         binding.pauseButton.setOnClickListener(this)
         binding.saveSongButton.setOnClickListener(this)
 
         val trackListObserver = Observer<List<Track>> {
             adapter.submitList(viewModel.trackList.value)
-            Log.d("OBSERVER TRIGGERED", viewModel.trackList.value?.size.toString())
         }
         viewModel.trackList.observe(viewLifecycleOwner, trackListObserver)
-
-
 
         return binding.root
     }
 
 
-
-
-    companion object ButtonController {
-        private lateinit var binding: TrackListFragmentBinding
-
-        fun setEmptySongView(){
-            setAllButtonsInvisible()
-            binding.recordButton.visibility = View.VISIBLE
-        }
-
-        fun setStopView(){
-            setAllButtonsInvisible()
-            setPlayButton()
-            binding.recordButton.visibility = View.VISIBLE
-            binding.saveSongButton.visibility = View.VISIBLE
-        }
-
-        fun setPauseView(){
-            setAllButtonsInvisible()
-            setPlayButton()
-            binding.playButton.blink()
-        }
-
-        fun setPlayView(){
-            setAllButtonsInvisible()
-            binding.stopButton.visibility = View.VISIBLE
-            binding.pauseButton.visibility = View.VISIBLE
-        }
-
-        fun setRecView(){
-            setAllButtonsInvisible()
-            binding.stopButton.visibility = View.VISIBLE
-        }
-
-        fun setPlayButton(){
-            when(AudioController.playerList.isNotEmpty()){
-                true -> binding.playButton.visibility = View.VISIBLE
-                false -> binding.playButton.visibility = View.GONE
-            }
-        }
-
-        private fun setAllButtonsInvisible() {
-            for (button:View in binding.buttonView) {
-                if (button is ImageButton) {
-                    button.visibility = View.GONE
-                }
-            }
-        }
-
-        fun View.blink(
-            times: Int = Animation.INFINITE,
-            duration: Long = 1L,
-            offset: Long = 400L,
-            minAlpha: Float = 0.0f,
-            maxAlpha: Float = 1.0f,
-            repeatMode: Int = Animation.REVERSE
-        ) {
-            startAnimation(AlphaAnimation(minAlpha, maxAlpha).also {
-                it.duration = duration
-                it.startOffset = offset
-                it.repeatMode = repeatMode
-                it.repeatCount = times
-            })
-        }
-
-        fun View.colorBlink(colorFrom:Int, colorTo:Int, view: View) {
-            val colorAnimation = ValueAnimator.ofObject(ArgbEvaluator(), colorFrom, colorTo)
-            colorAnimation.duration = 400 // milliseconds
-            colorAnimation.addUpdateListener { animator -> view.setBackgroundColor(animator.animatedValue as Int) }
-            colorAnimation.start()
-        }
-
-
-    }
-
-
-
-
     override fun onClick(p0: View?) {
-        when(p0){
+        when (p0) {
             binding.playButton -> {
-                if(AudioController.controllerState == AudioController.ControllerState.PAUSE){
+                if (AudioController.controllerState == AudioController.ControllerState.PAUSE) {
                     changeState(AudioController.ControllerState.CONTINUE)
-                    binding.playButton.clearAnimation()
-                }else{
+                    //binding.playButton.clearAnimation()
+                } else {
                     changeState(AudioController.ControllerState.PLAY)
                 }
             }
@@ -171,53 +96,172 @@ class TrackListFragment : Fragment(), View.OnClickListener {
                 viewModel.stopRecordTrack()
             }
 
-            binding.recordButton ->{
-                if(viewModel.trackList.value?.size!! < 8){
-                    val fileName = "track${viewModel.trackList.value?.count()?.plus(1)}"
-                    val pcmdir = "${context?.filesDir?.absolutePath}/$fileName.pcm"
-                    val wavdir = "${context?.filesDir?.absolutePath}/$fileName.wav"
-                    viewModel.recordTrack(fileName, pcmdir,wavdir)
-                    if(AudioController.playerList.isEmpty()){
-                        changeState(AudioController.ControllerState.REC)
-                    }else{
-                        changeState(AudioController.ControllerState.PLAYREC)
-                    }
-                }else{
-                    val snack = Snackbar.make(
-                        mRecyclerView,
-                        "TOO MANY TRACKS",
-                        Snackbar.LENGTH_SHORT
-                    )
-                    val view = snack.view
-                    val params = view.layoutParams as FrameLayout.LayoutParams
-                    params.gravity = Gravity.CENTER
-                    view.setBackgroundResource(R.color.redTransparent)
-                    snack.show()
+            binding.recordButton -> {
+                if (viewModel.trackList.value?.size!! > 7) {
+                    showTooManyTracksSnackBar()
+                    return
+                }
+                viewModel.recordTrack(requireContext())
+                if (AudioController.playerList.isEmpty()) {
+                    changeState(AudioController.ControllerState.REC)
+                } else {
+                    changeState(AudioController.ControllerState.PLAYREC)
                 }
             }
+
 
             binding.pauseButton -> {
                 changeState(AudioController.ControllerState.PAUSE)
             }
 
             binding.saveSongButton -> {
-                findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
+                val trackList = viewModel.trackList.value
+                val pcmDir = viewModel.currentSong?.filePath
+                val songWavFileDir = viewModel.currentSong?.wavFilePath
+                if ((trackList != null)
+                    && trackList.isNotEmpty()
+                    && (songWavFileDir != null)
+                    && (pcmDir != null)
+                ) {
+                    val wavFile = File(songWavFileDir)
+                    val pcmFile = File(pcmDir)
+                    AudioController.mixAudio(trackList, pcmFile, wavFile)
+                    findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
+                } else {
+                    showEmptySongSnackBar()
+                }
             }
-
-
         }
         uiListener.uiCallback()
     }
 
-    fun deleteTrack(trackId:Long, filePath:String){
+    fun deleteTrack(trackId: Long, pcmFilePath: String, wavFilePath: String) {
         viewModel.deleteTrackFromDb(trackId)
-        try{
-            Files.delete(Paths.get(filePath))
-        } catch (e:IOException){
+        try {
+            Files.delete(Paths.get(pcmFilePath))
+            Files.delete(Paths.get(wavFilePath))
+        } catch (e: IOException) {
             e.printStackTrace()
         }
     }
 
+    fun updateTrackVolume(volume:Float,id:Long){
+        viewModel.updateTrackVolumeToDb(volume,id)
+    }
+
+    fun setButtonUI(){
+        when(AudioController.controllerState){
+            AudioController.ControllerState.STOP -> {
+                if(AudioController.playerList.isEmpty()){
+                    setDefaultView()
+                }else{
+                    setReadyToPlayUI()
+                }
+            }
+            AudioController.ControllerState.PLAY -> setPlayingUI()
+            AudioController.ControllerState.CONTINUE -> setPlayingUI()
+            AudioController.ControllerState.REC -> setRecordingUI()
+            AudioController.ControllerState.PLAYREC -> setRecordingUI()
+            AudioController.ControllerState.PAUSE -> setPauseUI()
+        }
+    }
+
+    private fun setAllButtonsInvisible(){
+        for (button:View in binding.buttonLayout) {
+            if (button is ImageButton) {
+                button.visibility = View.INVISIBLE
+            }
+        }
+    }
+
+    private fun setDefaultView(){
+        setAllButtonsInvisible()
+        binding.recordButton.visibility = View.VISIBLE
+    }
+
+    private fun setReadyToPlayUI(){
+        setAllButtonsInvisible()
+        binding.playButton.visibility = View.VISIBLE
+        binding.recordButton.visibility = View.VISIBLE
+
+    }
+
+    private fun setPlayingUI(){
+        setAllButtonsInvisible()
+        binding.stopButton.visibility = View.VISIBLE
+        binding.pauseButton.visibility = View.VISIBLE
+    }
+
+    private fun setRecordingUI(){
+        setAllButtonsInvisible()
+        binding.stopButton.visibility = View.VISIBLE
+    }
+
+    private fun setPauseUI(){
+        setAllButtonsInvisible()
+        binding.pauseButton.visibility = View.VISIBLE
+        binding.playButton.visibility = View.VISIBLE
+        binding.stopButton.visibility = View.VISIBLE
+    }
+
+
+
+
+    private fun View.blink(
+        times: Int = Animation.INFINITE,
+        duration: Long = 1L,
+        offset: Long = 400L,
+        minAlpha: Float = 0.0f,
+        maxAlpha: Float = 1.0f,
+        repeatMode: Int = Animation.REVERSE
+    ) {
+        startAnimation(AlphaAnimation(minAlpha, maxAlpha).also {
+            it.duration = duration
+            it.startOffset = offset
+            it.repeatMode = repeatMode
+            it.repeatCount = times
+        })
+    }
+
+    private fun colorBlink(colorFrom: Int, colorTo: Int, view: View) {
+        val colorAnimation = ValueAnimator.ofObject(ArgbEvaluator(), colorFrom, colorTo)
+        colorAnimation.duration = 400 // milliseconds
+        colorAnimation.addUpdateListener { animator -> view.setBackgroundColor(animator.animatedValue as Int) }
+        colorAnimation.start()
+    }
+
+    private fun showTooManyTracksSnackBar() {
+        val snack = Snackbar.make(
+            mRecyclerView,
+            "TOO MANY TRACKS",
+            Snackbar.LENGTH_SHORT
+        )
+        val view = snack.view
+        val params = view.layoutParams as FrameLayout.LayoutParams
+        params.gravity = Gravity.CENTER
+        view.setBackgroundResource(R.color.redTransparent)
+        snack.show()
+    }
+
+    private fun showEmptySongSnackBar() {
+        val snack = Snackbar.make(
+            mRecyclerView,
+            "RECORD SOMETHING BEFORE SAVING",
+            Snackbar.LENGTH_SHORT
+        )
+        val view = snack.view
+        val params = view.layoutParams as FrameLayout.LayoutParams
+        params.gravity = Gravity.CENTER
+        view.setBackgroundResource(R.color.redTransparent)
+        snack.show()
+    }
+
+    override fun uiCallback() {
+        setButtonUI()
+    }
 
 }
 
+interface AudioListener{
+    fun uiCallback()
+}

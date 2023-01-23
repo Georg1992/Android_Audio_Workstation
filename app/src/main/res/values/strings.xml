@@ -1,11 +1,18 @@
 <resources>
     <string name="app_name">Audio Workstation</string>
-    <string name="REC">Record</string>
-    <string name="PlayTrackButton">PlayTrackButton</string>
+    <string name="REC">RecordTrackButton</string>
+    <string name="PLAY">PlayTrackButton</string>
+    <string name="STOP">StopTrackButton</string>
+    <string name="PAUSE">PauseButton</string>
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="okEffect">OK</string>
     <string name="applyeffects">applyEffects</string>
     <string name="reverb">REVERB</string>
     <string name="applyeffect">ApplyEffect</string>
+    <string name="createSong">Create Song</string>
+    <string name="OK">Ok</string>
+    <string name="CANCEL">Cancel</string>
+    <string name="SaveButton">SAVE</string>
+
 </resources>

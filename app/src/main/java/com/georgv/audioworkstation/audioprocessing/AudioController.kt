@@ -10,9 +10,13 @@ import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.data.Track
-import com.georgv.audioworkstation.ui.main.TrackListFragment
+import com.georgv.audioworkstation.ui.main.AudioListener
+import org.apache.commons.io.FileUtils
 import java.io.*
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.concurrent.thread
+
 
 object AudioController {
     enum class ControllerState {
@@ -25,24 +29,30 @@ object AudioController {
     }
 
     lateinit var fragmentActivitySender: FragmentActivity
+    lateinit var audioListener: AudioListener
     private lateinit var recorder: AudioRecord
-    private val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
-    private lateinit var recordingThread:Thread
+    private const val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
+    private lateinit var recordingThread: Thread
+    private lateinit var trackToRecord: Track
+
+
+
 
     //for raw audio can use
-    private val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_STEREO
-    const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+    private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_STEREO
+    private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     const val SAMPLE_RATE = 44100
     private val BUFFER_SIZE_RECORDING =
         AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
 
 
-    var controllerState: ControllerState = ControllerState.STOP//NOT GOOD
-    lateinit var lastRecorded: Track //NOT GOOD
-
+    var controllerState: ControllerState = ControllerState.STOP
     val playerList: MutableList<MediaPlayer> = mutableListOf()
 
 
+    fun getTrackToRecord(track: Track) {
+        trackToRecord = track
+    }
 
     private fun startRecording() {
         if (ActivityCompat.checkSelfPermission(
@@ -59,7 +69,7 @@ object AudioController {
         if (this::recorder.isInitialized) {
             recorder.startRecording()
             recordingThread = thread(true) {
-                writeAudioDataToFile(lastRecorded)
+                writeAudioDataToFile(trackToRecord)
             }
             recordingThread.interrupt()
         }
@@ -109,18 +119,18 @@ object AudioController {
     }
 
 
-
-    private fun playTrack(player: MediaPlayer) {
+    private fun playAudio(player: MediaPlayer) {
         try {
             val playingThread = thread(true) {
                 player.prepare()
             }
-            player.setOnPreparedListener{
+            player.setOnPreparedListener {
+
 
                 playingThread.interrupt()
                 player.setOnCompletionListener {
                     it.stop()
-                    if(allTracksComplete() && controllerState != ControllerState.PLAYREC){
+                    if (allTracksComplete() && controllerState != ControllerState.PLAYREC) {
                         changeState(ControllerState.STOP)
                     }
                 }
@@ -131,10 +141,19 @@ object AudioController {
         }
     }
 
+    fun controlVolume(player:MediaPlayer?, volume:Float){
+        val vol = volume/100F
+        player?.setVolume(vol,vol)
+    }
 
-    private fun allTracksComplete():Boolean{
+
+
+
+    private fun allTracksComplete(): Boolean {
         return playerList.all { !it.isPlaying }
     }
+
+
 
 
     fun changeState(audioControllerState: ControllerState) {
@@ -142,39 +161,93 @@ object AudioController {
         when (audioControllerState) {
             ControllerState.PLAY -> {
                 for (player in playerList) {
-                    playTrack(player)
+                    playAudio(player)
                 }
-                TrackListFragment.setPlayView()
             }
             ControllerState.PLAYREC -> {
                 startRecording()
                 for (player in playerList) {
-                    playTrack(player)
+                    playAudio(player)
                 }
-                TrackListFragment.setRecView()
             }
             ControllerState.REC -> {
                 startRecording()
-                TrackListFragment.setRecView()
             }
             ControllerState.STOP -> {
                 stop()
-                TrackListFragment.setStopView()
             }
             ControllerState.PAUSE -> {
                 for (player in playerList) {
                     player.pause()
                 }
-                TrackListFragment.setPauseView()
             }
             ControllerState.CONTINUE -> {
-                for(player in playerList){
+                for (player in playerList) {
                     player.start()
-
                 }
-                TrackListFragment.setPlayView()
             }
         }
+        audioListener.uiCallback()
     }
+
+
+//    byte | 01 02 | 03 04 | 05 06 | 07 08 | 09 10 | 11 12 | ...
+//    channel |  Left | Right | Left  | Right | Left |  Right | ...
+//    frame |     First     |    Second     |     Third     | ...
+//    sample | 1st L | 1st R | 2nd L | 2nd R | 3rd L | 3rd R | ... etc.
+
+    fun mixAudio(tracks: List<Track>, outputPcmFile: File, outputWavFile: File) {
+        val bufferSize = 64000
+        val outputFileSize = getBigestFileSize(tracks)
+        var offset: Long = 0
+
+        val mixed = FloatArray(bufferSize / 2)
+        val mixedShort = ShortArray(bufferSize / 2)
+        val mixedByte = ByteArray(bufferSize)
+
+        val doTimes = (outputFileSize / bufferSize).toInt() + 1
+        repeat(doTimes) {
+            for (track in tracks) {
+                val inputFile = File(track.pcmDir)
+                val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
+                inputFile.inputStream().channel.read(bytesBuffer, offset)
+                val bytes = bytesBuffer.array()
+                val tmpBuffer = ShortArray(bufferSize / 2)
+                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                    .get(tmpBuffer)
+                val audioFloats = FloatArray(bufferSize / 2)
+
+                for (i in tmpBuffer.indices) {
+                    audioFloats[i] = tmpBuffer[i].toFloat() / 0x8000
+
+                    if (track == tracks[0]) {
+                        mixed[i] = audioFloats[i]
+                    } else {
+                        mixed[i] =
+                            ((mixed[i] + audioFloats[i]) * 0.8).toFloat()               //(mixed[i] + audioFloats[i]) - (mixed[i]*audioFloats[i])
+                    }
+                    if (mixed[i] > 1.0f) mixed[i] = 1.0f
+                    if (mixed[i] < -1.0f) mixed[i] = -1.0f
+
+                    mixedShort[i] = (mixed[i] * 32768.0f).toInt().toShort()
+                }
+            }
+            offset += bufferSize
+            ByteBuffer.wrap(mixedByte).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                .put(mixedShort)
+            FileUtils.writeByteArrayToFile(outputPcmFile, mixedByte, true)
+        }
+        TypeConverter.pcmToWav(outputPcmFile, outputWavFile, 2, SAMPLE_RATE, SAMPLE_RATE, 16)
+    }
+
+    private fun getBigestFileSize(tracks: List<Track>): Long {
+        val bigestTrack = tracks.maxByOrNull { track -> track.duration!! }
+        return File(bigestTrack!!.pcmDir).length()
+    }
+
+
+
+
 }
+
 

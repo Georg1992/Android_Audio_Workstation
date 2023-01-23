@@ -13,21 +13,35 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="65dp">
+            android:layout_height="68dp">
+
+        <ImageButton
+                android:id="@+id/playButton"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:minHeight="48dp"
+                android:src="@drawable/ic_baseline_play_arrow_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
 
         <TextView
-                android:id="@+id/instrumentText"
+                android:id="@+id/songName"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:shadowColor="@color/white"
                 android:shadowRadius="6"
                 android:text=""
+                android:elevation="6dp"
+                android:gravity = "center"
                 app:drawableTint="#9DF197"
                 app:fontFamily="monospace"
-                android:textSize="15sp"
+                android:textSize="18sp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent" />
 
         <ImageView
                 android:id="@+id/deleteButton"
@@ -36,7 +50,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_baseline_delete_24"
-                app:layout_constraintEnd_toEndOf="@+id/instrumentText" />
+                app:layout_constraintEnd_toEndOf="@+id/songName" />
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

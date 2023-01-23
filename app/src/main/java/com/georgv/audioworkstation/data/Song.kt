@@ -13,6 +13,7 @@ data class Song(
     @PrimaryKey(autoGenerate = true)
     val id: Long,
     val filePath:String?,
+    val wavFilePath: String?,
     var inEditMode: Boolean,
     var songName:String?
     ):Parcelable {

@@ -15,41 +15,13 @@ class Reverb(val track: Track) : Effect() {
 
 
     override fun apply(filePath: String) {
-        val audioSource = File(filePath)
-        var processedAudio: ByteArray? = null
-        if (audioSource.length() > MAX_BUFFER_SIZE) {
-            readInChunks(audioSource)
-        } else {
-            processedAudio = processReverb(audioSource)
-            audioSource.writeBytes(processedAudio)
-        }
-        processedAudio = null
+        //processReverb(audioSource)
     }
 
-    private fun readInChunks(file: File) {
-        var tmpFiles = 0
-        try {
-            file.inputStream().buffered().use { input ->
-                while (true) {
-                    var buff = ByteArray(MAX_BUFFER_SIZE.toInt())
-                    val read = input.read(buff)
-                    if (read <= 0) break
-                    if (read < MAX_BUFFER_SIZE) {
-                        buff = ByteArray(read)
-                    }
-                    tmpFiles++
-                    val tmp = File(track.pcmDir.plus("tmp${tmpFiles}.pcm"))
-                    tmp.writeBytes(buff)
-                }
-                file.inputStream().close()
-            }
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
-    }
 
     private fun processReverb(audioSource: File): ByteArray {
         val audioBuffer: ByteArray = audioSource.readBytes()
+
         val frameSize = 4 //16 bit audio 2 channels
         val floatBufferSize = audioBuffer.size * frameSize
 

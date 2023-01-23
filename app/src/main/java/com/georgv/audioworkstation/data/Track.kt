@@ -20,11 +20,13 @@ data class Track(
     val id:Long,
     var isRecording:Boolean?,
     var trackName:String,
+    var volume:Float,
     val pcmDir:String,
     val wavDir:String,
     val timeStampStart:Long,
     var timeStampStop:Long?,
     var duration:Long?,
     val songID: Long,
-    val effecs: String?
+    val effects: String?
     ):Parcelable
+
