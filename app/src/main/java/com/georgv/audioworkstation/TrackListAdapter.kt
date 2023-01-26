@@ -10,6 +10,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.audioprocessing.AudioController
+import com.georgv.audioworkstation.audioprocessing.Reverb
+import com.georgv.audioworkstation.customHandlers.CustomDataSource
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.TrackHolderViewBinding
 import com.georgv.audioworkstation.ui.main.TrackListFragment
@@ -115,7 +117,6 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
         holder.trackId = item.id
         holder.instrumentName.text = item.trackName
         holder.volumeSlider.value = item.volume
-        holder.pcmPath = item.pcmDir
         holder.wavPath = item.wavDir
         viewHolders.add(holder)
         if (item.isRecording == true) {
@@ -128,7 +129,8 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
                 holder.itemView.setBackgroundResource(R.color.green)
                 val newPlayer = MediaPlayer()
                 newPlayer.apply {
-                    setDataSource(item.wavDir)
+                    setDataSource(CustomDataSource(item))
+                    //setDataSource(item.wavDir)
                 }
                 holder.player = newPlayer
                 AudioController.playerList.add(newPlayer)

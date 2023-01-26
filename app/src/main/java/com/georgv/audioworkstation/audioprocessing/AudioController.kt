@@ -6,12 +6,15 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import com.georgv.audioworkstation.customHandlers.TypeConverter
+import com.georgv.audioworkstation.customHandlers.WavHeader
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.AudioListener
 import org.apache.commons.io.FileUtils
+import org.apache.commons.io.input.buffer.CircularByteBuffer
 import java.io.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -75,11 +78,13 @@ object AudioController {
         }
     }
 
+
+
     private fun writeAudioDataToFile(track: Track) {
         val audioBuffer = ByteArray(BUFFER_SIZE_RECORDING)
         val outputStream: FileOutputStream?
         try {
-            outputStream = FileOutputStream(track.pcmDir)
+            outputStream = FileOutputStream(track.wavDir)
         } catch (e: FileNotFoundException) {
             return
         }
@@ -98,12 +103,18 @@ object AudioController {
         } catch (e: IOException) {
             e.printStackTrace()
         }
-        val inputFile = File(track.pcmDir)
-        val outputFile = File(track.wavDir)
+        val inputFile = File(track.wavDir)
+        val outputFileSize = inputFile.length() + 44
+        writeHeader(inputFile,outputFileSize)
+    }
 
-        TypeConverter.pcmToWav(
-            inputFile, outputFile, 2, SAMPLE_RATE, SAMPLE_RATE, 16
-        )
+    private fun writeHeader(file: File, outputFileSize: Long){
+        val header = WavHeader(outputFileSize, SAMPLE_RATE, 2, 16)
+        val headerAsByteArray = header.getHeader()
+        val randomAccessFile = RandomAccessFile(file, "rw")
+        randomAccessFile.seek(0) // seek to the beginning of the file
+        randomAccessFile.write(headerAsByteArray)
+        randomAccessFile.close()
     }
 
 
@@ -125,13 +136,12 @@ object AudioController {
                 player.prepare()
             }
             player.setOnPreparedListener {
-
-
                 playingThread.interrupt()
                 player.setOnCompletionListener {
                     it.stop()
                     if (allTracksComplete() && controllerState != ControllerState.PLAYREC) {
                         changeState(ControllerState.STOP)
+                        return@setOnCompletionListener
                     }
                 }
                 player.start()
@@ -196,19 +206,21 @@ object AudioController {
 //    frame |     First     |    Second     |     Third     | ...
 //    sample | 1st L | 1st R | 2nd L | 2nd R | 3rd L | 3rd R | ... etc.
 
-    fun mixAudio(tracks: List<Track>, outputPcmFile: File, outputWavFile: File) {
+    fun mixAudio(tracks: List<Track>, outputWavFile: File) {
         val bufferSize = 64000
-        val outputFileSize = getBigestFileSize(tracks)
-        var offset: Long = 0
+        var offset: Long = 44 // Skipping the WAV header
+        val outputFileSize = getLongestFileSize(tracks)
+
 
         val mixed = FloatArray(bufferSize / 2)
         val mixedShort = ShortArray(bufferSize / 2)
         val mixedByte = ByteArray(bufferSize)
 
-        val doTimes = (outputFileSize / bufferSize).toInt() + 1
+        val doTimes = ((outputFileSize-offset) / bufferSize).toInt() + 1
+        writeHeader(outputWavFile,outputFileSize)
         repeat(doTimes) {
             for (track in tracks) {
-                val inputFile = File(track.pcmDir)
+                val inputFile = File(track.wavDir)
                 val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
                 inputFile.inputStream().channel.read(bytesBuffer, offset)
                 val bytes = bytesBuffer.array()
@@ -235,14 +247,16 @@ object AudioController {
             offset += bufferSize
             ByteBuffer.wrap(mixedByte).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                 .put(mixedShort)
-            FileUtils.writeByteArrayToFile(outputPcmFile, mixedByte, true)
+            FileUtils.writeByteArrayToFile(outputWavFile, mixedByte, true)
+
         }
-        TypeConverter.pcmToWav(outputPcmFile, outputWavFile, 2, SAMPLE_RATE, SAMPLE_RATE, 16)
     }
 
-    private fun getBigestFileSize(tracks: List<Track>): Long {
-        val bigestTrack = tracks.maxByOrNull { track -> track.duration!! }
-        return File(bigestTrack!!.pcmDir).length()
+
+
+    private fun getLongestFileSize(tracks: List<Track>): Long {
+        val longestTrack = tracks.maxByOrNull { track -> track.duration!! }
+        return File(longestTrack!!.wavDir).length()
     }
 
 

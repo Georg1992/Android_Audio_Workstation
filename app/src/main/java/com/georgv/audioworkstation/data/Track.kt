@@ -21,7 +21,6 @@ data class Track(
     var isRecording:Boolean?,
     var trackName:String,
     var volume:Float,
-    val pcmDir:String,
     val wavDir:String,
     val timeStampStart:Long,
     var timeStampStop:Long?,

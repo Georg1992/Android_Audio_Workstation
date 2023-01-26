@@ -6,7 +6,7 @@ import kotlin.math.pow
 
 class Equalizer : Effect() {
 
-    override fun apply(filePath: String) {
+    override fun apply(byteArray: ByteArray):ByteArray {
         TODO("Not yet implemented")
     }
 

@@ -16,7 +16,7 @@
             android:layout_height="68dp">
 
         <ImageButton
-                android:id="@+id/playButton"
+                android:id="@+id/playSongButton"
                 android:layout_width="60dp"
                 android:layout_height="60dp"
                 android:minHeight="48dp"
@@ -24,6 +24,18 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
+
+        <ImageButton
+                android:id="@+id/stopSongButton"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:minHeight="48dp"
+                android:src="@drawable/ic_baseline_stop_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                android:visibility="invisible"
                 tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
 
         <TextView

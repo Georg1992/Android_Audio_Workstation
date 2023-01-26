@@ -28,7 +28,7 @@ class EffectFragment : Fragment() {
     ): View {
         binding = FragmentEffectBinding.inflate(inflater,container,false)
         val track = args.selectedTrack
-        val reverbSwitch:Switch = binding.switch2
+        val reverbSwitch:Switch = binding.switchReverb
         val applyAllButton:ImageButton = binding.applyAllEffect
         val trackName = binding.trackName
         trackName.text = track.trackName

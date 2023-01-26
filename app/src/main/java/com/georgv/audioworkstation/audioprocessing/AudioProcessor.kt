@@ -9,7 +9,6 @@ object AudioProcessor {
 
     fun toFloatArray(
         bytes: ByteArray,
-        byteArrayLength: Int,
         floatBuffer:Int
     ): FloatArray {
         val samples = FloatArray(floatBuffer)
@@ -18,9 +17,8 @@ object AudioProcessor {
         val fullScale = fullScale(bitsPerSample)
         var i = 0
         var s = 0
-        while (i < byteArrayLength) {
+        while (i < bytes.size) {
             var temp: Long = unpack16Bit(bytes, i)
-
             temp = extendSign(temp, bitsPerSample)
             val sample: Float = (temp / fullScale).toFloat()
 
@@ -34,7 +32,6 @@ object AudioProcessor {
 
     //	This method converts the byte data into a long
     //	When the data is stored in 16-bit encoding, the bytes need to be bit shifted into position, and Bitwise OR to put the bytes together.
-
     private fun unpack16Bit(
         bytes: ByteArray,
         i: Int
@@ -44,11 +41,11 @@ object AudioProcessor {
     }
 
 
-    fun pack(
+    fun toByteArray (
         samples: FloatArray,
         bytes: ByteArray,
         slen: Int
-    ): Int {
+    ): ByteArray {
         val bitsPerSample: Int = 16
         val bytesPerSample: Int = 2
         val fullScale = fullScale(bitsPerSample)
@@ -62,7 +59,7 @@ object AudioProcessor {
             i += bytesPerSample
             s++
         }
-        return i
+        return bytes
     }
 
     private fun pack16Bit(

@@ -116,16 +116,13 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
 
             binding.saveSongButton -> {
                 val trackList = viewModel.trackList.value
-                val pcmDir = viewModel.currentSong?.filePath
                 val songWavFileDir = viewModel.currentSong?.wavFilePath
                 if ((trackList != null)
                     && trackList.isNotEmpty()
                     && (songWavFileDir != null)
-                    && (pcmDir != null)
                 ) {
                     val wavFile = File(songWavFileDir)
-                    val pcmFile = File(pcmDir)
-                    AudioController.mixAudio(trackList, pcmFile, wavFile)
+                    AudioController.mixAudio(trackList, wavFile)
                     findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
                 } else {
                     showEmptySongSnackBar()

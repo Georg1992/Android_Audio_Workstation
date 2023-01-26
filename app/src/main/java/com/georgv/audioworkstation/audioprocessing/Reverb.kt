@@ -1,68 +1,66 @@
 package com.georgv.audioworkstation.audioprocessing
 
-import com.georgv.audioworkstation.data.Track
-import java.io.*
 import kotlin.math.abs
 
 const val MAX_BUFFER_SIZE = 8e+6
 
-class Reverb(val track: Track) : Effect() {
+class Reverb() : Effect() {
 
-    val sampleRate = AudioController.SAMPLE_RATE.toFloat()
+    private val sampleRate = AudioController.SAMPLE_RATE.toFloat()
     var delayInMilliSeconds: Float = 1000f
     var decayFactor: Float = 0.5f
     var mixPercent: Int = 50
 
 
-    override fun apply(filePath: String) {
-        //processReverb(audioSource)
+    override fun apply(byteArray:ByteArray):ByteArray {
+        return processReverb(byteArray)
     }
 
 
-    private fun processReverb(audioSource: File): ByteArray {
-        val audioBuffer: ByteArray = audioSource.readBytes()
+    private fun processReverb(byteArray: ByteArray): ByteArray {
+        val audioBuffer: ByteArray = byteArray
 
         val frameSize = 4 //16 bit audio 2 channels
         val floatBufferSize = audioBuffer.size * frameSize
 
-        val samples = AudioProcessor.toFloatArray(audioBuffer, audioBuffer.size, floatBufferSize)
-        val originalSamples = samples.copyOf()
+        val samples = AudioProcessor.toFloatArray(audioBuffer, floatBufferSize)
+        //val final = AudioProcessor.toByteArray(samples,audioBuffer,byteArray.size)
 
-
+        return audioBuffer
         //Adding the 4 Comb Filters
-        var outputComb = FloatArray(floatBufferSize)
-        var comb1 = combFilter(samples, floatBufferSize, delayInMilliSeconds, decayFactor)
-        var comb2 =combFilter(samples, floatBufferSize,
-            delayInMilliSeconds - 11.73f, decayFactor - 0.1313f)
-        var comb3 = combFilter(samples, floatBufferSize,
-            delayInMilliSeconds + 19.31f, decayFactor - 0.2743f)
-        var comb4 =  combFilter(samples, floatBufferSize,
-            delayInMilliSeconds - 7.97f, decayFactor - 0.31f)
-
-        for (i in 0 until floatBufferSize) {
-            outputComb[i] = comb1[i] + comb2[i] + comb3[i] + comb4[i]
-        }
-        comb1 = floatArrayOf()
-        comb2 = floatArrayOf()
-        comb3 = floatArrayOf()
-        comb4 = floatArrayOf()
-
-        var mixAudio = FloatArray(floatBufferSize)
-        for (i in 0 until floatBufferSize) {
-            mixAudio[i] = ((100 - mixPercent) * originalSamples[i]) + (outputComb[i] * mixPercent)
-        }
-        outputComb = floatArrayOf()
-        //Method calls for 2 All Pass Filters. Defined at the bottom
-        var allPassFilterSamples1 = allPassFilter(mixAudio, floatBufferSize)
-        mixAudio = floatArrayOf()
-        var allPassFilterSamples2 = allPassFilter(allPassFilterSamples1, floatBufferSize)
-        allPassFilterSamples1 = floatArrayOf()
-
-        val finalAudioSamples = ByteArray(floatBufferSize)
-        AudioProcessor.pack(allPassFilterSamples2, finalAudioSamples, audioBuffer.size * 2)
-        allPassFilterSamples2 = floatArrayOf()
-        return finalAudioSamples
-    }
+//        var outputComb = FloatArray(floatBufferSize)
+//        var comb1 = combFilter(samples, floatBufferSize, delayInMilliSeconds, decayFactor)
+//        var comb2 =combFilter(samples, floatBufferSize,
+//            delayInMilliSeconds - 11.73f, decayFactor - 0.1313f)
+//        var comb3 = combFilter(samples, floatBufferSize,
+//            delayInMilliSeconds + 19.31f, decayFactor - 0.2743f)
+//        var comb4 =  combFilter(samples, floatBufferSize,
+//            delayInMilliSeconds - 7.97f, decayFactor - 0.31f)
+//
+//        for (i in 0 until floatBufferSize) {
+//            outputComb[i] = comb1[i] + comb2[i] + comb3[i] + comb4[i]
+//        }
+//        comb1 = floatArrayOf()
+//        comb2 = floatArrayOf()
+//        comb3 = floatArrayOf()
+//        comb4 = floatArrayOf()
+//
+//        var mixAudio = FloatArray(floatBufferSize)
+//        for (i in 0 until floatBufferSize) {
+//            mixAudio[i] = ((100 - mixPercent) * originalSamplesAsFloat[i]) + (outputComb[i] * mixPercent)
+//        }
+//        outputComb = floatArrayOf()
+//        //Method calls for 2 All Pass Filters. Defined at the bottom
+//        var allPassFilterSamples1 = allPassFilter(mixAudio, floatBufferSize)
+//        mixAudio = floatArrayOf()
+//        var allPassFilterSamples2 = allPassFilter(allPassFilterSamples1, floatBufferSize)
+//        allPassFilterSamples1 = floatArrayOf()
+//
+//        val finalAudioSamples = ByteArray(floatBufferSize)
+//        AudioProcessor.pack(allPassFilterSamples2, finalAudioSamples, audioBuffer.size * 2)
+//        allPassFilterSamples2 = floatArrayOf()
+//
+}
 
     private fun combFilter(
         samples: FloatArray,
@@ -79,6 +77,7 @@ class Reverb(val track: Track) : Effect() {
         }
         return samples
     }
+
 
     private fun allPassFilter(samples: FloatArray, samplesLength: Int): FloatArray {
         val delaySamples =
@@ -106,7 +105,6 @@ class Reverb(val track: Track) : Effect() {
             value = (value + (currentValue - value)) / max
             allPassFilterSamples[i] = value
         }
-
-        return allPassFilterSamples
+        return samples
     }
 }

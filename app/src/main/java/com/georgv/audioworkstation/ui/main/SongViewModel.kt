@@ -38,8 +38,8 @@ class SongViewModel(application: Application) : AndroidViewModel(application){
         get() = _trackList
 
 
-    suspend fun createNewSong(songName:String, filePath:String, wavDir:String) {
-        val newSong = Song(0, filePath, wavDir,true, songName)
+    suspend fun createNewSong(songName:String,wavDir:String) {
+        val newSong = Song(0, wavDir,true, songName)
         val job = viewModelScope.async() {
             db.songDao().insert(newSong)
         }
@@ -55,7 +55,6 @@ class SongViewModel(application: Application) : AndroidViewModel(application){
     fun recordTrack(context:Context) {
         val id = songID.value
         val name = "t${_trackList.value?.count()?.plus(1)}s${currentSong?.id}"
-        val pcmDir = "${context.filesDir.absolutePath}/$name.pcm"
         val wavDir = "${context.filesDir.absolutePath}/$name.wav"
         if(id != null) {
             val newTrack = Track(
@@ -63,7 +62,6 @@ class SongViewModel(application: Application) : AndroidViewModel(application){
                 true,
                 name,
                 100F,
-                pcmDir,
                 wavDir,
                 TypeConverter.dateToTimestamp(Date()),
                 null,
@@ -110,7 +108,6 @@ class SongViewModel(application: Application) : AndroidViewModel(application){
             for(track in tracks){
                 try{
                     Files.delete(Paths.get(track.wavDir))
-                    Files.delete(Paths.get(track.pcmDir))
                 } catch (e:IOException){
                     e.printStackTrace()
                 }

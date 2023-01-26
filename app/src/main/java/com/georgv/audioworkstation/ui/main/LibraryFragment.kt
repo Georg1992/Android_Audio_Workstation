@@ -61,10 +61,9 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
     }
 
     private fun createSongAndNavigate(songName:String){
-        val filePath = "${context?.filesDir?.absolutePath}/$songName.pcm"
         val wavDir = "${context?.filesDir?.absolutePath}/$songName.wav"
         lifecycleScope.launch{
-            viewModel.createNewSong(songName,filePath,wavDir)
+            viewModel.createNewSong(songName,wavDir)
             val song = viewModel.currentSong
             if(song != null){
                 navigateToTheSong(song)
@@ -88,9 +87,11 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
     }
 
 
+
     override fun delegateFunctionToDialog(songName: String) {
         createSongAndNavigate(songName)
     }
+
 
 }
 
