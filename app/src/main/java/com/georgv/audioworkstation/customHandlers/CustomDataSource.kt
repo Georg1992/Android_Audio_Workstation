@@ -5,7 +5,7 @@ import com.georgv.audioworkstation.audioprocessing.Reverb
 import com.georgv.audioworkstation.data.Track
 import java.io.File
 import java.io.FileInputStream
-import java.io.IOException
+
 
 
 class CustomDataSource(track: Track) : MediaDataSource() {
@@ -20,10 +20,9 @@ class CustomDataSource(track: Track) : MediaDataSource() {
 
 
     private fun processingAudio(audioToProcess: ByteArray): ByteArray {
-        val effect = Reverb()
-        return effect.apply(audioToProcess)
-    }
 
+        return byteArrayOf()
+    }
 
     override fun readAt(position: Long, buffer: ByteArray?, offset: Int, size: Int): Int {
         if (buffer == null || size <= 0) return 0
@@ -48,7 +47,6 @@ class CustomDataSource(track: Track) : MediaDataSource() {
             -1
         }
     }
-
 
     override fun getSize(): Long {
         return fileLengthNoHeader.toLong()*4

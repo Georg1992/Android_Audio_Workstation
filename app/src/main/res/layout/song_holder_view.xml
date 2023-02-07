@@ -8,7 +8,7 @@
         android:layout_marginStart="2dp"
         android:layout_marginTop="2dp"
         android:layout_marginEnd="2dp"
-        app:cardCornerRadius="5dp"
+        app:cardCornerRadius="20dp"
         tools:context=".MainActivity">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -24,7 +24,8 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck" />
+                tools:ignore="SpeakableTextPresentCheck,DuplicateClickableBoundsCheck"
+                android:layout_marginHorizontal="5dp" />
 
         <ImageButton
                 android:id="@+id/stopSongButton"
@@ -46,7 +47,7 @@
                 android:shadowRadius="6"
                 android:text=""
                 android:elevation="6dp"
-                android:gravity = "center"
+                android:gravity="center"
                 app:drawableTint="#9DF197"
                 app:fontFamily="monospace"
                 android:textSize="18sp"
@@ -57,12 +58,13 @@
 
         <ImageView
                 android:id="@+id/deleteButton"
-                android:layout_width="50dp"
+                android:layout_width="40dp"
                 android:layout_height="match_parent"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_baseline_delete_24"
-                app:layout_constraintEnd_toEndOf="@+id/songName" />
+                app:layout_constraintEnd_toEndOf="@+id/songName"
+                android:layout_margin="5dp" />
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

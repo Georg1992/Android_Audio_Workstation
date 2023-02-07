@@ -1,51 +1,54 @@
 package com.georgv.audioworkstation.audioprocessing
 
-class Compressor {
+import kotlin.math.abs
+import kotlin.math.exp
+
+class Compressor(val threshold: Float, val ratio: Float, val knee: Float, val attackTime: Float, val releaseTime: Float, val makeupGain: Float): Effect() {
 
 
+    override fun apply(floatArray: FloatArray): FloatArray {
+        return compressAudio(floatArray)
+    }
 
-    fun compressAudio(input: ByteArray, threshold: Double, ratio: Double, knee: Double, attackTime: Double, releaseTime: Double, makeupGain: Double): ByteArray {
-        val output = ByteArray(input.size)
-        var gain = 1.0
-        var currentSample: Double
-        var currentSampleAbs: Double
-        var gainReduction: Double = 0.0
-        var attackCoeff = Math.exp(-1 / (attackTime * 44100))
-        var releaseCoeff = Math.exp(-1 / (releaseTime * 44100))
+
+    private fun compressAudio(input: FloatArray): FloatArray {
+        val output = FloatArray(input.size)
+        var gain = 1f
+        var filteredGain = gain
+        val attackCoeff = exp(-1.0 / (44100 * attackTime))
+        val releaseCoeff = exp(-1.0 / (44100 * releaseTime))
+
+        val limiterEnabled: Boolean = false
 
         for (i in input.indices) {
-            currentSample = input[i].toDouble() / 128.0
-            currentSampleAbs = Math.abs(currentSample)
-
-            if (currentSampleAbs > threshold) {
-                gainReduction = (1 / ratio - 1) * (currentSampleAbs - threshold) / (1 - threshold)
-                gainReduction = Math.max(0.0, gainReduction)
-
-                if (knee > 0) {
-                    var x = currentSampleAbs - threshold
-                    var y = x / knee
-                    y = Math.min(1.0, y)
-                    gainReduction *= y * y
-                }
-                gain *= (1 - gainReduction)
-            }
-
-            if (currentSampleAbs > threshold) {
-                if (currentSample > 0) {
-                    output[i] = (currentSample * (1 + gain) * 128).toInt().toByte()
-                } else {
-                    output[i] = (currentSample * (1 - gain) * 128).toInt().toByte()
-                }
+            val inputSample = input[i]
+            val diff = abs(inputSample) - threshold
+            val reduction = if (diff > 0) {
+                diff * ratio
             } else {
-                output[i] = input[i]
+                0f
             }
-
-            if (currentSampleAbs > threshold) {
-                gain = attackCoeff * gain + (1 - attackCoeff) * (1 - gainReduction)
+            gain = if (reduction > 0) {
+                (1 / ratio).coerceAtLeast(1 - reduction / (knee + reduction))
             } else {
-                gain = releaseCoeff * gain + (1 - releaseCoeff) * 1.0
+                (1 / ratio).coerceAtLeast(1 + diff / (knee - diff))
+            }
+            filteredGain = if ( gain > filteredGain) {
+                (filteredGain * attackCoeff).toFloat() + ( gain * (1 - attackCoeff)).toFloat()
+            } else {
+                (filteredGain * releaseCoeff).toFloat() + (gain * (1 - releaseCoeff)).toFloat()
+            }
+            output[i] = if (makeupGain == 0f) inputSample * filteredGain else inputSample * filteredGain * makeupGain
+            if (limiterEnabled) {
+                output[i] = output[i].coerceAtMost(0.99f)
             }
         }
+
         return output
+    }
+
+
+    override fun apply(byteArray: ByteArray): ByteArray {
+        TODO("Not yet implemented")
     }
 }

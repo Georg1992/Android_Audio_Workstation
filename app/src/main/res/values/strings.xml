@@ -7,12 +7,53 @@
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="okEffect">OK</string>
-    <string name="applyeffects">applyEffects</string>
+
     <string name="reverb">REVERB</string>
-    <string name="applyeffect">ApplyEffect</string>
+
     <string name="createSong">Create Song</string>
-    <string name="OK">Ok</string>
+    <string name="OK">OK</string>
     <string name="CANCEL">Cancel</string>
     <string name="SaveButton">SAVE</string>
+
+    <string name="reverbSwitch" />
+    <string name="sliderDelay" />
+    <string name="sliderDecay" />
+    <string name="sliderDryWet" />
+    <string name="sliderFeedback" />
+
+    <string name="applyAllEffectsButton">ApplyEffectsButton</string>
+    <string name="delayText">Delay ms</string>
+    <string name="decayText">Decay Factor</string>
+    <string name="dryWetText">Dry/Wet</string>
+    <string name="feedbackText">Feedback</string>
+    <string name="apply_effect">Apply Effect</string>
+    <string name="equalizerText">EQUALIZER</string>
+    <string name="eqSwitch">Apply Effect</string>
+    <string name="sliderBand1" />
+
+    <string name="revTag">rev</string>
+    <string name="eqTag">eq</string>
+    <string name="compressor">COMPRESSOR</string>
+    <string name="thresholdText">Threshold</string>
+    <string name="ratioText">Ratio</string>
+    <string name="kneeText">Knee</string>
+    <string name="attackText">Attack</string>
+    <string name="compTag">comp</string>
+    <string name="gainText">Gain</string>
+    <string name="sliderThreshold">ThresholdSlider</string>
+    <string name="sliderRatio">RatioSlider</string>
+    <string name="sliderGain">Gain</string>
+    <string name="compSwitch">compSwitch</string>
+    <string name="releaseText">Release</string>
+    <string name="sliderAttack">Attack</string>
+    <string name="sliderKnee">Knee</string>
+
+    <string name="band1Text">lowpass</string>
+    <string name="band2Text">800Hz</string>
+    <string name="band3Text">2KHz</string>
+    <string name="band4Text">8KHz</string>
+    <string name="band5Text">15KHz</string>
+    <string name="band6Text">highpass</string>
+
 
 </resources>

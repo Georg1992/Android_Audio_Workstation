@@ -1,44 +1,73 @@
 package com.georgv.audioworkstation.audioprocessing
+import org.jtransforms.fft.FloatFFT_1D
+import kotlin.math.*
 
-import java.lang.Math.*
-import org.jtransforms.fft.DoubleFFT_1D
-import kotlin.math.pow
+class Equalizer(val band1:Int,val band2:Int,val band3:Int,val band4:Int,val band5:Int,val band6:Int) : Effect() {
+    private var gains:Array<Int> = arrayOf(band1,band2,band3,band4,band5,band6)
 
-class Equalizer : Effect() {
-
-    override fun apply(byteArray: ByteArray):ByteArray {
-        TODO("Not yet implemented")
+    override fun apply(floatArray: FloatArray): FloatArray {
+        return parametricEqualizer(floatArray)
     }
 
-    fun parametricEqualizer(audioSamples: ByteArray, frequencyBands: Array<Pair<Double, Double>>, gains: DoubleArray) {
-        val sampleRate = 44100
-        val nyquist = sampleRate / 2.0
-        val audioDouble = audioSamples.map { it.toDouble() / 128.0 }.toDoubleArray()
-        val fftMag = DoubleArray(audioDouble.size / 2 + 1)
-        val fftPhase = DoubleArray(audioDouble.size / 2 + 1)
-        val fft1d = DoubleFFT_1D(audioDouble.size.toLong())
-        fft1d.realForward(audioDouble)
-        for (i in fftMag.indices) {
-            fftMag[i] =
-                kotlin.math.sqrt(audioDouble[i * 2] * audioDouble[i * 2] + audioDouble[i * 2 + 1] * audioDouble[i * 2 + 1])
-            fftPhase[i] = kotlin.math.atan2(audioDouble[i * 2 + 1], audioDouble[i * 2])
-        }
-        for (i in frequencyBands.indices) {
-            val startIndex = (frequencyBands[i].first / nyquist * fftMag.size).toInt()
-            val endIndex = (frequencyBands[i].second / nyquist * fftMag.size).toInt()
-            val gain = 10.0.pow(gains[i] / 20.0)
+    private val frequencyBands = arrayOf(
+        Pair(0, 200),
+        Pair(200, 1000),
+        Pair(1000, 4000),
+        Pair(4000, 10000),
+        Pair(10000, 16000),
+        Pair(16000, 22000)
+    )
 
-            for (j in startIndex..endIndex) {
-                fftMag[j] *= gain
+    private fun getNextPowerOfTwo(num: Int): Int {
+        return 2.0.pow(ceil(ln(num.toDouble()) / Math.log(2.0))).toInt()
+    }
+
+    private fun parametricEqualizer(audioSamples: FloatArray): FloatArray {
+        val fftSize = getNextPowerOfTwo(audioSamples.size)
+        val fft = FloatFFT_1D(fftSize.toLong())
+
+        val complexBuffer = FloatArray(2 * fftSize)
+        for (i in audioSamples.indices) {
+            complexBuffer[2 * i] = audioSamples[i]
+            complexBuffer[2 * i + 1] = 0f
+        }
+
+        fft.complexForward(complexBuffer)
+
+        for (i in frequencyBands.indices) {
+            val band = frequencyBands[i]
+            val gain = 10.0.pow(gains[i].toFloat() / 20.0).toFloat()
+
+            val startBin = (band.first * fftSize / 44100).toInt()
+            val endBin = (band.second * fftSize / 44100).toInt()
+
+            for (bin in startBin until endBin) {
+                val re = complexBuffer[2 * bin]
+                val im = complexBuffer[2 * bin + 1]
+
+                val magnitude = sqrt(re * re + im * im.toDouble()).toFloat()
+                val phase = atan2(im.toDouble(), re.toDouble()).toFloat()
+
+                complexBuffer[2 * bin] = magnitude * gain * cos(phase.toDouble()).toFloat()
+                complexBuffer[2 * bin + 1] = magnitude * gain * sin(phase.toDouble()).toFloat()
             }
         }
-        for (i in fftMag.indices) {
-            audioDouble[i * 2] = fftMag[i] * kotlin.math.cos(fftPhase[i])
-            audioDouble[i * 2 + 1] = fftMag[i] * kotlin.math.sin(fftPhase[i])
+
+        fft.complexInverse(complexBuffer, true)
+
+        val result = FloatArray(audioSamples.size)
+        for (i in audioSamples.indices) {
+            result[i] = complexBuffer[2 * i]
         }
-        fft1d.realInverse(audioDouble, true)
-        //audioSamples = audioDouble.map { (it * 128).toByte() }.toByteArray
+
+        return result
     }
 
 
+
+
+
+    override fun apply(byteArray: ByteArray): ByteArray {
+        TODO("Not yet implemented")
+    }
 }

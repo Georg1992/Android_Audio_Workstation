@@ -1,17 +1,22 @@
 package com.georgv.audioworkstation
 
-import android.media.MediaPlayer
+import android.R.attr.button
+import android.R.attr.radius
+import android.R.attr.strokeWidth
+import android.R.color
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.util.Log
 import android.view.*
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.audioprocessing.AudioController
-import com.georgv.audioworkstation.audioprocessing.Reverb
-import com.georgv.audioworkstation.customHandlers.CustomDataSource
+import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.TrackHolderViewBinding
 import com.georgv.audioworkstation.ui.main.TrackListFragment
@@ -22,72 +27,65 @@ import com.google.android.material.slider.Slider
 private const val DEBUG_TAG = "Gestures"
 
 
-class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()),
-    UiListener {
+class TrackListAdapter(val parentFragment: TrackListFragment) :
+    ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()) {
 
     private val viewHolders: MutableList<TrackViewHolder> = mutableListOf()
 
     init {
-        Log.d("I INIT ADAPTER", "I INIT ADAPTER")
         hideAllSliders()
     }
 
-    inner class TrackViewHolder(binding: TrackHolderViewBinding) : RecyclerView.ViewHolder(binding.root),
-        View.OnClickListener{
+    inner class TrackViewHolder(val binding: TrackHolderViewBinding) :
+        RecyclerView.ViewHolder(binding.root),
+        View.OnClickListener {
         lateinit var track: Track
-        var trackId:Long = 0
-        var player: MediaPlayer? = null
-
+        var processor: AudioProcessor? = null
+        //var uiListener: UiListener? = null
+        var trackId: Long = 0
         var selected: Boolean = false
         val instrumentName: TextView = binding.instrumentText
         val volumeSlider = binding.slider
-        var wavPath:String = ""
-        var pcmPath:String = ""
-
+        var wavPath: String = ""
 
         init {
-
-            Log.d("I INIT", "I INIT")
-
             itemView.setOnClickListener(this)
             binding.effectsButton.setOnClickListener {
-                if(AudioController.controllerState == AudioController.ControllerState.STOP){
-                    val action = TrackListFragmentDirections.actionTitleFragmentToEffectFragment(track)
+                if (AudioController.controllerState == AudioController.ControllerState.STOP) {
+                    val action =
+                        TrackListFragmentDirections.actionTitleFragmentToEffectFragment(track)
                     findNavController(parentFragment).navigate(action)
                 }
-
             }
 
             binding.deleteButton.setOnClickListener {
-                if(AudioController.controllerState == AudioController.ControllerState.STOP){
+                if (AudioController.controllerState == AudioController.ControllerState.STOP) {
                     selected = false
-                    releasePlayer(this)
-                    parentFragment.deleteTrack(trackId, pcmPath, wavPath)
-                    uiCallback()
+                    AudioController.removeTrackFromTheTrackList(track)
+                    parentFragment.deleteTrack(trackId, wavPath)
+                    parentFragment.setButtonUI()
                 }
             }
 
-            binding.volumeButton.setOnClickListener{
-                if(volumeSlider.isVisible){
+            binding.volumeButton.setOnClickListener {
+                if (volumeSlider.isVisible) {
                     hideAllSliders()
-                }else{
+                } else {
                     hideAllSliders()
                     volumeSlider.visibility = View.VISIBLE
                 }
             }
 
             volumeSlider.stepSize = 1f
-            volumeSlider.addOnChangeListener{ slider: Slider, fl: Float, _: Boolean ->
-                if(player != null){
-                    AudioController.controlVolume(player, fl)
-                }
+            volumeSlider.addOnChangeListener { slider: Slider, fl: Float, _: Boolean ->
 
             }
 
-            volumeSlider.addOnSliderTouchListener(object:Slider.OnSliderTouchListener{
+            volumeSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
                 override fun onStartTrackingTouch(slider: Slider) {
 
                 }
+
                 override fun onStopTrackingTouch(slider: Slider) {
                     parentFragment.updateTrackVolume(slider.value, trackId)
                 }
@@ -102,12 +100,11 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
                 onBindViewHolder(this, adapterPosition)
             }
         }
-
-
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, position: Int): TrackViewHolder {
-        val itemBinding = TrackHolderViewBinding.inflate(LayoutInflater.from(parent.context),parent,false)
+        val itemBinding =
+            TrackHolderViewBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return TrackViewHolder(itemBinding)
     }
 
@@ -120,39 +117,45 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
         holder.wavPath = item.wavDir
         viewHolders.add(holder)
         if (item.isRecording == true) {
-            holder.itemView.setBackgroundResource(R.color.redTransparent)
+            val gradientDrawable = GradientDrawable()
+            val color = ContextCompat.getColor(parentFragment.requireContext(),R.color.redTransparent)
+            gradientDrawable.setColor(color)
+            gradientDrawable.cornerRadius = radius.toFloat()
+            gradientDrawable.setStroke(3, Color.BLACK)
+            holder.itemView.background = gradientDrawable
+
             holder.selected = false
             return
         }
         when (holder.selected) {
             true -> {
-                holder.itemView.setBackgroundResource(R.color.green)
-                val newPlayer = MediaPlayer()
-                newPlayer.apply {
-                    setDataSource(CustomDataSource(item))
-                    //setDataSource(item.wavDir)
-                }
-                holder.player = newPlayer
-                AudioController.playerList.add(newPlayer)
+                holder.processor = AudioProcessor(item)
+                //holder.uiListener =
+                AudioController.addTrackToTheTrackList(item, holder.processor)
+                val gradientDrawable = GradientDrawable()
+                val color = ContextCompat.getColor(parentFragment.requireContext(),R.color.green)
+                gradientDrawable.setColor(color)
+                gradientDrawable.cornerRadius = radius.toFloat()
+                gradientDrawable.setStroke(3, Color.BLACK)
+                holder.itemView.background = gradientDrawable
             }
             false -> {
-                releasePlayer(holder)
-                holder.itemView.setBackgroundResource(R.color.blue)
+                holder.processor = null
+                AudioController.removeTrackFromTheTrackList(item)
+                val gradientDrawable = GradientDrawable()
+                val color = ContextCompat.getColor(parentFragment.requireContext(),R.color.blue)
+                gradientDrawable.setColor(color)
+                gradientDrawable.cornerRadius = radius.toFloat()
+                gradientDrawable.setStroke(3, Color.BLACK)
+                holder.itemView.background = gradientDrawable
             }
         }
-        uiCallback()
+        parentFragment.setButtonUI()
     }
 
-    private fun releasePlayer(holder: TrackViewHolder){
-        if (holder.player != null) {
-            holder.player?.release()
-            AudioController.playerList.remove(holder.player)
-            holder.player = null
-        }
-    }
 
-    private fun hideAllSliders(){
-        for(holder in viewHolders){
+    private fun hideAllSliders() {
+        for (holder in viewHolders) {
             holder.volumeSlider.visibility = View.INVISIBLE
         }
     }
@@ -160,24 +163,6 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
 
     override fun getItemId(position: Int): Long = position.toLong()
 
-
-    override fun uiCallback() {
-        if (AudioController.controllerState == AudioController.ControllerState.PAUSE) {
-            for (holder in viewHolders) {
-                if (holder.selected) {
-                    //parentFragment.colorBlink(R.color.green, R.color.blue, holder.itemView)
-                }
-            }
-        } else {
-            for (holder in viewHolders) {
-                if (holder.selected) {
-                    holder.itemView.clearAnimation()
-                    holder.itemView.setBackgroundResource(R.color.green)
-                }
-            }
-        }
-        parentFragment.setButtonUI()
-    }
 
     private class DiffCallback : DiffUtil.ItemCallback<Track>() {
         override fun areItemsTheSame(oldItem: Track, newItem: Track): Boolean {
@@ -188,6 +173,9 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
             return when {
                 newItem.trackName != oldItem.trackName -> false
                 newItem.isRecording != oldItem.isRecording -> false
+                newItem.reverb != oldItem.reverb -> false
+                newItem.equalizer != oldItem.equalizer -> false
+                newItem.compressor != oldItem.compressor -> false
                 else -> true
             }
         }
@@ -199,6 +187,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) : ListAdapter<Trac
 
 interface UiListener {
     fun uiCallback()
+    fun setValueFromUi(float: Float)
 }
 
 

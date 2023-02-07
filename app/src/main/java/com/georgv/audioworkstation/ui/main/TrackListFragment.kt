@@ -40,12 +40,11 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: TrackListFragmentBinding
-    private lateinit var uiListener: UiListener
     private lateinit var mRecyclerView: RecyclerView
     private val args: TrackListFragmentArgs by navArgs()
 
     init {
-        AudioController.playerList.clear()
+        AudioController.trackList.clear()
         AudioController.audioListener = this
     }
 
@@ -62,7 +61,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
         mRecyclerView.layoutManager = layoutManager
         val adapter = TrackListAdapter(this)
         mRecyclerView.adapter = adapter
-        uiListener = adapter
+
 
         binding.songName.text = args.selectedSong.songName
         binding.playButton.setOnClickListener(this)
@@ -101,11 +100,11 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
                     showTooManyTracksSnackBar()
                     return
                 }
-                viewModel.recordTrack(requireContext())
-                if (AudioController.playerList.isEmpty()) {
+                viewModel.createTrack(requireContext())
+                if (AudioController.trackList.isEmpty()) {
                     changeState(AudioController.ControllerState.REC)
                 } else {
-                    changeState(AudioController.ControllerState.PLAYREC)
+                    changeState(AudioController.ControllerState.PLAY_REC)
                 }
             }
 
@@ -122,20 +121,21 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
                     && (songWavFileDir != null)
                 ) {
                     val wavFile = File(songWavFileDir)
-                    AudioController.mixAudio(trackList, wavFile)
+
+
+
                     findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
                 } else {
                     showEmptySongSnackBar()
                 }
             }
         }
-        uiListener.uiCallback()
+        setButtonUI()
     }
 
-    fun deleteTrack(trackId: Long, pcmFilePath: String, wavFilePath: String) {
+    fun deleteTrack(trackId: Long, wavFilePath: String) {
         viewModel.deleteTrackFromDb(trackId)
         try {
-            Files.delete(Paths.get(pcmFilePath))
             Files.delete(Paths.get(wavFilePath))
         } catch (e: IOException) {
             e.printStackTrace()
@@ -149,7 +149,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
     fun setButtonUI(){
         when(AudioController.controllerState){
             AudioController.ControllerState.STOP -> {
-                if(AudioController.playerList.isEmpty()){
+                if(AudioController.trackList.isEmpty()){
                     setDefaultView()
                 }else{
                     setReadyToPlayUI()
@@ -158,7 +158,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
             AudioController.ControllerState.PLAY -> setPlayingUI()
             AudioController.ControllerState.CONTINUE -> setPlayingUI()
             AudioController.ControllerState.REC -> setRecordingUI()
-            AudioController.ControllerState.PLAYREC -> setRecordingUI()
+            AudioController.ControllerState.PLAY_REC -> setRecordingUI()
             AudioController.ControllerState.PAUSE -> setPauseUI()
         }
     }

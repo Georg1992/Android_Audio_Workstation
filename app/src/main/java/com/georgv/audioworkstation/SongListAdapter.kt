@@ -1,5 +1,8 @@
 package com.georgv.audioworkstation
 
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.view.LayoutInflater
 import android.view.View
@@ -17,8 +20,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
 
     inner class SongViewHolder(itemBinding:SongHolderViewBinding):RecyclerView.ViewHolder(itemBinding.root), View.OnClickListener, AudioListener{
         lateinit var song:Song
-        lateinit var player: MediaPlayer
-        fun isPlayerInitialized() = ::player.isInitialized
+
 
         init {
             AudioController.audioListener = this
@@ -28,17 +30,14 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
             }
 
             binding.playSongButton.setOnClickListener{
-                player = MediaPlayer()
-                player.apply{
-                    setDataSource(song.wavFilePath)
-                }
-                AudioController.playerList.add(player)
+                //AudioController.createAudioTrack()
+
+
                 AudioController.changeState(AudioController.ControllerState.PLAY)
             }
 
             binding.stopSongButton.setOnClickListener{
                 AudioController.changeState(AudioController.ControllerState.STOP)
-                releasePlayer(this)
             }
         }
 
@@ -93,12 +92,6 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
         }
     }
 
-    private fun releasePlayer(holder: SongListAdapter.SongViewHolder){
-        if (holder.isPlayerInitialized()) {
-            holder.player.release()
-            AudioController.playerList.remove(holder.player)
-        }
-    }
 
     interface OnItemClickListener {
         fun onItemClick(position: Int, song: Song)

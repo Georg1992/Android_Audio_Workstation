@@ -28,7 +28,7 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
     private lateinit var songRecyclerView:RecyclerView
 
     init {
-        AudioController.playerList.clear()
+        AudioController.trackList.clear()
     }
 
     override fun onCreateView(
