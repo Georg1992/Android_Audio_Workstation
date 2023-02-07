@@ -3,6 +3,8 @@ package com.georgv.audioworkstation.database
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.room.*
+import com.georgv.audioworkstation.audioprocessing.Equalizer
+import com.georgv.audioworkstation.audioprocessing.Reverb
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 
@@ -36,6 +38,9 @@ interface TrackDao{
     @Query("SELECT * FROM tracks WHERE songID = :id")
     suspend fun getTracksBySongId(id:Long): List<Track>
 
+    @Query("SELECT COUNT(*) FROM tracks WHERE songID = :id")
+    suspend fun getTracksAmountBySongId(id: Long?): Int
+
     @Query("DELETE FROM tracks WHERE songID = :id")
     suspend fun deleteTracksBySongId(id:Long)
 
@@ -46,8 +51,20 @@ interface TrackDao{
     @Query("UPDATE tracks SET volume=:volume WHERE id=:id")
     suspend fun trackVolumeUpdate(volume:Float, id: Long)
 
+    @Query("UPDATE tracks SET reverb=:reverb WHERE id=:id")
+    suspend fun trackReverbUpdate(reverb: String?,id: Long)
+
+    @Query("UPDATE tracks SET equalizer=:equalizer WHERE id=:id")
+    suspend fun trackEqUpdate(equalizer: String?,id: Long)
+
+    @Query("UPDATE tracks SET compressor=:compressor WHERE id=:id")
+    suspend fun trackCompUpdate(compressor: String?,id: Long)
+
     @Query("SELECT * FROM tracks WHERE isRecording = 1")
     suspend fun getTrackInEdit():Track?
+
+    @Query("SELECT id FROM tracks ORDER BY id DESC LIMIT 1")
+    suspend fun getLastTrackId(): Int?
 
     @Query("SELECT * FROM tracks WHERE id = :id")
     fun getTrackByID(id: Long):LiveData<Track>

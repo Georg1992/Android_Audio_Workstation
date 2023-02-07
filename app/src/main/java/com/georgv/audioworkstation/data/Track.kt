@@ -4,9 +4,10 @@ import android.os.Parcelable
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
-import kotlinx.android.parcel.Parcelize
+import androidx.room.TypeConverters
+import com.georgv.audioworkstation.customHandlers.TypeConverter
 
-@Parcelize
+@kotlinx.parcelize.Parcelize
 @Entity(
     tableName = "tracks",
     foreignKeys = [ForeignKey(
@@ -21,12 +22,14 @@ data class Track(
     var isRecording:Boolean?,
     var trackName:String,
     var volume:Float,
-    val pcmDir:String,
     val wavDir:String,
     val timeStampStart:Long,
     var timeStampStop:Long?,
     var duration:Long?,
     val songID: Long,
-    val effects: String?
+    @TypeConverters(TypeConverter::class)
+    var equalizer: String?,
+    var compressor: String?,
+    var reverb: String?
     ):Parcelable
 
