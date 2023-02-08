@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.main
 
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -28,15 +29,18 @@ import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.UiListener
+import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
+import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
 import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.databinding.TrackListFragmentBinding
+
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 
 
-class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
+class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, AudioProcessingCallback {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: TrackListFragmentBinding
@@ -56,6 +60,8 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
 
         AudioController.fragmentActivitySender = requireActivity()
         binding = TrackListFragmentBinding.inflate(inflater, container, false)
+        binding.progressBar.visibility = View.GONE
+        binding.processingText.visibility = View.GONE
         val layoutManager = LinearLayoutManager(context)
         mRecyclerView = binding.trackListRecyclerView
         mRecyclerView.layoutManager = layoutManager
@@ -114,17 +120,18 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
             }
 
             binding.saveSongButton -> {
+                val processor = AudioProcessor()
+                processor.setSongToProcessor(viewModel.currentSong)
                 val trackList = viewModel.trackList.value
-                val songWavFileDir = viewModel.currentSong?.wavFilePath
+                val songWavFileDir = viewModel.currentSong.wavFilePath
                 if ((trackList != null)
                     && trackList.isNotEmpty()
                     && (songWavFileDir != null)
+                    && controllerState == AudioController.ControllerState.STOP
                 ) {
                     val wavFile = File(songWavFileDir)
 
-
-
-                    findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
+                    processor.mixAudio(trackList,wavFile,this)
                 } else {
                     showEmptySongSnackBar()
                 }
@@ -255,6 +262,22 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener {
 
     override fun uiCallback() {
         setButtonUI()
+    }
+
+    override fun onProcessingStarted() {
+        binding.trackListRecyclerView.visibility = View.GONE
+        binding.progressBar.visibility = View.VISIBLE
+        binding.processingText.visibility = View.VISIBLE
+    }
+
+
+    override fun onProcessingProgress(progress: String) {
+        val str = "PROCESSING TRACK: $progress"
+        binding.processingText.text = str
+    }
+
+    override fun onProcessingFinished() {
+        findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
     }
 
 }

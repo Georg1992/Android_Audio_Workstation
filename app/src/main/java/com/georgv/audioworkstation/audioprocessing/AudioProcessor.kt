@@ -13,7 +13,9 @@ import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
 import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.customHandlers.WavHeader
+import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.parcelize.Parcelize
 import org.apache.commons.io.FileUtils
 import java.io.*
@@ -40,20 +42,54 @@ private val BUFFER_SIZE_RECORDING =
 
 
 
-class AudioProcessor(val track: Track):UiListener {
-    private val pcm16BitBufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE,
-        CHANNEL_CONFIG, PCM_16BIT_AUDIO_FORMAT)
+class AudioProcessor():UiListener {
+    private lateinit var effects:Array<Effect?>
+    private lateinit var file: File
 
-    private lateinit var audioTrack: AudioTrack
+    private lateinit var _track:Track
+    private var track: Track
+        get() = _track
+        set(value) {
+            _track = value
+            effects = arrayOf(TypeConverter.toEffect(track.equalizer),
+                TypeConverter.toEffect(track.compressor),TypeConverter.toEffect(track.reverb))
+            file = File(track.wavDir)
+            volume = track.volume
+        }
+
+    private var mixprocessor = false
+    private var volume = 100F
+    private lateinit var _song: Song
+    private var song:Song
+        get() = _song
+        set(value) {
+            Log.d("THIS IS A MIX PROCESSR","FOR MIXING")
+            _song = value
+            file = song.wavFilePath?.let { File(it) }!!
+            mixprocessor = true
+        }
+
+    private var _audioTrack: AudioTrack? = null
+    private var audioTrack:AudioTrack?
+    get() = _audioTrack
+    set(value) {
+        _audioTrack=value
+        controlVolume(volume)
+    }
     var isPlaying = false
 
-    private var file = File(track.wavDir)
-
-    private val effects = arrayOf(TypeConverter.toEffect(track.equalizer),
-        TypeConverter.toEffect(track.compressor),TypeConverter.toEffect(track.reverb))
-
+    private val pcm16BitBufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE,
+        CHANNEL_CONFIG, PCM_16BIT_AUDIO_FORMAT)
     private val executor: ExecutorService = Executors.newFixedThreadPool(2)
 
+
+    fun setTrackToProcessor(track: Track){
+        this.track = track
+    }
+
+    fun setSongToProcessor(song:Song){
+        this.song = song
+    }
 
     fun startRecording() {
         if (ActivityCompat.checkSelfPermission(
@@ -74,12 +110,23 @@ class AudioProcessor(val track: Track):UiListener {
     }
 
     fun playAudio(){
+        if(mixprocessor){
+            playNoProcessing()
+            return
+        }
         if(effects.all{it == null}){
             playNoProcessing()
             return
         }
         playWithProcessing()
     }
+
+    fun controlVolume(volume: Float) {
+        val vol = volume / 100F
+        audioTrack?.setVolume(vol)
+    }
+
+
 
     private fun playWithProcessing() {
         executor.execute {
@@ -88,7 +135,7 @@ class AudioProcessor(val track: Track):UiListener {
                 val inputStream = file.inputStream()
                 inputStream.skip(44)
                 val buffer = ByteArray(PLAYBACK_BUFFER_SIZE*2)
-                audioTrack.play()
+                audioTrack?.play()
                 isPlaying = true
                 var index = 0
                 val nextBuffers = arrayOf(floatArrayOf(), floatArrayOf())
@@ -102,9 +149,9 @@ class AudioProcessor(val track: Track):UiListener {
                             floatBuffer = toPcmFloating(buffer)
                             nextBuffers[(index+1)%2] = effectChain(floatBuffer)
                     }
-                    audioTrack.write(nextBuffers[index%2], 0, nextBuffers[index%2].size, AudioTrack.WRITE_BLOCKING)
+                    audioTrack?.write(nextBuffers[index%2], 0, nextBuffers[index%2].size, AudioTrack.WRITE_BLOCKING)
                     if(nextBuffers[(index+1)%2].size < PLAYBACK_BUFFER_SIZE){
-                        audioTrack.write(nextBuffers[index+1%2], 0, nextBuffers[index+1%2].size, AudioTrack.WRITE_BLOCKING)
+                        audioTrack?.write(nextBuffers[index+1%2], 0, nextBuffers[index+1%2].size, AudioTrack.WRITE_BLOCKING)
                     }
                     index++
                 }
@@ -123,11 +170,11 @@ class AudioProcessor(val track: Track):UiListener {
             val inputStream = file.inputStream()
             inputStream.skip(44)
             val buffer = ByteArray(pcm16BitBufferSize)
-            audioTrack.play()
+            audioTrack?.play()
             isPlaying = true
             while (inputStream.read(buffer) > 0 && (controllerState == AudioController.ControllerState.PLAY
                 || controllerState == AudioController.ControllerState.PLAY_REC)) {
-                audioTrack.write(buffer, 0 , buffer.size)
+                audioTrack?.write(buffer, 0 , buffer.size)
             }
             stopAudioTrack()
             inputStream.close()
@@ -175,8 +222,8 @@ class AudioProcessor(val track: Track):UiListener {
 
     private fun stopAudioTrack() {
         isPlaying = false
-        audioTrack.stop()
-        audioTrack.flush()
+        audioTrack?.stop()
+        audioTrack?.flush()
         val handler = Handler(Looper.getMainLooper())
         handler.post {
             AudioController.checkTracksFinishedPlaying()
@@ -199,8 +246,6 @@ class AudioProcessor(val track: Track):UiListener {
             .setBufferSizeInBytes(bufferSize)
             .build()
 
-        val volume = track.volume / 100
-        audioTrack.setVolume(volume)
     }
 
 
@@ -235,17 +280,18 @@ class AudioProcessor(val track: Track):UiListener {
         return floatBuffer.array()
     }
 
-    private fun controlVolume(volume: Float) {
-        val vol = volume / 100F
-        audioTrack.setVolume(vol)
-    }
 
     //    byte | 01 02 | 03 04 | 05 06 | 07 08 | 09 10 | 11 12 | ...
 //    channel |  Left | Right | Left  | Right | Left |  Right | ...
 //    frame |     First     |    Second     |     Third     | ...
 //    sample | 1st L | 1st R | 2nd L | 2nd R | 3rd L | 3rd R | ... etc.
-    fun mixAudio(tracks: List<Track>, outputWavFile: File) {
-        executor.execute(){
+
+    fun mixAudio(tracks: List<Track>, outputWavFile: File, callback: AudioProcessingCallback) {
+        executor.execute{
+            val handler = Handler(Looper.getMainLooper())
+            handler.post{
+                callback.onProcessingStarted()
+            }
             val bufferSize = PLAYBACK_BUFFER_SIZE
             var offset: Long = 44 // Skipping the WAV header
             val outputFileSize = getLongestFileSize(tracks)
@@ -258,6 +304,9 @@ class AudioProcessor(val track: Track):UiListener {
             //writeHeader(outputWavFile, outputFileSize)
             repeat(doTimes) {
                 for (track in tracks) {
+                    handler.post{
+                        callback.onProcessingProgress(track.trackName)
+                    }
                     val inputFile = File(track.wavDir)
                     val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
                     inputFile.inputStream().channel.read(bytesBuffer, offset)
@@ -265,6 +314,7 @@ class AudioProcessor(val track: Track):UiListener {
                     val tmpBuffer = ShortArray(bufferSize / 2)
                     ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                         .get(tmpBuffer)
+
                     val audioFloats = FloatArray(bufferSize / 2)
 
                     for (i in tmpBuffer.indices) {
@@ -288,7 +338,9 @@ class AudioProcessor(val track: Track):UiListener {
                 FileUtils.writeByteArrayToFile(outputWavFile, mixedByte, true)
 
             }
-
+            handler.post{
+                callback.onProcessingFinished()
+            }
         }
     }
 
@@ -296,6 +348,7 @@ class AudioProcessor(val track: Track):UiListener {
         val longestTrack = tracks.maxByOrNull { track -> track.duration!! }
         return File(longestTrack!!.wavDir).length()
     }
+
 
 
 
@@ -309,10 +362,73 @@ class AudioProcessor(val track: Track):UiListener {
         controlVolume(float)
     }
 
-
-
-
 }
+interface AudioProcessingCallback {
+    fun onProcessingStarted()
+    fun onProcessingProgress(progress: String)
+    fun onProcessingFinished()
+}
+
+
+
+
+//fun mixAudio(tracks: List<Track>, outputWavFile: File, callback: AudioProcessingCallback) {
+//    executor.execute{
+//        val handler = Handler(Looper.getMainLooper())
+//        handler.post{
+//            callback.onProcessingStarted()
+//        }
+//        val bufferSize = PLAYBACK_BUFFER_SIZE
+//        var offset: Long = 44 // Skipping the WAV header
+//        val outputFileSize = getLongestFileSize(tracks)
+//
+//        val mixed = FloatArray(bufferSize / 2)
+//        val mixedShort = ShortArray(bufferSize / 2)
+//        val mixedByte = ByteArray(bufferSize)
+//
+//        val doTimes = ((outputFileSize - offset) / bufferSize).toInt() + 1
+//        //writeHeader(outputWavFile, outputFileSize)
+//        repeat(doTimes) {
+//            for (track in tracks) {
+//                handler.post{
+//                    callback.onProcessingProgress(track.trackName)
+//                }
+//                val inputFile = File(track.wavDir)
+//                val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
+//                inputFile.inputStream().channel.read(bytesBuffer, offset)
+//                val bytes = bytesBuffer.array()
+//                val tmpBuffer = ShortArray(bufferSize / 2)
+//                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+//                    .get(tmpBuffer)
+//
+//                val audioFloats = FloatArray(bufferSize / 2)
+//
+//                for (i in tmpBuffer.indices) {
+//                    audioFloats[i] = tmpBuffer[i].toFloat() / 0x8000
+//
+//                    if (track == tracks[0]) {
+//                        mixed[i] = audioFloats[i]
+//                    } else {
+//                        mixed[i] =
+//                            ((mixed[i] + audioFloats[i]) * 0.8).toFloat()               //(mixed[i] + audioFloats[i]) - (mixed[i]*audioFloats[i])
+//                    }
+//                    if (mixed[i] > 1.0f) mixed[i] = 1.0f
+//                    if (mixed[i] < -1.0f) mixed[i] = -1.0f
+//
+//                    mixedShort[i] = (mixed[i] * 32768.0f).toInt().toShort()
+//                }
+//            }
+//            offset += bufferSize
+//            ByteBuffer.wrap(mixedByte).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+//                .put(mixedShort)
+//            FileUtils.writeByteArrayToFile(outputWavFile, mixedByte, true)
+//
+//        }
+//        handler.post{
+//            callback.onProcessingFinished()
+//        }
+//    }
+//}
 
 
 

@@ -46,6 +46,8 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
             it.isEnabled = true
         }
 
+
+
         val layoutManager = LinearLayoutManager(context)
         songRecyclerView = binding.songsRecyclerView
         songRecyclerView.layoutManager = layoutManager
@@ -65,9 +67,7 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
         lifecycleScope.launch{
             viewModel.createNewSong(songName,wavDir)
             val song = viewModel.currentSong
-            if(song != null){
-                navigateToTheSong(song)
-            }
+            navigateToTheSong(song)
         }
     }
 

@@ -1,7 +1,9 @@
 package com.georgv.audioworkstation.audioprocessing
 
+import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.georgv.audioworkstation.UiListener
+import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.AudioListener
 import org.apache.commons.io.FileUtils
@@ -28,10 +30,11 @@ object AudioController {
     var controllerState: ControllerState = ControllerState.STOP
     lateinit var trackToRecord: Track
     val trackList: MutableList<Pair<Track, AudioProcessor>> = mutableListOf()
-
+    var songToPlay: Pair<Song,AudioProcessor>? = null
 
     private fun recordAudio(track: Track) {
-        val processor = AudioProcessor(track)
+        val processor = AudioProcessor()
+        processor.setTrackToProcessor(track)
         processor.startRecording()
     }
 
@@ -49,10 +52,11 @@ object AudioController {
     fun removeTrackFromTheTrackList(track: Track) {
         val copy = trackList.toMutableList()
         for (pair in copy) {
-            if (pair.first == track) {
+            if (pair.first.id == track.id) {
                 trackList.remove(pair)
             }
         }
+        Log.d("REMOVING TRACK", "${track.trackName} and listSize is ${trackList.size}")
     }
 
     fun checkTracksFinishedPlaying(){
@@ -71,6 +75,7 @@ object AudioController {
         when (audioControllerState) {
             ControllerState.PLAY -> {
                 playTracksSimultaneously()
+                playSong()
             }
             ControllerState.PLAY_REC -> {
                 playTracksSimultaneously()
@@ -91,6 +96,12 @@ object AudioController {
             }
         }
         audioListener.uiCallback()
+    }
+
+    private fun playSong(){
+        mainExecutor.execute(){
+            songToPlay?.second?.playAudio()
+        }
     }
 
     private fun playTracksSimultaneously() {

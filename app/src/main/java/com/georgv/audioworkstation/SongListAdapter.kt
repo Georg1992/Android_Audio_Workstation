@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.audioprocessing.AudioController
+import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.databinding.SongHolderViewBinding
 import com.georgv.audioworkstation.ui.main.AudioListener
@@ -20,6 +21,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
 
     inner class SongViewHolder(itemBinding:SongHolderViewBinding):RecyclerView.ViewHolder(itemBinding.root), View.OnClickListener, AudioListener{
         lateinit var song:Song
+        lateinit var processor: AudioProcessor
 
 
         init {
@@ -30,9 +32,9 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
             }
 
             binding.playSongButton.setOnClickListener{
-                //AudioController.createAudioTrack()
-
-
+                processor = AudioProcessor()
+                processor.setSongToProcessor(song)
+                AudioController.songToPlay = Pair(song,processor)
                 AudioController.changeState(AudioController.ControllerState.PLAY)
             }
 

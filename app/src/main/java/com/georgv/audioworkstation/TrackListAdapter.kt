@@ -36,12 +36,11 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
         hideAllSliders()
     }
 
-    inner class TrackViewHolder(val binding: TrackHolderViewBinding) :
+    inner class TrackViewHolder(private val binding: TrackHolderViewBinding) :
         RecyclerView.ViewHolder(binding.root),
         View.OnClickListener {
         lateinit var track: Track
         var processor: AudioProcessor? = null
-        //var uiListener: UiListener? = null
         var trackId: Long = 0
         var selected: Boolean = false
         val instrumentName: TextView = binding.instrumentText
@@ -77,8 +76,8 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
             }
 
             volumeSlider.stepSize = 1f
-            volumeSlider.addOnChangeListener { slider: Slider, fl: Float, _: Boolean ->
-
+            volumeSlider.addOnChangeListener { _: Slider, fl: Float, _: Boolean ->
+                processor?.controlVolume(fl)
             }
 
             volumeSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
@@ -109,6 +108,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
     }
 
     override fun onBindViewHolder(holder: TrackViewHolder, position: Int) {
+        Log.d("BINDING VIEWHOLDER", "UPDATING")
         val item = getItem(position)
         holder.track = item
         holder.trackId = item.id
@@ -118,7 +118,8 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
         viewHolders.add(holder)
         if (item.isRecording == true) {
             val gradientDrawable = GradientDrawable()
-            val color = ContextCompat.getColor(parentFragment.requireContext(),R.color.redTransparent)
+            val color =
+                ContextCompat.getColor(parentFragment.requireContext(), R.color.redTransparent)
             gradientDrawable.setColor(color)
             gradientDrawable.cornerRadius = radius.toFloat()
             gradientDrawable.setStroke(3, Color.BLACK)
@@ -129,11 +130,12 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
         }
         when (holder.selected) {
             true -> {
-                holder.processor = AudioProcessor(item)
-                //holder.uiListener =
+                val processor = AudioProcessor()
+                processor.setTrackToProcessor(item)
+                holder.processor = processor
                 AudioController.addTrackToTheTrackList(item, holder.processor)
                 val gradientDrawable = GradientDrawable()
-                val color = ContextCompat.getColor(parentFragment.requireContext(),R.color.green)
+                val color = ContextCompat.getColor(parentFragment.requireContext(), R.color.green)
                 gradientDrawable.setColor(color)
                 gradientDrawable.cornerRadius = radius.toFloat()
                 gradientDrawable.setStroke(3, Color.BLACK)
@@ -143,7 +145,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
                 holder.processor = null
                 AudioController.removeTrackFromTheTrackList(item)
                 val gradientDrawable = GradientDrawable()
-                val color = ContextCompat.getColor(parentFragment.requireContext(),R.color.blue)
+                val color = ContextCompat.getColor(parentFragment.requireContext(), R.color.blue)
                 gradientDrawable.setColor(color)
                 gradientDrawable.cornerRadius = radius.toFloat()
                 gradientDrawable.setStroke(3, Color.BLACK)

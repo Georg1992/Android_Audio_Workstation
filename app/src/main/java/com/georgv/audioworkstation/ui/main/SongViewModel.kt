@@ -26,8 +26,8 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     val songList: LiveData<List<Song>>
         get() = _songList
 
-    private var _currentSong: Song? = null
-    val currentSong: Song?
+    private lateinit var _currentSong: Song
+    val currentSong: Song
         get() = _currentSong
 
     private var songID: MutableLiveData<Long> = MutableLiveData()
