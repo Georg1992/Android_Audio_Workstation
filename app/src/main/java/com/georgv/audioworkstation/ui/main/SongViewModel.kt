@@ -21,7 +21,6 @@ import java.util.*
 class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     private var db: SongDB = SongDB.get(application, viewModelScope)
-
     private val _songList: LiveData<List<Song>> = db.songDao().getAllSongs()
     val songList: LiveData<List<Song>>
         get() = _songList
@@ -31,10 +30,10 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         get() = _currentSong
 
     private var songID: MutableLiveData<Long> = MutableLiveData()
-    private var _trackList: LiveData<List<Track>> = Transformations.switchMap(songID)
-    { id ->
+    private var _trackList: LiveData<List<Track>> = songID.switchMap { id:Long ->
         db.trackDao().getLiveDataTracksBySongId(id)
     }
+
     val trackList: LiveData<List<Track>>
         get() = _trackList
 

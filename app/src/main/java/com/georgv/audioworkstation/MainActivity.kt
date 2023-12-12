@@ -8,10 +8,6 @@ import androidx.core.app.ActivityCompat
 import com.georgv.audioworkstation.databinding.MainActivityBinding
 
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
-
-
-
-
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: MainActivityBinding

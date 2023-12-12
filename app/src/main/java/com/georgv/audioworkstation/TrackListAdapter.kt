@@ -1,9 +1,6 @@
 package com.georgv.audioworkstation
 
-import android.R.attr.button
 import android.R.attr.radius
-import android.R.attr.strokeWidth
-import android.R.color
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.util.Log
