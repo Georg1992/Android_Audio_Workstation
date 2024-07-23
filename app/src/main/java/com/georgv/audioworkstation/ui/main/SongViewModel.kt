@@ -8,11 +8,10 @@ import androidx.lifecycle.*
 import com.georgv.audioworkstation.audioprocessing.*
 import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.data.Song
-import com.georgv.audioworkstation.data.SongDB
+import com.georgv.audioworkstation.database.SongDB
 import com.georgv.audioworkstation.data.Track
 import kotlinx.coroutines.*
 import java.io.IOException
-import java.lang.reflect.Type
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.*

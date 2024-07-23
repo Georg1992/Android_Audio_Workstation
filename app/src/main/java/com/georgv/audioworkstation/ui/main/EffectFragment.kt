@@ -3,14 +3,11 @@ package com.georgv.audioworkstation.ui.main
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
-import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
-import androidx.core.view.children
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.NavHostFragment
@@ -28,7 +25,7 @@ class EffectFragment : Fragment() {
     private lateinit var binding: FragmentEffectBinding
     private lateinit var track: Track
     private val viewModel: SongViewModel by activityViewModels()
-    private val args: EffectFragmentArgs by navArgs()
+
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -36,7 +33,7 @@ class EffectFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View {
         binding = FragmentEffectBinding.inflate(inflater, container, false)
-        track = args.selectedTrack
+        //track = args.selectedTrack
         Log.d("TRACK EQ IN EFFECT FRAG", "${track.equalizer}")
 
         val applyAllButton: ImageButton = binding.applyAllEffect
@@ -86,10 +83,8 @@ class EffectFragment : Fragment() {
 
         applyAllButton.setOnClickListener {
             val song = viewModel.currentSong
-            if (song != null) {
-                val action = EffectFragmentDirections.actionEffectFragmentToTrackListFragment(song)
-                NavHostFragment.findNavController(this).navigate(action)
-            }
+            val action = EffectFragmentDirections.actionEffectFragmentToTrackListFragment()
+            NavHostFragment.findNavController(this).navigate(action)
         }
         // Inflate the layout for this fragment
         return binding.root

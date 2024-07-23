@@ -45,7 +45,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: TrackListFragmentBinding
     private lateinit var mRecyclerView: RecyclerView
-    private val args: TrackListFragmentArgs by navArgs()
+    //private val args: TrackListFragmentArgs by navArgs()
 
     init {
         AudioController.trackList.clear()
@@ -69,7 +69,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         mRecyclerView.adapter = adapter
 
 
-        binding.songName.text = args.selectedSong.songName
+        //binding.songName.text = args.selectedSong.songName
         binding.playButton.setOnClickListener(this)
         binding.recordButton.setOnClickListener(this)
         binding.stopButton.setOnClickListener(this)
@@ -154,7 +154,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
     }
 
     fun setButtonUI(){
-        when(AudioController.controllerState){
+        when(controllerState){
             AudioController.ControllerState.STOP -> {
                 if(AudioController.trackList.isEmpty()){
                     setDefaultView()
@@ -167,6 +167,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
             AudioController.ControllerState.REC -> setRecordingUI()
             AudioController.ControllerState.PLAY_REC -> setRecordingUI()
             AudioController.ControllerState.PAUSE -> setPauseUI()
+            else -> {}
         }
     }
 

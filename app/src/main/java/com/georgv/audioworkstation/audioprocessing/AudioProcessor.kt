@@ -40,8 +40,6 @@ private val BUFFER_SIZE_RECORDING =
     AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, PCM_16BIT_AUDIO_FORMAT)
 
 
-
-
 class AudioProcessor():UiListener {
     private lateinit var effects:Array<Effect?>
     private lateinit var file: File
@@ -63,7 +61,6 @@ class AudioProcessor():UiListener {
     private var song:Song
         get() = _song
         set(value) {
-            Log.d("THIS IS A MIX PROCESSR","FOR MIXING")
             _song = value
             file = song.wavFilePath?.let { File(it) }!!
             mixprocessor = true

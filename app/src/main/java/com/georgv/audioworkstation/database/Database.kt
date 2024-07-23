@@ -1,12 +1,11 @@
-package com.georgv.audioworkstation.data
+package com.georgv.audioworkstation.database
 
 import android.content.Context
-import android.content.res.Resources
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.georgv.audioworkstation.database.SongDao
-import com.georgv.audioworkstation.database.TrackDao
+import com.georgv.audioworkstation.data.Song
+import com.georgv.audioworkstation.data.Track
 import kotlinx.coroutines.CoroutineScope
 
 @Database(entities = [(Track::class), (Song::class)], version = 1)

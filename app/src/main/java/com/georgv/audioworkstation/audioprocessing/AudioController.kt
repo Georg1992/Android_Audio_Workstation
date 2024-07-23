@@ -6,10 +6,6 @@ import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.AudioListener
-import org.apache.commons.io.FileUtils
-import java.io.*
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
@@ -20,7 +16,8 @@ object AudioController {
         CONTINUE,
         PLAY_REC,
         STOP,
-        PAUSE
+        PAUSE,
+        STREAM
     }
 
     lateinit var fragmentActivitySender: FragmentActivity
@@ -73,6 +70,9 @@ object AudioController {
     fun changeState(audioControllerState: ControllerState) {
         controllerState = audioControllerState
         when (audioControllerState) {
+            ControllerState.STREAM -> {
+                streamAudio()
+            }
             ControllerState.PLAY -> {
                 playTracksSimultaneously()
                 playSong()
@@ -116,6 +116,12 @@ object AudioController {
                 }
             }
             latch.await()
+        }
+    }
+
+    private fun streamAudio(){
+        mainExecutor.execute(){
+
         }
     }
 }
