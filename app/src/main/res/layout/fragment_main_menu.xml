@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/mainMenuFragment">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+        <Button
+                style="@style/MainMenuButtonStyle"
+                android:text="Loudspeaker"
+                android:layout_width="150dp"
+                android:layout_height="100dp"
+                android:id="@+id/toLoudSpeakerButton"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                android:layout_marginTop="150dp"
+                android:layout_marginStart="30dp"
+                >
+
+        </Button>
+
+        <Button
+                style="@style/MainMenuButtonStyle"
+                android:text="Library"
+                android:layout_width="150dp"
+                android:layout_height="100dp"
+                android:id="@+id/toLibraryButton"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginEnd="25dp"
+                android:layout_marginTop="150dp"></Button>
+
+        <Button
+                style="@style/MainMenuButtonStyle"
+                android:text="NewSong"
+                android:layout_width="150dp"
+                android:layout_height="100dp"
+                android:id="@+id/toTrackListButton"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/toLoudSpeakerButton"
+                android:layout_marginStart="40dp"
+                app:layout_constraintBottom_toBottomOf="parent"></Button>
+
+        <Button
+                style="@style/MainMenuButtonStyle"
+                android:text="Settings"
+                android:layout_width="150dp"
+                android:layout_height="100dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/toLibraryButton"
+                android:id="@+id/button"
+                android:layout_marginEnd="25dp"
+                app:layout_constraintBottom_toBottomOf="parent"></Button>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</FrameLayout>

@@ -37,7 +37,6 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
         savedInstanceState: Bundle?
     ): View {
         binding = LibraryFragmentBinding.inflate(inflater,container,false)
-
         binding.plusButton.setOnClickListener {
             it.isEnabled = false
             val manager = parentFragmentManager
@@ -45,8 +44,6 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
             dialog.show(manager,"CREATE NEW SONG")
             it.isEnabled = true
         }
-
-
 
         val layoutManager = LinearLayoutManager(context)
         songRecyclerView = binding.songsRecyclerView
@@ -73,7 +70,7 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
 
     private fun navigateToTheSong(song: Song){
         viewModel.updateSongOnNavigate(song)
-        val action = LibraryFragmentDirections.actionLibraryFragmentToTrackListFragment(song)
+        val action = LibraryFragmentDirections.actionLibraryFragmentToTrackListFragment()
         NavHostFragment.findNavController(this).navigate(action)
     }
 

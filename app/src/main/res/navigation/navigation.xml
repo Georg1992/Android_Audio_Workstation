@@ -4,7 +4,7 @@
     android:id="@+id/navigation"
     xmlns:tools="http://schemas.android.com/tools"
     android:label="nav"
-    app:startDestination="@id/libraryFragment">
+    app:startDestination="@id/mainMenuFragment">
     <fragment
         android:id="@+id/trackListFragment"
         android:name="com.georgv.audioworkstation.ui.main.TrackListFragment"
@@ -16,9 +16,6 @@
         <action
                 android:id="@+id/action_titleFragment_to_effectFragment"
                 app:destination="@id/effectFragment" />
-        <argument
-                android:name="selected_song"
-                app:argType="com.georgv.audioworkstation.data.Song" />
     </fragment>
     <fragment
         android:id="@+id/libraryFragment"
@@ -40,9 +37,30 @@
                 android:id="@+id/action_effectFragment_to_trackListFragment"
                 app:destination="@id/trackListFragment">
         </action>
-        <argument
-                android:name="selected_track"
-                app:argType="com.georgv.audioworkstation.data.Track" />
+    </fragment>
+
+    <fragment
+            android:id="@+id/mainMenuFragment"
+            android:name="com.georgv.audioworkstation.ui.main.MainMenuFragment"
+            android:label="MainMenuFragment"
+            tools:layout="@layout/fragment_main_menu">
+        <action
+                android:id="@+id/action_mainMenuFragment_to_libraryFragment"
+                app:destination="@id/libraryFragment" />
+        <action
+                android:id="@+id/action_mainMenuFragment_to_trackListFragment"
+                app:destination="@id/trackListFragment" />
+        <action
+                android:id="@+id/action_mainMenuFragment_to_loudspeakerFragment"
+                app:destination="@id/loudspeakerFragment"
+                app:enterAnim="@anim/nav_default_enter_anim" />
+    </fragment>
+    <fragment
+            android:id="@id/loudspeakerFragment"
+            android:label="fragment_loudspeaker"
+            tools:layout="@layout/fragment_loud_speaker"
+            android:name="com.georgv.audioworkstation.ui.main.LoudSpeakerFragment">
+
     </fragment>
 
 </navigation>

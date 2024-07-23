@@ -49,7 +49,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
             binding.effectsButton.setOnClickListener {
                 if (AudioController.controllerState == AudioController.ControllerState.STOP) {
                     val action =
-                        TrackListFragmentDirections.actionTitleFragmentToEffectFragment(track)
+                        TrackListFragmentDirections.actionTitleFragmentToEffectFragment()
                     findNavController(parentFragment).navigate(action)
                 }
             }
