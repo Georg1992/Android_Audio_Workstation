@@ -1,11 +1,13 @@
 package com.georgv.audioworkstation.audioprocessing
 
+import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.AudioListener
+import com.georgv.audioworkstation.ui.main.Streamer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
@@ -20,6 +22,7 @@ object AudioController {
         STREAM
     }
 
+
     lateinit var fragmentActivitySender: FragmentActivity
     lateinit var audioListener: AudioListener
     private val mainExecutor = Executors.newSingleThreadExecutor()
@@ -28,6 +31,7 @@ object AudioController {
     lateinit var trackToRecord: Track
     val trackList: MutableList<Pair<Track, AudioProcessor>> = mutableListOf()
     var songToPlay: Pair<Song,AudioProcessor>? = null
+    var streamer:Streamer? = null
 
     private fun recordAudio(track: Track) {
         val processor = AudioProcessor()
@@ -71,7 +75,7 @@ object AudioController {
         controllerState = audioControllerState
         when (audioControllerState) {
             ControllerState.STREAM -> {
-                streamAudio()
+                startStreamAudio()
             }
             ControllerState.PLAY -> {
                 playTracksSimultaneously()
@@ -86,7 +90,7 @@ object AudioController {
                 recordAudio(trackToRecord)
             }
             ControllerState.STOP -> {
-
+                stopStreamAudio()
             }
             ControllerState.PAUSE -> {
 
@@ -119,11 +123,19 @@ object AudioController {
         }
     }
 
-    private fun streamAudio(){
-        mainExecutor.execute(){
-
+    private fun startStreamAudio(){
+        mainExecutor.execute() {
+            streamer?.startAudioStreaming()
         }
     }
+
+    private fun stopStreamAudio(){
+        mainExecutor.execute() {
+           streamer?.stopAudioStreaming()
+        }
+    }
+
+
 }
 
 

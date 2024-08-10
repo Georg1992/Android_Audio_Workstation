@@ -1,22 +1,20 @@
 package com.georgv.audioworkstation.audioprocessing
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.*
 import android.os.Handler
 import android.os.Looper
-import android.os.Parcelable
-import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.georgv.audioworkstation.MainActivity
 import com.georgv.audioworkstation.UiListener
-import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
 import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.customHandlers.WavHeader
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.parcelize.Parcelize
 import org.apache.commons.io.FileUtils
 import java.io.*
 import java.nio.ByteBuffer
@@ -31,7 +29,7 @@ private const val PLAYBACK_BUFFER_SIZE = 32 * 1024
 private const val PCM_16BIT_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
 private const val FLOAT_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT
 private const val SAMPLE_RATE = 44100
-private const val CHANNELS_MONO = AudioFormat.CHANNEL_OUT_MONO
+//private const val CHANNELS_MONO = AudioFormat.CHANNEL_OUT_MONO
 private const val CHANNELS_STEREO = AudioFormat.CHANNEL_OUT_STEREO
 
 private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_STEREO
@@ -43,6 +41,7 @@ private val BUFFER_SIZE_RECORDING =
 class AudioProcessor():UiListener {
     private lateinit var effects:Array<Effect?>
     private lateinit var file: File
+    private lateinit var audioStreamingService: AudioStreamingService
 
     private lateinit var _track:Track
     private var track: Track
@@ -118,6 +117,7 @@ class AudioProcessor():UiListener {
         playWithProcessing()
     }
 
+
     fun controlVolume(volume: Float) {
         val vol = volume / 100F
         audioTrack?.setVolume(vol)
@@ -162,7 +162,7 @@ class AudioProcessor():UiListener {
     }
 
     private fun playNoProcessing(){
-        executor.execute(){
+        executor.execute{
             createAudioTrack(pcm16BitBufferSize, PCM_16BIT_AUDIO_FORMAT, CHANNELS_STEREO)
             val inputStream = file.inputStream()
             inputStream.skip(44)

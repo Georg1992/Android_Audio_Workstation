@@ -1,11 +1,15 @@
 package com.georgv.audioworkstation
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.databinding.MainActivityBinding
 
 
@@ -17,7 +21,6 @@ class MainActivity : AppCompatActivity() {
         Manifest.permission.RECORD_AUDIO,
         Manifest.permission.MODIFY_AUDIO_SETTINGS,
         Manifest.permission.READ_MEDIA_AUDIO,
-        Manifest.permission.FOREGROUND_SERVICE,
         Manifest.permission.POST_NOTIFICATIONS
     )
 
@@ -29,6 +32,16 @@ class MainActivity : AppCompatActivity() {
         binding = MainActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+    }
+
+    private fun createNotificationChannel(){
+        val channel = NotificationChannel(
+            "running_channel",
+            "running notifications",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
     }
 
     private fun checkAndRequestPermissions() {

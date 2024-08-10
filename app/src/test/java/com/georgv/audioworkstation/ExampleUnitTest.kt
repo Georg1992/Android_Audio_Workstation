@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation
 
 import org.junit.Test
-
 import org.junit.Assert.*
 
 /**

@@ -1,0 +1,7 @@
+[
+{
+  "directory": "C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/.cxx/Debug/3p5s5xf4/armeabi-v7a",
+  "command": "C:\\Users\\georg\\AppData\\Local\\Android\\Sdk\\ndk\\26.1.10909125\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=armv7-none-linux-androideabi26 --sysroot=C:/Users/georg/AppData/Local/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daudioworkstation_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -march=armv7-a -mthumb -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles\\audioworkstation.dir\\audioworkstation.cpp.o -c C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\src\\main\\cpp\\audioworkstation.cpp",
+  "file": "C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\src\\main\\cpp\\audioworkstation.cpp"
+}
+]

@@ -1,0 +1,4 @@
+C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/.cxx/Debug/70425w2u/armeabi-v7a/CMakeFiles/audioworkstation.dir
+C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/.cxx/Debug/70425w2u/armeabi-v7a/CMakeFiles/native-lib.dir
+C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/.cxx/Debug/70425w2u/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/.cxx/Debug/70425w2u/armeabi-v7a/CMakeFiles/rebuild_cache.dir

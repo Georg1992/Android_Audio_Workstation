@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.main
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -281,8 +282,11 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
     }
 
+
+
 }
 
 interface AudioListener{
     fun uiCallback()
+
 }

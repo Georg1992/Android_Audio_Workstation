@@ -1,0 +1,12 @@
+# ninja log v5
+0	5	0	clean	114c22d99d9963d6
+0	65	7450096540232328	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	6719f1b4705f1309
+66	131	7450096540842482	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86/libaudioworkstation.so	588dbc124a911ebf
+3	616	7450096545699010	CMakeFiles/native-lib.dir/native-lib.cpp.o	9eb4df73ac5034fe
+620	669	7450096546244204	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86/libnative-lib.so	fbfc2eee94e0db3c
+0	5	0	clean	114c22d99d9963d6
+0	5	0	clean	114c22d99d9963d6
+5	62	7450112980004181	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	6719f1b4705f1309
+63	117	7450112980504296	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86/libaudioworkstation.so	588dbc124a911ebf
+7	694	7450112986246281	CMakeFiles/native-lib.dir/native-lib.cpp.o	9eb4df73ac5034fe
+694	756	7450112986881520	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86/libnative-lib.so	fbfc2eee94e0db3c

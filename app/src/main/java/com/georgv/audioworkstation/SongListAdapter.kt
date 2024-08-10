@@ -1,9 +1,7 @@
 package com.georgv.audioworkstation
 
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioTrack
-import android.media.MediaPlayer
+
+import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -71,6 +69,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
         override fun uiCallback() {
             setUI()
         }
+
     }
 
     override fun onCreateViewHolder(parent: ViewGroup,position: Int): SongViewHolder {
