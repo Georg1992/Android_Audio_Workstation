@@ -5,10 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.support.v4.media.RatingCompat.Style
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.OnBackPressedDispatcher
+import androidx.core.content.ContextCompat
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioStreamingService
@@ -28,9 +32,7 @@ class LoudSpeakerFragment : Fragment(), AudioListener, Streamer {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        arguments?.let {
 
-        }
     }
 
     override fun onCreateView(
@@ -42,8 +44,10 @@ class LoudSpeakerFragment : Fragment(), AudioListener, Streamer {
         binding.loudspeakerSwitch.setOnClickListener{
             if(!isStreaming){
                 AudioController.changeState(AudioController.ControllerState.STREAM)
+                binding.loudspeakerSwitch.setBackgroundResource(R.color.darkRed)
             }else{
                 AudioController.changeState(AudioController.ControllerState.STOP)
+                binding.loudspeakerSwitch.setBackgroundResource(R.color.yellow)
             }
             isStreaming=!isStreaming
         }
@@ -62,12 +66,12 @@ class LoudSpeakerFragment : Fragment(), AudioListener, Streamer {
     }
 
     override fun uiCallback() {
-        val randomColor = Color.rgb(
-            Random.nextInt(256),  // Red component (0-255)
-            Random.nextInt(256),  // Green component (0-255)
-            Random.nextInt(256)   // Blue component (0-255)
-        )
-        binding.loudspeakerSwitch.setBackgroundColor(randomColor)
+
+    }
+
+    override fun onDestroy() {
+        stopAudioStreaming()
+        super.onDestroy()
     }
 }
 

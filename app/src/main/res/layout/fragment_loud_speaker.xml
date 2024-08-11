@@ -11,10 +11,12 @@
 
 
     <ImageButton
-            android:src="@android:drawable/btn_star"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:src="@drawable/baseline_record_voice_over_24"
+            android:layout_width="300dp"
+            android:layout_height="300dp"
             android:layout_gravity="center"
             android:contentDescription="TODO"
-            android:id = "@+id/loudspeakerSwitch"/>
+            android:id="@+id/loudspeakerSwitch"
+            android:background="@color/yellow"
+            android:elevation="10dp" />
 </FrameLayout>

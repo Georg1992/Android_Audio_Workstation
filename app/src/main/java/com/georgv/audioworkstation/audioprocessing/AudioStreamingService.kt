@@ -5,8 +5,6 @@ import android.content.ContentValues.TAG
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.georgv.audioworkstation.R
 
 
 class AudioStreamingService: Service()  {

@@ -27,3 +27,15 @@
 61	119	7450112965569275	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
 6	597	7450112970335600	CMakeFiles/native-lib.dir/native-lib.cpp.o	97e23511a891663c
 597	657	7450112970950835	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libnative-lib.so	890e2e9d9d8ff75d
+5	76	7450403471983970	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
+76	136	7450403472558927	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
+5	68	7450408217205952	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
+68	120	7450408217699688	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
+3	74	7450412193626930	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
+74	127	7450412194142365	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
+4	72	7450415520055251	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
+72	123	7450415520555830	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
+3	66	7450417347418007	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
+66	121	7450417347938847	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
+5	75	7450420710331750	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
+75	129	7450420710861862	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/arm64-v8a/libaudioworkstation.so	ce271b59a6c97a0e
