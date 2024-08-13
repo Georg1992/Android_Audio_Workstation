@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -16,15 +17,26 @@ import com.georgv.audioworkstation.databinding.MainActivityBinding
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: MainActivityBinding
-    private val permissions = arrayOf<String>(
-        Manifest.permission.FOREGROUND_SERVICE,
-        Manifest.permission.RECORD_AUDIO,
-        Manifest.permission.MODIFY_AUDIO_SETTINGS,
-        Manifest.permission.READ_MEDIA_AUDIO,
-        Manifest.permission.POST_NOTIFICATIONS
-    )
+    @RequiresApi(Build.VERSION_CODES.P)
+    private val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf<String>(
+            Manifest.permission.FOREGROUND_SERVICE,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.MODIFY_AUDIO_SETTINGS,
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+    } else {
+        TODO("VERSION.SDK_INT < TIRAMISU")
+        arrayOf<String>(
+            Manifest.permission.FOREGROUND_SERVICE,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.MODIFY_AUDIO_SETTINGS,
+        )
+    }
 
 
+    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ActivityCompat.requestPermissions(this,permissions,1)
@@ -44,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         notificationManager.createNotificationChannel(channel)
     }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun checkAndRequestPermissions() {
         for (permission in permissions) {
             if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
@@ -54,19 +67,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1) {
-            // Check if all permissions are granted
-            val allPermissionsGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-
-            if (allPermissionsGranted) {
-                // All permissions are granted, proceed with your app logic
-                // ...
-            } else {
-                // Some permissions are denied, handle accordingly
-                // ...
-            }
-        }
-    }
+//    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+//        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+//        if (requestCode == 1) {
+//            // Check if all permissions are granted
+//            val allPermissionsGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+//
+//            if (allPermissionsGranted) {
+//                // All permissions are granted, proceed with your app logic
+//                // ...
+//            } else {
+//                // Some permissions are denied, handle accordingly
+//                // ...
+//            }
+//        }
+//    }
 }

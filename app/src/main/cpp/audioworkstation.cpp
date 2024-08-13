@@ -15,7 +15,7 @@ SLPlayItf playerPlay = nullptr;
 SLAndroidSimpleBufferQueueItf recorderBufferQueue = nullptr;
 SLAndroidSimpleBufferQueueItf playerBufferQueue = nullptr;
 
-const SLInterfaceID playerIID[2] = { SL_IID_PLAY, SL_IID_BUFFERQUEUE };
+const SLInterfaceID playerIID[2] = { SL_IID_PLAY, SL_IID_ANDROIDSIMPLEBUFFERQUEUE };
 const SLboolean playerReq[2] = { SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE };
 
 const SLInterfaceID recorderIID[2] = { SL_IID_RECORD, SL_IID_ANDROIDSIMPLEBUFFERQUEUE };
@@ -40,14 +40,12 @@ void createEngine(){
         return;
     }
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Engine created successfully");
-
     // Realize the engine
-    result = (*engineObject)->Realize(engineObject, SL_BOOLEAN_TRUE);
+    result = (*engineObject)->Realize(engineObject, SL_BOOLEAN_FALSE);
     if (result != SL_RESULT_SUCCESS) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Engine Realize failed: %d", result);
         return;
     }
-
     // Get the engine interface
     result = (*engineObject)->GetInterface(engineObject, SL_IID_ENGINE, &engineEngine);
     if (result != SL_RESULT_SUCCESS) {
@@ -56,6 +54,7 @@ void createEngine(){
     }
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Engine interface obtained successfully");
 }
+
 
 void createOutputMix(){
     SLresult result;
@@ -72,7 +71,6 @@ void createOutputMix(){
 
 void startAudioStreaming() {
     SLresult result;
-
     // Set up the recorder
     SLDataLocator_IODevice loc_dev = {SL_DATALOCATOR_IODEVICE, SL_IODEVICE_AUDIOINPUT, SL_DEFAULTDEVICEID_AUDIOINPUT, nullptr};
     SLDataSource audioSrc = {&loc_dev, nullptr};
@@ -107,10 +105,13 @@ void startAudioStreaming() {
     }
 
     // Set up the player
+    SLDataLocator_AndroidSimpleBufferQueue loc_bq_player = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 1};
+    SLDataSource audioSrcPlayer = {&loc_bq_player, &format_pcm};
+
     SLDataLocator_OutputMix loc_outmix = {SL_DATALOCATOR_OUTPUTMIX, outputMixObject};
     SLDataSink audioSnkPlayer = {&loc_outmix, nullptr};
 
-    result = (*engineEngine)->CreateAudioPlayer(engineEngine, &playerObject, &audioSrc, &audioSnkPlayer, 2, playerIID, playerReq);
+    result = (*engineEngine)->CreateAudioPlayer(engineEngine, &playerObject, &audioSrcPlayer, &audioSnkPlayer, 2, playerIID, playerReq);
     if (result != SL_RESULT_SUCCESS) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "CreateAudioPlayer failed: %d", result);
         return;
@@ -157,7 +158,7 @@ void startAudioStreaming() {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_audioprocessing_AudioStreamingService_createEngine(JNIEnv *env,
+Java_com_georgv_audioworkstation_audioprocessing_AudioStreamingService_startStreaming(JNIEnv *env,
                                                                                     jobject thiz) {
     createEngine();
     createOutputMix();
@@ -168,6 +169,55 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_audioprocessing_AudioStreamingService_destroyEngine(JNIEnv *env,
                                                                                      jobject thiz) {
+    if (playerPlay != nullptr) {
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Stopping audio playback");
+
+        // Stop the audio player
+        SLresult result = (*playerPlay)->SetPlayState(playerPlay, SL_PLAYSTATE_STOPPED);
+        if (result != SL_RESULT_SUCCESS) {
+            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Failed to stop audio player: %d", result);
+        }
+
+        // Destroy the audio player object
+        if (playerObject != nullptr) {
+            (*playerObject)->Destroy(playerObject);
+            playerObject = nullptr;
+            __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Audio player object destroyed");
+        }
+
+        playerPlay = nullptr;
+        playerBufferQueue = nullptr;
+    }
+
+    if (recorderRecord != nullptr) {
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Stopping audio recording");
+
+        // Stop the audio recorder
+        SLresult result = (*recorderRecord)->SetRecordState(recorderRecord, SL_RECORDSTATE_STOPPED);
+        if (result != SL_RESULT_SUCCESS) {
+            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Failed to stop audio recorder: %d", result);
+        }
+
+        // Destroy the audio recorder object
+        if (recorderObject != nullptr) {
+            (*recorderObject)->Destroy(recorderObject);
+            recorderObject = nullptr;
+            __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Audio recorder object destroyed");
+        }
+
+        recorderRecord = nullptr;
+        recorderBufferQueue = nullptr;
+    }
+
+    if (outputMixObject != nullptr) {
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Destroying output mix");
+
+        // Destroy the output mix object
+        (*outputMixObject)->Destroy(outputMixObject);
+        outputMixObject = nullptr;
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Output mix object destroyed");
+    }
+
     if (engineEngine != nullptr) {
         __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Destroying engine interface");
 

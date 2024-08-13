@@ -14,9 +14,8 @@ class AudioStreamingService: Service()  {
         System.loadLibrary("audioworkstation")
     }
 
-    private external fun createEngine()
+    private external fun startStreaming()
     private external fun destroyEngine()
-    private external fun stringFromJNI()
 
     override fun onCreate() {
         super.onCreate()
@@ -26,7 +25,7 @@ class AudioStreamingService: Service()  {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service Started")
         // Start your audio streaming here
-        createEngine()
+        startStreaming()
 
         return START_STICKY
     }
@@ -42,4 +41,5 @@ class AudioStreamingService: Service()  {
         // This is a started service, not a bound service, so return null
         return null
     }
+
 }

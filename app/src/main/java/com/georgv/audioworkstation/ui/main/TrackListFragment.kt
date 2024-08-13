@@ -46,7 +46,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: TrackListFragmentBinding
     private lateinit var mRecyclerView: RecyclerView
-    //private val args: TrackListFragmentArgs by navArgs()
+
 
     init {
         AudioController.trackList.clear()
@@ -91,7 +91,6 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
             binding.playButton -> {
                 if (AudioController.controllerState == AudioController.ControllerState.PAUSE) {
                     changeState(AudioController.ControllerState.CONTINUE)
-                    //binding.playButton.clearAnimation()
                 } else {
                     changeState(AudioController.ControllerState.PLAY)
                 }

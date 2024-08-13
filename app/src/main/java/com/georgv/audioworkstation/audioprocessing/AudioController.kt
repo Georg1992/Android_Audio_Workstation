@@ -21,7 +21,6 @@ object AudioController {
         STREAM
     }
 
-
     lateinit var fragmentActivitySender: FragmentActivity
     lateinit var audioListener: AudioListener
     private val mainExecutor = Executors.newSingleThreadExecutor()
@@ -102,13 +101,13 @@ object AudioController {
     }
 
     private fun playSong(){
-        mainExecutor.execute(){
+        mainExecutor.execute{
             songToPlay?.second?.playAudio()
         }
     }
 
     private fun playTracksSimultaneously() {
-        mainExecutor.execute() {
+        mainExecutor.execute{
             val latch = CountDownLatch(trackList.size)
             for (pair in trackList) {
                 try {
@@ -123,13 +122,13 @@ object AudioController {
     }
 
     private fun startStreamAudio(){
-        mainExecutor.execute() {
+        mainExecutor.execute{
             streamer?.startAudioStreaming()
         }
     }
 
     private fun stopStreamAudio(){
-        mainExecutor.execute() {
+        mainExecutor.execute{
            streamer?.stopAudioStreaming()
         }
     }

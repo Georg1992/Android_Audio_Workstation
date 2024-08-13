@@ -19,7 +19,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
 
     inner class SongViewHolder(itemBinding:SongHolderViewBinding):RecyclerView.ViewHolder(itemBinding.root), View.OnClickListener, AudioListener{
         lateinit var song:Song
-        lateinit var processor: AudioProcessor
+        private lateinit var processor: AudioProcessor
 
 
         init {
