@@ -14,7 +14,6 @@
             android:orientation="horizontal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/yellow"
             android:elevation="2dp"
             android:gravity="right"
             android:padding="5dp">
@@ -51,8 +50,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             android:gravity="center"
-            android:layout_margin="5dp"
-            android:background="@color/yellow">
+            android:layout_margin="5dp">
 
         <ProgressBar
                 android:id="@+id/progressBar"
@@ -128,8 +126,7 @@
                 app:layout_constraintStart_toStartOf="parent"
                 android:visibility="invisible"
                 android:contentDescription="@string/STOP"
-                style="@android:style/Widget.ImageButton"
-                android:background="@color/blue" />
+                style="@android:style/Widget.ImageButton" />
 
         <ImageButton
                 android:id="@+id/playButton"

@@ -6,6 +6,24 @@ import kotlin.math.sqrt
 class Reverb(var delayInMilliSeconds: Int, var decayFactor: Float,
              var reverbPercent: Int, var feedbackFactor: Float) : Effect(){
 
+    inner class Comb(combDelay: Float, combDecay: Float, private val feedback:Float) {
+        private val delayInSamples =
+            ((delayInMilliSeconds + combDelay) * (sampleRate / 1000)).toInt()
+        private val decay = decayFactor + combDecay
+        private val buffer = FloatArray(delayInSamples)
+        private var bufferIndex = 0
+
+        fun applyComb(audioInput:FloatArray): FloatArray {
+            val combOutput = FloatArray(audioInput.size)
+            for (i in audioInput.indices) {
+                combOutput[i] = buffer[bufferIndex]
+                buffer[bufferIndex] = audioInput[i] * decay + buffer[bufferIndex] * feedback
+                bufferIndex = (bufferIndex + 1) % delayInSamples
+            }
+            return combOutput
+        }
+    }
+
     private val sampleRate = 44100
     private val combList = arrayOf(
         Comb(0.0f, 0.0f,feedbackFactor*1f),
@@ -35,23 +53,6 @@ class Reverb(var delayInMilliSeconds: Int, var decayFactor: Float,
         return allPassFilterSamples2
     }
 
-    inner class Comb(combDelay: Float, combDecay: Float, private val feedback:Float) {
-        private val delayInSamples =
-            ((delayInMilliSeconds + combDelay) * (sampleRate / 1000)).toInt()
-        private val decay = decayFactor + combDecay
-        private val buffer = FloatArray(delayInSamples)
-        private var bufferIndex = 0
-
-        fun applyComb(audioInput:FloatArray): FloatArray {
-            val combOutput = FloatArray(audioInput.size)
-            for (i in audioInput.indices) {
-                combOutput[i] = buffer[bufferIndex]
-                buffer[bufferIndex] = audioInput[i] * decay + buffer[bufferIndex] * feedback
-                bufferIndex = (bufferIndex + 1) % delayInSamples
-            }
-            return combOutput
-        }
-    }
 
     private fun mixedCombsAsFloat(audioInput: FloatArray):FloatArray{
         val mixedCombs = FloatArray(audioInput.size)

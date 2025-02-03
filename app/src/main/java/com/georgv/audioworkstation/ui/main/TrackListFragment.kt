@@ -2,10 +2,7 @@ package com.georgv.audioworkstation.ui.main
 
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
-import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -24,12 +21,9 @@ import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.georgv.audioworkstation.data.Track
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
-import androidx.core.view.isVisible
 import androidx.navigation.fragment.findNavController
-import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
 import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
 import com.georgv.audioworkstation.audioprocessing.AudioProcessor
@@ -89,7 +83,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
     override fun onClick(p0: View?) {
         when (p0) {
             binding.playButton -> {
-                if (AudioController.controllerState == AudioController.ControllerState.PAUSE) {
+                if (controllerState == AudioController.ControllerState.PAUSE) {
                     changeState(AudioController.ControllerState.CONTINUE)
                 } else {
                     changeState(AudioController.ControllerState.PLAY)
@@ -102,10 +96,6 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
             }
 
             binding.recordButton -> {
-                if (viewModel.trackList.value?.size!! > 7) {
-                    showTooManyTracksSnackBar()
-                    return
-                }
                 viewModel.createTrack(requireContext())
                 if (AudioController.trackList.isEmpty()) {
                     changeState(AudioController.ControllerState.REC)
@@ -244,7 +234,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         val view = snack.view
         val params = view.layoutParams as FrameLayout.LayoutParams
         params.gravity = Gravity.CENTER
-        view.setBackgroundResource(R.color.redTransparent)
+        view.setBackgroundResource(R.color.bright_green)
         snack.show()
     }
 
@@ -257,7 +247,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         val view = snack.view
         val params = view.layoutParams as FrameLayout.LayoutParams
         params.gravity = Gravity.CENTER
-        view.setBackgroundResource(R.color.redTransparent)
+        view.setBackgroundResource(R.color.bright_green)
         snack.show()
     }
 

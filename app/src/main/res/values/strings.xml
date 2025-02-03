@@ -1,13 +1,15 @@
 <resources>
+    <string name="menuFastRecordButton">FastRecord</string>
+    <string name="menuDevicesButton">Devices</string>
+    <string name="menuCommunityButton">Community</string>
+    <string name="menuCreateButton">Create</string>
+    <string name="menuLibraryButton">Library</string>
     <string name="app_name">Audio Workstation</string>
     <string name="REC">RecordTrackButton</string>
     <string name="PLAY">PlayTrackButton</string>
     <string name="STOP">StopTrackButton</string>
     <string name="PAUSE">PauseButton</string>
-    <!-- TODO: Remove or change this placeholder text -->
-    <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="okEffect">OK</string>
-
     <string name="reverb">REVERB</string>
 
     <string name="createSong">Create Song</string>
@@ -54,6 +56,7 @@
     <string name="band4Text">8KHz</string>
     <string name="band5Text">15KHz</string>
     <string name="band6Text">highpass</string>
+    <string name="fast_record">Fast Record</string>
 
 
 </resources>

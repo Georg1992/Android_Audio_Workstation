@@ -39,7 +39,6 @@
             <androidx.cardview.widget.CardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:cardBackgroundColor="@color/blue"
                     android:id="@+id/eqCard"
                     android:layout_margin="5dp">
 
@@ -380,7 +379,6 @@
             <androidx.cardview.widget.CardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:cardBackgroundColor="@color/yellow"
                     android:id="@+id/compCard"
                     android:layout_margin="5dp">
 
@@ -986,7 +984,6 @@
             android:layout_marginBottom="10dp"
             android:contentDescription="@string/applyAllEffectsButton"
             android:minHeight="48dp"
-            android:backgroundTint="@color/green"
             android:backgroundTintMode="add"
             tools:ignore="ImageContrastCheck" />
 

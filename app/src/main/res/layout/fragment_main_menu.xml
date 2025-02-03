@@ -1,62 +1,83 @@
-<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout
-        xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:app="http://schemas.android.com/apk/res-auto"
-        xmlns:tools="http://schemas.android.com/tools"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:id="@+id/mainMenuFragment">
+        android:gravity="center"
+        android:orientation="vertical">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- Grid Layout for the menu items -->
+    <GridLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:padding="16dp"
+            android:id="@+id/gridLayout">
 
-        <Button
-                style="@style/MainMenuButtonStyle"
-                android:text="Loudspeaker"
-                android:layout_width="150dp"
-                android:layout_height="100dp"
-                android:id="@+id/toLoudSpeakerButton"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                android:layout_marginTop="150dp"
-                android:layout_marginStart="30dp"
-                >
+        <!-- First Menu Item -->
+        <include
+                layout="@layout/menu_item"
+                android:id="@+id/btnCreate"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_rowWeight="1"
+                android:layout_margin="5dp" />
 
-        </Button>
+        <!-- Second Menu Item -->
+        <include
+                layout="@layout/menu_item"
+                android:id="@+id/btnLibrary"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_rowWeight="1"
+                android:layout_margin="5dp" />
 
-        <Button
-                style="@style/MainMenuButtonStyle"
-                android:text="Library"
-                android:layout_width="150dp"
-                android:layout_height="100dp"
-                android:id="@+id/toLibraryButton"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                android:layout_marginEnd="25dp"
-                android:layout_marginTop="150dp"></Button>
+        <!-- Third Menu Item -->
+        <include
+                layout="@layout/menu_item"
+                android:id="@+id/btnDevices"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_rowWeight="1"
+                android:layout_margin="5dp" />
 
-        <Button
-                style="@style/MainMenuButtonStyle"
-                android:text="NewSong"
-                android:layout_width="150dp"
-                android:layout_height="100dp"
-                android:id="@+id/toTrackListButton"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/toLoudSpeakerButton"
-                android:layout_marginStart="40dp"
-                app:layout_constraintBottom_toBottomOf="parent"></Button>
+        <!-- Fourth Menu Item -->
+        <include
+                layout="@layout/menu_item"
+                android:id="@+id/btnCommunity"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_rowWeight="1"
+                android:layout_margin="5dp" />
 
-        <Button
-                style="@style/MainMenuButtonStyle"
-                android:text="Settings"
-                android:layout_width="150dp"
-                android:layout_height="100dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/toLibraryButton"
-                android:id="@+id/button"
-                android:layout_marginEnd="25dp"
-                app:layout_constraintBottom_toBottomOf="parent"></Button>
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </GridLayout>
 
-</FrameLayout>
+    <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="15dp">
+
+        <ImageView
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:src="@drawable/ic_baseline_fiber_manual_record_24"
+                android:id="@+id/fastRecordIcon"
+                android:layout_gravity="center_horizontal" />
+
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/fast_record" />
+    </LinearLayout>
+
+
+</LinearLayout>
+
+
+
+
+
+

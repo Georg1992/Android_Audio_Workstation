@@ -27,7 +27,6 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.POST_NOTIFICATIONS
         )
     } else {
-        TODO("VERSION.SDK_INT < TIRAMISU")
         arrayOf<String>(
             Manifest.permission.FOREGROUND_SERVICE,
             Manifest.permission.RECORD_AUDIO,
@@ -67,19 +66,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-//    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-//        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-//        if (requestCode == 1) {
-//            // Check if all permissions are granted
-//            val allPermissionsGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-//
-//            if (allPermissionsGranted) {
-//                // All permissions are granted, proceed with your app logic
-//                // ...
-//            } else {
-//                // Some permissions are denied, handle accordingly
-//                // ...
-//            }
-//        }
-//    }
 }

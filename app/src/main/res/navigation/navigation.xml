@@ -50,17 +50,6 @@
         <action
                 android:id="@+id/action_mainMenuFragment_to_trackListFragment"
                 app:destination="@id/trackListFragment" />
-        <action
-                android:id="@+id/action_mainMenuFragment_to_loudspeakerFragment"
-                app:destination="@id/loudspeakerFragment"
-                app:enterAnim="@anim/nav_default_enter_anim" />
-    </fragment>
-    <fragment
-            android:id="@id/loudspeakerFragment"
-            android:label="fragment_loudspeaker"
-            tools:layout="@layout/fragment_loud_speaker"
-            android:name="com.georgv.audioworkstation.ui.main.LoudSpeakerFragment">
-
     </fragment>
 
 </navigation>

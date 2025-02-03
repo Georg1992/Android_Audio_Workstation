@@ -1,11 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-    <style name="MainStyle" parent="Theme.AppCompat.Light.NoActionBar" >
-        <item name="android:color">@color/darkRed</item>
-    </style>
-
-    <style name="MainMenuButtonStyle">
-        <item name="android:background">@color/darkRed</item> <!-- Change this to your desired color -->
-        <item name="android:textColor">@color/white</item>
+    <style name="MainMenuButtonStyle" parent="Theme.Design.Light">
+        <item name="android:fontFamily">monospace</item>
     </style>
 </resources>

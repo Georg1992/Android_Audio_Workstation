@@ -116,7 +116,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
         if (item.isRecording == true) {
             val gradientDrawable = GradientDrawable()
             val color =
-                ContextCompat.getColor(parentFragment.requireContext(), R.color.redTransparent)
+                ContextCompat.getColor(parentFragment.requireContext(), R.color.soft_red)
             gradientDrawable.setColor(color)
             gradientDrawable.cornerRadius = radius.toFloat()
             gradientDrawable.setStroke(3, Color.BLACK)
@@ -132,7 +132,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
                 holder.processor = processor
                 AudioController.addTrackToTheTrackList(item, holder.processor)
                 val gradientDrawable = GradientDrawable()
-                val color = ContextCompat.getColor(parentFragment.requireContext(), R.color.green)
+                val color = ContextCompat.getColor(parentFragment.requireContext(), R.color.bright_green)
                 gradientDrawable.setColor(color)
                 gradientDrawable.cornerRadius = radius.toFloat()
                 gradientDrawable.setStroke(3, Color.BLACK)
@@ -142,7 +142,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
                 holder.processor = null
                 AudioController.removeTrackFromTheTrackList(item)
                 val gradientDrawable = GradientDrawable()
-                val color = ContextCompat.getColor(parentFragment.requireContext(), R.color.blue)
+                val color = ContextCompat.getColor(parentFragment.requireContext(), R.color.white)
                 gradientDrawable.setColor(color)
                 gradientDrawable.cornerRadius = radius.toFloat()
                 gradientDrawable.setStroke(3, Color.BLACK)

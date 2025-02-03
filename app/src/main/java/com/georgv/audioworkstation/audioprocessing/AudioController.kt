@@ -6,7 +6,6 @@ import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.AudioListener
-import com.georgv.audioworkstation.ui.main.Streamer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
@@ -17,8 +16,7 @@ object AudioController {
         CONTINUE,
         PLAY_REC,
         STOP,
-        PAUSE,
-        STREAM
+        PAUSE
     }
 
     lateinit var fragmentActivitySender: FragmentActivity
@@ -29,7 +27,6 @@ object AudioController {
     lateinit var trackToRecord: Track
     val trackList: MutableList<Pair<Track, AudioProcessor>> = mutableListOf()
     var songToPlay: Pair<Song,AudioProcessor>? = null
-    var streamer:Streamer? = null
 
     private fun recordAudio(track: Track) {
         val processor = AudioProcessor()
@@ -72,9 +69,6 @@ object AudioController {
     fun changeState(audioControllerState: ControllerState) {
         controllerState = audioControllerState
         when (audioControllerState) {
-            ControllerState.STREAM -> {
-                startStreamAudio()
-            }
             ControllerState.PLAY -> {
                 playTracksSimultaneously()
                 playSong()
@@ -88,7 +82,7 @@ object AudioController {
                 recordAudio(trackToRecord)
             }
             ControllerState.STOP -> {
-                stopStreamAudio()
+
             }
             ControllerState.PAUSE -> {
 
@@ -118,18 +112,6 @@ object AudioController {
                 }
             }
             latch.await()
-        }
-    }
-
-    private fun startStreamAudio(){
-        mainExecutor.execute{
-            streamer?.startAudioStreaming()
-        }
-    }
-
-    private fun stopStreamAudio(){
-        mainExecutor.execute{
-           streamer?.stopAudioStreaming()
         }
     }
 
