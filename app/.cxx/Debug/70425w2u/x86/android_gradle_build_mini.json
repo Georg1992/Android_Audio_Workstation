@@ -1,32 +1,32 @@
 {
   "buildFiles": [
-    "C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\src\\main\\cpp\\CMakeLists.txt"
+    "C:\\Users\\selft\\AndroidStudioProjects\\SonicBox\\app\\src\\main\\cpp\\CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
     [
-      "C:\\Users\\georg\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "C:\\Users\\selft\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
       "-C",
-      "C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\.cxx\\Debug\\70425w2u\\x86",
+      "C:\\Users\\selft\\AndroidStudioProjects\\SonicBox\\app\\.cxx\\Debug\\70425w2u\\x86",
       "clean"
     ]
   ],
   "buildTargetsCommandComponents": [
-    "C:\\Users\\georg\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "C:\\Users\\selft\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
     "-C",
-    "C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\.cxx\\Debug\\70425w2u\\x86",
+    "C:\\Users\\selft\\AndroidStudioProjects\\SonicBox\\app\\.cxx\\Debug\\70425w2u\\x86",
     "{LIST_OF_TARGETS_TO_BUILD}"
   ],
   "libraries": {
     "native-lib::@6890427a1f51a3e7e1df": {
       "artifactName": "native-lib",
       "abi": "x86",
-      "output": "C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\build\\intermediates\\cxx\\Debug\\70425w2u\\obj\\x86\\libnative-lib.so",
+      "output": "C:\\Users\\selft\\AndroidStudioProjects\\SonicBox\\app\\build\\intermediates\\cxx\\Debug\\70425w2u\\obj\\x86\\libnative-lib.so",
       "runtimeFiles": []
     },
     "audioworkstation::@6890427a1f51a3e7e1df": {
       "artifactName": "audioworkstation",
       "abi": "x86",
-      "output": "C:\\Users\\georg\\Documents\\Android_Audio_App\\Android_Audio_Workstation\\app\\build\\intermediates\\cxx\\Debug\\70425w2u\\obj\\x86\\libaudioworkstation.so",
+      "output": "C:\\Users\\selft\\AndroidStudioProjects\\SonicBox\\app\\build\\intermediates\\cxx\\Debug\\70425w2u\\obj\\x86\\libaudioworkstation.so",
       "runtimeFiles": []
     }
   }
