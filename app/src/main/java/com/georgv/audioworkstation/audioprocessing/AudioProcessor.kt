@@ -11,7 +11,6 @@ import androidx.core.app.ActivityCompat
 import com.georgv.audioworkstation.MainActivity
 import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
-import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.customHandlers.WavHeader
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
@@ -45,9 +44,8 @@ class AudioProcessor():UiListener {
         get() = _track
         set(value) {
             _track = value
-            effects = arrayOf(TypeConverter.toEffect(track.equalizer),
-                TypeConverter.toEffect(track.compressor),TypeConverter.toEffect(track.reverb))
-            file = File(track.wavDir)
+            effects = arrayOf()
+            file = File(track.wavFilePath)
             volume = track.volume
         }
 
@@ -299,9 +297,9 @@ class AudioProcessor():UiListener {
             repeat(doTimes) {
                 for (track in tracks) {
                     handler.post{
-                        callback.onProcessingProgress(track.trackName)
+                        track.name?.let { it1 -> callback.onProcessingProgress(it1) }
                     }
-                    val inputFile = File(track.wavDir)
+                    val inputFile = File(track.wavFilePath)
                     val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
                     inputFile.inputStream().channel.read(bytesBuffer, offset)
                     val bytes = bytesBuffer.array()
@@ -340,7 +338,7 @@ class AudioProcessor():UiListener {
 
     private fun getLongestFileSize(tracks: List<Track>): Long {
         val longestTrack = tracks.maxByOrNull { track -> track.duration!! }
-        return File(longestTrack!!.wavDir).length()
+        return File(longestTrack!!.wavFilePath).length()
     }
 
 

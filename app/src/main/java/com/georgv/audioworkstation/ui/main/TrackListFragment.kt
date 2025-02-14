@@ -15,12 +15,11 @@ import androidx.core.view.iterator
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.georgv.audioworkstation.TrackListAdapter
-import androidx.lifecycle.Observer
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
-import com.georgv.audioworkstation.data.Track
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
@@ -28,6 +27,7 @@ import com.georgv.audioworkstation.audioprocessing.AudioController.controllerSta
 import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
 import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.databinding.TrackListFragmentBinding
+import kotlinx.coroutines.launch
 
 import java.io.File
 import java.io.IOException
@@ -37,14 +37,14 @@ import java.nio.file.Paths
 
 class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, AudioProcessingCallback {
 
-    private val viewModel: SongViewModel by activityViewModels()
+    private val viewModel: TrackListViewModel by activityViewModels()
     private lateinit var binding: TrackListFragmentBinding
     private lateinit var mRecyclerView: RecyclerView
 
 
     init {
-        AudioController.trackList.clear()
-        AudioController.audioListener = this
+        //AudioController.trackList.clear()
+       // AudioController.audioListener = this
     }
 
     override fun onCreateView(
@@ -64,17 +64,20 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         mRecyclerView.adapter = adapter
 
 
-        //binding.songName.text = args.selectedSong.songName
+        binding.songName.text = ""
         binding.playButton.setOnClickListener(this)
         binding.recordButton.setOnClickListener(this)
         binding.stopButton.setOnClickListener(this)
         binding.pauseButton.setOnClickListener(this)
         binding.saveSongButton.setOnClickListener(this)
 
-        val trackListObserver = Observer<List<Track>> {
-            adapter.submitList(viewModel.trackList.value)
-        }
-        viewModel.trackList.observe(viewLifecycleOwner, trackListObserver)
+
+//        lifecycleScope.launch {
+//            viewModel.trackList.collect { tracks ->
+//                adapter.submitList(tracks)
+//            }
+//        }
+
 
         return binding.root
     }
@@ -92,11 +95,11 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
 
             binding.stopButton -> {
                 changeState(AudioController.ControllerState.STOP)
-                viewModel.stopRecordTrack()
+
             }
 
             binding.recordButton -> {
-                viewModel.createTrack(requireContext())
+                viewModel.createTrack()
                 if (AudioController.trackList.isEmpty()) {
                     changeState(AudioController.ControllerState.REC)
                 } else {
@@ -109,28 +112,25 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
                 changeState(AudioController.ControllerState.PAUSE)
             }
 
-            binding.saveSongButton -> {
-                val processor = AudioProcessor()
-                processor.setSongToProcessor(viewModel.currentSong)
-                val trackList = viewModel.trackList.value
-                val songWavFileDir = viewModel.currentSong.wavFilePath
-                if ((trackList != null)
-                    && trackList.isNotEmpty()
-                    && (songWavFileDir != null)
-                    && controllerState == AudioController.ControllerState.STOP
-                ) {
-                    val wavFile = File(songWavFileDir)
-
-                    processor.mixAudio(trackList,wavFile,this)
-                } else {
-                    showEmptySongSnackBar()
-                }
-            }
+//            binding.saveSongButton -> {
+//                val processor = AudioProcessor()
+//               // processor.setSongToProcessor(viewModel.)
+//                val trackList = viewModel.tracks
+//                //val songWavFileDir = viewModel.currentSong.wavFilePath
+//                if ((songWavFileDir != null) && controllerState == AudioController.ControllerState.STOP
+//                ) {
+//                    val wavFile = File(songWavFileDir)
+//
+//                    //processor.mixAudio(trackList,wavFile,this)
+//                } else {
+//                    showEmptySongSnackBar()
+//                }
+//            }
         }
         setButtonUI()
     }
 
-    fun deleteTrack(trackId: Long, wavFilePath: String) {
+    fun deleteTrack(trackId: String, wavFilePath: String) {
         viewModel.deleteTrackFromDb(trackId)
         try {
             Files.delete(Paths.get(wavFilePath))
@@ -139,7 +139,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         }
     }
 
-    fun updateTrackVolume(volume:Float,id:Long){
+    fun updateTrackVolume(volume:Float,id:String){
         viewModel.updateTrackVolumeToDb(volume,id)
     }
 

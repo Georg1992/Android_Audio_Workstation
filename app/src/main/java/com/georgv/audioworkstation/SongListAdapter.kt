@@ -26,7 +26,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
             AudioController.audioListener = this
             this.itemView.setOnClickListener(this)
             binding.deleteButton.setOnClickListener {
-                listener.onDeleteClick(song.id)
+                //listener.onDeleteClick()
             }
 
             binding.playSongButton.setOnClickListener{
@@ -79,7 +79,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
 
     override fun onBindViewHolder(holder: SongViewHolder, position: Int) {
         holder.song = getItem(position)
-        binding.songName.text = holder.song.songName
+        binding.songName.text = holder.song.name
     }
 
 
@@ -96,7 +96,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
 
     interface OnItemClickListener {
         fun onItemClick(position: Int, song: Song)
-        fun onDeleteClick(songID:Long)
+        fun onDeleteClick(songID:String)
     }
 }
 

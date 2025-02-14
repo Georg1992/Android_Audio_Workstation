@@ -7,12 +7,10 @@ class WavHeader(
     bitDepth: Int
 ) {
     private val header = ByteArray(44)
-    private val channels: Short
-    private val bitDepth: Short
+    private val channels: Short = channels.toShort()
+    private val bitDepth: Short = bitDepth.toShort()
 
     init {
-        this.channels = channels.toShort()
-        this.bitDepth = bitDepth.toShort()
         buildHeader()
     }
 

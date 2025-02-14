@@ -52,7 +52,6 @@ object AudioController {
                 trackList.remove(pair)
             }
         }
-        Log.d("REMOVING TRACK", "${track.trackName} and listSize is ${trackList.size}")
     }
 
     fun checkTracksFinishedPlaying(){

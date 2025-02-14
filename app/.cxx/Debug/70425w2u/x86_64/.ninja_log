@@ -30,3 +30,15 @@
 61	109	7600747137161697	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86_64/libaudioworkstation.so	99574b580b771fd5
 5	583	7600747141882944	CMakeFiles/native-lib.dir/native-lib.cpp.o	a6972b3cd98f8c61
 583	631	7600747142378130	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86_64/libnative-lib.so	f8ab89242dd71e62
+0	4	0	clean	114c22d99d9963d6
+0	5	0	clean	114c22d99d9963d6
+8	94	7611204907395580	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	b9c9dfe2a33a7a6f
+95	220	7611204908476197	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86_64/libaudioworkstation.so	99574b580b771fd5
+10	836	7611204914742076	CMakeFiles/native-lib.dir/native-lib.cpp.o	a6972b3cd98f8c61
+837	905	7611204915456814	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86_64/libnative-lib.so	f8ab89242dd71e62
+0	4	0	clean	114c22d99d9963d6
+0	4	0	clean	114c22d99d9963d6
+3	68	7611711756880019	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	b9c9dfe2a33a7a6f
+69	124	7611711757395620	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86_64/libaudioworkstation.so	99574b580b771fd5
+5	751	7611711763592047	CMakeFiles/native-lib.dir/native-lib.cpp.o	a6972b3cd98f8c61
+751	839	7611711764483961	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/x86_64/libnative-lib.so	f8ab89242dd71e62

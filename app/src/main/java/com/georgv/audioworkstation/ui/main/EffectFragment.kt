@@ -11,9 +11,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.NavHostFragment
-import androidx.navigation.fragment.navArgs
 import com.georgv.audioworkstation.audioprocessing.*
-import com.georgv.audioworkstation.customHandlers.TypeConverter
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.FragmentEffectBinding
 import com.google.android.material.slider.Slider
@@ -24,7 +22,7 @@ class EffectFragment : Fragment() {
 
     private lateinit var binding: FragmentEffectBinding
     private lateinit var track: Track
-    private val viewModel: SongViewModel by activityViewModels()
+    private val viewModel: TrackListViewModel by activityViewModels()
 
 
     override fun onCreateView(
@@ -34,11 +32,11 @@ class EffectFragment : Fragment() {
     ): View {
         binding = FragmentEffectBinding.inflate(inflater, container, false)
         //track = args.selectedTrack
-        Log.d("TRACK EQ IN EFFECT FRAG", "${track.equalizer}")
+        Log.d("TRACK EQ IN EFFECT FRAG", "${track}")
 
         val applyAllButton: ImageButton = binding.applyAllEffect
         val trackName = binding.trackName
-        trackName.text = track.trackName
+        trackName.text = track.name
 
         val sliders = arrayOf(
             Pair(binding.sldBand1, binding.band1Value),
@@ -64,7 +62,7 @@ class EffectFragment : Fragment() {
             binding.switchEq,binding.switchReverb,binding.switchCompressor
         )
 
-        setSliders(sliders, switches, track.equalizer, track.compressor, track.reverb)
+            //setSliders(sliders, switches, track.equalizer, track.compressor, track.reverb)
 
 
         for(switch in switches){
@@ -82,7 +80,6 @@ class EffectFragment : Fragment() {
 
 
         applyAllButton.setOnClickListener {
-            val song = viewModel.currentSong
             val action = EffectFragmentDirections.actionEffectFragmentToTrackListFragment()
             NavHostFragment.findNavController(this).navigate(action)
         }
@@ -129,9 +126,6 @@ class EffectFragment : Fragment() {
         rev: String?
     ) {
         setSliderSteps()
-        val equalizer = TypeConverter.toEffect(eq)
-        val compressor = TypeConverter.toEffect(comp)
-        val reverb = TypeConverter.toEffect(rev)
 
         for (pair in arraySl) {
             val slider = pair.first
@@ -155,31 +149,31 @@ class EffectFragment : Fragment() {
                 setTextView(sl, textView, fl)
             }
 
-            if (reverb != null && reverb is Reverb) {
-                binding.sliderDelay.value = reverb.delayInMilliSeconds.toFloat()
-                binding.sliderDryWet.value = reverb.reverbPercent.toFloat()
-                binding.sliderFeedback.value = reverb.feedbackFactor
-                binding.sliderDecay.value = reverb.decayFactor
-                binding.switchReverb.isChecked = true
-            }
-            if (equalizer != null && equalizer is Equalizer) {
-                binding.sldBand1.value = equalizer.band1.toFloat()
-                binding.sldBand2.value = equalizer.band2.toFloat()
-                binding.sldBand3.value = equalizer.band3.toFloat()
-                binding.sldBand4.value = equalizer.band4.toFloat()
-                binding.sldBand5.value = equalizer.band5.toFloat()
-                binding.sldBand6.value = equalizer.band6.toFloat()
-                binding.switchEq.isChecked = true
-            }
-            if (compressor != null && compressor is Compressor) {
-                binding.sliderThreshold.value = compressor.threshold
-                binding.sliderRatio.value = compressor.ratio
-                binding.sliderKnee.value = compressor.knee
-                binding.sliderAttack.value = compressor.attackTime
-                binding.sliderRelease.value = compressor.releaseTime
-                binding.sliderGain.value = compressor.makeupGain
-                binding.switchCompressor.isChecked = true
-            }
+//            if (rev != null && rev is Reverb) {
+//                binding.sliderDelay.value = rev.delayInMilliSeconds.toFloat()
+//                binding.sliderDryWet.value = rev.reverbPercent.toFloat()
+//                binding.sliderFeedback.value = rev.feedbackFactor
+//                binding.sliderDecay.value = rev.decayFactor
+//                binding.switchReverb.isChecked = true
+//            }
+//            if (eq != null && eq is Equalizer) {
+//                binding.sldBand1.value = eq.band1.toFloat()
+//                binding.sldBand2.value = eq.band2.toFloat()
+//                binding.sldBand3.value = eq.band3.toFloat()
+//                binding.sldBand4.value = eq.band4.toFloat()
+//                binding.sldBand5.value = eq.band5.toFloat()
+//                binding.sldBand6.value = eq.band6.toFloat()
+//                binding.switchEq.isChecked = true
+//            }
+//            if (comp != null && comp is Compressor) {
+//                binding.sliderThreshold.value = comp.threshold
+//                binding.sliderRatio.value = comp.ratio
+//                binding.sliderKnee.value = comp.knee
+//                binding.sliderAttack.value = comp.attackTime
+//                binding.sliderRelease.value = comp.releaseTime
+//                binding.sliderGain.value = comp.makeupGain
+//                binding.switchCompressor.isChecked = true
+//            }
             setTextView(slider,textView,slider.value)
         }
     }

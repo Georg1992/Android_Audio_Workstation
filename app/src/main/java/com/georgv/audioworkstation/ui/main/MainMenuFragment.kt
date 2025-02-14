@@ -7,12 +7,18 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.Toast
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import com.georgv.audioworkstation.databinding.FragmentMainMenuBinding
 import com.georgv.audioworkstation.ui.main.dialogs.CreateSongDialogFragment
+import kotlinx.coroutines.launch
 
 class MainMenuFragment : Fragment(), DialogCaller {
     private lateinit var binding: FragmentMainMenuBinding
+    private val viewModel: TrackListViewModel by activityViewModels ()
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,11 +40,31 @@ class MainMenuFragment : Fragment(), DialogCaller {
             val manager = parentFragmentManager
             val dialog = CreateSongDialogFragment(this)
             dialog.show(manager,"CREATE NEW SONG")
-//            val action = MainMenuFragmentDirections.actionMainMenuFragmentToTrackListFragment()
-//            NavHostFragment.findNavController(this).navigate(action)
         }
+
+        observeTasks()
         return binding.root
     }
+
+    private fun observeTasks() {
+        viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
+            if (isLoading) {
+                showLoadingScreen()
+            } else {
+                hideLoadingScreen()
+            }
+        }
+
+        viewModel.taskStatus.observe(viewLifecycleOwner) { result ->
+            result?.onSuccess {
+                navigateToTrackList()
+                viewModel.clearTaskStatus()
+            }?.onFailure { error ->
+               // showToast(error.localizedMessage ?: "Unknown error")
+            }
+        }
+    }
+
 
 
     private fun setMenuIconsAndText() {
@@ -67,7 +93,21 @@ class MainMenuFragment : Fragment(), DialogCaller {
 
     }
 
+    private fun showLoadingScreen() {
+
+    }
+
+    private fun hideLoadingScreen() {
+
+    }
+
+    private fun navigateToTrackList() {
+        val action = MainMenuFragmentDirections.actionMainMenuFragmentToTrackListFragment()
+        NavHostFragment.findNavController(this@MainMenuFragment).navigate(action)
+    }
+
     override fun delegateFunctionToDialog(songName: String) {
+        viewModel.createNewSong(songName,null)
 
     }
 
@@ -76,4 +116,5 @@ class MainMenuFragment : Fragment(), DialogCaller {
         super.onConfigurationChanged(newConfig)
         adjustGridLayout(newConfig.orientation)
     }
+
 }

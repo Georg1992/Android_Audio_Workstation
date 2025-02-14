@@ -1,15 +1,11 @@
 package com.georgv.audioworkstation.ui.main
 
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,7 +20,7 @@ import kotlinx.coroutines.launch
 class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCaller{
 
     private lateinit var binding: LibraryFragmentBinding
-    private val viewModel: SongViewModel by activityViewModels()
+    private val viewModel: TrackListViewModel by activityViewModels()
     private lateinit var songRecyclerView:RecyclerView
 
     init {
@@ -51,22 +47,15 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
         val adapter = SongListAdapter(this)
         songRecyclerView.adapter = adapter
 
-        val songListObserver = Observer<List<Song>>{
-            adapter.submitList(viewModel.songList.value)
+        lifecycleScope.launch {
+//            viewModel.songList.collect { songs ->
+//                adapter.submitList(songs)
+//            }
         }
-        viewModel.songList.observe(viewLifecycleOwner,songListObserver)
 
         return binding.root
     }
 
-    private fun createSongAndNavigate(songName:String){
-        val wavDir = "${context?.filesDir?.absolutePath}/$songName.wav"
-        lifecycleScope.launch{
-            viewModel.createNewSong(songName,wavDir)
-            val song = viewModel.currentSong
-            navigateToTheSong(song)
-        }
-    }
 
     private fun navigateToTheSong(song: Song){
         viewModel.updateSongOnNavigate(song)
@@ -79,14 +68,14 @@ class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCall
         navigateToTheSong(song)
     }
 
-    override fun onDeleteClick(songID:Long) {
+    override fun onDeleteClick(songID:String) {
         viewModel.deleteSongFromDB(songID)
     }
 
 
 
     override fun delegateFunctionToDialog(songName: String) {
-        createSongAndNavigate(songName)
+
     }
 
 

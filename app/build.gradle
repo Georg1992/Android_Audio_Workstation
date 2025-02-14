@@ -4,11 +4,16 @@ plugins {
     id 'kotlin-parcelize'
     id 'androidx.navigation.safeargs.kotlin'
     id("com.google.devtools.ksp")
+    id 'org.jetbrains.kotlin.kapt'
+    id 'io.realm.kotlin'
 
 }
 
+apply plugin: "realm-android"
+
+
 android {
-    compileSdk 34
+    compileSdk 35
 
     externalNativeBuild {
         cmake {
@@ -72,14 +77,12 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
 
-    //ROOM
-    implementation "androidx.room:room-runtime:2.6.1"
-    ksp "androidx.room:room-compiler:2.6.1"
-    implementation "androidx.room:room-ktx:2.6.1"
-    implementation "androidx.room:room-paging:2.6.1"
+    implementation 'io.realm.kotlin:library-base:1.16.0'
+    // If using Device Sync
+    implementation 'io.realm.kotlin:library-sync:1.16.0'
+    // If using coroutines with the SDK
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.0'
 
-    //REALM
-    implementation "io.realm:realm-android-library:10.19.0"
 
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
     implementation 'commons-io:commons-io:2.13.0'
