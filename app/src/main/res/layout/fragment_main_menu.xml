@@ -1,80 +1,51 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:orientation="vertical">
+        android:layout_height="match_parent">
 
-    <!-- Grid Layout for the menu items -->
-    <GridLayout
+    <!-- RecyclerView for the grid of menu items -->
+    <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/menuRecyclerView"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:padding="16dp"
-            android:id="@+id/gridLayout">
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="2"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toTopOf="@+id/fastRecordButton" />
 
-        <!-- First Menu Item -->
-        <include
-                layout="@layout/menu_item"
-                android:id="@+id/btnCreate"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_columnWeight="1"
-                android:layout_rowWeight="1"
-                android:layout_margin="5dp" />
-
-        <!-- Second Menu Item -->
-        <include
-                layout="@layout/menu_item"
-                android:id="@+id/btnLibrary"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_columnWeight="1"
-                android:layout_rowWeight="1"
-                android:layout_margin="5dp" />
-
-        <!-- Third Menu Item -->
-        <include
-                layout="@layout/menu_item"
-                android:id="@+id/btnDevices"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_columnWeight="1"
-                android:layout_rowWeight="1"
-                android:layout_margin="5dp" />
-
-        <!-- Fourth Menu Item -->
-        <include
-                layout="@layout/menu_item"
-                android:id="@+id/btnCommunity"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_columnWeight="1"
-                android:layout_rowWeight="1"
-                android:layout_margin="5dp" />
-
-    </GridLayout>
-
-    <LinearLayout
+    <!-- Button containing ImageView + TextView -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/fastRecordButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="15dp">
+            android:clickable="true"
+            android:focusable="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
         <ImageView
+                android:id="@+id/fastRecordIcon"
                 android:layout_width="80dp"
                 android:layout_height="80dp"
                 android:src="@drawable/ic_baseline_fiber_manual_record_24"
-                android:id="@+id/fastRecordIcon"
-                android:layout_gravity="center_horizontal" />
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toTopOf="@+id/textView2" />
 
         <TextView
+                android:id="@+id/textView2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/fast_record" />
-    </LinearLayout>
+                android:text="@string/fast_record"
+                app:layout_constraintTop_toBottomOf="@id/fastRecordIcon"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"/>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
-
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
 
 
 

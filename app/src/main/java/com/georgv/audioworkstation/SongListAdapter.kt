@@ -14,13 +14,12 @@ import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.databinding.SongHolderViewBinding
 import com.georgv.audioworkstation.ui.main.AudioListener
 
-class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongListAdapter.SongViewHolder>(DiffCallback()) {
+class SongListAdapter(val listener:OnSongItemClickListener): ListAdapter<Song, SongListAdapter.SongViewHolder>(DiffCallback()) {
     private lateinit var binding: SongHolderViewBinding
 
     inner class SongViewHolder(itemBinding:SongHolderViewBinding):RecyclerView.ViewHolder(itemBinding.root), View.OnClickListener, AudioListener{
         lateinit var song:Song
         private lateinit var processor: AudioProcessor
-
 
         init {
             AudioController.audioListener = this
@@ -94,7 +93,7 @@ class SongListAdapter(val listener:OnItemClickListener): ListAdapter<Song, SongL
     }
 
 
-    interface OnItemClickListener {
+    interface OnSongItemClickListener {
         fun onItemClick(position: Int, song: Song)
         fun onDeleteClick(songID:String)
     }

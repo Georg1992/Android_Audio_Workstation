@@ -16,15 +16,12 @@ import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.TrackHolderViewBinding
-import com.georgv.audioworkstation.ui.main.TrackListFragment
-import com.georgv.audioworkstation.ui.main.TrackListFragmentDirections
+import com.georgv.audioworkstation.ui.main.SongFragment
+import com.georgv.audioworkstation.ui.main.SongFragmentDirections
 import com.google.android.material.slider.Slider
 
 
-private const val DEBUG_TAG = "Gestures"
-
-
-class TrackListAdapter(val parentFragment: TrackListFragment) :
+class TrackListAdapter(val parentFragment: SongFragment) :
     ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()) {
 
     private val viewHolders: MutableList<TrackViewHolder> = mutableListOf()
@@ -33,7 +30,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
         hideAllSliders()
     }
 
-    inner class TrackViewHolder(private val binding: TrackHolderViewBinding) : RecyclerView.ViewHolder(binding.root), View.OnClickListener {
+    inner class TrackViewHolder(binding: TrackHolderViewBinding) : RecyclerView.ViewHolder(binding.root), View.OnClickListener {
         lateinit var track: Track
         lateinit var trackId: String
         var processor: AudioProcessor? = null
@@ -47,7 +44,7 @@ class TrackListAdapter(val parentFragment: TrackListFragment) :
             binding.effectsButton.setOnClickListener {
                 if (AudioController.controllerState == AudioController.ControllerState.STOP) {
                     val action =
-                        TrackListFragmentDirections.actionTitleFragmentToEffectFragment()
+                        SongFragmentDirections.actionTitleFragmentToEffectFragment()
                     findNavController(parentFragment).navigate(action)
                 }
             }

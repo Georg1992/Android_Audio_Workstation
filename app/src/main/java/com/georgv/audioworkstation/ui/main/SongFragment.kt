@@ -19,28 +19,25 @@ import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
-import androidx.lifecycle.lifecycleScope
+import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
 import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
-import com.georgv.audioworkstation.audioprocessing.AudioProcessor
-import com.georgv.audioworkstation.databinding.TrackListFragmentBinding
-import kotlinx.coroutines.launch
+import com.georgv.audioworkstation.databinding.SongFragmentBinding
 
-import java.io.File
+
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 
 
-class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, AudioProcessingCallback {
+class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProcessingCallback {
 
-    private val viewModel: TrackListViewModel by activityViewModels()
-    private lateinit var binding: TrackListFragmentBinding
+    private val viewModel: SongViewModel by activityViewModels()
+    private lateinit var binding: SongFragmentBinding
     private lateinit var mRecyclerView: RecyclerView
-
 
     init {
         //AudioController.trackList.clear()
@@ -54,7 +51,7 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
     ): View {
 
         AudioController.fragmentActivitySender = requireActivity()
-        binding = TrackListFragmentBinding.inflate(inflater, container, false)
+        binding = SongFragmentBinding.inflate(inflater, container, false)
         binding.progressBar.visibility = View.GONE
         binding.processingText.visibility = View.GONE
         val layoutManager = LinearLayoutManager(context)
@@ -63,13 +60,17 @@ class TrackListFragment : Fragment(), View.OnClickListener, AudioListener, Audio
         val adapter = TrackListAdapter(this)
         mRecyclerView.adapter = adapter
 
-
-        binding.songName.text = ""
         binding.playButton.setOnClickListener(this)
         binding.recordButton.setOnClickListener(this)
         binding.stopButton.setOnClickListener(this)
         binding.pauseButton.setOnClickListener(this)
         binding.saveSongButton.setOnClickListener(this)
+
+        viewModel.currentSong.observe(viewLifecycleOwner) { song ->
+            song?.let {
+                binding.songName.text = it.name
+            }
+        }
 
 
 //        lifecycleScope.launch {

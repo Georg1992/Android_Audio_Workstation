@@ -1,24 +1,34 @@
 package com.georgv.audioworkstation.ui.main
-
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.Toast
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.ListView
+import android.widget.TextView
+import androidx.activity.addCallback
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
+import androidx.recyclerview.widget.RecyclerView
+import com.georgv.audioworkstation.MainMenuAdapter
+import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.customHandlers.ViewAnimator
 import com.georgv.audioworkstation.databinding.FragmentMainMenuBinding
-import com.georgv.audioworkstation.ui.main.dialogs.CreateSongDialogFragment
-import kotlinx.coroutines.launch
 
-class MainMenuFragment : Fragment(), DialogCaller {
+class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemClickListener {
     private lateinit var binding: FragmentMainMenuBinding
-    private val viewModel: TrackListViewModel by activityViewModels ()
-
+    private val viewModel: SongViewModel by activityViewModels ()
+    data class MenuItem(val name: String, val iconResId: Int)
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var menuAdapter: MainMenuAdapter
+    private val viewAnimator = ViewAnimator()
+    private var lastClickedPosition: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,78 +43,88 @@ class MainMenuFragment : Fragment(), DialogCaller {
     ): View {
         // Inflate the layout for this fragment
         binding = FragmentMainMenuBinding.inflate(inflater, container, false)
-        adjustGridLayout(resources.configuration.orientation)
-        setMenuIconsAndText()
+        recyclerView = binding.menuRecyclerView
+        menuAdapter = MainMenuAdapter(getMenuItems(),this)
+        recyclerView.adapter = menuAdapter
 
-        binding.btnCreate.root.setOnClickListener {
-            val manager = parentFragmentManager
-            val dialog = CreateSongDialogFragment(this)
-            dialog.show(manager,"CREATE NEW SONG")
+        checkIfLoading()
+
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner) {
+            lastClickedPosition?.let { position ->
+                viewAnimator.reverseRecyclerViewAnimation(recyclerView)
+                val clickedView = binding.menuRecyclerView.findViewHolderForAdapterPosition(position)?.itemView
+                clickedView?.let { viewAnimator.expandMenuItem(it, true) }
+            }
         }
 
-        observeTasks()
+        binding.fastRecordButton.setOnClickListener {
+            onFastRecordButtonClick()
+        }
+
         return binding.root
     }
 
-    private fun observeTasks() {
+    private fun getMenuItems(): List<MenuItem> {
+        return listOf(
+            MenuItem("Create", R.drawable.logoo),
+            MenuItem("Library", R.drawable.logoo),
+            MenuItem("Devices", R.drawable.logoo),
+            MenuItem("Community", R.drawable.logoo)
+        )
+    }
+
+    private fun onFastRecordButtonClick() {
+        // Get the view you want to animate (e.g., the menu container)
+        val menuView = binding.menuRecyclerView // Or whatever the view is
+
+        // Animate the menu view to float out of the screen
+        viewAnimator.floatViewOutOfScreen(menuView)
+
+        // Wait for the animation to complete and navigate to SongFragment
+        Handler(Looper.getMainLooper()).postDelayed({
+            navigateToSong() // Trigger the navigation after the animation completes
+        }, 500) // Delay should match the animation duration
+    }
+
+    private fun checkIfLoading() {
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
             if (isLoading) {
-                showLoadingScreen()
-            } else {
-                hideLoadingScreen()
-            }
-        }
-
-        viewModel.taskStatus.observe(viewLifecycleOwner) { result ->
-            result?.onSuccess {
-                navigateToTrackList()
-                viewModel.clearTaskStatus()
-            }?.onFailure { error ->
-               // showToast(error.localizedMessage ?: "Unknown error")
+                navigateToSong()
             }
         }
     }
 
-
-
-    private fun setMenuIconsAndText() {
-        binding.btnCreate.menuIcon.setImageResource(com.georgv.audioworkstation.R.drawable.logoo)
-        binding.btnCreate.textView.text =
-            getString(com.georgv.audioworkstation.R.string.menuCreateButton)
-        binding.btnLibrary.menuIcon.setImageResource(com.georgv.audioworkstation.R.drawable.logoo)
-        binding.btnLibrary.textView.text =
-            getString(com.georgv.audioworkstation.R.string.menuLibraryButton)
-        binding.btnDevices.menuIcon.setImageResource(com.georgv.audioworkstation.R.drawable.logoo)
-        binding.btnDevices.textView.text =
-            getString(com.georgv.audioworkstation.R.string.menuDevicesButton)
-        binding.btnCommunity.menuIcon.setImageResource(com.georgv.audioworkstation.R.drawable.logoo)
-        binding.btnCommunity.textView.text =
-            getString(com.georgv.audioworkstation.R.string.menuCommunityButton)
-    }
-
-    private fun adjustGridLayout(orientation: Int) {
-        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            binding.gridLayout.columnCount = 4
-            binding.gridLayout.rowCount = 1
-        } else if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-            binding.gridLayout.columnCount = 2
-            binding.gridLayout.rowCount = 2
-        }
-
-    }
-
-    private fun showLoadingScreen() {
-
-    }
-
-    private fun hideLoadingScreen() {
-
-    }
-
-    private fun navigateToTrackList() {
-        val action = MainMenuFragmentDirections.actionMainMenuFragmentToTrackListFragment()
+    private fun navigateToSong() {
+        val action = MainMenuFragmentDirections.actionMainMenuFragmentToSongFragment()
         NavHostFragment.findNavController(this@MainMenuFragment).navigate(action)
     }
+
+    // Helper function for common animation
+    private fun animateView(view: View, scaleX: Float = 1f, scaleY: Float = 1f, translationX: Float = 0f, translationY: Float = 0f, alpha: Float = 1f, duration: Long = 300) {
+        view.animate()
+            .scaleX(scaleX)
+            .scaleY(scaleY)
+            .translationX(translationX)
+            .translationY(translationY)
+            .alpha(alpha)
+            .setDuration(duration)
+            .setInterpolator(AccelerateDecelerateInterpolator())
+            .start()
+    }
+
+
+
+
+
+
+    override fun onMenuItemClick(position: Int) {
+        lastClickedPosition = position
+        viewAnimator.animateRecyclerView(recyclerView, position)
+        val clickedView = binding.menuRecyclerView.findViewHolderForAdapterPosition(position)?.itemView
+        clickedView?.let { viewAnimator.expandMenuItem(it, false) }
+    }
+
+
 
     override fun delegateFunctionToDialog(songName: String) {
         viewModel.createNewSong(songName,null)
@@ -114,7 +134,8 @@ class MainMenuFragment : Fragment(), DialogCaller {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        adjustGridLayout(newConfig.orientation)
+
     }
+
 
 }

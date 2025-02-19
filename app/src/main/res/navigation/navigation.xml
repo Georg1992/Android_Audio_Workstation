@@ -6,13 +6,12 @@
     android:label="nav"
     app:startDestination="@id/mainMenuFragment">
     <fragment
-        android:id="@+id/trackListFragment"
-        android:name="com.georgv.audioworkstation.ui.main.TrackListFragment"
-        android:label="Track_List_Fragment"
-        tools:layout="@layout/track_list_fragment">
+            android:id="@+id/song_Fragment"
+            android:label="Song_Fragment"
+            android:name="com.georgv.audioworkstation.ui.main.SongFragment">
         <action
-            android:id="@+id/action_titleFragment_to_libraryFragment"
-            app:destination="@id/libraryFragment" />
+                android:id="@+id/action_titleFragment_to_libraryFragment"
+                app:destination="@id/libraryFragment" />
         <action
                 android:id="@+id/action_titleFragment_to_effectFragment"
                 app:destination="@id/effectFragment" />
@@ -25,7 +24,7 @@
 
         <action
                 android:id="@+id/action_libraryFragment_to_trackListFragment"
-                app:destination="@id/trackListFragment">
+                app:destination="@id/song_Fragment">
         </action>
     </fragment>
     <fragment
@@ -35,7 +34,7 @@
             tools:layout="@layout/fragment_effect" >
         <action
                 android:id="@+id/action_effectFragment_to_trackListFragment"
-                app:destination="@id/trackListFragment">
+                app:destination="@id/song_Fragment">
         </action>
     </fragment>
 
@@ -48,8 +47,8 @@
                 android:id="@+id/action_mainMenuFragment_to_libraryFragment"
                 app:destination="@id/libraryFragment" />
         <action
-                android:id="@+id/action_mainMenuFragment_to_trackListFragment"
-                app:destination="@id/trackListFragment" />
+                android:id="@+id/action_mainMenuFragment_to_song_Fragment"
+                app:destination="@id/song_Fragment" />
     </fragment>
 
 </navigation>

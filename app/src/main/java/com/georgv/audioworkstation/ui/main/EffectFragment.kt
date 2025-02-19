@@ -22,7 +22,7 @@ class EffectFragment : Fragment() {
 
     private lateinit var binding: FragmentEffectBinding
     private lateinit var track: Track
-    private val viewModel: TrackListViewModel by activityViewModels()
+    private val viewModel: SongViewModel by activityViewModels()
 
 
     override fun onCreateView(

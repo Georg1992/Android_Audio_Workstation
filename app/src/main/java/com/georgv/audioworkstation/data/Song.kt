@@ -9,7 +9,7 @@ open class Song() : RealmObject {
     var id: String = UUID.randomUUID().toString()
     var name: String? = null
     var wavFilePath: String? = null
-    var inEditMode: Boolean = false
+    private var inEditMode: Boolean = false
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

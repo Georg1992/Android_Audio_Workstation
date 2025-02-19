@@ -17,10 +17,10 @@ import com.georgv.audioworkstation.databinding.LibraryFragmentBinding
 import com.georgv.audioworkstation.ui.main.dialogs.CreateSongDialogFragment
 import kotlinx.coroutines.launch
 
-class LibraryFragment:Fragment(),SongListAdapter.OnItemClickListener, DialogCaller{
+class LibraryFragment:Fragment(),SongListAdapter.OnSongItemClickListener, DialogCaller{
 
     private lateinit var binding: LibraryFragmentBinding
-    private val viewModel: TrackListViewModel by activityViewModels()
+    private val viewModel: SongViewModel by activityViewModels()
     private lateinit var songRecyclerView:RecyclerView
 
     init {

@@ -3,12 +3,14 @@ package com.georgv.audioworkstation.ui.main
 
 import android.app.Application
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.*
 import com.georgv.audioworkstation.audioprocessing.*
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import io.realm.kotlin.Realm
 import io.realm.kotlin.RealmConfiguration
+import io.realm.kotlin.ext.query
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,19 +19,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 
-class TrackListViewModel(application: Application) : AndroidViewModel(application) {
-
+class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     private var _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> get() = _isLoading
 
-    private var _taskStatus = MutableLiveData<Result<Unit>?>()
-    val taskStatus: LiveData<Result<Unit>?> get() = _taskStatus
-
     private val _tracks = MutableStateFlow<List<Track>>(emptyList())
     val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
 
-
+    private val _currentSong = MutableLiveData<Song?>()
+    val currentSong: LiveData<Song?> get() = _currentSong
 
     private val realm: Realm by lazy {
         Realm.open(RealmConfiguration.Builder(schema = setOf(Song::class)).build())
@@ -37,21 +36,39 @@ class TrackListViewModel(application: Application) : AndroidViewModel(applicatio
 
 
     fun createNewSong(songName: String, wavDir: String?) {
-        _isLoading.postValue(true) // Start loading
+        _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                realm.write {
+                val songId = UUID.randomUUID().toString()
+                val addedSong = realm.write {
                     copyToRealm(Song().apply {
-                        id = UUID.randomUUID().toString()
+                        id = songId
                         this.name = songName
                         this.wavFilePath = wavDir
                     })
                 }
-                _isLoading.postValue(false) // Stop loading
-                _taskStatus.postValue(Result.success(Unit)) // Success message
+                _currentSong.postValue(addedSong) // Updates LiveData
+                _isLoading.postValue(false)
             } catch (e: Exception) {
-                _isLoading.postValue(false) // Stop loading
-                _taskStatus.postValue(Result.failure(e)) // Error message
+                _isLoading.postValue(true)
+                e.printStackTrace()
+            }
+        }
+    }
+
+
+    fun loadSong(songId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val song = realm.query<Song>("id == $0", songId).find().firstOrNull()
+                if (song != null) {
+                    _currentSong.postValue(song)
+                } else {
+                    // Handle case when song is not found
+                }
+            } catch (e: Exception) {
+                // Handle any exception, for example logging or showing an error
+                e.printStackTrace()
             }
         }
     }
@@ -108,9 +125,6 @@ class TrackListViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun clearTaskStatus() {
-        _taskStatus.value = null // Reset task status
-    }
 
     override fun onCleared() {
         super.onCleared()
