@@ -1,6 +1,20 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="MainMenuButtonStyle" parent="Theme.Design.Light">
-        <item name="android:fontFamily">monospace</item>
+    <style name="Theme.MyApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Your colors -->
+        <item name="colorPrimary">@color/cool_blue</item>
+        <item name="colorOnPrimary">@color/bright_green</item>
+        <item name="colorOnSecondary">@color/white</item>
+
+        <!-- Set text appearances -->
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.MyApp.Headline</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.MyApp.Body</item>
+    </style>
+
+    <style name="TextAppearance.MyApp.Headline" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="fontFamily">monospace</item>
+    </style>
+
+    <style name="TextAppearance.MyApp.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="fontFamily">monospace</item>
     </style>
 </resources>

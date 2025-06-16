@@ -18,29 +18,23 @@
                 android:orientation="vertical"
                 android:gravity="center">
 
+            <!-- Icon -->
             <ImageView
+                    android:id="@+id/menu_icon"
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="3"
-                    android:src="@drawable/baseline_volume_up_24"
-                    android:id="@+id/menu_icon" />
+                    android:scaleType="centerInside" />
 
+            <!-- Menu Title -->
             <TextView
-                    android:id="@+id/text_view"
+                    android:id="@+id/menu_item_name"
                     android:layout_width="wrap_content"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:textSize="30sp" />
-
-            <ListView
-                    android:id="@+id/expandable_list"
-                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:visibility="gone"
-                    android:divider="@android:color/darker_gray"
-                    android:dividerHeight="1dp" />
-        </LinearLayout>
+                    android:textStyle="bold"
+                    android:textSize="20sp" />
 
+        </LinearLayout>
     </androidx.cardview.widget.CardView>
 </FrameLayout>
 

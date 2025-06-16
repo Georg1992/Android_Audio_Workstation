@@ -22,7 +22,7 @@ import java.nio.FloatBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-private const val PLAYBACK_BUFFER_SIZE = 32 * 1024
+private const val PLAYBACK_BUFFER_SIZE = 32 * 256
 private const val PCM_16BIT_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
 private const val FLOAT_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT
 private const val SAMPLE_RATE = 44100

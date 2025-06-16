@@ -15,18 +15,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:elevation="2dp"
-            android:gravity="right"
+            android:gravity="end"
             android:padding="5dp">
 
         <TextView
                 android:text="Test"
-                android:textSize="34sp"
-                android:layout_width="wrap_content"
+                android:textSize="20sp"
+                android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:id="@+id/songName"
-                android:gravity="center"
-                android:fontFamily="serif-monospace"
-                android:layout_margin="10dp" />
+                android:gravity="center" />
 
         <ImageButton
                 android:id="@+id/saveSongButton"
@@ -79,71 +77,11 @@
 
     </LinearLayout>
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <fragment
+            android:id="@+id/audioControlsFragment"
+            android:name="com.georgv.audioworkstation.ui.main.fragments.AudioControlsFragment"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:id="@+id/buttonLayout"
-            android:layout_weight="0.15">
-
-        <ImageButton
-                android:id="@+id/pauseButton"
-                android:layout_width="70dp"
-                android:layout_height="70dp"
-                android:minHeight="48dp"
-                android:src="@drawable/ic_baseline_pause_24"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/recordButton"
-                android:layout_marginEnd="15dp"
-                android:visibility="invisible"
-                android:contentDescription="@string/PAUSE"
-                style="@android:style/Widget.ImageButton" />
-
-        <ImageButton
-                android:id="@+id/recordButton"
-                android:layout_width="70dp"
-                android:layout_height="70dp"
-                android:minHeight="48dp"
-                android:src="@drawable/ic_baseline_fiber_manual_record_24"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                android:visibility="visible"
-                android:contentDescription="@string/REC"
-                style="@android:style/Widget.ImageButton"
-                android:scaleType="centerInside" />
-
-        <ImageButton
-                android:id="@+id/stopButton"
-                android:layout_width="70dp"
-                android:layout_height="70dp"
-                android:minHeight="48dp"
-                android:src="@drawable/ic_baseline_stop_24"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                android:visibility="invisible"
-                android:contentDescription="@string/STOP"
-                style="@android:style/Widget.ImageButton" />
-
-        <ImageButton
-                android:id="@+id/playButton"
-                android:layout_width="70dp"
-                android:layout_height="70dp"
-                android:minHeight="60dp"
-                app:flow_horizontalAlign="center"
-                android:src="@drawable/ic_baseline_play_arrow_24"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toEndOf="@+id/recordButton"
-                android:layout_marginStart="15dp"
-                android:visibility="invisible"
-                android:contentDescription="@string/PLAY"
-                style="@android:style/Widget.ImageButton" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            android:layout_height="wrap_content" />
 
 
 </LinearLayout>

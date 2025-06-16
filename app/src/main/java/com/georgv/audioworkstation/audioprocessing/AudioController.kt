@@ -1,11 +1,10 @@
 package com.georgv.audioworkstation.audioprocessing
 
-import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
-import com.georgv.audioworkstation.ui.main.AudioListener
+import com.georgv.audioworkstation.ui.main.fragments.AudioListener
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 

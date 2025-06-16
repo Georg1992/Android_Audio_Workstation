@@ -8,11 +8,10 @@ import android.widget.EditText
 import androidx.fragment.app.DialogFragment
 import com.georgv.audioworkstation.R
 import android.text.InputType
-import androidx.fragment.app.Fragment
-import com.georgv.audioworkstation.ui.main.DialogCaller
+import com.georgv.audioworkstation.ui.main.fragments.DialogCaller
 
 
-class CreateSongDialogFragment(private val caller:DialogCaller) : DialogFragment() {
+class CreateSongDialogFragment(private val caller: DialogCaller) : DialogFragment() {
 
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {

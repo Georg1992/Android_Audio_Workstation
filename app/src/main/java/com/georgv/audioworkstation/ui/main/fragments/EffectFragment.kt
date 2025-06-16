@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.ui.main
+package com.georgv.audioworkstation.ui.main.fragments
 
 import android.os.Bundle
 import android.util.Log
@@ -14,6 +14,7 @@ import androidx.navigation.fragment.NavHostFragment
 import com.georgv.audioworkstation.audioprocessing.*
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.FragmentEffectBinding
+import com.georgv.audioworkstation.ui.main.SongViewModel
 import com.google.android.material.slider.Slider
 
 

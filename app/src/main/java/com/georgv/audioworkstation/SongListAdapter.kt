@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation
 
 
-import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,12 +11,13 @@ import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.databinding.SongHolderViewBinding
-import com.georgv.audioworkstation.ui.main.AudioListener
+import com.georgv.audioworkstation.ui.main.fragments.AudioListener
 
 class SongListAdapter(val listener:OnSongItemClickListener): ListAdapter<Song, SongListAdapter.SongViewHolder>(DiffCallback()) {
     private lateinit var binding: SongHolderViewBinding
 
-    inner class SongViewHolder(itemBinding:SongHolderViewBinding):RecyclerView.ViewHolder(itemBinding.root), View.OnClickListener, AudioListener{
+    inner class SongViewHolder(itemBinding:SongHolderViewBinding):RecyclerView.ViewHolder(itemBinding.root), View.OnClickListener,
+        AudioListener {
         lateinit var song:Song
         private lateinit var processor: AudioProcessor
 

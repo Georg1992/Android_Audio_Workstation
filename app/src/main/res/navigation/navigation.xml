@@ -8,7 +8,7 @@
     <fragment
             android:id="@+id/song_Fragment"
             android:label="Song_Fragment"
-            android:name="com.georgv.audioworkstation.ui.main.SongFragment">
+            android:name="com.georgv.audioworkstation.ui.main.fragments.SongFragment">
         <action
                 android:id="@+id/action_titleFragment_to_libraryFragment"
                 app:destination="@id/libraryFragment" />
@@ -18,7 +18,7 @@
     </fragment>
     <fragment
         android:id="@+id/libraryFragment"
-        android:name="com.georgv.audioworkstation.ui.main.LibraryFragment"
+        android:name="com.georgv.audioworkstation.ui.main.fragments.LibraryFragment"
         android:label="LibraryFragment"
             tools:layout="@layout/library_fragment">
 
@@ -29,7 +29,7 @@
     </fragment>
     <fragment
             android:id="@+id/effectFragment"
-            android:name="com.georgv.audioworkstation.ui.main.EffectFragment"
+            android:name="com.georgv.audioworkstation.ui.main.fragments.EffectFragment"
             android:label="fragment_effect"
             tools:layout="@layout/fragment_effect" >
         <action
@@ -40,7 +40,7 @@
 
     <fragment
             android:id="@+id/mainMenuFragment"
-            android:name="com.georgv.audioworkstation.ui.main.MainMenuFragment"
+            android:name="com.georgv.audioworkstation.ui.main.fragments.MainMenuFragment"
             android:label="MainMenuFragment"
             tools:layout="@layout/fragment_main_menu">
         <action

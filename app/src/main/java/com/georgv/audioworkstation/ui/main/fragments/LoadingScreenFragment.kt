@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.ui.main
+package com.georgv.audioworkstation.ui.main.fragments
 
 import android.os.Bundle
 import android.view.View

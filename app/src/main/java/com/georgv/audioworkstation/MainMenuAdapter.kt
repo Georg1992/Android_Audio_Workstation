@@ -4,12 +4,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.data.Song
+import com.georgv.audioworkstation.data.MenuItem
 import com.georgv.audioworkstation.databinding.MenuItemBinding
-import com.georgv.audioworkstation.ui.main.MainMenuFragment
+import com.georgv.audioworkstation.ui.main.fragments.MainMenuFragment
 
 class MainMenuAdapter(
-    private val menuItems: List<MainMenuFragment.MenuItem>,
+    private val menuItems: List<MenuItem>,
     private val listener: OnMenuItemClickListener
 ) : RecyclerView.Adapter<MainMenuAdapter.MenuViewHolder>() {
 
@@ -20,8 +20,8 @@ class MainMenuAdapter(
             this.itemView.setOnClickListener(this)
         }
 
-        fun bind(menuItem: MainMenuFragment.MenuItem) {
-            binding.textView.text = menuItem.name
+        fun bind(menuItem: MenuItem) {
+            binding.menuItemName.text = menuItem.name
             binding.menuIcon.setImageResource(menuItem.iconResId)
         }
 

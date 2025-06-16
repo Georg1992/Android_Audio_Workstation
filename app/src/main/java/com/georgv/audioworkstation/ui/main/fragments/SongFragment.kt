@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.ui.main
+package com.georgv.audioworkstation.ui.main.fragments
 
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
@@ -19,13 +19,13 @@ import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
-import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
 import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
 import com.georgv.audioworkstation.databinding.SongFragmentBinding
+import com.georgv.audioworkstation.ui.main.SongViewModel
 
 
 import java.io.IOException
@@ -38,11 +38,6 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: SongFragmentBinding
     private lateinit var mRecyclerView: RecyclerView
-
-    init {
-        //AudioController.trackList.clear()
-       // AudioController.audioListener = this
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -60,10 +55,6 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         val adapter = TrackListAdapter(this)
         mRecyclerView.adapter = adapter
 
-        binding.playButton.setOnClickListener(this)
-        binding.recordButton.setOnClickListener(this)
-        binding.stopButton.setOnClickListener(this)
-        binding.pauseButton.setOnClickListener(this)
         binding.saveSongButton.setOnClickListener(this)
 
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
@@ -73,62 +64,13 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         }
 
 
-//        lifecycleScope.launch {
-//            viewModel.trackList.collect { tracks ->
-//                adapter.submitList(tracks)
-//            }
-//        }
-
 
         return binding.root
     }
 
 
     override fun onClick(p0: View?) {
-        when (p0) {
-            binding.playButton -> {
-                if (controllerState == AudioController.ControllerState.PAUSE) {
-                    changeState(AudioController.ControllerState.CONTINUE)
-                } else {
-                    changeState(AudioController.ControllerState.PLAY)
-                }
-            }
 
-            binding.stopButton -> {
-                changeState(AudioController.ControllerState.STOP)
-
-            }
-
-            binding.recordButton -> {
-                viewModel.createTrack()
-                if (AudioController.trackList.isEmpty()) {
-                    changeState(AudioController.ControllerState.REC)
-                } else {
-                    changeState(AudioController.ControllerState.PLAY_REC)
-                }
-            }
-
-
-            binding.pauseButton -> {
-                changeState(AudioController.ControllerState.PAUSE)
-            }
-
-//            binding.saveSongButton -> {
-//                val processor = AudioProcessor()
-//               // processor.setSongToProcessor(viewModel.)
-//                val trackList = viewModel.tracks
-//                //val songWavFileDir = viewModel.currentSong.wavFilePath
-//                if ((songWavFileDir != null) && controllerState == AudioController.ControllerState.STOP
-//                ) {
-//                    val wavFile = File(songWavFileDir)
-//
-//                    //processor.mixAudio(trackList,wavFile,this)
-//                } else {
-//                    showEmptySongSnackBar()
-//                }
-//            }
-        }
-        setButtonUI()
     }
 
     fun deleteTrack(trackId: String, wavFilePath: String) {
@@ -143,65 +85,6 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
     fun updateTrackVolume(volume:Float,id:String){
         viewModel.updateTrackVolumeToDb(volume,id)
     }
-
-    fun setButtonUI(){
-        when(controllerState){
-            AudioController.ControllerState.STOP -> {
-                if(AudioController.trackList.isEmpty()){
-                    setDefaultView()
-                }else{
-                    setReadyToPlayUI()
-                }
-            }
-            AudioController.ControllerState.PLAY -> setPlayingUI()
-            AudioController.ControllerState.CONTINUE -> setPlayingUI()
-            AudioController.ControllerState.REC -> setRecordingUI()
-            AudioController.ControllerState.PLAY_REC -> setRecordingUI()
-            AudioController.ControllerState.PAUSE -> setPauseUI()
-            else -> {}
-        }
-    }
-
-    private fun setAllButtonsInvisible(){
-        for (button:View in binding.buttonLayout) {
-            if (button is ImageButton) {
-                button.visibility = View.INVISIBLE
-            }
-        }
-    }
-
-    private fun setDefaultView(){
-        setAllButtonsInvisible()
-        binding.recordButton.visibility = View.VISIBLE
-    }
-
-    private fun setReadyToPlayUI(){
-        setAllButtonsInvisible()
-        binding.playButton.visibility = View.VISIBLE
-        binding.recordButton.visibility = View.VISIBLE
-
-    }
-
-    private fun setPlayingUI(){
-        setAllButtonsInvisible()
-        binding.stopButton.visibility = View.VISIBLE
-        binding.pauseButton.visibility = View.VISIBLE
-    }
-
-    private fun setRecordingUI(){
-        setAllButtonsInvisible()
-        binding.stopButton.visibility = View.VISIBLE
-    }
-
-    private fun setPauseUI(){
-        setAllButtonsInvisible()
-        binding.pauseButton.visibility = View.VISIBLE
-        binding.playButton.visibility = View.VISIBLE
-        binding.stopButton.visibility = View.VISIBLE
-    }
-
-
-
 
     private fun View.blink(
         times: Int = Animation.INFINITE,
@@ -252,9 +135,6 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         snack.show()
     }
 
-    override fun uiCallback() {
-        setButtonUI()
-    }
 
     override fun onProcessingStarted() {
         binding.trackListRecyclerView.visibility = View.GONE
@@ -272,6 +152,9 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
     }
 
+    override fun uiCallback() {
+        TODO("Not yet implemented")
+    }
 
 
 }

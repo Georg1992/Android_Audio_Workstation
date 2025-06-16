@@ -16,8 +16,8 @@ import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioProcessor
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.databinding.TrackHolderViewBinding
-import com.georgv.audioworkstation.ui.main.SongFragment
-import com.georgv.audioworkstation.ui.main.SongFragmentDirections
+import com.georgv.audioworkstation.ui.main.fragments.SongFragment
+import com.georgv.audioworkstation.ui.main.fragments.SongFragmentDirections
 import com.google.android.material.slider.Slider
 
 
@@ -54,7 +54,6 @@ class TrackListAdapter(val parentFragment: SongFragment) :
                     selected = false
                     //AudioController.removeTrackFromTheTrackList()
                     parentFragment.deleteTrack(trackId, wavPath)
-                    parentFragment.setButtonUI()
                 }
             }
 
@@ -145,7 +144,6 @@ class TrackListAdapter(val parentFragment: SongFragment) :
                 holder.itemView.background = gradientDrawable
             }
         }
-        parentFragment.setButtonUI()
     }
 
 

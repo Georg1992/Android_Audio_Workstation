@@ -57,6 +57,7 @@
     <string name="band5Text">15KHz</string>
     <string name="band6Text">highpass</string>
     <string name="fast_record">Fast Record</string>
+    <string name="play_pause">PLAY_PAUSE</string>
 
 
 </resources>

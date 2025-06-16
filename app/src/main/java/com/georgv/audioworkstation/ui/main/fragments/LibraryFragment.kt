@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.ui.main
+package com.georgv.audioworkstation.ui.main.fragments
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -14,10 +14,11 @@ import com.georgv.audioworkstation.SongListAdapter
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.databinding.LibraryFragmentBinding
+import com.georgv.audioworkstation.ui.main.SongViewModel
 import com.georgv.audioworkstation.ui.main.dialogs.CreateSongDialogFragment
 import kotlinx.coroutines.launch
 
-class LibraryFragment:Fragment(),SongListAdapter.OnSongItemClickListener, DialogCaller{
+class LibraryFragment:Fragment(),SongListAdapter.OnSongItemClickListener, DialogCaller {
 
     private lateinit var binding: LibraryFragmentBinding
     private val viewModel: SongViewModel by activityViewModels()
