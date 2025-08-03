@@ -1,1 +1,1 @@
-C:\Users\georg\Documents\Android_Audio_App\Android_Audio_Workstation\app\src\main\cpp\CMakeLists.txt
+C:\Users\selft\Android_Audio_Workstation\app\src\main\cpp\CMakeLists.txt
