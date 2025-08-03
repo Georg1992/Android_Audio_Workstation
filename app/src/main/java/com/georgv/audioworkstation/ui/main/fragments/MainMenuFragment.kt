@@ -23,7 +23,6 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
     private val viewModel: SongViewModel by activityViewModels ()
     private lateinit var menuRecyclerView: RecyclerView
     private lateinit var menuAdapter: MainMenuAdapter
-    private lateinit var recordButtonLayout : ConstraintLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

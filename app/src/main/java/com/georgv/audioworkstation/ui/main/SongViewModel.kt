@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.*
 import com.georgv.audioworkstation.audioprocessing.*
 import com.georgv.audioworkstation.data.Song
+import com.georgv.audioworkstation.data.SongRepositoryImpl
 import com.georgv.audioworkstation.data.Track
 import io.realm.kotlin.Realm
 import io.realm.kotlin.RealmConfiguration
@@ -33,34 +34,27 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     private val realm: Realm by lazy {
         Realm.open(RealmConfiguration.Builder(schema = setOf(Song::class)).build())
     }
+    private val songRepo = SongRepositoryImpl(realm)
 
 
     fun createNewSong(songName: String, wavDir: String?) {
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val songId = UUID.randomUUID().toString()
-                val addedSong = realm.write {
-                    copyToRealm(Song().apply {
-                        id = songId
-                        this.name = songName
-                        this.wavFilePath = wavDir
-                    })
-                }
-                _currentSong.postValue(addedSong) // Updates LiveData
-                _isLoading.postValue(false)
+                val song = songRepo.createSong(songName, wavDir)
+                _currentSong.postValue(song)
             } catch (e: Exception) {
-                _isLoading.postValue(true)
                 e.printStackTrace()
+            } finally {
+                _isLoading.postValue(false)
             }
         }
     }
 
-
-    fun loadSong(songId: String) {
+    fun loadSongByID(songId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val song = realm.query<Song>("id == $0", songId).find().firstOrNull()
+                val song = songRepo.getSongById(songId)
                 if (song != null) {
                     _currentSong.postValue(song)
                 } else {
@@ -73,16 +67,21 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteSongFromDB(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            realm.write {
+                val song = songRepo.getSongById(id)
+                song?.let { delete(it) }
+            }
+            Log.d("DELETING FROM THE DB", "ID: $id")
+        }
+    }
+
 
 
     fun updateSongOnNavigate(song: Song) {
 
     }
-
-    fun createTrack() {
-
-    }
-
 
 
     fun deleteTrackFromDb(id: String) {
@@ -98,9 +97,6 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    private suspend fun deleteData(songID: String) {
-
-    }
 
     fun updateTrackVolumeToDb(volume: Float, id: String) {
 
@@ -112,17 +108,6 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteEffectFromDb(tag: String,id: String){
 
-    }
-
-
-    fun deleteSongFromDB(id: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            realm.write {
-                val song = query<Song>(Song::class, "id == $0", id).first().find()
-                song?.let { delete(it) }
-            }
-            Log.d("DELETING FROM THE DB", "ID: $id")
-        }
     }
 
 
