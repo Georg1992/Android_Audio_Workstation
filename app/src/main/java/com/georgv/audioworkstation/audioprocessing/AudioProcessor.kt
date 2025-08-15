@@ -21,6 +21,7 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import android.util.Log
 
 private const val PLAYBACK_BUFFER_SIZE = 32 * 256
 private const val PCM_16BIT_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
@@ -44,7 +45,7 @@ class AudioProcessor():UiListener {
         get() = _track
         set(value) {
             _track = value
-            effects = arrayOf()
+            effects = emptyArray<Effect?>()
             file = File(track.wavFilePath)
             volume = track.volume
         }
@@ -56,7 +57,13 @@ class AudioProcessor():UiListener {
         get() = _song
         set(value) {
             _song = value
-            file = song.wavFilePath?.let { File(it) }!!
+            val path = value.wavFilePath
+            if (path.isNullOrEmpty()) {
+                Log.e("AudioProcessor", "Song wavFilePath is null or empty")
+                mixprocessor = true
+                return
+            }
+            file = File(path)
             mixprocessor = true
         }
 
@@ -124,34 +131,35 @@ class AudioProcessor():UiListener {
         executor.execute {
             try {
                 createAudioTrack(PLAYBACK_BUFFER_SIZE, FLOAT_AUDIO_FORMAT, CHANNELS_STEREO)
-                val inputStream = file.inputStream()
-                inputStream.skip(44)
-                val buffer = ByteArray(PLAYBACK_BUFFER_SIZE*2)
-                audioTrack?.play()
-                isPlaying = true
-                var index = 0
-                val nextBuffers = arrayOf(floatArrayOf(), floatArrayOf())
-                inputStream.read(buffer)
-                var floatBuffer = toFloatArrayMono(buffer)
-                nextBuffers[0] = effectChain(floatBuffer)
+                file.inputStream().use { inputStream ->
+                    inputStream.skip(44)
+                    val buffer = ByteArray(PLAYBACK_BUFFER_SIZE*2)
+                    audioTrack?.play()
+                    isPlaying = true
+                    var index = 0
+                    val nextBuffers = arrayOf(floatArrayOf(), floatArrayOf())
+                    inputStream.read(buffer)
+                    var floatBuffer = toFloatArrayMono(buffer)
+                    nextBuffers[0] = effectChain(floatBuffer)
 
-                while ((inputStream.read(buffer) > 0 && (controllerState == AudioController.ControllerState.PLAY
-                            || controllerState == AudioController.ControllerState.PLAY_REC))){
-                    executor.execute {
-                            floatBuffer = toPcmFloating(buffer)
-                            nextBuffers[(index+1)%2] = effectChain(floatBuffer)
+                    while ((inputStream.read(buffer) > 0 && (controllerState == AudioController.ControllerState.PLAY
+                                || controllerState == AudioController.ControllerState.PLAY_REC))){
+                        executor.execute {
+                                floatBuffer = toPcmFloating(buffer)
+                                nextBuffers[(index+1)%2] = effectChain(floatBuffer)
+                        }
+                        audioTrack?.write(nextBuffers[index%2], 0, nextBuffers[index%2].size, AudioTrack.WRITE_BLOCKING)
+                        if(nextBuffers[(index+1)%2].size < PLAYBACK_BUFFER_SIZE){
+                            audioTrack?.write(nextBuffers[(index+1)%2], 0, nextBuffers[(index+1)%2].size, AudioTrack.WRITE_BLOCKING)
+                        }
+                        index++
                     }
-                    audioTrack?.write(nextBuffers[index%2], 0, nextBuffers[index%2].size, AudioTrack.WRITE_BLOCKING)
-                    if(nextBuffers[(index+1)%2].size < PLAYBACK_BUFFER_SIZE){
-                        audioTrack?.write(nextBuffers[index+1%2], 0, nextBuffers[index+1%2].size, AudioTrack.WRITE_BLOCKING)
-                    }
-                    index++
                 }
                 stopAudioTrack()
             } catch (e: IOException) {
-                e.printStackTrace()
+                Log.e("AudioProcessor", "IO error during playWithProcessing", e)
             } catch (e: InterruptedException) {
-                e.printStackTrace()
+                Log.e("AudioProcessor", "Interrupted during playWithProcessing", e)
             }
         }
     }
@@ -159,17 +167,20 @@ class AudioProcessor():UiListener {
     private fun playNoProcessing(){
         executor.execute{
             createAudioTrack(pcm16BitBufferSize, PCM_16BIT_AUDIO_FORMAT, CHANNELS_STEREO)
-            val inputStream = file.inputStream()
-            inputStream.skip(44)
-            val buffer = ByteArray(pcm16BitBufferSize)
-            audioTrack?.play()
-            isPlaying = true
-            while (inputStream.read(buffer) > 0 && (controllerState == AudioController.ControllerState.PLAY
-                || controllerState == AudioController.ControllerState.PLAY_REC)) {
-                audioTrack?.write(buffer, 0 , buffer.size)
+            try {
+                file.inputStream().use { inputStream ->
+                    inputStream.skip(44)
+                    val buffer = ByteArray(pcm16BitBufferSize)
+                    audioTrack?.play()
+                    isPlaying = true
+                    while (inputStream.read(buffer) > 0 && (controllerState == AudioController.ControllerState.PLAY
+                        || controllerState == AudioController.ControllerState.PLAY_REC)) {
+                        audioTrack?.write(buffer, 0 , buffer.size)
+                    }
+                }
+            } finally {
+                stopAudioTrack()
             }
-            stopAudioTrack()
-            inputStream.close()
         }
     }
 
@@ -186,27 +197,23 @@ class AudioProcessor():UiListener {
 
     private fun writeAudioDataToFile(recorder:AudioRecord) {
         val audioBuffer = ByteArray(BUFFER_SIZE_RECORDING)
-        val outputStream: FileOutputStream?
         try {
-            outputStream = FileOutputStream(file)
-        } catch (e: FileNotFoundException) {
-            return
-        }
-        while (controllerState in setOf(AudioController.ControllerState.REC, AudioController.ControllerState.PLAY_REC)) {
-            recorder.read(audioBuffer, 0, BUFFER_SIZE_RECORDING)
-            try {
-                outputStream.write(audioBuffer)
-                // clean up file writing operations
-            } catch (e: IOException) {
-                e.printStackTrace()
+            FileOutputStream(file).use { outputStream ->
+                while (controllerState in setOf(AudioController.ControllerState.REC, AudioController.ControllerState.PLAY_REC)) {
+                    recorder.read(audioBuffer, 0, BUFFER_SIZE_RECORDING)
+                    try {
+                        outputStream.write(audioBuffer)
+                    } catch (e: IOException) {
+                        Log.e("AudioProcessor", "Failed writing audio buffer", e)
+                    }
+                }
+                outputStream.flush()
             }
-        }
-        recorder.release()
-        try {
-            outputStream.flush()
-            outputStream.close()
-        } catch (e: IOException) {
-            e.printStackTrace()
+        } catch (e: FileNotFoundException) {
+            Log.e("AudioProcessor", "Output file not found for recording", e)
+            return
+        } finally {
+            recorder.release()
         }
         val outputFileSize = file.length() + 44
         writeHeader(file, outputFileSize)
@@ -337,8 +344,8 @@ class AudioProcessor():UiListener {
     }
 
     private fun getLongestFileSize(tracks: List<Track>): Long {
-        val longestTrack = tracks.maxByOrNull { track -> track.duration!! }
-        return File(longestTrack!!.wavFilePath).length()
+        val longestTrack = tracks.maxByOrNull { track -> track.duration ?: 0L }
+        return longestTrack?.let { File(it.wavFilePath).length() } ?: 0L
     }
 
 

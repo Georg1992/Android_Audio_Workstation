@@ -20,7 +20,7 @@ object Permissions {
                     ) !=
                     PackageManager.PERMISSION_GRANTED
                 ) {
-                    TODO()
+                    ActivityCompat.requestPermissions(it, arrayOf(Manifest.permission.RECORD_AUDIO), 1001)
                     return
                 }
             }

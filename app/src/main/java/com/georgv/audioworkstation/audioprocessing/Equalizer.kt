@@ -1,6 +1,8 @@
 package com.georgv.audioworkstation.audioprocessing
 import org.jtransforms.fft.FloatFFT_1D
 import kotlin.math.*
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class Equalizer(val band1:Int,val band2:Int,val band3:Int,val band4:Int,val band5:Int,val band6:Int) : Effect() {
     private var gains:Array<Int> = arrayOf(band1,band2,band3,band4,band5,band6)
@@ -63,11 +65,23 @@ class Equalizer(val band1:Int,val band2:Int,val band3:Int,val band4:Int,val band
         return result
     }
 
-
-
-
-
     override fun apply(byteArray: ByteArray): ByteArray {
-        TODO("Not yet implemented")
+        val floats = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().let { shortBuffer ->
+            val out = FloatArray(shortBuffer.remaining())
+            var idx = 0
+            while (shortBuffer.hasRemaining()) {
+                out[idx++] = shortBuffer.get() / 32768.0f
+            }
+            out
+        }
+        val processed = apply(floats)
+        val outShorts = ShortArray(processed.size)
+        for (i in processed.indices) {
+            val clamped = processed[i].coerceIn(-1.0f, 1.0f)
+            outShorts[i] = (clamped * 32767.0f).toInt().toShort()
+        }
+        val outBytes = ByteArray(outShorts.size * 2)
+        ByteBuffer.wrap(outBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(outShorts)
+        return outBytes
     }
 }

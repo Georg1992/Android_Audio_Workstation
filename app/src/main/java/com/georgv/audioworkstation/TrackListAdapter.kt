@@ -24,6 +24,10 @@ import com.google.android.material.slider.Slider
 class TrackListAdapter(val parentFragment: SongFragment) :
     ListAdapter<Track, TrackListAdapter.TrackViewHolder>(DiffCallback()) {
 
+    init {
+        setHasStableIds(true)
+    }
+
     private val viewHolders: MutableList<TrackViewHolder> = mutableListOf()
 
     init {
@@ -87,7 +91,10 @@ class TrackListAdapter(val parentFragment: SongFragment) :
         override fun onClick(p0: View?) {
             if (AudioController.controllerState == AudioController.ControllerState.STOP) {
                 selected = !selected
-                onBindViewHolder(this, adapterPosition)
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    notifyItemChanged(pos)
+                }
             }
         }
     }
@@ -104,8 +111,10 @@ class TrackListAdapter(val parentFragment: SongFragment) :
         holder.track = item
         holder.trackId = item.id
         holder.instrumentName.text = item.name
-        holder.volumeSlider.value = item.volume
-        viewHolders.add(holder)
+        if (holder.volumeSlider.value != item.volume) {
+            holder.volumeSlider.value = item.volume
+        }
+        if (!viewHolders.contains(holder)) viewHolders.add(holder)
         if (item.isRecording) {
             val gradientDrawable = GradientDrawable()
             val color =

@@ -5,6 +5,7 @@ import com.georgv.audioworkstation.UiListener
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.Track
 import com.georgv.audioworkstation.ui.main.fragments.AudioListener
+import android.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
@@ -106,7 +107,7 @@ object AudioController {
                     pair.second.playAudio()
                     latch.countDown()
                 } catch (e: Exception) {
-                    // handle exception
+                    Log.e("AudioController", "Failed to play track ${'$'}{pair.first.id}", e)
                 }
             }
             latch.await()

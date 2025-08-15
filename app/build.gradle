@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.application'
-    id 'kotlin-android'
+    id 'org.jetbrains.kotlin.android'
     id 'kotlin-parcelize'
     id 'androidx.navigation.safeargs.kotlin'
     id("com.google.devtools.ksp")
@@ -8,9 +8,6 @@ plugins {
     id 'io.realm.kotlin'
 
 }
-
-apply plugin: "realm-android"
-
 
 android {
     compileSdk 35
@@ -24,7 +21,7 @@ android {
     defaultConfig {
         applicationId "com.georgv.audioworkstation"
         minSdk 26
-        targetSdk 33
+        targetSdk 35
         versionCode 1
         versionName "1.0"
 

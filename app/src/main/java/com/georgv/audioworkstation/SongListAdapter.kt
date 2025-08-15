@@ -51,8 +51,15 @@ class SongListAdapter(val listener:OnSongItemClickListener): ListAdapter<Song, S
             when(AudioController.controllerState){
                 AudioController.ControllerState.STOP -> setStoppedUI()
                 AudioController.ControllerState.PLAY -> setPlayingUI()
+                AudioController.ControllerState.PLAY_REC -> setPlayingUI()
+                AudioController.ControllerState.PAUSE -> setPlayPauseUI()
                 else -> setStoppedUI()
             }
+        }
+
+        private fun setPlayPauseUI(){
+            binding.stopSongButton.visibility = View.VISIBLE
+            binding.playSongButton.visibility = View.INVISIBLE
         }
 
         private fun setStoppedUI(){
@@ -84,11 +91,11 @@ class SongListAdapter(val listener:OnSongItemClickListener): ListAdapter<Song, S
 
     private class DiffCallback : DiffUtil.ItemCallback<Song>() {
         override fun areItemsTheSame(oldItem: Song, newItem: Song): Boolean {
-            return oldItem == newItem
+            return oldItem.id == newItem.id
         }
 
         override fun areContentsTheSame(oldItem: Song, newItem: Song): Boolean {
-            return oldItem == newItem
+            return oldItem.areContentsTheSame(newItem)
         }
     }
 

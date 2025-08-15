@@ -153,7 +153,7 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
     }
 
     override fun uiCallback() {
-        TODO("Not yet implemented")
+        // no-op for now
     }
 
 
