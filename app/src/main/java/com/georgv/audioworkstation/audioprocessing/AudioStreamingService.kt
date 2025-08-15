@@ -68,7 +68,7 @@ class AudioStreamingService: Service()  {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Audio Workstation")
             .setContentText("Streaming audio")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
