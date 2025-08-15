@@ -91,7 +91,7 @@ class TrackListAdapter(val parentFragment: SongFragment) :
         override fun onClick(p0: View?) {
             if (AudioController.controllerState == AudioController.ControllerState.STOP) {
                 selected = !selected
-                val pos = bindingAdapterPosition
+                val pos = adapterPosition
                 if (pos != RecyclerView.NO_POSITION) {
                     notifyItemChanged(pos)
                 }
