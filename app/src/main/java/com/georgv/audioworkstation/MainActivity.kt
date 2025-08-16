@@ -104,6 +104,13 @@ class MainActivity : AppCompatActivity() {
      * Get the native engine instance for use in fragments
      */
     fun getNativeEngine(): NativeEngine = nativeEngine
+    
+    /**
+     * Check if RECORD_AUDIO permission is granted
+     */
+    fun hasRecordPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
 
     private fun createNotificationChannel(){
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
@@ -129,6 +136,36 @@ class MainActivity : AppCompatActivity() {
     @RequiresApi(Build.VERSION_CODES.P)
     private fun makeRequest() {
         ActivityCompat.requestPermissions(this, permissions, 101)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        when (requestCode) {
+            1, 101 -> {
+                if (grantResults.isNotEmpty()) {
+                    val recordAudioGranted = permissions.indexOf(Manifest.permission.RECORD_AUDIO).let { index ->
+                        index >= 0 && index < grantResults.size && grantResults[index] == PackageManager.PERMISSION_GRANTED
+                    }
+                    
+                    if (recordAudioGranted) {
+                        Log.i("MainActivity", "🎤 RECORD_AUDIO permission granted - initializing audio features")
+                        // Test native engine now that we have permission
+                        testNativeEngine()
+                    } else {
+                        Log.w("MainActivity", "❌ RECORD_AUDIO permission denied - recording features will be limited")
+                    }
+                    
+                    // Log all permission results for debugging
+                    permissions.forEachIndexed { index, permission ->
+                        val granted = index < grantResults.size && grantResults[index] == PackageManager.PERMISSION_GRANTED
+                        Log.d("MainActivity", "Permission $permission: ${if (granted) "GRANTED" else "DENIED"}")
+                    }
+                } else {
+                    Log.w("MainActivity", "Permission request returned empty results")
+                }
+            }
+        }
     }
 
     override fun onDestroy() {

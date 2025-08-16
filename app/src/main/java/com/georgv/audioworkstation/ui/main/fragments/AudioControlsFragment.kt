@@ -1,6 +1,4 @@
 package com.georgv.audioworkstation.ui.main.fragments
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -8,10 +6,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.georgv.audioworkstation.MainActivity
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.databinding.FragmentAudioControlsBinding
 import com.georgv.audioworkstation.engine.NativeAudioManager
@@ -25,23 +22,6 @@ class AudioControlsFragment:Fragment() {
     private var nativeAudio: NativeAudioManager? = null
     private var isRecording = false
     private val audioSession = AudioSessionManager.getInstance()
-    
-    // Permission launcher for audio recording
-    private val recordPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            Log.i("AudioControlsFragment", "🎤 RECORD_AUDIO permission granted")
-            // Retry recording operation
-            proceedWithRecording()
-        } else {
-            Log.e("AudioControlsFragment", "❌ RECORD_AUDIO permission denied")
-            Toast.makeText(requireContext(), "Audio recording permission required", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    // Pending recording operation
-    private var pendingRecordingOperation: (() -> Unit)? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -189,13 +169,11 @@ class AudioControlsFragment:Fragment() {
     }
     
         private fun startNewRecording() {
-        // Check permission first
-        if (!hasRecordPermission()) {
-            Log.w("AudioControlsFragment", "🔒 RECORD_AUDIO permission not granted, requesting...")
-            requestRecordPermission { 
-                Log.i("AudioControlsFragment", "📱 Retrying recording after permission granted")
-                startNewRecording() 
-            }
+        // Check permission using MainActivity's centralized permission system
+        val mainActivity = activity as? MainActivity
+        if (mainActivity?.hasRecordPermission() != true) {
+            Log.w("AudioControlsFragment", "🔒 RECORD_AUDIO permission not granted")
+            Toast.makeText(requireContext(), "Audio recording permission required. Please restart the app and grant permission.", Toast.LENGTH_LONG).show()
             return
         }
         
@@ -320,13 +298,11 @@ class AudioControlsFragment:Fragment() {
     }
     
     private fun startRecordingForTrack(trackData: AudioSessionManager.TrackData) {
-        // Check permission first
-        if (!hasRecordPermission()) {
-            Log.w("AudioControlsFragment", "🔒 RECORD_AUDIO permission not granted for pending track, requesting...")
-            requestRecordPermission { 
-                Log.i("AudioControlsFragment", "📱 Retrying pending recording after permission granted")
-                startRecordingForTrack(trackData)
-            }
+        // Check permission using MainActivity's centralized permission system
+        val mainActivity = activity as? MainActivity
+        if (mainActivity?.hasRecordPermission() != true) {
+            Log.w("AudioControlsFragment", "🔒 RECORD_AUDIO permission not granted for pending track")
+            Toast.makeText(requireContext(), "Audio recording permission required. Please restart the app and grant permission.", Toast.LENGTH_LONG).show()
             return
         }
         
@@ -379,26 +355,6 @@ class AudioControlsFragment:Fragment() {
         // Set record button to recording state - use bright red/green
         binding.recordButton.setBackgroundResource(R.color.soft_red)
         Log.d("AudioControlsFragment", "UI: Showing recording state - record button RED")
-    }
-    
-    // Permission handling methods
-    private fun hasRecordPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-    
-    private fun requestRecordPermission(operation: () -> Unit) {
-        pendingRecordingOperation = operation
-        Log.i("AudioControlsFragment", "🔒 Requesting RECORD_AUDIO permission")
-        recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-    }
-    
-    private fun proceedWithRecording() {
-        Log.i("AudioControlsFragment", "📱 Proceeding with pending recording operation")
-        pendingRecordingOperation?.invoke()
-        pendingRecordingOperation = null
     }
 
 }
