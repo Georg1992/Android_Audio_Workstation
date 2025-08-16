@@ -117,8 +117,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             val trackCopy = track
             
             Log.i("SongViewModel", "Created track: ${trackCopy?.name} - Recording: ${trackCopy?.isRecording}")
-            // Refresh tracks to update UI
-            loadTracksForCurrentSong()
+            // UI updates automatically via reactive flows
             trackCopy
         } catch (e: Exception) {
             Log.e("SongViewModel", "Failed to create track", e)
@@ -138,8 +137,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                         it.timeStampStart = System.currentTimeMillis()
                     } ?: Log.e("SongViewModel", "Track not found for ID: $trackId")
                 }
-                Log.i("SongViewModel", "Calling loadTracksForCurrentSong to refresh UI")
-                loadTracksForCurrentSong() // Refresh tracks
+                // UI updates automatically via reactive flows
             } catch (e: Exception) {
                 Log.e("SongViewModel", "Failed to start track recording", e)
             }
@@ -159,8 +157,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                         it.duration = duration
                     } ?: Log.e("SongViewModel", "Track not found for ID: $trackId")
                 }
-                Log.i("SongViewModel", "Calling loadTracksForCurrentSong to refresh UI")
-                loadTracksForCurrentSong() // Refresh tracks
+                // UI updates automatically via reactive flows
             } catch (e: Exception) {
                 Log.e("SongViewModel", "Failed to finish track recording", e)
             }
@@ -248,8 +245,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // loadTracksForCurrentSong() is now replaced by reactive flows
-    // Tracks automatically update when database changes via tracks StateFlow
+    // Tracks automatically update when database changes via reactive flows
 
     fun deleteSongFromDB(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -268,22 +264,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun updateTrackWavPath(trackId: String, wavPath: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                realm.write {
-                    val track = query<Track>("id == $0", trackId).first().find()
-                    track?.let {
-                        it.wavFilePath = wavPath
-                        it.isRecording = true
-                    }
-                }
-                // Tracks automatically refresh via reactive flows
-            } catch (e: Exception) {
-                Log.e("SongViewModel", "Failed to update track WAV path", e)
-            }
-        }
-    }
+
     
     fun getRecordingTrack(): Track? {
         val song = _currentSong.value ?: return null

@@ -184,6 +184,13 @@ grep -rn "import.*\$" app/src/main/java --include="*.kt" | head -3
 echo "📝 Checking for missing return types in functions..."
 grep -rn "fun.*(" app/src/main/java --include="*.kt" | grep -v ": " | grep -v "= " | head -3
 
+# Check for obsolete method calls that may cause unresolved references
+echo "📝 Checking for obsolete method calls..."
+if grep -rn "loadTracksForCurrentSong\|loadTracksForSong\|refreshTracks\|updateTrackWavPath" app/src/main/java --include="*.kt"; then
+    echo "❌ Found calls to potentially removed methods"
+    ((ERRORS++))
+fi
+
 echo -e "\n📊 Validation Summary"
 echo "====================="
 

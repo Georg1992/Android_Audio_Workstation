@@ -59,8 +59,7 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
             if (song != null) {
                 Log.i("SongFragment", "Song updated: ${song.name} (ID: ${song.id})")
                 binding.songName.text = song.name
-                // Load tracks for this song
-                viewModel.loadTracksForCurrentSong()
+                // Tracks load automatically via reactive flows
             } else {
                 Log.w("SongFragment", "Song is null")
                 binding.songName.text = "No Song Selected"

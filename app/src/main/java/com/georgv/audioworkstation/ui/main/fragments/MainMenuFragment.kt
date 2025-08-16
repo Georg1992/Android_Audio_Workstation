@@ -87,13 +87,8 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
                 Log.i("MainMenuFragment", "  Song: ${song.name} (ID: ${song.id})")
                 Log.i("MainMenuFragment", "  Track: ${track.name} (ID: ${track.id})")
                 
-                // Create WAV file path for recording
-                val wavPath = Utilities.createWavFilePath(requireContext(), trackName)
-                Log.i("MainMenuFragment", "WAV path: $wavPath")
-                
-                // Update track with WAV path and mark as recording
-                viewModel.updateTrackWavPath(track.id, wavPath)
-                Log.i("MainMenuFragment", "Track updated with WAV path and recording flag")
+                // WAV path will be set when recording starts
+                Log.i("MainMenuFragment", "Track created successfully for Fast Record")
                 
                 // Small delay to ensure database operations complete before navigation
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
