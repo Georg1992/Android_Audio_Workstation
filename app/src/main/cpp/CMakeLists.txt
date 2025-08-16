@@ -7,20 +7,10 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("audioworkstation")
 
-# Create and name the library
-add_library(audioworkstation SHARED
-	# existing sources
-	audioworkstation.cpp
-	native-lib.cpp
-	# engine sources
-	engine/AudioEngine.cpp
-	engine/JNI_Bridge.cpp
-)
-
 # Find system libraries
 find_library(log-lib log)
 
-# Oboe - force cache refresh
+# Oboe dependency
 include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
 FetchContent_Declare(
@@ -30,6 +20,16 @@ FetchContent_Declare(
   UPDATE_COMMAND ""
 )
 FetchContent_MakeAvailable(oboe)
+
+# Create and name the library
+add_library(audioworkstation SHARED
+	# existing sources
+	audioworkstation.cpp
+	native-lib.cpp
+	# engine sources
+	engine/AudioEngine.cpp
+	engine/JNI_Bridge.cpp
+)
 
 # Link libraries to your target
 target_include_directories(audioworkstation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
