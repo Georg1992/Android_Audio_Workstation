@@ -55,7 +55,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     fun createTrackForCurrentSong(trackName: String, wavFilePath: String): Track? {
         val song = _currentSong.value ?: return null
         return try {
-            realm.writeBlocking {
+            val track = realm.writeBlocking {
                 copyToRealm(Track().apply {
                     this.songId = song.id
                     this.name = trackName
@@ -65,6 +65,10 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     this.volume = 100f
                 })
             }
+            Log.i("SongViewModel", "Created track: ${track?.name} - Recording: ${track?.isRecording}")
+            // Refresh tracks to update UI
+            loadTracksForCurrentSong()
+            track
         } catch (e: Exception) {
             Log.e("SongViewModel", "Failed to create track", e)
             null
@@ -72,16 +76,19 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun finishTrackRecording(trackId: String, duration: Long) {
+        Log.i("SongViewModel", "finishTrackRecording called for track: $trackId")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 realm.write {
                     val track = query<Track>("id == $0", trackId).first().find()
                     track?.let {
+                        Log.i("SongViewModel", "Setting isRecording = false for track: ${it.name}")
                         it.isRecording = false
                         it.timeStampStop = System.currentTimeMillis()
                         it.duration = duration
-                    }
+                    } ?: Log.e("SongViewModel", "Track not found for ID: $trackId")
                 }
+                Log.i("SongViewModel", "Calling loadTracksForCurrentSong to refresh UI")
                 loadTracksForCurrentSong() // Refresh tracks
             } catch (e: Exception) {
                 Log.e("SongViewModel", "Failed to finish track recording", e)

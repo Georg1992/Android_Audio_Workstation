@@ -78,7 +78,9 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
                 tracks.forEach { track ->
                     Log.i("SongFragment", "Track in list: ${track.name} - Recording: ${track.isRecording}")
                 }
-                (mRecyclerView.adapter as? TrackListAdapter)?.submitList(tracks)
+                // Create a new list to ensure adapter gets updated
+                val adapter = mRecyclerView.adapter as? TrackListAdapter
+                adapter?.submitList(tracks.toList()) // Force a new list instance
             }
         }
 

@@ -116,6 +116,8 @@ class TrackListAdapter(val parentFragment: SongFragment) :
         // Update selection state from ViewModel
         holder.selected = parentFragment.isTrackSelected(item.id)
         
+        Log.d("TrackListAdapter", "Binding track: ${item.name} - Recording: ${item.isRecording} - Selected: ${holder.selected}")
+        
         if (item.isRecording) {
             val gradientDrawable = GradientDrawable()
             val color =
@@ -176,6 +178,8 @@ class TrackListAdapter(val parentFragment: SongFragment) :
             return when {
                 newItem.name != oldItem.name -> false
                 newItem.isRecording != oldItem.isRecording -> false
+                newItem.volume != oldItem.volume -> false
+                newItem.wavFilePath != oldItem.wavFilePath -> false
                 else -> true
             }
         }
