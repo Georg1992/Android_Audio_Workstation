@@ -88,25 +88,47 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     fun createNewSongWithTrack(songName: String, trackName: String = "Track 1"): Pair<Song?, Track?> {
         return try {
             Log.i("SongViewModel", "Creating song: $songName with track: $trackName")
-            realm.writeBlocking {
-                val song = copyToRealm(Song().apply {
+            
+            // First create the song only
+            val song = realm.writeBlocking {
+                copyToRealm(Song().apply {
                     id = UUID.randomUUID().toString()
                     name = songName
                     wavFilePath = null
                 })
-                
-                val track = copyToRealm(Track().apply {
-                    songId = song.id
-                    name = trackName
-                    wavFilePath = "" // Will be set when recording starts
-                    isRecording = false
-                    timeStampStart = System.currentTimeMillis()
-                    volume = 100f
-                })
-                
-                Log.i("SongViewModel", "Created song: ${song.name} (ID: ${song.id}) with track: ${track.name} (ID: ${track.id})")
+            }
+            
+            if (song != null) {
+                Log.i("SongViewModel", "Song created successfully: ${song.name} (ID: ${song.id})")
                 _currentSong.postValue(song)
+                
+                // Then try to create the track separately
+                val track = try {
+                    realm.writeBlocking {
+                        copyToRealm(Track().apply {
+                            songId = song.id
+                            name = trackName
+                            wavFilePath = "" // Will be set when recording starts
+                            isRecording = false
+                            timeStampStart = System.currentTimeMillis()
+                            volume = 100f
+                        })
+                    }
+                } catch (trackError: Exception) {
+                    Log.e("SongViewModel", "Failed to create track (schema issue), creating without track", trackError)
+                    null
+                }
+                
+                if (track != null) {
+                    Log.i("SongViewModel", "Track created successfully: ${track.name} (ID: ${track.id})")
+                } else {
+                    Log.w("SongViewModel", "Song created but track creation failed - proceeding with song only")
+                }
+                
                 Pair(song, track)
+            } else {
+                Log.e("SongViewModel", "Failed to create song")
+                Pair(null, null)
             }
         } catch (e: Exception) {
             Log.e("SongViewModel", "Failed to create song with track", e)
