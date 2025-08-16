@@ -27,6 +27,27 @@ open class Song() : RealmObject {
     }
 }
 
+/**
+ * Thread-safe data class for UI operations
+ * Used for copying Realm Song objects to avoid threading issues
+ */
+data class SongData(
+    val id: String,
+    val name: String?,
+    val wavFilePath: String?
+)
+
+/**
+ * Extension function to convert Realm Song to thread-safe SongData
+ */
+fun Song.toSongData(): SongData {
+    return SongData(
+        id = this.id,
+        name = this.name,
+        wavFilePath = this.wavFilePath
+    )
+}
+
 
 
 

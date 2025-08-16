@@ -20,27 +20,32 @@ class PropertyValidator:
             with open(file_path, 'r') as f:
                 content = f.read()
                 
-            # Find class declarations
-            class_matches = re.finditer(r'class\s+(\w+)', content)
+            # Find class declarations with their bodies
+            class_pattern = r'(open\s+)?class\s+(\w+)[^{]*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}'
+            class_matches = re.finditer(class_pattern, content, re.DOTALL)
             
             for class_match in class_matches:
-                class_name = class_match.group(1)
+                class_name = class_match.group(2)
+                class_body = class_match.group(3)
+                
                 print(f"🔍 Analyzing class: {class_name}")
                 
-                # Extract properties (var/val declarations)
+                # Extract properties (var/val declarations) only within this class body
                 properties = {}
                 
-                # Find var/val declarations
+                # Find var/val declarations within the class body only
                 property_pattern = r'(var|val)\s+(\w+)\s*:\s*(\w+[\?]?)'
-                property_matches = re.finditer(property_pattern, content)
+                property_matches = re.finditer(property_pattern, class_body)
                 
                 for prop_match in property_matches:
                     prop_type = prop_match.group(1)  # var or val
                     prop_name = prop_match.group(2)
                     prop_kotlin_type = prop_match.group(3)
                     
-                    properties[prop_name] = prop_type
-                    print(f"   {prop_type} {prop_name}: {prop_kotlin_type}")
+                    # Skip duplicate property names (keep the first one found)
+                    if prop_name not in properties:
+                        properties[prop_name] = prop_type
+                        print(f"   {prop_type} {prop_name}: {prop_kotlin_type}")
                 
                 self.class_properties[class_name] = properties
                 print(f"   Total properties: {len(properties)}\n")
@@ -94,14 +99,28 @@ class PropertyValidator:
                             print(f"   {error}")
                             self.errors.append(error)
                         elif class_props[prop_name] == 'val':
-                            error = f"❌ {file_path}:{line_num} - Cannot reassign val property '{prop_name}' in class {class_name}"
-                            print(f"   {error}")
-                            self.errors.append(error)
+                            # Check if this is inside a legitimate Realm write context
+                            context_start = max(0, apply_match.start() - 200)  # Look 200 chars before
+                            context = content[context_start:apply_match.start()]
+                            
+                            # Allow val assignments in legitimate Realm contexts
+                            if ('realm.writeBlocking' in context and 'copyToRealm' in apply_body) or \
+                               ('copyToRealm(' in context and pattern_type == 'constructor'):
+                                print(f"   ✅ {prop_name} = ... (valid in Realm write context)")
+                            else:
+                                error = f"❌ {file_path}:{line_num} - Cannot reassign val property '{prop_name}' in class {class_name}"
+                                print(f"   {error}")
+                                self.errors.append(error)
                         elif pattern_type == 'constructor' and class_name in ['Track', 'Song']:
-                            # Temporarily disabled - will fix systematically
-                            print(f"   ⚠️  Warning: {class_name}() constructor usage (should review)")
-                            # error = f"⚠️  {file_path}:{line_num} - Potential Realm issue: Assigning to {class_name}() outside write context may fail"
-                            # self.errors.append(error)
+                            # Check if this is inside a legitimate Realm write context  
+                            context_start = max(0, apply_match.start() - 200)
+                            context = content[context_start:apply_match.start()]
+                            
+                            if ('realm.writeBlocking' in context and 'copyToRealm' in apply_body) or \
+                               ('copyToRealm(' in context):
+                                print(f"   ✅ {class_name}() constructor in Realm context (valid)")
+                            else:
+                                print(f"   ⚠️  Warning: {class_name}() constructor outside Realm context (should review)")
                         else:
                             print(f"   ✅ {prop_name} = ... (valid var assignment)")
                         

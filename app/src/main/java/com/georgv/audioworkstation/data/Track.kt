@@ -33,4 +33,37 @@ open class Track() : RealmObject {
     }
 }
 
+/**
+ * Thread-safe data class for UI operations
+ * Used for copying Realm Track objects to avoid threading issues
+ */
+data class TrackData(
+    val id: String,
+    val songId: String?,
+    val name: String?,
+    val volume: Float,
+    val wavFilePath: String,
+    val isRecording: Boolean,
+    val timeStampStart: Long,
+    val timeStampStop: Long?,
+    val duration: Long?
+)
+
+/**
+ * Extension function to convert Realm Track to thread-safe TrackData
+ */
+fun Track.toTrackData(): TrackData {
+    return TrackData(
+        id = this.id,
+        songId = this.songId,
+        name = this.name,
+        volume = this.volume,
+        wavFilePath = this.wavFilePath,
+        isRecording = this.isRecording,
+        timeStampStart = this.timeStampStart,
+        timeStampStop = this.timeStampStop,
+        duration = this.duration
+    )
+}
+
 

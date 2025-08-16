@@ -7,9 +7,13 @@ import android.widget.Toast
 import androidx.lifecycle.*
 import com.georgv.audioworkstation.audioprocessing.*
 import com.georgv.audioworkstation.data.Song
+import com.georgv.audioworkstation.data.SongData
 import com.georgv.audioworkstation.data.SongRepositoryImpl
 import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.data.TrackData
 import com.georgv.audioworkstation.data.RealmManager
+import com.georgv.audioworkstation.data.toSongData
+import com.georgv.audioworkstation.data.toTrackData
 import io.realm.kotlin.ext.query
 
 import kotlinx.coroutines.*
@@ -23,8 +27,8 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     private var _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> get() = _isLoading
 
-    private val _currentSong = MutableLiveData<Song?>()
-    val currentSong: LiveData<Song?> get() = _currentSong
+    private val _currentSong = MutableLiveData<SongData?>()
+    val currentSong: LiveData<SongData?> get() = _currentSong
 
     private val realm = RealmManager.realm
     private val songRepo = SongRepositoryImpl(realm)
@@ -81,11 +85,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val song = songRepo.createSong(songName, wavDir)
                 // Create a thread-safe copy for UI
-                val songCopy = Song().apply {
-                    id = song.id
-                    name = song.name
-                    wavFilePath = song.wavFilePath
-                }
+                val songCopy = song.toSongData()
                 _currentSong.postValue(songCopy)
                 
                 // Start audio session for fast audio access
@@ -183,11 +183,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             if (song != null) {
                 Log.i("SongViewModel", "Song created successfully: ${song.name} (ID: ${song.id})")
                 // Create a thread-safe copy for UI
-                val songCopy = Song().apply {
-                    id = song.id
-                    name = song.name
-                    wavFilePath = song.wavFilePath
-                }
+                val songCopy = song.toSongData()
                 _currentSong.postValue(songCopy)
                 
                 // Start audio session for fast audio access
@@ -234,11 +230,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 val song = songRepo.getSongById(songId)
                 if (song != null) {
                     // Create a thread-safe copy for UI
-                    val songCopy = Song().apply {
-                        id = song.id
-                        name = song.name
-                        wavFilePath = song.wavFilePath
-                    }
+                    val songCopy = song.toSongData()
                     _currentSong.postValue(songCopy)
                     
                     // Start audio session for fast audio access
@@ -297,20 +289,8 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         val song = _currentSong.value ?: return null
         return try {
             val track = realm.query<Track>("songId == $0 AND isRecording == $1", song.id, true).first().find()
-            // Return thread-safe copy
-            track?.let {
-                Track().apply {
-                    id = it.id
-                    songId = it.songId
-                    name = it.name
-                    wavFilePath = it.wavFilePath
-                    isRecording = it.isRecording
-                    timeStampStart = it.timeStampStart
-                    timeStampStop = it.timeStampStop
-                    duration = it.duration
-                    volume = it.volume
-                }
-            }
+            // Return the track directly (Realm manages thread safety for read operations)
+            track
         } catch (e: Exception) {
             Log.e("SongViewModel", "Error finding recording track", e)
             null
