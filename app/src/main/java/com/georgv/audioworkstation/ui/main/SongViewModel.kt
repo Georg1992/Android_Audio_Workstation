@@ -9,8 +9,7 @@ import com.georgv.audioworkstation.audioprocessing.*
 import com.georgv.audioworkstation.data.Song
 import com.georgv.audioworkstation.data.SongRepositoryImpl
 import com.georgv.audioworkstation.data.Track
-import io.realm.kotlin.Realm
-import io.realm.kotlin.RealmConfiguration
+import com.georgv.audioworkstation.data.RealmManager
 import io.realm.kotlin.ext.query
 
 import kotlinx.coroutines.*
@@ -31,9 +30,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> get() = _currentSong
 
-    private val realm: Realm by lazy {
-        Realm.open(RealmConfiguration.Builder(schema = setOf(Song::class, Track::class)).build())
-    }
+    private val realm = RealmManager.realm
     private val songRepo = SongRepositoryImpl(realm)
 
 
@@ -226,7 +223,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        realm.close()
+        // Don't close realm here since it's shared via RealmManager
     }
 
 
