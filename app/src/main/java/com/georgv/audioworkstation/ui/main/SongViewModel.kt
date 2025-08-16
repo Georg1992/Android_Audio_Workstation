@@ -23,6 +23,18 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     private var _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> get() = _isLoading
 
+    private val _currentSong = MutableLiveData<Song?>()
+    val currentSong: LiveData<Song?> get() = _currentSong
+
+    private val realm = RealmManager.realm
+    private val songRepo = SongRepositoryImpl(realm)
+    
+    // Audio-optimized session manager (fast, no DB calls for audio)
+    private val audioSession = AudioSessionManager.getInstance()
+    
+    // Current song ID for reactive flows
+    private val _currentSongId = MutableStateFlow<String?>(null)
+
     // Reactive tracks flow (UI updates automatically when DB changes)
     val tracks: StateFlow<List<Track>> = _currentSongId
         .filterNotNull()
@@ -52,18 +64,6 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptySet()
         )
-
-    private val _currentSong = MutableLiveData<Song?>()
-    val currentSong: LiveData<Song?> get() = _currentSong
-
-    private val realm = RealmManager.realm
-    private val songRepo = SongRepositoryImpl(realm)
-    
-    // Audio-optimized session manager (fast, no DB calls for audio)
-    private val audioSession = AudioSessionManager.getInstance()
-    
-    // Current song ID for reactive flows
-    private val _currentSongId = MutableStateFlow<String?>(null)
     
     // Helper to convert Realm Track to AudioSessionManager.TrackData
     private fun Track.toTrackData() = AudioSessionManager.TrackData(
