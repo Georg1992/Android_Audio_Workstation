@@ -19,19 +19,24 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import kotlinx.coroutines.flow.collectLatest
 import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.audioprocessing.AudioController
+import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
 import com.google.android.material.snackbar.Snackbar
 import android.widget.FrameLayout
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
+import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
 import com.georgv.audioworkstation.databinding.SongFragmentBinding
 import com.georgv.audioworkstation.ui.main.SongViewModel
 
 
-// Removed unused imports
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
 
 
-class SongFragment : Fragment(), View.OnClickListener {
+class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProcessingCallback {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: SongFragmentBinding
@@ -180,8 +185,18 @@ class SongFragment : Fragment(), View.OnClickListener {
         binding.processingText.text = str
     }
 
+    override fun onProcessingFinished() {
+        findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
+    }
+
+    override fun uiCallback() {
+        // no-op for now
+    }
+
+
 }
 
 interface AudioListener{
     fun uiCallback()
+
 }
