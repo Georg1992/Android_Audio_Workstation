@@ -68,9 +68,26 @@ class AudioControlsFragment:Fragment() {
     
     private fun onPlayClicked() {
         Log.i("AudioControlsFragment", "Play clicked")
+        val selectedTracks = viewModel.getSelectedTracks()
+        if (selectedTracks.isEmpty()) {
+            Log.i("AudioControlsFragment", "No tracks selected, play button idle")
+            return
+        }
+        
+        // Load selected tracks into native engine
         nativeAudio?.let { audio ->
+            audio.clearTracks()
+            selectedTracks.forEach { track ->
+                if (!track.isRecording && track.wavFilePath.isNotEmpty()) {
+                    audio.addTrack(track.wavFilePath, track.volume / 100f)
+                    Log.i("AudioControlsFragment", "Added track to playback: ${track.name}")
+                }
+            }
+            audio.loadTracks()
+            
             if (audio.startPlayback()) {
                 showPause()
+                Log.i("AudioControlsFragment", "Started playback of ${selectedTracks.size} selected tracks")
             }
         }
     }
@@ -98,6 +115,8 @@ class AudioControlsFragment:Fragment() {
             // Update track in database to mark recording as finished
             finishRecordingInDatabase()
         }
+        // Clear track selection after stopping
+        viewModel.clearTrackSelection()
         showPlay()
     }
     
@@ -111,25 +130,38 @@ class AudioControlsFragment:Fragment() {
         }
     }
     
-    private fun startNewRecording() {
+        private fun startNewRecording() {
         try {
-            // Create a new track for recording
-            val songName = "Recording_${System.currentTimeMillis()}"
-            val trackName = "Track ${System.currentTimeMillis() % 1000}"
+            val currentSong = viewModel.currentSong.value
+            if (currentSong == null) {
+                Log.e("AudioControlsFragment", "No current song for recording")
+                return
+            }
             
-            // This should create the track in the current song if one exists
-            // For now, we'll start recording without creating a new song
-                         nativeAudio?.let { audio ->
-                 val recordingsDir = java.io.File(requireContext().filesDir, "recordings")
-                 if (!recordingsDir.exists()) recordingsDir.mkdirs()
-                 val wavPath = "${recordingsDir}/${trackName}.wav"
-                 if (audio.startRecording(wavPath)) {
-                    isRecording = true
-                    updateRecordingState()
-                    Log.i("AudioControlsFragment", "Recording started")
-                } else {
-                    Log.e("AudioControlsFragment", "Failed to start recording")
+            // Create a new track for recording
+            val timestamp = System.currentTimeMillis()
+            val trackName = "Track_${timestamp % 10000}"
+            val recordingsDir = java.io.File(requireContext().filesDir, "recordings")
+            if (!recordingsDir.exists()) recordingsDir.mkdirs()
+            val wavPath = "${recordingsDir}/${trackName}.wav"
+            
+            // Create track in database
+            val track = viewModel.createTrackForCurrentSong(trackName, wavPath)
+            if (track != null) {
+                Log.i("AudioControlsFragment", "Created new track for recording: ${track.name}")
+                
+                // Start native recording
+                nativeAudio?.let { audio ->
+                    if (audio.startRecording(wavPath)) {
+                        isRecording = true
+                        updateRecordingState()
+                        Log.i("AudioControlsFragment", "Recording started for track: ${track.name}")
+                    } else {
+                        Log.e("AudioControlsFragment", "Failed to start native recording")
+                    }
                 }
+            } else {
+                Log.e("AudioControlsFragment", "Failed to create track for recording")
             }
         } catch (e: Exception) {
             Log.e("AudioControlsFragment", "Error starting recording", e)

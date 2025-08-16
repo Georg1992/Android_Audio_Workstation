@@ -103,6 +103,22 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
     fun updateTrackVolume(volume:Float,id:String){
         viewModel.updateTrackVolumeToDb(volume,id)
     }
+    
+    // Track selection methods for adapter
+    fun toggleTrackSelection(trackId: String) {
+        viewModel.toggleTrackSelection(trackId)
+        // Refresh the specific item in the adapter
+        val adapter = mRecyclerView.adapter as? TrackListAdapter
+        val tracks = viewModel.tracks.value
+        val position = tracks.indexOfFirst { it.id == trackId }
+        if (position != -1) {
+            adapter?.notifyItemChanged(position)
+        }
+    }
+    
+    fun isTrackSelected(trackId: String): Boolean {
+        return viewModel.isTrackSelected(trackId)
+    }
 
     private fun View.blink(
         times: Int = Animation.INFINITE,

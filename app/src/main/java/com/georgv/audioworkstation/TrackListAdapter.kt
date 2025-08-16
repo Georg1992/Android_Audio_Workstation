@@ -90,11 +90,8 @@ class TrackListAdapter(val parentFragment: SongFragment) :
 
         override fun onClick(p0: View?) {
             if (AudioController.controllerState == AudioController.ControllerState.STOP) {
-                selected = !selected
-                val pos = adapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    notifyItemChanged(pos)
-                }
+                // Use centralized track selection through parent fragment
+                parentFragment.toggleTrackSelection(trackId)
             }
         }
     }
@@ -115,6 +112,10 @@ class TrackListAdapter(val parentFragment: SongFragment) :
             holder.volumeSlider.value = item.volume
         }
         if (!viewHolders.contains(holder)) viewHolders.add(holder)
+        
+        // Update selection state from ViewModel
+        holder.selected = parentFragment.isTrackSelected(item.id)
+        
         if (item.isRecording) {
             val gradientDrawable = GradientDrawable()
             val color =

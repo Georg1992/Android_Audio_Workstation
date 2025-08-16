@@ -26,6 +26,10 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _tracks = MutableStateFlow<List<Track>>(emptyList())
     val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
+    
+    // Track selection for playback
+    private val _selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedTrackIds: StateFlow<Set<String>> = _selectedTrackIds.asStateFlow()
 
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> get() = _currentSong
@@ -214,6 +218,31 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             Log.e("SongViewModel", "Error finding recording track", e)
             null
         }
+    }
+    
+    // Track selection methods
+    fun toggleTrackSelection(trackId: String) {
+        val currentSelection = _selectedTrackIds.value
+        _selectedTrackIds.value = if (currentSelection.contains(trackId)) {
+            currentSelection - trackId
+        } else {
+            currentSelection + trackId
+        }
+        Log.i("SongViewModel", "Track selection changed: ${_selectedTrackIds.value}")
+    }
+    
+    fun clearTrackSelection() {
+        _selectedTrackIds.value = emptySet()
+        Log.i("SongViewModel", "Track selection cleared")
+    }
+    
+    fun getSelectedTracks(): List<Track> {
+        val selectedIds = _selectedTrackIds.value
+        return _tracks.value.filter { selectedIds.contains(it.id) }
+    }
+    
+    fun isTrackSelected(trackId: String): Boolean {
+        return _selectedTrackIds.value.contains(trackId)
     }
 
     fun deleteTrackFromDb(id: String) {
