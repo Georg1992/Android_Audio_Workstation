@@ -60,7 +60,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     this.songId = song.id
                     this.name = trackName
                     this.wavFilePath = wavFilePath
-                    this.isRecording = true
+                    this.isRecording = false  // Don't start recording automatically
                     this.timeStampStart = System.currentTimeMillis()
                     this.volume = 100f
                 })
@@ -75,6 +75,26 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
+    fun startTrackRecording(trackId: String) {
+        Log.i("SongViewModel", "startTrackRecording called for track: $trackId")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                realm.write {
+                    val track = query<Track>("id == $0", trackId).first().find()
+                    track?.let {
+                        Log.i("SongViewModel", "Setting isRecording = true for track: ${it.name}")
+                        it.isRecording = true
+                        it.timeStampStart = System.currentTimeMillis()
+                    } ?: Log.e("SongViewModel", "Track not found for ID: $trackId")
+                }
+                Log.i("SongViewModel", "Calling loadTracksForCurrentSong to refresh UI")
+                loadTracksForCurrentSong() // Refresh tracks
+            } catch (e: Exception) {
+                Log.e("SongViewModel", "Failed to start track recording", e)
+            }
+        }
+    }
+
     fun finishTrackRecording(trackId: String, duration: Long) {
         Log.i("SongViewModel", "finishTrackRecording called for track: $trackId")
         viewModelScope.launch(Dispatchers.IO) {

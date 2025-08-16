@@ -138,30 +138,46 @@ class AudioControlsFragment:Fragment() {
                 return
             }
             
-            // Create a new track for recording
-            val timestamp = System.currentTimeMillis()
-            val trackName = "Track_${timestamp % 10000}"
-            val recordingsDir = java.io.File(requireContext().filesDir, "recordings")
-            if (!recordingsDir.exists()) recordingsDir.mkdirs()
-            val wavPath = "${recordingsDir}/${trackName}.wav"
+            // Get selected tracks or create a new one if none exist
+            val selectedTracks = viewModel.getSelectedTracks()
+            val trackToRecord = if (selectedTracks.isNotEmpty()) {
+                // Use the first selected track
+                selectedTracks.first()
+            } else {
+                // Get existing tracks
+                val existingTracks = viewModel.tracks.value
+                if (existingTracks.isNotEmpty()) {
+                    // Use the first existing track
+                    existingTracks.first()
+                } else {
+                    // Create a new track only if none exist
+                    val timestamp = System.currentTimeMillis()
+                    val trackName = "Track_${timestamp % 10000}"
+                    val recordingsDir = java.io.File(requireContext().filesDir, "recordings")
+                    if (!recordingsDir.exists()) recordingsDir.mkdirs()
+                    val wavPath = "${recordingsDir}/${trackName}.wav"
+                    viewModel.createTrackForCurrentSong(trackName, wavPath)
+                }
+            }
             
-            // Create track in database
-            val track = viewModel.createTrackForCurrentSong(trackName, wavPath)
-            if (track != null) {
-                Log.i("AudioControlsFragment", "Created new track for recording: ${track.name}")
+            if (trackToRecord != null) {
+                Log.i("AudioControlsFragment", "Starting recording for track: ${trackToRecord.name}")
+                
+                // Mark track as recording in database
+                viewModel.startTrackRecording(trackToRecord.id)
                 
                 // Start native recording
                 nativeAudio?.let { audio ->
-                    if (audio.startRecording(wavPath)) {
+                    if (audio.startRecording(trackToRecord.wavFilePath)) {
                         isRecording = true
                         updateRecordingState()
-                        Log.i("AudioControlsFragment", "Recording started for track: ${track.name}")
+                        Log.i("AudioControlsFragment", "Recording started for track: ${trackToRecord.name}")
                     } else {
                         Log.e("AudioControlsFragment", "Failed to start native recording")
                     }
                 }
             } else {
-                Log.e("AudioControlsFragment", "Failed to create track for recording")
+                Log.e("AudioControlsFragment", "Failed to find or create track for recording")
             }
         } catch (e: Exception) {
             Log.e("AudioControlsFragment", "Error starting recording", e)
