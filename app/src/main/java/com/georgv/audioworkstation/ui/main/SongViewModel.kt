@@ -60,7 +60,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     this.songId = song.id
                     this.name = trackName
                     this.wavFilePath = wavFilePath
-                    this.isRecording = false  // Don't start recording automatically
+                    this.isRecording = true  // Start recording immediately for Fast Record
                     this.timeStampStart = System.currentTimeMillis()
                     this.volume = 100f
                 })
