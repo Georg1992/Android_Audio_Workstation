@@ -13,17 +13,30 @@ OpenSLInput::~OpenSLInput() {
 }
 
 bool OpenSLInput::start(int32_t sampleRate, int32_t channelCount) {
+	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "🎤 Starting OpenSL ES recording: %d Hz, %d channels", sampleRate, channelCount);
 	SLresult result;
 
 	// Create engine
 	result = slCreateEngine(&m_engineObject, 0, nullptr, 0, nullptr, nullptr);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to create OpenSL ES engine: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ OpenSL ES engine created");
 
 	result = (*m_engineObject)->Realize(m_engineObject, SL_BOOLEAN_FALSE);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to realize OpenSL ES engine: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ OpenSL ES engine realized");
 
 	result = (*m_engineObject)->GetInterface(m_engineObject, SL_IID_ENGINE, &m_engine_itf);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to get OpenSL ES engine interface: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ OpenSL ES engine interface obtained");
 
 	// Configure audio source
 	SLDataLocator_IODevice loc_dev = {SL_DATALOCATOR_IODEVICE, SL_IODEVICE_AUDIOINPUT,
@@ -44,8 +57,13 @@ bool OpenSLInput::start(int32_t sampleRate, int32_t channelCount) {
 	const SLInterfaceID ids[2] = {SL_IID_ANDROIDSIMPLEBUFFERQUEUE, SL_IID_ANDROIDCONFIGURATION};
 	const SLboolean req[2] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
 
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "🎙️ Creating audio recorder...");
 	result = (*m_engine_itf)->CreateAudioRecorder(m_engine_itf, &m_recorderObject, &audioSrc, &audioSnk, 2, ids, req);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to create audio recorder: %d (THIS IS LIKELY PERMISSION ISSUE!)", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ Audio recorder created successfully");
 
 	// Configure for voice recognition (optional, can improve quality)
 	SLAndroidConfigurationItf recorderConfig;
@@ -57,16 +75,32 @@ bool OpenSLInput::start(int32_t sampleRate, int32_t channelCount) {
 	}
 
 	result = (*m_recorderObject)->Realize(m_recorderObject, SL_BOOLEAN_FALSE);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to realize audio recorder: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ Audio recorder realized");
 
 	result = (*m_recorderObject)->GetInterface(m_recorderObject, SL_IID_RECORD, &m_recorderRecord);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to get record interface: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ Record interface obtained");
 
 	result = (*m_recorderObject)->GetInterface(m_recorderObject, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &m_recorderBufferQueue);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to get buffer queue interface: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ Buffer queue interface obtained");
 
 	result = (*m_recorderBufferQueue)->RegisterCallback(m_recorderBufferQueue, recorderCallback, this);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to register buffer queue callback: %d", result);
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ Buffer queue callback registered");
 
 	// Create buffers
 	m_frames = 1024;
@@ -77,14 +111,20 @@ bool OpenSLInput::start(int32_t sampleRate, int32_t channelCount) {
 	m_floatBuffer = new float[m_bufferSize];
 
 	// Start recording
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "🎬 Starting recording state...");
 	result = (*m_recorderRecord)->SetRecordState(m_recorderRecord, SL_RECORDSTATE_RECORDING);
-	if (result != SL_RESULT_SUCCESS) return false;
+	if (result != SL_RESULT_SUCCESS) {
+		__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "❌ Failed to start recording state: %d", result);
+		return false;
+	}
 
 	m_recording = true;
+	__android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "✅ Recording state started");
 
 	// Enqueue initial buffer
 	recorderCallback(m_recorderBufferQueue, this);
 
+	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "🎉 OpenSL ES recording started successfully!");
 	return true;
 }
 
