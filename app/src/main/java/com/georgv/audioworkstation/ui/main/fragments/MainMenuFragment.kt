@@ -51,6 +51,7 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
         nativeAudio = NativeAudioManager.from(this)
 
         binding.recordButton.setOnClickListener {
+            Log.i("MainMenuFragment", "Record button clicked - listener triggered")
             onFastRecordButtonClick()
         }
 
@@ -68,6 +69,8 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
 
     private fun onFastRecordButtonClick() {
         try {
+            Log.i("MainMenuFragment", "Fast Record button clicked")
+            
             // Create unique song name with timestamp
             val songName = "Recording_${System.currentTimeMillis()}"
             val trackName = "Track 1"
@@ -79,9 +82,11 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
             
             if (song != null && track != null) {
                 currentRecordingTrack = track
+                Log.i("MainMenuFragment", "Song and track created: ${song.name}, ${track.name}")
                 
                 // Create WAV file path for recording
                 val wavPath = Utilities.createWavFilePath(requireContext(), "${songName}_$trackName")
+                Log.i("MainMenuFragment", "WAV path: $wavPath")
                 
                 // Update track with WAV path
                 updateTrackWavPath(track.id, wavPath)
@@ -95,15 +100,23 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
                         navigateToSong()
                     } else {
                         Log.e("MainMenuFragment", "Failed to start native recording")
+                        // Still navigate even if recording fails
+                        navigateToSong()
                     }
                 } ?: run {
                     Log.e("MainMenuFragment", "Native audio manager not available")
+                    // Still navigate even if native audio is not available
+                    navigateToSong()
                 }
             } else {
                 Log.e("MainMenuFragment", "Failed to create song and track")
+                // For debugging, try to navigate anyway
+                navigateToSong()
             }
         } catch (e: Exception) {
             Log.e("MainMenuFragment", "Error in Fast Record", e)
+            // Try to navigate anyway for debugging
+            navigateToSong()
         }
     }
     
@@ -112,8 +125,13 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
     }
 
     private fun navigateToSong() {
-        val action = MainMenuFragmentDirections.actionMainMenuFragmentToSongFragment()
-        NavHostFragment.findNavController(this@MainMenuFragment).navigate(action)
+        try {
+            // Use the actual action ID from navigation.xml
+            NavHostFragment.findNavController(this@MainMenuFragment).navigate(R.id.action_mainMenuFragment_to_song_Fragment)
+            Log.i("MainMenuFragment", "Navigation to song fragment successful")
+        } catch (e: Exception) {
+            Log.e("MainMenuFragment", "Navigation failed", e)
+        }
     }
 
     override fun onMenuItemClick(position: Int) {
