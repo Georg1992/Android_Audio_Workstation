@@ -189,7 +189,7 @@ class AudioControlsFragment:Fragment() {
                 // Start native recording
                 nativeAudio?.let { audio ->
                     if (audio.startRecording(wavPath)) {
-                        isRecording = true
+                        // Sync local state with session state
                         updateRecordingState()
                         Log.i("AudioControlsFragment", "Recording started for track: ${track.name}")
                     } else {
@@ -211,42 +211,12 @@ class AudioControlsFragment:Fragment() {
             nativeAudio?.stopRecording()
             // Update AudioSessionManager immediately for fast state access
             audioSession.stopRecording()
-            isRecording = false
+            // Sync local state with session state
             updateRecordingState()
             Log.i("AudioControlsFragment", "Recording stopped")
         } catch (e: Exception) {
             Log.e("AudioControlsFragment", "Error stopping recording", e)
         }
-    }
-    
-    private fun updateRecordingState() {
-        // Use AudioSessionManager for instant state check (no native calls needed)
-        isRecording = audioSession.isRecording()
-        
-        // Update UI based on recording state
-        if (isRecording) {
-            showRecording()
-        } else {
-            showPlay()
-        }
-    }
-    
-    private fun showRecording() {
-        // When recording: show pause button instead of record, highlight record button
-        binding.recordButton.setBackgroundResource(R.color.bright_green)
-        binding.playButton.visibility = View.GONE
-        binding.pauseButton.visibility = View.VISIBLE
-        binding.playPauseButton.visibility = View.GONE
-        Log.d("AudioControlsFragment", "UI: Showing recording state")
-    }
-    
-    private fun showPlay() {
-        // When not recording: show normal play controls
-        binding.recordButton.setBackgroundResource(R.drawable.button_background)
-        binding.playButton.visibility = View.VISIBLE
-        binding.pauseButton.visibility = View.GONE
-        binding.playPauseButton.visibility = View.GONE
-        Log.d("AudioControlsFragment", "UI: Showing play state")
     }
     
     private fun finishRecordingInDatabase() {
@@ -260,6 +230,24 @@ class AudioControlsFragment:Fragment() {
             Log.i("AudioControlsFragment", "Database updated - UI will refresh automatically via reactive flows")
         } else {
             Log.w("AudioControlsFragment", "No recording track found to finish")
+        }
+    }
+    
+    private fun updateRecordingState() {
+        // Sync local isRecording with AudioSessionManager state
+        val sessionIsRecording = audioSession.isRecording()
+        Log.i("AudioControlsFragment", "updateRecordingState - Session recording: $sessionIsRecording, Local recording: $isRecording")
+        
+        if (sessionIsRecording != isRecording) {
+            isRecording = sessionIsRecording
+            Log.i("AudioControlsFragment", "Updated local recording state to: $isRecording")
+        }
+        
+        // Update UI based on recording state
+        if (isRecording) {
+            showRecording()
+        } else {
+            showPlay()
         }
     }
     
@@ -283,7 +271,7 @@ class AudioControlsFragment:Fragment() {
             nativeAudio?.let { audio ->
                 if (audio.startRecording(trackData.wavFilePath)) {
                     // AudioSessionManager already has this track marked as recording
-                    isRecording = true
+                    // Sync local state with session state
                     updateRecordingState()
                     Log.i("AudioControlsFragment", "Started recording for track: ${trackData.name}")
                 } else {
@@ -310,6 +298,22 @@ class AudioControlsFragment:Fragment() {
         binding.playButton.visibility = View.GONE
         binding.playPauseButton.visibility = View.GONE
         binding.pauseButton.visibility = View.VISIBLE
+    }
+    
+    private fun showPlay() {
+        binding.pauseButton.visibility = View.GONE
+        binding.playPauseButton.visibility = View.GONE
+        binding.playButton.visibility = View.VISIBLE
+        // Reset record button to normal state (not recording)
+        binding.recordButton.setBackgroundResource(android.R.color.darker_gray)
+    }
+    
+    private fun showRecording() {
+        binding.pauseButton.visibility = View.GONE
+        binding.playPauseButton.visibility = View.GONE
+        binding.playButton.visibility = View.VISIBLE
+        // Set record button to recording state (green/red color)
+        binding.recordButton.setBackgroundResource(android.R.color.holo_green_light)
     }
 
 }
