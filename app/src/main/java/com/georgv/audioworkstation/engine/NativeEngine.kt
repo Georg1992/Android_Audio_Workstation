@@ -6,26 +6,41 @@ import android.util.Log
 
 class NativeEngine {
 	private val TAG = "NativeEngine"
+	private var isNativeLibraryLoaded = false
 	
 	init {
-		System.loadLibrary("audioworkstation")
+		try {
+			System.loadLibrary("audioworkstation")
+			isNativeLibraryLoaded = true
+			Log.i(TAG, "Native library loaded successfully")
+		} catch (e: UnsatisfiedLinkError) {
+			Log.w(TAG, "Native library not available - running in fallback mode", e)
+			isNativeLibraryLoaded = false
+		}
 	}
 
-	fun init() = nativeInit()
-	fun release() = nativeRelease()
-	fun clearTracks() = nativeClearTracks()
-	fun addTrack(path: String) = nativeAddTrack(path)
-	fun addTrack(path: String, volume: Float) = nativeAddTrackWithVolume(path, volume)
-	fun loadTracks() = nativeLoadTracks()
-	fun offlineMixToWav(outputPath: String): Boolean = nativeOfflineMixToWav(outputPath)
-	fun start(): Boolean = nativeStart()
-	fun stop() = nativeStop()
-	fun reset() = nativeReset()
+	fun init() = if (isNativeLibraryLoaded) nativeInit() else Unit
+	fun release() = if (isNativeLibraryLoaded) nativeRelease() else Unit
+	fun clearTracks() = if (isNativeLibraryLoaded) nativeClearTracks() else Unit
+	fun addTrack(path: String) = if (isNativeLibraryLoaded) nativeAddTrack(path) else Unit
+	fun addTrack(path: String, volume: Float) = if (isNativeLibraryLoaded) nativeAddTrackWithVolume(path, volume) else Unit
+	fun loadTracks() = if (isNativeLibraryLoaded) nativeLoadTracks() else Unit
+	fun offlineMixToWav(outputPath: String): Boolean = if (isNativeLibraryLoaded) nativeOfflineMixToWav(outputPath) else false
+	fun start(): Boolean = if (isNativeLibraryLoaded) nativeStart() else false
+	fun stop() = if (isNativeLibraryLoaded) nativeStop() else Unit
+	fun reset() = if (isNativeLibraryLoaded) nativeReset() else Unit
 	
 	// Recording functions
-	fun startRecording(outputPath: String): Boolean = nativeStartRecording(outputPath)
-	fun stopRecording() = nativeStopRecording()
-	fun isRecording(): Boolean = nativeIsRecording()
+	fun startRecording(outputPath: String): Boolean = if (isNativeLibraryLoaded) nativeStartRecording(outputPath) else false
+	fun stopRecording() = if (isNativeLibraryLoaded) nativeStopRecording() else Unit
+	fun isRecording(): Boolean = if (isNativeLibraryLoaded) nativeIsRecording() else false
+	
+	// Convenience methods for compatibility
+	fun startPlayback(): Boolean = start()
+	fun stopPlayback() = stop()
+	
+	// Check if native functionality is available
+	fun isNativeAvailable(): Boolean = isNativeLibraryLoaded
 	
 	/**
 	 * Create a simple test tone WAV file for testing
