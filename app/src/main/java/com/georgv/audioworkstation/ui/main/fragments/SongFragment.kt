@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.main.fragments
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
