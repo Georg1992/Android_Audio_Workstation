@@ -60,16 +60,24 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         binding.saveSongButton.setOnClickListener(this)
 
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
-            song?.let {
-                binding.songName.text = it.name
+            if (song != null) {
+                Log.i("SongFragment", "Song updated: ${song.name} (ID: ${song.id})")
+                binding.songName.text = song.name
                 // Load tracks for this song
                 viewModel.loadTracksForCurrentSong()
+            } else {
+                Log.w("SongFragment", "Song is null")
+                binding.songName.text = "No Song Selected"
             }
         }
         
         // Observe tracks StateFlow and update adapter
         lifecycleScope.launchWhenStarted {
             viewModel.tracks.collectLatest { tracks ->
+                Log.i("SongFragment", "Tracks updated: ${tracks.size} tracks")
+                tracks.forEach { track ->
+                    Log.i("SongFragment", "Track in list: ${track.name} - Recording: ${track.isRecording}")
+                }
                 (mRecyclerView.adapter as? TrackListAdapter)?.submitList(tracks)
             }
         }

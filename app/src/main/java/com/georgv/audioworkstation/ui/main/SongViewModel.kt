@@ -134,11 +134,19 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadTracksForCurrentSong() {
-        val song = _currentSong.value ?: return
+        val song = _currentSong.value ?: run {
+            Log.w("SongViewModel", "loadTracksForCurrentSong called but no current song")
+            return
+        }
+        Log.i("SongViewModel", "Loading tracks for song: ${song.name} (ID: ${song.id})")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val tracks = realm.query<Track>("songId == $0", song.id).find()
+                Log.i("SongViewModel", "Found ${tracks.size} tracks for song ${song.name}")
                 _tracks.value = tracks.toList()
+                tracks.forEach { track ->
+                    Log.i("SongViewModel", "Track: ${track.name} (ID: ${track.id}) - Recording: ${track.isRecording}")
+                }
             } catch (e: Exception) {
                 Log.e("SongViewModel", "Failed to load tracks for song", e)
             }

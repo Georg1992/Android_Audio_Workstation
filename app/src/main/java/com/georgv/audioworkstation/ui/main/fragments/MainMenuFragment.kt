@@ -83,7 +83,9 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
             
             if (song != null && track != null) {
                 currentRecordingTrack = track
-                Log.i("MainMenuFragment", "Song and track created: ${song.name}, ${track.name}")
+                Log.i("MainMenuFragment", "Song and track created successfully:")
+                Log.i("MainMenuFragment", "  Song: ${song.name} (ID: ${song.id})")
+                Log.i("MainMenuFragment", "  Track: ${track.name} (ID: ${track.id})")
                 
                 // Create WAV file path for recording
                 val wavPath = Utilities.createWavFilePath(requireContext(), trackName)
@@ -91,14 +93,16 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
                 
                 // Update track with WAV path and mark as recording
                 viewModel.updateTrackWavPath(track.id, wavPath)
+                Log.i("MainMenuFragment", "Track updated with WAV path and recording flag")
                 
-                // Navigate first, then start recording in the audio controls
-                navigateToSong()
+                // Small delay to ensure database operations complete before navigation
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    navigateToSong()
+                    Log.i("MainMenuFragment", "Navigation completed")
+                }, 100) // 100ms delay
                 
-                // Note: Recording will be started by AudioControlsFragment detecting the recording track
-                Log.i("MainMenuFragment", "Navigation completed, recording should start in AudioControls")
             } else {
-                Log.e("MainMenuFragment", "Failed to create song and track")
+                Log.e("MainMenuFragment", "Failed to create song and/or track - song: $song, track: $track")
                 navigateToSong()
             }
         } catch (e: Exception) {
