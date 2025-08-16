@@ -60,10 +60,8 @@ class AudioControlsFragment:Fragment() {
         // Check if already recording when fragment is created
         updateRecordingState()
         
-        // If recording was started by Fast Record, we should be in recording state
-        if (isRecording) {
-            Log.i("AudioControlsFragment", "Fragment created while recording is active")
-        }
+        // Check if there's a track marked for recording from Fast Record
+        checkForPendingRecording()
 
         return binding.root
     }
@@ -156,6 +154,31 @@ class AudioControlsFragment:Fragment() {
             binding.recordButton.setBackgroundResource(R.color.bright_green) // Recording indicator
         } else {
             binding.recordButton.setBackgroundResource(R.drawable.button_background) // Normal state
+        }
+    }
+    
+    private fun checkForPendingRecording() {
+        // Check if there's a track marked for recording (from Fast Record)
+        val recordingTrack = viewModel.getRecordingTrack()
+        if (recordingTrack != null && !isRecording) {
+            Log.i("AudioControlsFragment", "Found track marked for recording: ${recordingTrack.name}")
+            startRecordingForTrack(recordingTrack)
+        }
+    }
+    
+    private fun startRecordingForTrack(track: com.georgv.audioworkstation.data.Track) {
+        try {
+            nativeAudio?.let { audio ->
+                if (audio.startRecording(track.wavFilePath)) {
+                    isRecording = true
+                    updateRecordingState()
+                    Log.i("AudioControlsFragment", "Started recording for track: ${track.name}")
+                } else {
+                    Log.e("AudioControlsFragment", "Failed to start recording for track: ${track.name}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AudioControlsFragment", "Error starting recording for track", e)
         }
     }
 

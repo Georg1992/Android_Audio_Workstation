@@ -172,9 +172,20 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                         it.isRecording = true
                     }
                 }
+                loadTracksForCurrentSong() // Refresh tracks after update
             } catch (e: Exception) {
                 Log.e("SongViewModel", "Failed to update track WAV path", e)
             }
+        }
+    }
+    
+    fun getRecordingTrack(): Track? {
+        val song = _currentSong.value ?: return null
+        return try {
+            realm.query<Track>("songId == $0 AND isRecording == $1", song.id, true).first().find()
+        } catch (e: Exception) {
+            Log.e("SongViewModel", "Error finding recording track", e)
+            null
         }
     }
 

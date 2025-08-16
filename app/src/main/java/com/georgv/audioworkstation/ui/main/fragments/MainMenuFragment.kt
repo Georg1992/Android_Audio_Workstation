@@ -72,8 +72,9 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
             Log.i("MainMenuFragment", "Fast Record button clicked")
             
             // Create unique song name with timestamp
-            val songName = "Recording_${System.currentTimeMillis()}"
-            val trackName = "Track 1"
+            val timestamp = System.currentTimeMillis()
+            val songName = "Recording_$timestamp"
+            val trackName = "Track_1_$timestamp"
             
             Log.i("MainMenuFragment", "Starting Fast Record: $songName")
             
@@ -85,44 +86,28 @@ class MainMenuFragment : Fragment(), DialogCaller, MainMenuAdapter.OnMenuItemCli
                 Log.i("MainMenuFragment", "Song and track created: ${song.name}, ${track.name}")
                 
                 // Create WAV file path for recording
-                val wavPath = Utilities.createWavFilePath(requireContext(), "${songName}_$trackName")
+                val wavPath = Utilities.createWavFilePath(requireContext(), trackName)
                 Log.i("MainMenuFragment", "WAV path: $wavPath")
                 
-                // Update track with WAV path
-                updateTrackWavPath(track.id, wavPath)
+                // Update track with WAV path and mark as recording
+                viewModel.updateTrackWavPath(track.id, wavPath)
                 
-                // Start native recording
-                nativeAudio?.let { audio ->
-                    if (audio.startRecording(wavPath)) {
-                        Log.i("MainMenuFragment", "Recording started successfully")
-                        
-                        // Navigate to song fragment
-                        navigateToSong()
-                    } else {
-                        Log.e("MainMenuFragment", "Failed to start native recording")
-                        // Still navigate even if recording fails
-                        navigateToSong()
-                    }
-                } ?: run {
-                    Log.e("MainMenuFragment", "Native audio manager not available")
-                    // Still navigate even if native audio is not available
-                    navigateToSong()
-                }
+                // Navigate first, then start recording in the audio controls
+                navigateToSong()
+                
+                // Note: Recording will be started by AudioControlsFragment detecting the recording track
+                Log.i("MainMenuFragment", "Navigation completed, recording should start in AudioControls")
             } else {
                 Log.e("MainMenuFragment", "Failed to create song and track")
-                // For debugging, try to navigate anyway
                 navigateToSong()
             }
         } catch (e: Exception) {
             Log.e("MainMenuFragment", "Error in Fast Record", e)
-            // Try to navigate anyway for debugging
             navigateToSong()
         }
     }
     
-    private fun updateTrackWavPath(trackId: String, wavPath: String) {
-        viewModel.updateTrackWavPath(trackId, wavPath)
-    }
+
 
     private fun navigateToSong() {
         try {
