@@ -8,24 +8,28 @@ class NativeEngine {
 	private val TAG = "NativeEngine"
 	
 	init {
-		System.loadLibrary("audioworkstation")
+		try {
+			System.loadLibrary("audioworkstation")
+		} catch (e: UnsatisfiedLinkError) {
+			Log.w(TAG, "Native library not available, using stub implementation")
+		}
 	}
 
-	fun init() = nativeInit()
-	fun release() = nativeRelease()
-	fun clearTracks() = nativeClearTracks()
-	fun addTrack(path: String) = nativeAddTrack(path)
-	fun addTrack(path: String, volume: Float) = nativeAddTrackWithVolume(path, volume)
-	fun loadTracks() = nativeLoadTracks()
-	fun offlineMixToWav(outputPath: String): Boolean = nativeOfflineMixToWav(outputPath)
-	fun start(): Boolean = nativeStart()
-	fun stop() = nativeStop()
-	fun reset() = nativeReset()
+	fun init() = try { nativeInit() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native init not available") }
+	fun release() = try { nativeRelease() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native release not available") }
+	fun clearTracks() = try { nativeClearTracks() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native clearTracks not available") }
+	fun addTrack(path: String) = try { nativeAddTrack(path) } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native addTrack not available") }
+	fun addTrack(path: String, volume: Float) = try { nativeAddTrackWithVolume(path, volume) } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native addTrackWithVolume not available") }
+	fun loadTracks() = try { nativeLoadTracks() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native loadTracks not available") }
+	fun offlineMixToWav(outputPath: String): Boolean = try { nativeOfflineMixToWav(outputPath) } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native offlineMixToWav not available"); false }
+	fun start(): Boolean = try { nativeStart() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native start not available"); false }
+	fun stop() = try { nativeStop() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native stop not available") }
+	fun reset() = try { nativeReset() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native reset not available") }
 	
 	// Recording functions
-	fun startRecording(outputPath: String): Boolean = nativeStartRecording(outputPath)
-	fun stopRecording() = nativeStopRecording()
-	fun isRecording(): Boolean = nativeIsRecording()
+	fun startRecording(outputPath: String): Boolean = try { nativeStartRecording(outputPath) } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native startRecording not available"); false }
+	fun stopRecording() = try { nativeStopRecording() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native stopRecording not available") }
+	fun isRecording(): Boolean = try { nativeIsRecording() } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "Native isRecording not available"); false }
 	
 	/**
 	 * Create a simple test tone WAV file for testing

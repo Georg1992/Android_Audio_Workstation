@@ -45,12 +45,13 @@ android {
         jvmTarget = '17'
     }
     namespace 'com.georgv.audioworkstation'
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
-    }
+    // Temporarily disabled to fix build issues
+    // externalNativeBuild {
+    //     cmake {
+    //         path file('src/main/cpp/CMakeLists.txt')
+    //         version '3.22.1'
+    //     }
+    // }
 }
 
 dependencies {
