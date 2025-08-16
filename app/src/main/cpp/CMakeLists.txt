@@ -20,12 +20,14 @@ add_library(audioworkstation SHARED
 # Find system libraries
 find_library(log-lib log)
 
-# Oboe
+# Oboe - force cache refresh
 include(FetchContent)
+set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
 FetchContent_Declare(
   oboe
   GIT_REPOSITORY https://github.com/google/oboe.git
   GIT_TAG main
+  UPDATE_COMMAND ""
 )
 FetchContent_MakeAvailable(oboe)
 
