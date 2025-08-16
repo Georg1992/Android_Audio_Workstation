@@ -19,9 +19,17 @@ add_library(audioworkstation SHARED
 
 # Find system libraries
 find_library(log-lib log)
-find_library(OpenSLES-lib OpenSLES)
+
+# Oboe
+include(FetchContent)
+FetchContent_Declare(
+  oboe
+  GIT_REPOSITORY https://github.com/google/oboe.git
+  GIT_TAG 1.9.2
+)
+FetchContent_MakeAvailable(oboe)
 
 # Link libraries to your target
 target_include_directories(audioworkstation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(audioworkstation ${log-lib} ${OpenSLES-lib})
+target_link_libraries(audioworkstation oboe::oboe ${log-lib})

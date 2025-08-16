@@ -2,8 +2,10 @@
 #include <memory>
 #include <string>
 #include "AudioEngine.h"
+#include "OboeOutput.h"
 
 static std::unique_ptr<dawengine::AudioEngine> g_engine;
+static std::unique_ptr<OboeOutput> g_output;
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeInit(JNIEnv*, jobject){
@@ -14,6 +16,7 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeInit(JNIEnv*, jobject
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeRelease(JNIEnv*, jobject){
+	if (g_output) { g_output->stop(); g_output.reset(); }
 	g_engine.reset();
 }
 
@@ -37,4 +40,16 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeOfflineMixToWav(JNIEn
 	bool ok = g_engine->offlineMixToWav(std::string(cout ? cout : ""));
 	env->ReleaseStringUTFChars(outPath, cout);
 	return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStart(JNIEnv*, jobject){
+	if(!g_engine) return JNI_FALSE;
+	if(!g_output) g_output = std::make_unique<OboeOutput>(g_engine.get());
+	return g_output->start() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStop(JNIEnv*, jobject){
+	if(g_output) g_output->stop();
 }

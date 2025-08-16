@@ -1,5 +1,6 @@
 #include "AudioEngine.h"
 #include <cstdio>
+#include <cstring>
 
 namespace dawengine {
 
@@ -25,6 +26,11 @@ bool AudioEngine::offlineMixToWav(const std::string &outputPath) {
 	std::fwrite(msg, 1, 12, f);
 	std::fclose(f);
 	return true;
+}
+
+void AudioEngine::render(float* outputInterleaved, int32_t numFrames, int32_t channels, int32_t /*sampleRate*/) {
+	if (!outputInterleaved) return;
+	std::memset(outputInterleaved, 0, sizeof(float) * static_cast<size_t>(numFrames * channels));
 }
 
 } // namespace dawengine
