@@ -281,11 +281,7 @@ class AudioControlsFragment:Fragment() {
         }
     }
 
-    private fun showPlay() {
-        binding.playPauseButton.visibility = View.GONE
-        binding.pauseButton.visibility = View.GONE
-        binding.playButton.visibility = View.VISIBLE
-    }
+
 
     private fun showPlayPause() {
         binding.playButton.visibility = View.GONE
