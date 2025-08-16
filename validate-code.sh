@@ -191,6 +191,24 @@ if grep -rn "loadTracksForCurrentSong\|loadTracksForSong\|refreshTracks\|updateT
     ((ERRORS++))
 fi
 
+# Check for common missing imports
+echo "📝 Checking for missing imports..."
+declare -A missing_imports
+missing_imports["Snackbar"]="com.google.android.material.snackbar.Snackbar"
+missing_imports["Toast"]="android.widget.Toast"
+missing_imports["FrameLayout"]="android.widget.FrameLayout"
+missing_imports["LinearLayout"]="android.widget.LinearLayout"
+
+for class_name in "${!missing_imports[@]}"; do
+    # Find files that use the class but don't import it
+    while IFS= read -r file; do
+        if grep -q "\b${class_name}\b" "$file" && ! grep -q "import.*${missing_imports[$class_name]}" "$file"; then
+            echo "❌ Missing import in $(basename $file): ${missing_imports[$class_name]}"
+            ((ERRORS++))
+        fi
+    done < <(find app/src/main/java -name "*.kt" -type f)
+done
+
 echo -e "\n📊 Validation Summary"
 echo "====================="
 

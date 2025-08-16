@@ -21,6 +21,8 @@ import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.snackbar.Snackbar
+import android.widget.FrameLayout
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.databinding.SongFragmentBinding
 import com.georgv.audioworkstation.ui.main.SongViewModel
