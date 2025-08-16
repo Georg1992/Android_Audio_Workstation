@@ -256,11 +256,8 @@ class AudioControlsFragment:Fragment() {
             viewModel.finishTrackRecording(recordingTrack.id, duration)
             Log.i("AudioControlsFragment", "Finished recording for track: ${recordingTrack.name}")
             
-            // Force immediate UI refresh on main thread
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                viewModel.loadTracksForCurrentSong()
-                Log.i("AudioControlsFragment", "Forced UI refresh after stopping recording")
-            }, 100) // Small delay to ensure database write completes
+            // No need to manually refresh UI - reactive flows handle this automatically
+            Log.i("AudioControlsFragment", "Database updated - UI will refresh automatically via reactive flows")
         } else {
             Log.w("AudioControlsFragment", "No recording track found to finish")
         }
