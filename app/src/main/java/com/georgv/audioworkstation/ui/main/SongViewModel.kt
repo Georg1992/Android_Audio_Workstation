@@ -84,9 +84,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 val songCopy = Song().apply {
                     id = song.id
                     name = song.name
-                    wavDir = song.wavDir
-                    timeStampStart = song.timeStampStart
-                    timeStampStop = song.timeStampStop
+                    wavFilePath = song.wavFilePath
                 }
                 _currentSong.postValue(songCopy)
                 
@@ -253,9 +251,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     val songCopy = Song().apply {
                         id = song.id
                         name = song.name
-                        wavDir = song.wavDir
-                        timeStampStart = song.timeStampStart
-                        timeStampStop = song.timeStampStop
+                        wavFilePath = song.wavFilePath
                     }
                     _currentSong.postValue(songCopy)
                     
