@@ -59,12 +59,6 @@ class AudioSessionManager {
         _sessionData.value = SessionData(songId = songId, songName = songName)
     }
     
-    fun updateTracks(tracks: List<TrackData>) {
-        val current = _sessionData.value ?: return
-        _sessionData.value = current.copy(tracks = tracks)
-        Log.d(TAG, "Updated session with ${tracks.size} tracks")
-    }
-    
     fun toggleTrackSelection(trackId: String) {
         val current = _sessionData.value ?: return
         val newSelection = if (current.selectedTrackIds.contains(trackId)) {
