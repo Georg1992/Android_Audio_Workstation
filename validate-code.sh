@@ -209,6 +209,23 @@ for class_name in "${!missing_imports[@]}"; do
     done < <(find app/src/main/java -name "*.kt" -type f)
 done
 
+# Check for interface implementation issues
+echo "📝 Checking for interface implementation issues..."
+while IFS= read -r file; do
+    # Look for classes implementing interfaces
+    if grep -q "class.*:" "$file"; then
+        # Check for override methods that might not match any interface
+        if grep -q "override fun" "$file"; then
+            # Look for common problematic patterns
+            if grep -q "override fun onProcessing" "$file"; then
+                echo "❌ Found potentially invalid override methods in $(basename $file)"
+                echo "   Check if AudioProcessingCallback interface exists and matches override methods"
+                ((ERRORS++))
+            fi
+        fi
+    fi
+done < <(find app/src/main/java -name "*.kt" -type f)
+
 echo -e "\n📊 Validation Summary"
 echo "====================="
 

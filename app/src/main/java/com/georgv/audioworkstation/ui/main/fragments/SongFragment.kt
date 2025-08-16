@@ -33,7 +33,7 @@ import java.nio.file.Files
 import java.nio.file.Paths
 
 
-class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProcessingCallback {
+class SongFragment : Fragment(), View.OnClickListener, AudioListener {
 
     private val viewModel: SongViewModel by activityViewModels()
     private lateinit var binding: SongFragmentBinding
@@ -167,22 +167,6 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         view.setBackgroundResource(R.color.bright_green)
         snack.show()
     }
-
-
-    override fun onProcessingStarted() {
-        binding.trackListRecyclerView.visibility = View.GONE
-        binding.progressBar.visibility = View.VISIBLE
-        binding.processingText.visibility = View.VISIBLE
-    }
-
-
-    override fun onProcessingProgress(progress: String) {
-        val str = "PROCESSING TRACK: $progress"
-        binding.processingText.text = str
-    }
-
-    override fun onProcessingFinished() {
-        findNavController().navigate(R.id.action_titleFragment_to_libraryFragment)
     }
 
     override fun uiCallback() {
