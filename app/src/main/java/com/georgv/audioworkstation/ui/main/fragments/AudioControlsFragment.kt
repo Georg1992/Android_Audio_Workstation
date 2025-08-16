@@ -10,6 +10,7 @@ import androidx.fragment.app.activityViewModels
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.databinding.FragmentAudioControlsBinding
 import com.georgv.audioworkstation.engine.NativeAudioManager
+import com.georgv.audioworkstation.engine.AudioSessionManager
 import com.georgv.audioworkstation.ui.main.SongViewModel
 
 
@@ -18,6 +19,7 @@ class AudioControlsFragment:Fragment() {
     private val viewModel: SongViewModel by activityViewModels()
     private var nativeAudio: NativeAudioManager? = null
     private var isRecording = false
+    private val audioSession = AudioSessionManager.getInstance()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -77,19 +79,23 @@ class AudioControlsFragment:Fragment() {
     
     private fun onPlayClicked() {
         Log.i("AudioControlsFragment", "Play clicked")
-        val selectedTracks = viewModel.getSelectedTracks()
+        
+        // Get selected tracks for playback (instant access from AudioSessionManager)
+        val selectedTracks = audioSession.getTracksForPlayback()
+        Log.i("AudioControlsFragment", "Playing ${selectedTracks.size} selected tracks")
+        
         if (selectedTracks.isEmpty()) {
             Log.i("AudioControlsFragment", "No tracks selected, play button idle")
             return
         }
         
-        // Load selected tracks into native engine
+        // Load selected tracks into native engine (using cached data for speed)
         nativeAudio?.let { audio ->
             audio.clearTracks()
-            selectedTracks.forEach { track ->
-                if (!track.isRecording && track.wavFilePath.isNotEmpty()) {
-                    audio.addTrack(track.wavFilePath, track.volume / 100f)
-                    Log.i("AudioControlsFragment", "Added track to playback: ${track.name}")
+            selectedTracks.forEach { trackData ->
+                if (trackData.wavFilePath.isNotEmpty()) {
+                    audio.addTrack(trackData.wavFilePath, trackData.volume / 100f)
+                    Log.i("AudioControlsFragment", "Added track to playback: ${trackData.name}")
                 }
             }
             audio.loadTracks()
@@ -161,12 +167,12 @@ class AudioControlsFragment:Fragment() {
                 return
             }
             
-            // Check if there's already a recording ongoing
-            val recordingTrack = viewModel.getRecordingTrack()
-            if (recordingTrack != null) {
-                Log.w("AudioControlsFragment", "Recording already in progress for track: ${recordingTrack.name}")
-                return
-            }
+                    // Check if there's already a recording ongoing (instant check)
+        if (audioSession.isRecording()) {
+            val recordingTrack = audioSession.getRecordingTrack()
+            Log.w("AudioControlsFragment", "Recording already in progress for track: ${recordingTrack?.name}")
+            return
+        }
             
             // Always create a new track for recording
             val timestamp = System.currentTimeMillis()
@@ -203,6 +209,8 @@ class AudioControlsFragment:Fragment() {
     private fun stopRecording() {
         try {
             nativeAudio?.stopRecording()
+            // Update AudioSessionManager immediately for fast state access
+            audioSession.stopRecording()
             isRecording = false
             updateRecordingState()
             Log.i("AudioControlsFragment", "Recording stopped")
@@ -212,9 +220,8 @@ class AudioControlsFragment:Fragment() {
     }
     
     private fun updateRecordingState() {
-        nativeAudio?.let { audio ->
-            isRecording = audio.isRecording()
-        }
+        // Use AudioSessionManager for instant state check (no native calls needed)
+        isRecording = audioSession.isRecording()
         
         // Update UI based on recording state
         if (isRecording) {
@@ -261,7 +268,7 @@ class AudioControlsFragment:Fragment() {
     
     private fun checkForPendingRecording() {
         // Check if there's a track marked for recording (from Fast Record)
-        val recordingTrack = viewModel.getRecordingTrack()
+        val recordingTrack = audioSession.getRecordingTrack()
         Log.i("AudioControlsFragment", "checkForPendingRecording - Found recording track: ${recordingTrack?.name}, isRecording: $isRecording")
         
         if (recordingTrack != null && !isRecording) {
@@ -274,19 +281,23 @@ class AudioControlsFragment:Fragment() {
         }
     }
     
-    private fun startRecordingForTrack(track: com.georgv.audioworkstation.data.Track) {
+    private fun startRecordingForTrack(trackData: AudioSessionManager.TrackData) {
         try {
             nativeAudio?.let { audio ->
-                if (audio.startRecording(track.wavFilePath)) {
+                if (audio.startRecording(trackData.wavFilePath)) {
+                    // AudioSessionManager already has this track marked as recording
                     isRecording = true
                     updateRecordingState()
-                    Log.i("AudioControlsFragment", "Started recording for track: ${track.name}")
+                    Log.i("AudioControlsFragment", "Started recording for track: ${trackData.name}")
                 } else {
-                    Log.e("AudioControlsFragment", "Failed to start recording for track: ${track.name}")
+                    Log.e("AudioControlsFragment", "Failed to start recording for track: ${trackData.name}")
+                    // If native fails, stop recording in session manager too
+                    audioSession.stopRecording()
                 }
             }
         } catch (e: Exception) {
             Log.e("AudioControlsFragment", "Error starting recording for track", e)
+            audioSession.stopRecording()
         }
     }
 
