@@ -3,9 +3,11 @@
 #include <string>
 #include "AudioEngine.h"
 #include "OpenSLOutput.h"
+#include "OpenSLInput.h"
 
 static std::unique_ptr<dawengine::AudioEngine> g_engine;
 static std::unique_ptr<OpenSLOutput> g_output;
+static std::unique_ptr<OpenSLInput> g_input;
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeInit(JNIEnv*, jobject){
@@ -16,6 +18,7 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeInit(JNIEnv*, jobject
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeRelease(JNIEnv*, jobject){
+	if (g_input) { g_input->stop(); g_input.reset(); }
 	if (g_output) { g_output->stop(); g_output.reset(); }
 	g_engine.reset();
 }
@@ -73,4 +76,30 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStop(JNIEnv*, jobject
 extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeReset(JNIEnv*, jobject){
 	if(g_engine) g_engine->reset();
+}
+
+// Recording functions
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartRecording(JNIEnv* env, jobject, jstring outputPath){
+	if(!g_engine) return JNI_FALSE;
+	
+	const char* cpath = env->GetStringUTFChars(outputPath, nullptr);
+	std::string path(cpath ? cpath : "");
+	env->ReleaseStringUTFChars(outputPath, cpath);
+	
+	if(!g_engine->startRecording(path)) return JNI_FALSE;
+	
+	if(!g_input) g_input = std::make_unique<OpenSLInput>(g_engine.get());
+	return g_input->start() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopRecording(JNIEnv*, jobject){
+	if(g_input) g_input->stop();
+	if(g_engine) g_engine->stopRecording();
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsRecording(JNIEnv*, jobject){
+	return g_engine && g_engine->isRecording() ? JNI_TRUE : JNI_FALSE;
 }

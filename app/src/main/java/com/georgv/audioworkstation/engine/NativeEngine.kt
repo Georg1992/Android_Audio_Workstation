@@ -22,6 +22,11 @@ class NativeEngine {
 	fun stop() = nativeStop()
 	fun reset() = nativeReset()
 	
+	// Recording functions
+	fun startRecording(outputPath: String): Boolean = nativeStartRecording(outputPath)
+	fun stopRecording() = nativeStopRecording()
+	fun isRecording(): Boolean = nativeIsRecording()
+	
 	/**
 	 * Create a simple test tone WAV file for testing
 	 * Returns the path to the created file, or null if failed
@@ -93,4 +98,9 @@ class NativeEngine {
 	private external fun nativeStart(): Boolean
 	private external fun nativeStop()
 	private external fun nativeReset()
+	
+	// Recording JNI methods
+	private external fun nativeStartRecording(outputPath: String): Boolean
+	private external fun nativeStopRecording()
+	private external fun nativeIsRecording(): Boolean
 }

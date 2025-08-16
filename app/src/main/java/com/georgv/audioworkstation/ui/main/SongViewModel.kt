@@ -50,6 +50,70 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+    
+    fun createTrackForCurrentSong(trackName: String, wavFilePath: String): Track? {
+        val song = _currentSong.value ?: return null
+        return try {
+            realm.writeBlocking {
+                copyToRealm(Track().apply {
+                    this.songId = song.id
+                    this.name = trackName
+                    this.wavFilePath = wavFilePath
+                    this.isRecording = true
+                    this.timeStampStart = System.currentTimeMillis()
+                    this.volume = 100f
+                })
+            }
+        } catch (e: Exception) {
+            Log.e("SongViewModel", "Failed to create track", e)
+            null
+        }
+    }
+    
+    fun finishTrackRecording(trackId: String, duration: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                realm.write {
+                    val track = query<Track>("id == $0", trackId).first().find()
+                    track?.let {
+                        it.isRecording = false
+                        it.timeStampStop = System.currentTimeMillis()
+                        it.duration = duration
+                    }
+                }
+                loadTracksForCurrentSong() // Refresh tracks
+            } catch (e: Exception) {
+                Log.e("SongViewModel", "Failed to finish track recording", e)
+            }
+        }
+    }
+    
+    fun createNewSongWithTrack(songName: String, trackName: String = "Track 1"): Pair<Song?, Track?> {
+        return try {
+            realm.writeBlocking {
+                val song = copyToRealm(Song().apply {
+                    id = UUID.randomUUID().toString()
+                    name = songName
+                    wavFilePath = null
+                })
+                
+                val track = copyToRealm(Track().apply {
+                    songId = song.id
+                    name = trackName
+                    wavFilePath = "" // Will be set when recording starts
+                    isRecording = false
+                    timeStampStart = System.currentTimeMillis()
+                    volume = 100f
+                })
+                
+                _currentSong.postValue(song)
+                Pair(song, track)
+            }
+        } catch (e: Exception) {
+            Log.e("SongViewModel", "Failed to create song with track", e)
+            Pair(null, null)
+        }
+    }
 
     fun loadSongByID(songId: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -63,6 +127,18 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 // Handle any exception, for example logging or showing an error
                 e.printStackTrace()
+            }
+        }
+    }
+
+    fun loadTracksForCurrentSong() {
+        val song = _currentSong.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val tracks = realm.query<Track>("songId == $0", song.id).find()
+                _tracks.value = tracks.toList()
+            } catch (e: Exception) {
+                Log.e("SongViewModel", "Failed to load tracks for song", e)
             }
         }
     }
@@ -83,6 +159,22 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
 
     }
 
+
+    fun updateTrackWavPath(trackId: String, wavPath: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                realm.write {
+                    val track = query<Track>("id == $0", trackId).first().find()
+                    track?.let {
+                        it.wavFilePath = wavPath
+                        it.isRecording = true
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SongViewModel", "Failed to update track WAV path", e)
+            }
+        }
+    }
 
     fun deleteTrackFromDb(id: String) {
         viewModelScope.launch() {

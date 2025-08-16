@@ -19,6 +19,7 @@ add_library(audioworkstation SHARED
 	# engine sources
 	engine/AudioEngine.cpp
 	engine/OpenSLOutput.cpp
+	engine/OpenSLInput.cpp
 	engine/JNI_Bridge.cpp
 )
 

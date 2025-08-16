@@ -44,14 +44,30 @@ public:
 	void start();
 	void stop();
 	void reset(); // reset all playback positions to start
+	
+	// Recording functionality
+	bool startRecording(const std::string& outputPath, int32_t sampleRate = 44100, int32_t channels = 2);
+	void stopRecording();
+	bool isRecording() const { return m_isRecording; }
+	void processRecordedAudio(const float* inputBuffer, int32_t numFrames, int32_t channels);
 
 private:
 	std::vector<Track> m_tracks;
 	bool m_isPlaying = false;
 	
+	// Recording state
+	bool m_isRecording = false;
+	std::string m_recordingPath;
+	std::vector<float> m_recordingBuffer;
+	uint32_t m_recordingSampleRate = 44100;
+	uint32_t m_recordingChannels = 2;
+	
 	// WAV file reading
 	std::unique_ptr<WavData> loadWavFile(const std::string& path);
 	bool readWavHeader(FILE* file, uint32_t& sampleRate, uint32_t& channels, uint32_t& dataSize);
+	
+	// WAV file writing
+	bool writeWavFile(const std::string& path, const std::vector<float>& samples, uint32_t sampleRate, uint32_t channels);
 };
 
 } // namespace dawengine

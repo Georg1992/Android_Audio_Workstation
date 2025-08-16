@@ -139,4 +139,46 @@ class NativeAudioManager private constructor(private val nativeEngine: NativeEng
      * Get direct access to the native engine for advanced use
      */
     fun getNativeEngine(): NativeEngine = nativeEngine
+    
+    /**
+     * Start recording audio to the specified file path
+     */
+    fun startRecording(outputPath: String): Boolean {
+        return try {
+            if (nativeEngine.startRecording(outputPath)) {
+                Log.i(TAG, "Recording started: $outputPath")
+                true
+            } else {
+                Log.e(TAG, "Failed to start recording: $outputPath")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting recording: $outputPath", e)
+            false
+        }
+    }
+    
+    /**
+     * Stop current recording
+     */
+    fun stopRecording() {
+        try {
+            nativeEngine.stopRecording()
+            Log.i(TAG, "Recording stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping recording", e)
+        }
+    }
+    
+    /**
+     * Check if currently recording
+     */
+    fun isRecording(): Boolean {
+        return try {
+            nativeEngine.isRecording()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking recording state", e)
+            false
+        }
+    }
 }

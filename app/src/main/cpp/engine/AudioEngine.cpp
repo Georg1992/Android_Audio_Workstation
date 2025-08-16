@@ -299,4 +299,103 @@ bool AudioEngine::readWavHeader(FILE* file, uint32_t& sampleRate, uint32_t& chan
 	return false;
 }
 
+bool AudioEngine::startRecording(const std::string& outputPath, int32_t sampleRate, int32_t channels) {
+	if (m_isRecording) {
+		LOGE("Recording already in progress");
+		return false;
+	}
+	
+	m_recordingPath = outputPath;
+	m_recordingSampleRate = sampleRate;
+	m_recordingChannels = channels;
+	m_recordingBuffer.clear();
+	m_isRecording = true;
+	
+	LOGI("Started recording to: %s (%d Hz, %d channels)", outputPath.c_str(), sampleRate, channels);
+	return true;
+}
+
+void AudioEngine::stopRecording() {
+	if (!m_isRecording) {
+		LOGE("No recording in progress");
+		return;
+	}
+	
+	m_isRecording = false;
+	
+	// Save recorded audio to WAV file
+	if (!m_recordingBuffer.empty()) {
+		if (writeWavFile(m_recordingPath, m_recordingBuffer, m_recordingSampleRate, m_recordingChannels)) {
+			LOGI("Recording saved: %s (%zu samples)", m_recordingPath.c_str(), m_recordingBuffer.size());
+		} else {
+			LOGE("Failed to save recording: %s", m_recordingPath.c_str());
+		}
+	}
+	
+	m_recordingBuffer.clear();
+}
+
+void AudioEngine::processRecordedAudio(const float* inputBuffer, int32_t numFrames, int32_t channels) {
+	if (!m_isRecording || !inputBuffer) return;
+	
+	// Append audio data to recording buffer
+	size_t samplesToAdd = numFrames * channels;
+	size_t oldSize = m_recordingBuffer.size();
+	m_recordingBuffer.resize(oldSize + samplesToAdd);
+	
+	std::memcpy(m_recordingBuffer.data() + oldSize, inputBuffer, samplesToAdd * sizeof(float));
+}
+
+bool AudioEngine::writeWavFile(const std::string& path, const std::vector<float>& samples, uint32_t sampleRate, uint32_t channels) {
+	if (samples.empty()) {
+		LOGE("No audio data to write");
+		return false;
+	}
+	
+	FILE* file = std::fopen(path.c_str(), "wb");
+	if (!file) {
+		LOGE("Failed to create WAV file: %s", path.c_str());
+		return false;
+	}
+	
+	uint32_t totalFrames = samples.size() / channels;
+	uint32_t dataSize = totalFrames * channels * sizeof(int16_t);
+	uint32_t fileSize = 36 + dataSize;
+	
+	// Write WAV header
+	std::fwrite("RIFF", 1, 4, file);
+	std::fwrite(&fileSize, 4, 1, file);
+	std::fwrite("WAVE", 1, 4, file);
+	std::fwrite("fmt ", 1, 4, file);
+	
+	uint32_t fmtSize = 16;
+	uint16_t audioFormat = 1; // PCM
+	uint16_t numChannels = static_cast<uint16_t>(channels);
+	uint32_t byteRate = sampleRate * channels * 2;
+	uint16_t blockAlign = static_cast<uint16_t>(channels * 2);
+	uint16_t bitsPerSample = 16;
+	
+	std::fwrite(&fmtSize, 4, 1, file);
+	std::fwrite(&audioFormat, 2, 1, file);
+	std::fwrite(&numChannels, 2, 1, file);
+	std::fwrite(&sampleRate, 4, 1, file);
+	std::fwrite(&byteRate, 4, 1, file);
+	std::fwrite(&blockAlign, 2, 1, file);
+	std::fwrite(&bitsPerSample, 2, 1, file);
+	
+	std::fwrite("data", 1, 4, file);
+	std::fwrite(&dataSize, 4, 1, file);
+	
+	// Convert float samples to int16 and write
+	for (float sample : samples) {
+		// Clamp and convert to int16
+		sample = std::max(-1.0f, std::min(1.0f, sample));
+		int16_t intSample = static_cast<int16_t>(sample * 32767.0f);
+		std::fwrite(&intSample, 2, 1, file);
+	}
+	
+	std::fclose(file);
+	return true;
+}
+
 } // namespace dawengine
