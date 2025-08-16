@@ -28,6 +28,10 @@ private:
 	SLAndroidSimpleBufferQueueItf m_playerBufferQueue = nullptr;
 
 	int16_t* m_buffer = nullptr;
+	float* m_floatBuffer = nullptr;
 	size_t m_bufferSize = 0;
+	int32_t m_frames = 0;
+	int32_t m_channels = 0;
+	int32_t m_sampleRate = 0;
 	bool m_playing = false;
 };
