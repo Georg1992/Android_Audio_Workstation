@@ -226,6 +226,24 @@ while IFS= read -r file; do
     fi
 done < <(find app/src/main/java -name "*.kt" -type f)
 
+# Check for specific syntax structure issues
+echo "📝 Checking for syntax structure issues..."
+while IFS= read -r file; do
+    # Check for very specific problematic patterns
+    if grep -q "class.*{" "$file"; then
+        # Check for the specific pattern that caused the error: }    }
+        if grep -q "}[[:space:]]*}[[:space:]]*$" "$file"; then
+            # Make sure it's not just normal nested structures
+            line_num=$(grep -n "}[[:space:]]*}[[:space:]]*$" "$file" | head -1 | cut -d: -f1)
+            if [ ! -z "$line_num" ]; then
+                echo "❌ Potential extra closing brace in $(basename $file) at line $line_num"
+                echo "   Found standalone '}' that may be causing 'Expecting top level declaration'"
+                ((ERRORS++))
+            fi
+        fi
+    fi
+done < <(find app/src/main/java -name "*.kt" -type f)
+
 echo -e "\n📊 Validation Summary"
 echo "====================="
 

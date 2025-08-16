@@ -167,18 +167,10 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener {
         view.setBackgroundResource(R.color.bright_green)
         snack.show()
     }
-    }
 
     override fun uiCallback() {
         // no-op for now
     }
 
 
-}
-
-// AudioListener is now in its own file
-
-interface AudioProcessingCallback {
-    fun onProcessingProgress(progress: String)
-    fun onProcessingFinished()
 }
