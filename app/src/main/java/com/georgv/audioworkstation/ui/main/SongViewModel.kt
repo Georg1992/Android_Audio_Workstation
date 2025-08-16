@@ -193,7 +193,13 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val tracks = realm.query<Track>("songId == $0", song.id).find()
                 Log.i("SongViewModel", "Found ${tracks.size} tracks for song ${song.name}")
-                _tracks.value = tracks.toList()
+                
+                // Update StateFlow on Main thread
+                withContext(Dispatchers.Main) {
+                    _tracks.value = tracks.toList()
+                    Log.i("SongViewModel", "StateFlow updated with ${tracks.size} tracks")
+                }
+                
                 tracks.forEach { track ->
                     Log.i("SongViewModel", "Track: ${track.name} (ID: ${track.id}) - Recording: ${track.isRecording}")
                 }

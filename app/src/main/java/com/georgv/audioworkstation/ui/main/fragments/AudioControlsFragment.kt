@@ -68,8 +68,11 @@ class AudioControlsFragment:Fragment() {
     
     override fun onResume() {
         super.onResume()
+        Log.i("AudioControlsFragment", "onResume called")
         // Re-check for pending recording when returning to fragment
         checkForPendingRecording()
+        // Also update UI state
+        updateRecordingState()
     }
     
     private fun onPlayClicked() {
@@ -259,9 +262,15 @@ class AudioControlsFragment:Fragment() {
     private fun checkForPendingRecording() {
         // Check if there's a track marked for recording (from Fast Record)
         val recordingTrack = viewModel.getRecordingTrack()
+        Log.i("AudioControlsFragment", "checkForPendingRecording - Found recording track: ${recordingTrack?.name}, isRecording: $isRecording")
+        
         if (recordingTrack != null && !isRecording) {
-            Log.i("AudioControlsFragment", "Found track marked for recording: ${recordingTrack.name}")
+            Log.i("AudioControlsFragment", "Starting pending recording for track: ${recordingTrack.name}")
             startRecordingForTrack(recordingTrack)
+        } else if (recordingTrack == null) {
+            Log.i("AudioControlsFragment", "No pending recording track found")
+        } else {
+            Log.i("AudioControlsFragment", "Recording already in progress, not starting new one")
         }
     }
     
