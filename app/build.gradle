@@ -9,11 +9,12 @@ plugins {
 android {
     compileSdk 35
 
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
+    // Temporarily disabled to fix build issues
+    // externalNativeBuild {
+    //     cmake {
+    //         path "src/main/cpp/CMakeLists.txt"
+    //     }
+    // }
 
     defaultConfig {
         applicationId "com.georgv.audioworkstation"
