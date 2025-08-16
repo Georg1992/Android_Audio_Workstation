@@ -249,12 +249,26 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val song = songRepo.getSongById(songId)
                 if (song != null) {
-                    _currentSong.postValue(song)
+                    // Create a thread-safe copy for UI
+                    val songCopy = Song().apply {
+                        id = song.id
+                        name = song.name
+                        wavDir = song.wavDir
+                        timeStampStart = song.timeStampStart
+                        timeStampStop = song.timeStampStop
+                    }
+                    _currentSong.postValue(songCopy)
+                    
+                    // Start audio session for fast audio access
+                    _currentSongId.value = song.id
+                    audioSession.startSession(song.id, song.name)
                 } else {
                     // Handle case when song is not found
+                    Log.w("SongViewModel", "Song with ID $songId not found")
                 }
             } catch (e: Exception) {
                 // Handle any exception, for example logging or showing an error
+                Log.e("SongViewModel", "Error loading song by ID: $songId", e)
                 e.printStackTrace()
             }
         }
