@@ -223,6 +223,24 @@ while IFS= read -r file; do
                 ((ERRORS++))
             fi
         fi
+        
+        # Check for specific interface implementations that need required methods
+        if grep -q "class.*UiListener" "$file"; then
+            if ! grep -q "override fun onUiUpdate" "$file"; then
+                echo "❌ Class implementing UiListener missing required method in $(basename $file)"
+                echo "   UiListener interface requires: override fun onUiUpdate()"
+                echo "   This causes 'does not implement abstract member onUiUpdate' error"
+                ((ERRORS++))
+            fi
+        fi
+        
+        if grep -q "class.*AudioListener" "$file"; then
+            if ! grep -q "override fun uiCallback" "$file"; then
+                echo "❌ Class implementing AudioListener missing required method in $(basename $file)"
+                echo "   AudioListener interface requires: override fun uiCallback()"
+                ((ERRORS++))
+            fi
+        fi
     fi
 done < <(find app/src/main/java -name "*.kt" -type f)
 

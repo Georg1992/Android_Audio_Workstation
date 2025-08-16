@@ -80,6 +80,11 @@ class AudioProcessor():UiListener {
         CHANNEL_CONFIG, PCM_16BIT_AUDIO_FORMAT)
     private val executor: ExecutorService = Executors.newFixedThreadPool(2)
 
+    // Implementation of UiListener interface
+    override fun onUiUpdate() {
+        // TODO: Implement UI update logic for AudioProcessor
+        // This method is called when UI needs to be updated
+    }
 
     fun setTrackToProcessor(track: Track){
         this.track = track
