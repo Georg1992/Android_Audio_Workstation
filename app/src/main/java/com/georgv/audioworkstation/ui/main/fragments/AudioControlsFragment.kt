@@ -114,16 +114,30 @@ class AudioControlsFragment:Fragment() {
     }
     
     private fun onStopClicked() {
-        Log.i("AudioControlsFragment", "Stop clicked")
+        Log.i("AudioControlsFragment", "Stop clicked - isRecording: $isRecording")
+        
+        // Stop any playback
         nativeAudio?.stopPlayback()
+        
         if (isRecording) {
+            Log.i("AudioControlsFragment", "Stopping recording...")
             stopRecording()
+            
             // Update track in database to mark recording as finished
             finishRecordingInDatabase()
+            
+            Log.i("AudioControlsFragment", "Recording stopped, updating UI")
+        } else {
+            Log.i("AudioControlsFragment", "No recording to stop, just stopping playback")
         }
+        
         // Clear track selection after stopping
         viewModel.clearTrackSelection()
+        
+        // Ensure UI shows play state
         showPlay()
+        
+        Log.i("AudioControlsFragment", "Stop operation completed")
     }
     
     private fun onRecordClicked() {
@@ -199,12 +213,30 @@ class AudioControlsFragment:Fragment() {
             isRecording = audio.isRecording()
         }
         
-        // Update record button appearance based on recording state
+        // Update UI based on recording state
         if (isRecording) {
-            binding.recordButton.setBackgroundResource(R.color.bright_green) // Recording indicator
+            showRecording()
         } else {
-            binding.recordButton.setBackgroundResource(R.drawable.button_background) // Normal state
+            showPlay()
         }
+    }
+    
+    private fun showRecording() {
+        // When recording: show pause button instead of record, highlight record button
+        binding.recordButton.setBackgroundResource(R.color.bright_green)
+        binding.playButton.visibility = View.GONE
+        binding.pauseButton.visibility = View.VISIBLE
+        binding.playPauseButton.visibility = View.GONE
+        Log.d("AudioControlsFragment", "UI: Showing recording state")
+    }
+    
+    private fun showPlay() {
+        // When not recording: show normal play controls
+        binding.recordButton.setBackgroundResource(R.drawable.button_background)
+        binding.playButton.visibility = View.VISIBLE
+        binding.pauseButton.visibility = View.GONE
+        binding.playPauseButton.visibility = View.GONE
+        Log.d("AudioControlsFragment", "UI: Showing play state")
     }
     
     private fun finishRecordingInDatabase() {
@@ -214,8 +246,13 @@ class AudioControlsFragment:Fragment() {
             viewModel.finishTrackRecording(recordingTrack.id, duration)
             Log.i("AudioControlsFragment", "Finished recording for track: ${recordingTrack.name}")
             
-            // Refresh tracks to update UI colors
-            viewModel.loadTracksForCurrentSong()
+            // Force immediate UI refresh on main thread
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                viewModel.loadTracksForCurrentSong()
+                Log.i("AudioControlsFragment", "Forced UI refresh after stopping recording")
+            }, 100) // Small delay to ensure database write completes
+        } else {
+            Log.w("AudioControlsFragment", "No recording track found to finish")
         }
     }
     
