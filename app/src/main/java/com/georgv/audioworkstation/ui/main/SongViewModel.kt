@@ -32,7 +32,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     val currentSong: LiveData<Song?> get() = _currentSong
 
     private val realm: Realm by lazy {
-        Realm.open(RealmConfiguration.Builder(schema = setOf(Song::class)).build())
+        Realm.open(RealmConfiguration.Builder(schema = setOf(Song::class, Track::class)).build())
     }
     private val songRepo = SongRepositoryImpl(realm)
 
