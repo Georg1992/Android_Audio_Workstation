@@ -13,10 +13,9 @@ import com.georgv.audioworkstation.data.RealmManager
 import io.realm.kotlin.ext.query
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import java.util.UUID
+import com.georgv.audioworkstation.engine.AudioSessionManager
 
 
 class SongViewModel(application: Application) : AndroidViewModel(application) {
@@ -24,18 +23,56 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     private var _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> get() = _isLoading
 
-    private val _tracks = MutableStateFlow<List<Track>>(emptyList())
-    val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
+    // Reactive tracks flow (UI updates automatically when DB changes)
+    val tracks: StateFlow<List<Track>> = _currentSongId
+        .filterNotNull()
+        .flatMapLatest { songId ->
+            realm.query<Track>("songId == $0", songId)
+                .asFlow()
+                .map { results -> 
+                    val trackList = results.list.toList()
+                    // Update audio session with latest data (for fast audio access)
+                    val trackDataList = trackList.map { it.toTrackData() }
+                    audioSession.updateTracks(trackDataList)
+                    trackList
+                }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
     
-    // Track selection for playback
-    private val _selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
-    val selectedTrackIds: StateFlow<Set<String>> = _selectedTrackIds.asStateFlow()
+    // Track selection (delegated to AudioSessionManager for performance)
+    val selectedTrackIds: StateFlow<Set<String>> = audioSession.sessionData
+        .map { it?.selectedTrackIds ?: emptySet() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptySet()
+        )
 
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> get() = _currentSong
 
     private val realm = RealmManager.realm
     private val songRepo = SongRepositoryImpl(realm)
+    
+    // Audio-optimized session manager (fast, no DB calls for audio)
+    private val audioSession = AudioSessionManager.getInstance()
+    
+    // Current song ID for reactive flows
+    private val _currentSongId = MutableStateFlow<String?>(null)
+    
+    // Helper to convert Realm Track to AudioSessionManager.TrackData
+    private fun Track.toTrackData() = AudioSessionManager.TrackData(
+        id = id,
+        name = name,
+        wavFilePath = wavFilePath,
+        volume = volume,
+        isRecording = isRecording
+    )
 
 
     fun createNewSong(songName: String, wavDir: String?) {
@@ -52,6 +89,10 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     timeStampStop = song.timeStampStop
                 }
                 _currentSong.postValue(songCopy)
+                
+                // Start audio session for fast audio access
+                _currentSongId.value = song.id
+                audioSession.startSession(song.id, song.name)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -165,6 +206,10 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _currentSong.postValue(songCopy)
                 
+                // Start audio session for fast audio access
+                _currentSongId.value = song.id
+                audioSession.startSession(song.id, song.name)
+                
                 // Then try to create the track separately
                 val track = try {
                     realm.writeBlocking {
@@ -215,46 +260,8 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadTracksForCurrentSong() {
-        val song = _currentSong.value ?: run {
-            Log.w("SongViewModel", "loadTracksForCurrentSong called but no current song")
-            return
-        }
-        Log.i("SongViewModel", "Loading tracks for song: ${song.name} (ID: ${song.id})")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val tracks = realm.query<Track>("songId == $0", song.id).find()
-                Log.i("SongViewModel", "Found ${tracks.size} tracks for song ${song.name}")
-                
-                // Create thread-safe copies for UI
-                val trackCopies = tracks.map { track ->
-                    Track().apply {
-                        id = track.id
-                        songId = track.songId
-                        name = track.name
-                        wavFilePath = track.wavFilePath
-                        isRecording = track.isRecording
-                        timeStampStart = track.timeStampStart
-                        timeStampStop = track.timeStampStop
-                        duration = track.duration
-                        volume = track.volume
-                    }
-                }
-                
-                // Update StateFlow on Main thread
-                withContext(Dispatchers.Main) {
-                    _tracks.value = trackCopies
-                    Log.i("SongViewModel", "StateFlow updated with ${trackCopies.size} tracks")
-                }
-                
-                tracks.forEach { track ->
-                    Log.i("SongViewModel", "Track: ${track.name} (ID: ${track.id}) - Recording: ${track.isRecording}")
-                }
-            } catch (e: Exception) {
-                Log.e("SongViewModel", "Failed to load tracks for song", e)
-            }
-        }
-    }
+    // loadTracksForCurrentSong() is now replaced by reactive flows
+    // Tracks automatically update when database changes via tracks StateFlow
 
     fun deleteSongFromDB(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -314,29 +321,22 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
-    // Track selection methods
+    // Track selection methods (delegated to AudioSessionManager for performance)
     fun toggleTrackSelection(trackId: String) {
-        val currentSelection = _selectedTrackIds.value
-        _selectedTrackIds.value = if (currentSelection.contains(trackId)) {
-            currentSelection - trackId
-        } else {
-            currentSelection + trackId
-        }
-        Log.i("SongViewModel", "Track selection changed: ${_selectedTrackIds.value}")
+        audioSession.toggleTrackSelection(trackId)
     }
     
     fun clearTrackSelection() {
-        _selectedTrackIds.value = emptySet()
-        Log.i("SongViewModel", "Track selection cleared")
+        audioSession.clearTrackSelection()
     }
     
     fun getSelectedTracks(): List<Track> {
-        val selectedIds = _selectedTrackIds.value
-        return _tracks.value.filter { selectedIds.contains(it.id) }
+        val selectedIds = selectedTrackIds.value
+        return tracks.value.filter { selectedIds.contains(it.id) }
     }
     
     fun isTrackSelected(trackId: String): Boolean {
-        return _selectedTrackIds.value.contains(trackId)
+        return audioSession.isTrackSelected(trackId)
     }
 
     fun deleteTrackFromDb(id: String) {
