@@ -19,14 +19,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import kotlinx.coroutines.flow.collectLatest
 import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.audioprocessing.AudioController
-import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
-import com.google.android.material.snackbar.Snackbar
-import android.widget.FrameLayout
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
-import com.georgv.audioworkstation.audioprocessing.AudioProcessingCallback
 import com.georgv.audioworkstation.databinding.SongFragmentBinding
 import com.georgv.audioworkstation.ui.main.SongViewModel
 
@@ -196,7 +191,9 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
 
 }
 
-interface AudioListener{
-    fun uiCallback()
+// AudioListener is now in its own file
 
+interface AudioProcessingCallback {
+    fun onProcessingProgress(progress: String)
+    fun onProcessingFinished()
 }

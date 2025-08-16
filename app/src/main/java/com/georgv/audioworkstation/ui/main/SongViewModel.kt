@@ -304,7 +304,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                         it.isRecording = true
                     }
                 }
-                loadTracksForCurrentSong() // Refresh tracks after update
+                // Tracks automatically refresh via reactive flows
             } catch (e: Exception) {
                 Log.e("SongViewModel", "Failed to update track WAV path", e)
             }
@@ -353,31 +353,43 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         return audioSession.isTrackSelected(trackId)
     }
 
-    fun deleteTrackFromDb(id: String) {
-        viewModelScope.launch() {
-
-
+    fun deleteTrackFromDb(trackId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                realm.write {
+                    val track = query<Track>("id == $0", trackId).first().find()
+                    track?.let { delete(it) }
+                }
+                Log.i("SongViewModel", "Track deleted: $trackId")
+            } catch (e: Exception) {
+                Log.e("SongViewModel", "Failed to delete track", e)
+            }
         }
     }
 
+    fun updateTrackVolumeToDb(volume: Float, trackId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                realm.write {
+                    val track = query<Track>("id == $0", trackId).first().find()
+                    track?.let { 
+                        it.volume = volume
+                        Log.i("SongViewModel", "Updated track volume: ${it.name} -> $volume")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SongViewModel", "Failed to update track volume", e)
+            }
+        }
+    }
 
     private fun getSongById(id: String): Song? {
         return realm.query<Song>(Song::class, "id == $0", id).first().find()
     }
 
-
-
-    fun updateTrackVolumeToDb(volume: Float, id: String) {
-
-    }
-
-    fun updateEffectToDb(effect:Effect, id: String) {
-
-    }
-
-    fun deleteEffectFromDb(tag: String,id: String){
-
-    }
+    // TODO: Effect management methods will be implemented when Effect class is created
+    // fun updateEffectToDb(effect:Effect, id: String) { }
+    // fun deleteEffectFromDb(tag: String,id: String){ }
 
 
     override fun onCleared() {
