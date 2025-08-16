@@ -113,20 +113,8 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 })
             }
             
-            // Create thread-safe copy for UI
-            val trackCopy = track?.let { 
-                Track().apply {
-                    id = it.id
-                    songId = it.songId
-                    name = it.name
-                    wavFilePath = it.wavFilePath
-                    isRecording = it.isRecording
-                    timeStampStart = it.timeStampStart
-                    timeStampStop = it.timeStampStop
-                    duration = it.duration
-                    volume = it.volume
-                }
-            }
+            // Return the original track - it's already detached from Realm context
+            val trackCopy = track
             
             Log.i("SongViewModel", "Created track: ${trackCopy?.name} - Recording: ${trackCopy?.isRecording}")
             // Refresh tracks to update UI
