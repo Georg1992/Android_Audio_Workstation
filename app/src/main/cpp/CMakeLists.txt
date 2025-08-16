@@ -9,17 +9,7 @@ project("audioworkstation")
 
 # Find system libraries
 find_library(log-lib log)
-
-# Oboe dependency
-include(FetchContent)
-set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
-FetchContent_Declare(
-  oboe
-  GIT_REPOSITORY https://github.com/google/oboe.git
-  GIT_TAG main
-  UPDATE_COMMAND ""
-)
-FetchContent_MakeAvailable(oboe)
+find_library(OpenSLES-lib OpenSLES)
 
 # Create and name the library
 add_library(audioworkstation SHARED
@@ -28,10 +18,11 @@ add_library(audioworkstation SHARED
 	native-lib.cpp
 	# engine sources
 	engine/AudioEngine.cpp
+	engine/OpenSLOutput.cpp
 	engine/JNI_Bridge.cpp
 )
 
 # Link libraries to your target
 target_include_directories(audioworkstation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(audioworkstation oboe::oboe ${log-lib})
+target_link_libraries(audioworkstation ${log-lib} ${OpenSLES-lib})

@@ -2,10 +2,10 @@
 #include <memory>
 #include <string>
 #include "AudioEngine.h"
-#include "OboeOutput.h"
+#include "OpenSLOutput.h"
 
 static std::unique_ptr<dawengine::AudioEngine> g_engine;
-static std::unique_ptr<OboeOutput> g_output;
+static std::unique_ptr<OpenSLOutput> g_output;
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeInit(JNIEnv*, jobject){
@@ -45,7 +45,7 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeOfflineMixToWav(JNIEn
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStart(JNIEnv*, jobject){
 	if(!g_engine) return JNI_FALSE;
-	if(!g_output) g_output = std::make_unique<OboeOutput>(g_engine.get());
+	if(!g_output) g_output = std::make_unique<OpenSLOutput>(g_engine.get());
 	return g_output->start() ? JNI_TRUE : JNI_FALSE;
 }
 
