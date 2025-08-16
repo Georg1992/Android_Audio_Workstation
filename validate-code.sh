@@ -244,6 +244,28 @@ while IFS= read -r file; do
     fi
 done < <(find app/src/main/java -name "*.kt" -type f)
 
+# Check for interface redeclaration issues
+echo "📝 Checking for interface redeclaration issues..."
+# Find all interface declarations
+declare -A interface_declarations
+while IFS= read -r line; do
+    file=$(echo "$line" | cut -d: -f1)
+    line_num=$(echo "$line" | cut -d: -f2)
+    interface_name=$(echo "$line" | grep -o "interface [A-Za-z_][A-Za-z0-9_]*" | cut -d' ' -f2)
+    
+    if [ ! -z "$interface_name" ]; then
+        if [ ! -z "${interface_declarations[$interface_name]}" ]; then
+            echo "❌ Interface redeclaration found: $interface_name"
+            echo "   First declared in: ${interface_declarations[$interface_name]}"
+            echo "   Redeclared in: $(basename $file):$line_num"
+            echo "   This causes 'Redeclaration: $interface_name' compilation error"
+            ((ERRORS++))
+        else
+            interface_declarations[$interface_name]="$(basename $file):$line_num"
+        fi
+    fi
+done < <(grep -n "^interface " app/src/main/java -r --include="*.kt")
+
 echo -e "\n📊 Validation Summary"
 echo "====================="
 

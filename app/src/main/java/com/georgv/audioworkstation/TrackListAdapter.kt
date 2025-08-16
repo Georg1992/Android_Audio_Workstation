@@ -189,15 +189,5 @@ class TrackListAdapter(val parentFragment: SongFragment) :
 }
 
 
-interface UiListener {
-    fun uiCallback()
-    fun setValueFromUi(float: Float)
-}
-
-
-
-
-
-
 
 

@@ -81,8 +81,3 @@ class LibraryFragment:Fragment(),SongListAdapter.OnSongItemClickListener, Dialog
 
 
 }
-
-interface DialogCaller{
-    fun delegateFunctionToDialog(songName:String)
-}
-
