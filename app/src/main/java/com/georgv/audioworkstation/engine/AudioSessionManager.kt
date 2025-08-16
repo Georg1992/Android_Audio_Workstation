@@ -124,6 +124,28 @@ class AudioSessionManager {
         Log.i(TAG, "Stopped recording for track: $recordingTrackId")
     }
     
+    fun updateTracks(tracks: List<TrackData>) {
+        val current = _sessionData.value ?: return
+        
+        // Check if any track is recording and update session state accordingly
+        val recordingTrack = tracks.find { it.isRecording }
+        val newIsRecording = recordingTrack != null
+        val newRecordingTrackId = recordingTrack?.id
+        
+        Log.i(TAG, "updateTracks: ${tracks.size} tracks")
+        if (recordingTrack != null) {
+            Log.i(TAG, "  Found recording track: ${recordingTrack.name} (${recordingTrack.id})")
+        }
+        
+        _sessionData.value = current.copy(
+            tracks = tracks,
+            isRecording = newIsRecording,
+            recordingTrackId = newRecordingTrackId
+        )
+        
+        Log.d(TAG, "Updated session with ${tracks.size} tracks, recording: $newIsRecording")
+    }
+    
     fun addTrack(track: TrackData) {
         val current = _sessionData.value ?: return
         val updatedTracks = current.tracks + track

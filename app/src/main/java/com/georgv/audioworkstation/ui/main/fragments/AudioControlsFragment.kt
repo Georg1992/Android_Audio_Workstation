@@ -268,10 +268,17 @@ class AudioControlsFragment:Fragment() {
     private fun checkForPendingRecording() {
         // Check if there's a track marked for recording (from Fast Record)
         val recordingTrack = audioSession.getRecordingTrack()
-        Log.i("AudioControlsFragment", "checkForPendingRecording - Found recording track: ${recordingTrack?.name}, isRecording: $isRecording")
+        val sessionIsRecording = audioSession.isRecording()
+        val nativeIsRecording = nativeAudio?.isRecording() ?: false
         
-        if (recordingTrack != null && !isRecording) {
-            Log.i("AudioControlsFragment", "Starting pending recording for track: ${recordingTrack.name}")
+        Log.i("AudioControlsFragment", "checkForPendingRecording:")
+        Log.i("AudioControlsFragment", "  Recording track: ${recordingTrack?.name}")
+        Log.i("AudioControlsFragment", "  Local isRecording: $isRecording")
+        Log.i("AudioControlsFragment", "  Session isRecording: $sessionIsRecording") 
+        Log.i("AudioControlsFragment", "  Native isRecording: $nativeIsRecording")
+        
+        if (recordingTrack != null && !nativeIsRecording) {
+            Log.i("AudioControlsFragment", "🎬 Starting pending recording for track: ${recordingTrack.name}")
             startRecordingForTrack(recordingTrack)
         } else if (recordingTrack == null) {
             Log.i("AudioControlsFragment", "No pending recording track found")
