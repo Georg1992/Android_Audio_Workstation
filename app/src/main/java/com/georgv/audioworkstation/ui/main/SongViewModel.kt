@@ -43,7 +43,15 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val song = songRepo.createSong(songName, wavDir)
-                _currentSong.postValue(song)
+                // Create a thread-safe copy for UI
+                val songCopy = Song().apply {
+                    id = song.id
+                    name = song.name
+                    wavDir = song.wavDir
+                    timeStampStart = song.timeStampStart
+                    timeStampStop = song.timeStampStop
+                }
+                _currentSong.postValue(songCopy)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -65,10 +73,26 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     this.volume = 100f
                 })
             }
-            Log.i("SongViewModel", "Created track: ${track?.name} - Recording: ${track?.isRecording}")
+            
+            // Create thread-safe copy for UI
+            val trackCopy = track?.let { 
+                Track().apply {
+                    id = it.id
+                    songId = it.songId
+                    name = it.name
+                    wavFilePath = it.wavFilePath
+                    isRecording = it.isRecording
+                    timeStampStart = it.timeStampStart
+                    timeStampStop = it.timeStampStop
+                    duration = it.duration
+                    volume = it.volume
+                }
+            }
+            
+            Log.i("SongViewModel", "Created track: ${trackCopy?.name} - Recording: ${trackCopy?.isRecording}")
             // Refresh tracks to update UI
             loadTracksForCurrentSong()
-            track
+            trackCopy
         } catch (e: Exception) {
             Log.e("SongViewModel", "Failed to create track", e)
             null
@@ -131,7 +155,15 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
             
             if (song != null) {
                 Log.i("SongViewModel", "Song created successfully: ${song.name} (ID: ${song.id})")
-                _currentSong.postValue(song)
+                // Create a thread-safe copy for UI
+                val songCopy = Song().apply {
+                    id = song.id
+                    name = song.name
+                    wavDir = song.wavDir
+                    timeStampStart = song.timeStampStart
+                    timeStampStop = song.timeStampStop
+                }
+                _currentSong.postValue(songCopy)
                 
                 // Then try to create the track separately
                 val track = try {
@@ -194,10 +226,25 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 val tracks = realm.query<Track>("songId == $0", song.id).find()
                 Log.i("SongViewModel", "Found ${tracks.size} tracks for song ${song.name}")
                 
+                // Create thread-safe copies for UI
+                val trackCopies = tracks.map { track ->
+                    Track().apply {
+                        id = track.id
+                        songId = track.songId
+                        name = track.name
+                        wavFilePath = track.wavFilePath
+                        isRecording = track.isRecording
+                        timeStampStart = track.timeStampStart
+                        timeStampStop = track.timeStampStop
+                        duration = track.duration
+                        volume = track.volume
+                    }
+                }
+                
                 // Update StateFlow on Main thread
                 withContext(Dispatchers.Main) {
-                    _tracks.value = tracks.toList()
-                    Log.i("SongViewModel", "StateFlow updated with ${tracks.size} tracks")
+                    _tracks.value = trackCopies
+                    Log.i("SongViewModel", "StateFlow updated with ${trackCopies.size} tracks")
                 }
                 
                 tracks.forEach { track ->
@@ -246,7 +293,21 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     fun getRecordingTrack(): Track? {
         val song = _currentSong.value ?: return null
         return try {
-            realm.query<Track>("songId == $0 AND isRecording == $1", song.id, true).first().find()
+            val track = realm.query<Track>("songId == $0 AND isRecording == $1", song.id, true).first().find()
+            // Return thread-safe copy
+            track?.let {
+                Track().apply {
+                    id = it.id
+                    songId = it.songId
+                    name = it.name
+                    wavFilePath = it.wavFilePath
+                    isRecording = it.isRecording
+                    timeStampStart = it.timeStampStart
+                    timeStampStop = it.timeStampStop
+                    duration = it.duration
+                    volume = it.volume
+                }
+            }
         } catch (e: Exception) {
             Log.e("SongViewModel", "Error finding recording track", e)
             null
