@@ -68,7 +68,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     // Helper to convert Realm Track to AudioSessionManager.TrackData
     private fun Track.toTrackData() = AudioSessionManager.TrackData(
         id = id,
-        name = name,
+        name = name ?: "Unnamed Track",
         wavFilePath = wavFilePath,
         volume = volume,
         isRecording = isRecording
