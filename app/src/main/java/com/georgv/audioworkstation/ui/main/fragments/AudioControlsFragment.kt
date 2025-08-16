@@ -123,12 +123,19 @@ class AudioControlsFragment:Fragment() {
     }
     
     private fun onStopClicked() {
-        Log.i("AudioControlsFragment", "Stop clicked - isRecording: $isRecording")
+        val sessionIsRecording = audioSession.isRecording()
+        val recordingTrack = audioSession.getRecordingTrack()
+        
+        Log.i("AudioControlsFragment", "Stop clicked:")
+        Log.i("AudioControlsFragment", "  Local isRecording: $isRecording")
+        Log.i("AudioControlsFragment", "  Session isRecording: $sessionIsRecording") 
+        Log.i("AudioControlsFragment", "  Recording track: ${recordingTrack?.name}")
         
         // Stop any playback
         nativeAudio?.stopPlayback()
         
-        if (isRecording) {
+        // Always try to stop recording if there's a recording track
+        if (sessionIsRecording || recordingTrack != null) {
             Log.i("AudioControlsFragment", "Stopping recording...")
             stopRecording()
             
@@ -143,8 +150,8 @@ class AudioControlsFragment:Fragment() {
         // Clear track selection after stopping
         viewModel.clearTrackSelection()
         
-        // Ensure UI shows play state
-        showPlay()
+        // Force UI update to show play state
+        updateRecordingState()
         
         Log.i("AudioControlsFragment", "Stop operation completed")
     }
@@ -236,17 +243,24 @@ class AudioControlsFragment:Fragment() {
     private fun updateRecordingState() {
         // Sync local isRecording with AudioSessionManager state
         val sessionIsRecording = audioSession.isRecording()
-        Log.i("AudioControlsFragment", "updateRecordingState - Session recording: $sessionIsRecording, Local recording: $isRecording")
+        val recordingTrack = audioSession.getRecordingTrack()
+        
+        Log.i("AudioControlsFragment", "updateRecordingState:")
+        Log.i("AudioControlsFragment", "  Session recording: $sessionIsRecording")
+        Log.i("AudioControlsFragment", "  Local recording: $isRecording")
+        Log.i("AudioControlsFragment", "  Recording track: ${recordingTrack?.name}")
         
         if (sessionIsRecording != isRecording) {
             isRecording = sessionIsRecording
-            Log.i("AudioControlsFragment", "Updated local recording state to: $isRecording")
+            Log.i("AudioControlsFragment", "  ✅ Updated local recording state to: $isRecording")
         }
         
         // Update UI based on recording state
         if (isRecording) {
+            Log.i("AudioControlsFragment", "  🔴 Calling showRecording()")
             showRecording()
         } else {
+            Log.i("AudioControlsFragment", "  ⭕ Calling showPlay()")
             showPlay()
         }
     }
@@ -304,16 +318,18 @@ class AudioControlsFragment:Fragment() {
         binding.pauseButton.visibility = View.GONE
         binding.playPauseButton.visibility = View.GONE
         binding.playButton.visibility = View.VISIBLE
-        // Reset record button to normal state (not recording)
-        binding.recordButton.setBackgroundResource(android.R.color.darker_gray)
+        // Reset record button to normal state (not recording) - use default button background
+        binding.recordButton.setBackgroundResource(R.drawable.button_background)
+        Log.d("AudioControlsFragment", "UI: Showing play state - record button normal")
     }
     
     private fun showRecording() {
         binding.pauseButton.visibility = View.GONE
         binding.playPauseButton.visibility = View.GONE
         binding.playButton.visibility = View.VISIBLE
-        // Set record button to recording state (green/red color)
-        binding.recordButton.setBackgroundResource(android.R.color.holo_green_light)
+        // Set record button to recording state - use bright red/green
+        binding.recordButton.setBackgroundResource(R.color.soft_red)
+        Log.d("AudioControlsFragment", "UI: Showing recording state - record button RED")
     }
 
 }
