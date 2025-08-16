@@ -8,12 +8,20 @@ cmake_minimum_required(VERSION 3.22.1)
 project("audioworkstation")
 
 # Create and name the library
-add_library(audioworkstation SHARED audioworkstation.cpp)
-add_library(native-lib SHARED native-lib.cpp)
+add_library(audioworkstation SHARED
+	# existing sources
+	audioworkstation.cpp
+	native-lib.cpp
+	# engine sources
+	engine/AudioEngine.cpp
+	engine/JNI_Bridge.cpp
+)
 
 # Find system libraries
 find_library(log-lib log)
 find_library(OpenSLES-lib OpenSLES)
 
 # Link libraries to your target
+target_include_directories(audioworkstation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 target_link_libraries(audioworkstation ${log-lib} ${OpenSLES-lib})
