@@ -13,7 +13,9 @@ import android.view.animation.Animation
 import android.widget.ImageButton
 import androidx.core.view.iterator
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.flow.collectLatest
 import com.georgv.audioworkstation.TrackListAdapter
 import com.georgv.audioworkstation.audioprocessing.AudioController
 import com.georgv.audioworkstation.audioprocessing.AudioController.changeState
@@ -60,9 +62,17 @@ class SongFragment : Fragment(), View.OnClickListener, AudioListener, AudioProce
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             song?.let {
                 binding.songName.text = it.name
+                // Load tracks for this song
+                viewModel.loadTracksForCurrentSong()
             }
         }
-
+        
+        // Observe tracks StateFlow and update adapter
+        lifecycleScope.launchWhenStarted {
+            viewModel.tracks.collectLatest { tracks ->
+                (mRecyclerView.adapter as? TrackListAdapter)?.submitList(tracks)
+            }
+        }
 
 
         return binding.root

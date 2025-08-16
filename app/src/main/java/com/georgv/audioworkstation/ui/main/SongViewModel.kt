@@ -90,6 +90,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
     
     fun createNewSongWithTrack(songName: String, trackName: String = "Track 1"): Pair<Song?, Track?> {
         return try {
+            Log.i("SongViewModel", "Creating song: $songName with track: $trackName")
             realm.writeBlocking {
                 val song = copyToRealm(Song().apply {
                     id = UUID.randomUUID().toString()
@@ -106,6 +107,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     volume = 100f
                 })
                 
+                Log.i("SongViewModel", "Created song: ${song.name} (ID: ${song.id}) with track: ${track.name} (ID: ${track.id})")
                 _currentSong.postValue(song)
                 Pair(song, track)
             }

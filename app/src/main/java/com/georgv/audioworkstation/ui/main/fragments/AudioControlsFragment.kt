@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.main.fragments
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,12 +9,15 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.databinding.FragmentAudioControlsBinding
+import com.georgv.audioworkstation.engine.NativeAudioManager
 import com.georgv.audioworkstation.ui.main.SongViewModel
 
 
 class AudioControlsFragment:Fragment() {
     private lateinit var binding:FragmentAudioControlsBinding
     private val viewModel: SongViewModel by activityViewModels()
+    private var nativeAudio: NativeAudioManager? = null
+    private var isRecording = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -21,36 +25,138 @@ class AudioControlsFragment:Fragment() {
         savedInstanceState: Bundle?
     ): View {
         binding = FragmentAudioControlsBinding.inflate(inflater,container,false)
+        
+        // Initialize native audio manager
+        nativeAudio = NativeAudioManager.from(this)
 
         val clickAnimation = AnimationUtils.loadAnimation(context, R.anim.button_click)
         showPlay()
 
         binding.playButton.setOnClickListener {
             it.startAnimation(clickAnimation)
-            showPause()
+            onPlayClicked()
         }
 
         binding.pauseButton.setOnClickListener{
             it.startAnimation(clickAnimation)
-            showPlayPause()
+            onPauseClicked()
         }
 
         binding.playPauseButton.setOnClickListener {
             it.startAnimation(clickAnimation)
-            showPause()
+            onPlayPauseClicked()
         }
 
         binding.stopButton.setOnClickListener {
             it.startAnimation(clickAnimation)
-            showPlay()
+            onStopClicked()
         }
 
         binding.recordButton.setOnClickListener {
             it.startAnimation(clickAnimation)
-            showPause()
+            onRecordClicked()
+        }
+        
+        // Check if already recording when fragment is created
+        updateRecordingState()
+        
+        // If recording was started by Fast Record, we should be in recording state
+        if (isRecording) {
+            Log.i("AudioControlsFragment", "Fragment created while recording is active")
         }
 
         return binding.root
+    }
+    
+    private fun onPlayClicked() {
+        Log.i("AudioControlsFragment", "Play clicked")
+        nativeAudio?.let { audio ->
+            if (audio.startPlayback()) {
+                showPause()
+            }
+        }
+    }
+    
+    private fun onPauseClicked() {
+        Log.i("AudioControlsFragment", "Pause clicked")
+        nativeAudio?.stopPlayback()
+        showPlayPause()
+    }
+    
+    private fun onPlayPauseClicked() {
+        Log.i("AudioControlsFragment", "Play/Pause clicked")
+        nativeAudio?.let { audio ->
+            if (audio.startPlayback()) {
+                showPause()
+            }
+        }
+    }
+    
+    private fun onStopClicked() {
+        Log.i("AudioControlsFragment", "Stop clicked")
+        nativeAudio?.stopPlayback()
+        if (isRecording) {
+            stopRecording()
+        }
+        showPlay()
+    }
+    
+    private fun onRecordClicked() {
+        Log.i("AudioControlsFragment", "Record clicked")
+        if (isRecording) {
+            stopRecording()
+        } else {
+            startNewRecording()
+        }
+    }
+    
+    private fun startNewRecording() {
+        try {
+            // Create a new track for recording
+            val songName = "Recording_${System.currentTimeMillis()}"
+            val trackName = "Track ${System.currentTimeMillis() % 1000}"
+            
+            // This should create the track in the current song if one exists
+            // For now, we'll start recording without creating a new song
+                         nativeAudio?.let { audio ->
+                 val recordingsDir = java.io.File(requireContext().filesDir, "recordings")
+                 if (!recordingsDir.exists()) recordingsDir.mkdirs()
+                 val wavPath = "${recordingsDir}/${trackName}.wav"
+                 if (audio.startRecording(wavPath)) {
+                    isRecording = true
+                    updateRecordingState()
+                    Log.i("AudioControlsFragment", "Recording started")
+                } else {
+                    Log.e("AudioControlsFragment", "Failed to start recording")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AudioControlsFragment", "Error starting recording", e)
+        }
+    }
+    
+    private fun stopRecording() {
+        try {
+            nativeAudio?.stopRecording()
+            isRecording = false
+            updateRecordingState()
+            Log.i("AudioControlsFragment", "Recording stopped")
+        } catch (e: Exception) {
+            Log.e("AudioControlsFragment", "Error stopping recording", e)
+        }
+    }
+    
+    private fun updateRecordingState() {
+        nativeAudio?.let { audio ->
+            isRecording = audio.isRecording()
+        }
+        
+        // Update record button appearance based on recording state
+        if (isRecording) {
+            binding.recordButton.setBackgroundResource(R.color.bright_green) // Recording indicator
+        } else {
+            binding.recordButton.setBackgroundResource(R.drawable.button_background) // Normal state
+        }
     }
 
     private fun showPlay() {
