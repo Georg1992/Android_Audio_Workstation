@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Property Assignment Validator
-Prevents val reassignment and non-existent property errors
+Enhanced Property Assignment Validator
+Prevents val reassignment, non-existent property errors, and nullable type mismatches
 """
 
 import os
@@ -94,10 +94,46 @@ class PropertyValidator:
         except Exception as e:
             print(f"❌ Error validating {file_path}: {e}")
     
+    def validate_method_parameters(self, file_path: str):
+        """Validate method call parameters for nullable type mismatches"""
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+                
+            print(f"🔍 Validating method parameters in: {os.path.basename(file_path)}")
+            
+            # Look for common nullable parameter issues
+            nullable_patterns = [
+                (r'startSession\([^,]+,\s*([^)]+\.name)\)', 'String'),
+                (r'Log\.[idwe]\([^,]+,\s*([^)]+\.name)\)', 'String'),
+                (r'setText\(([^)]+\.name)\)', 'String'),
+            ]
+            
+            for pattern, expected_type in nullable_patterns:
+                matches = re.finditer(pattern, content)
+                for match in matches:
+                    param = match.group(1)
+                    line_num = content[:match.start()].count('\n') + 1
+                    
+                    # Check if parameter might be nullable
+                    if '.name' in param and 'song.name' in param:
+                        error = f"⚠️  {file_path}:{line_num} - Potential nullable issue: {param} (String?) passed where {expected_type} expected"
+                        print(f"   {error}")
+                        self.errors.append(error)
+                    elif '.name' in param and 'track.name' in param:
+                        error = f"⚠️  {file_path}:{line_num} - Potential nullable issue: {param} (String?) passed where {expected_type} expected"
+                        print(f"   {error}")
+                        self.errors.append(error)
+                    else:
+                        print(f"   ✅ {param} (valid parameter)")
+                        
+        except Exception as e:
+            print(f"❌ Error validating method parameters in {file_path}: {e}")
+    
     def run_validation(self):
         """Run the complete validation process"""
-        print("🛡️ Property Assignment Validator")
-        print("=" * 40)
+        print("🛡️ Enhanced Property & Method Validator")
+        print("=" * 45)
         
         # Phase 1: Parse all data classes
         print("\n📋 Phase 1: Parsing Data Classes")
@@ -109,8 +145,8 @@ class PropertyValidator:
                 self.parse_class_properties(str(kt_file))
         
         # Phase 2: Validate assignments in ViewModels and other files
-        print("\n📋 Phase 2: Validating Assignments")
-        print("-" * 35)
+        print("\n📋 Phase 2: Validating Property Assignments")
+        print("-" * 40)
         
         # Check ViewModels
         vm_dir = Path("app/src/main/java/com/georgv/audioworkstation/ui/main")
@@ -124,7 +160,21 @@ class PropertyValidator:
             for kt_file in fragment_dir.glob("*.kt"):
                 self.validate_property_assignments(str(kt_file))
         
-        # Phase 3: Summary
+        # Phase 3: Validate method parameters for nullable issues
+        print("\n📋 Phase 3: Validating Method Parameters")
+        print("-" * 40)
+        
+        # Check ViewModels for method parameter issues
+        if vm_dir.exists():
+            for kt_file in vm_dir.glob("*ViewModel.kt"):
+                self.validate_method_parameters(str(kt_file))
+        
+        # Check Fragments for method parameter issues
+        if fragment_dir.exists():
+            for kt_file in fragment_dir.glob("*.kt"):
+                self.validate_method_parameters(str(kt_file))
+        
+        # Phase 4: Summary
         print("\n📊 Validation Results")
         print("-" * 20)
         
@@ -134,7 +184,7 @@ class PropertyValidator:
                 print(f"  {error}")
             return False
         else:
-            print("✅ All property assignments are valid!")
+            print("✅ All validations passed!")
             return True
 
 if __name__ == "__main__":

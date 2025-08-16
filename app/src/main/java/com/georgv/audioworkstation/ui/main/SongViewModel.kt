@@ -90,7 +90,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // Start audio session for fast audio access
                 _currentSongId.value = song.id
-                audioSession.startSession(song.id, song.name)
+                audioSession.startSession(song.id, song.name ?: "Unnamed Song")
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -204,7 +204,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // Start audio session for fast audio access
                 _currentSongId.value = song.id
-                audioSession.startSession(song.id, song.name)
+                audioSession.startSession(song.id, song.name ?: "Unnamed Song")
                 
                 // Then try to create the track separately
                 val track = try {
@@ -255,7 +255,7 @@ class SongViewModel(application: Application) : AndroidViewModel(application) {
                     
                     // Start audio session for fast audio access
                     _currentSongId.value = song.id
-                    audioSession.startSession(song.id, song.name)
+                    audioSession.startSession(song.id, song.name ?: "Unnamed Song")
                 } else {
                     // Handle case when song is not found
                     Log.w("SongViewModel", "Song with ID $songId not found")
