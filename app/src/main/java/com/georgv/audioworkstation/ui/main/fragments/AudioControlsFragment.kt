@@ -95,6 +95,8 @@ class AudioControlsFragment:Fragment() {
         nativeAudio?.stopPlayback()
         if (isRecording) {
             stopRecording()
+            // Update track in database to mark recording as finished
+            finishRecordingInDatabase()
         }
         showPlay()
     }
@@ -103,6 +105,7 @@ class AudioControlsFragment:Fragment() {
         Log.i("AudioControlsFragment", "Record clicked")
         if (isRecording) {
             stopRecording()
+            finishRecordingInDatabase()
         } else {
             startNewRecording()
         }
@@ -154,6 +157,18 @@ class AudioControlsFragment:Fragment() {
             binding.recordButton.setBackgroundResource(R.color.bright_green) // Recording indicator
         } else {
             binding.recordButton.setBackgroundResource(R.drawable.button_background) // Normal state
+        }
+    }
+    
+    private fun finishRecordingInDatabase() {
+        val recordingTrack = viewModel.getRecordingTrack()
+        if (recordingTrack != null) {
+            val duration = System.currentTimeMillis() - recordingTrack.timeStampStart
+            viewModel.finishTrackRecording(recordingTrack.id, duration)
+            Log.i("AudioControlsFragment", "Finished recording for track: ${recordingTrack.name}")
+            
+            // Refresh tracks to update UI colors
+            viewModel.loadTracksForCurrentSong()
         }
     }
     
