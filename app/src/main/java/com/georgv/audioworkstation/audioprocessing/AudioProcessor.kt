@@ -358,11 +358,11 @@ class AudioProcessor():UiListener {
 
 
 
-    override fun uiCallback() {
+    fun uiCallback() {
 
     }
 
-    override fun setValueFromUi(float: Float) {
+    fun setValueFromUi(float: Float) {
         controlVolume(float)
     }
 

@@ -241,6 +241,24 @@ while IFS= read -r file; do
                 ((ERRORS++))
             fi
         fi
+        
+        # Check for invalid override methods that don't match any interface
+        if grep -q "override fun" "$file"; then
+            # Check for specific problematic override methods
+            if grep -q "override fun uiCallback" "$file" && ! grep -q "AudioListener" "$file"; then
+                echo "❌ Invalid override method found in $(basename $file)"
+                echo "   'override fun uiCallback()' but class doesn't implement AudioListener"
+                echo "   This causes 'uiCallback overrides nothing' error"
+                ((ERRORS++))
+            fi
+            
+            if grep -q "override fun setValueFromUi" "$file" && ! grep -q "class.*UiListener" "$file"; then
+                echo "❌ Invalid override method found in $(basename $file)"
+                echo "   'override fun setValueFromUi()' but no interface defines this method"
+                echo "   This causes 'setValueFromUi overrides nothing' error"
+                ((ERRORS++))
+            fi
+        fi
     fi
 done < <(find app/src/main/java -name "*.kt" -type f)
 
