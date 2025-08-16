@@ -44,7 +44,7 @@ class NativeEngine {
 				fos.write("fmt ".toByteArray())
 				writeInt32LE(fos, 16) // fmt chunk size
 				writeInt16LE(fos, 1) // audio format (PCM)
-				writeInt16LE(fos, channels) // num channels
+				writeInt16LE(fos, channels.toShort()) // num channels
 				writeInt32LE(fos, sampleRate) // sample rate
 				writeInt32LE(fos, sampleRate * channels * 2) // byte rate
 				writeInt16LE(fos, (channels * 2).toShort()) // block align
