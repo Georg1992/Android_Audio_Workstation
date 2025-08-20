@@ -29,6 +29,7 @@ add_library(audioworkstation SHARED
 	# engine sources
 	engine/AudioEngine.cpp
 	engine/JNI_Bridge.cpp
+	engine/OboeOutput.cpp
 )
 
 # Link libraries to your target
