@@ -1,5 +1,0 @@
-# ninja log v5
-2	450	7759660038197801	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	208c40f35ef4ed00
-451	762	7759660041147658	C:/Users/selft/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/armeabi-v7a/libaudioworkstation.so	a2ae4affc89a374d
-9	8085	7759660114521909	CMakeFiles/native-lib.dir/native-lib.cpp.o	cdae89b8fe621c17
-8089	8210	7759660115803325	C:/Users/selft/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/70425w2u/obj/armeabi-v7a/libnative-lib.so	870c3a1916e1fe9c

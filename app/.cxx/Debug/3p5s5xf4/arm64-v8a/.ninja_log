@@ -1,6 +1,0 @@
-# ninja log v5
-1	71	7449511415150861	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
-71	134	7449511415761008	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/3p5s5xf4/obj/arm64-v8a/libaudioworkstation.so	ff98ede083ed960f
-0	6	0	clean	114c22d99d9963d6
-2	97	7450023631629180	CMakeFiles/audioworkstation.dir/audioworkstation.cpp.o	9525344799b063ab
-98	175	7450023632339815	C:/Users/georg/Documents/Android_Audio_App/Android_Audio_Workstation/app/build/intermediates/cxx/Debug/3p5s5xf4/obj/arm64-v8a/libaudioworkstation.so	ff98ede083ed960f
