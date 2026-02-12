@@ -9,12 +9,12 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.NavHostFragment
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.MainMenuAdapter
+import com.georgv.audioworkstation.ui.adapters.MainMenuAdapter
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.customHandlers.Utilities
-import com.georgv.audioworkstation.customHandlers.ViewAnimator
-import com.georgv.audioworkstation.data.MenuItem
-import com.georgv.audioworkstation.data.MenuItemType
+import com.georgv.audioworkstation.core.util.Utilities
+import com.georgv.audioworkstation.core.ui.ViewAnimator
+import com.georgv.audioworkstation.data.model.MenuItem
+import com.georgv.audioworkstation.data.model.MenuItemType
 import com.georgv.audioworkstation.databinding.FragmentMainMenuBinding
 import com.georgv.audioworkstation.ui.main.SongViewModel
 

@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.audioprocessing
+package com.georgv.audioworkstation.audio.streaming
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -12,7 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.georgv.audioworkstation.MainActivity
+import com.georgv.audioworkstation.ui.MainActivity
 import com.georgv.audioworkstation.R
 
 
@@ -55,15 +55,13 @@ class AudioStreamingService: Service()  {
     private fun ensureForeground() {
         val channelId = "running_channel"
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Audio Streaming", NotificationManager.IMPORTANCE_LOW)
-            notificationManager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(channelId, "Audio Streaming", NotificationManager.IMPORTANCE_LOW)
+        notificationManager.createNotificationChannel(channel)
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            PendingIntent.FLAG_UPDATE_CURRENT or (PendingIntent.FLAG_IMMUTABLE)
         )
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Audio Workstation")

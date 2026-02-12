@@ -1,5 +1,7 @@
-package com.georgv.audioworkstation
+package com.georgv.audioworkstation.ui.adapters
 
+
+import com.georgv.audioworkstation.R
 import android.R.attr.radius
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -12,9 +14,9 @@ import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.audioprocessing.AudioController
-import com.georgv.audioworkstation.audioprocessing.AudioProcessor
-import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.audio.controller.AudioController
+import com.georgv.audioworkstation.audio.processing.AudioProcessor
+import com.georgv.audioworkstation.data.model.Track
 import com.georgv.audioworkstation.databinding.TrackHolderViewBinding
 import com.georgv.audioworkstation.ui.main.fragments.SongFragment
 import com.georgv.audioworkstation.ui.main.fragments.SongFragmentDirections
@@ -111,11 +113,11 @@ class TrackListAdapter(val parentFragment: SongFragment) :
         holder.track = item
         holder.trackId = item.id
         holder.instrumentName.text = item.name
-        if (holder.volumeSlider.value != item.volume) {
-            holder.volumeSlider.value = item.volume
+        if (holder.volumeSlider.value != item.gain) {
+            holder.volumeSlider.value = item.gain
         }
         if (!viewHolders.contains(holder)) viewHolders.add(holder)
-        if (item.isRecording) {
+        if (AudioController.controllerState == AudioController.ControllerState.REC) {
             val gradientDrawable = GradientDrawable()
             val color =
                 ContextCompat.getColor(parentFragment.requireContext(), R.color.soft_red)
@@ -174,7 +176,6 @@ class TrackListAdapter(val parentFragment: SongFragment) :
         override fun areContentsTheSame(oldItem: Track, newItem: Track): Boolean {
             return when {
                 newItem.name != oldItem.name -> false
-                newItem.isRecording != oldItem.isRecording -> false
                 else -> true
             }
         }
@@ -182,17 +183,5 @@ class TrackListAdapter(val parentFragment: SongFragment) :
 
 
 }
-
-
-interface UiListener {
-    fun uiCallback()
-    fun setValueFromUi(float: Float)
-}
-
-
-
-
-
-
 
 

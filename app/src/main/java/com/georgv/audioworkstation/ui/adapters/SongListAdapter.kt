@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation
+package com.georgv.audioworkstation.ui.adapters
 
 
 import android.view.LayoutInflater
@@ -7,9 +7,9 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.audioprocessing.AudioController
-import com.georgv.audioworkstation.audioprocessing.AudioProcessor
-import com.georgv.audioworkstation.data.Song
+import com.georgv.audioworkstation.audio.controller.AudioController
+import com.georgv.audioworkstation.audio.processing.AudioProcessor
+import com.georgv.audioworkstation.data.model.Song
 import com.georgv.audioworkstation.databinding.SongHolderViewBinding
 import com.georgv.audioworkstation.ui.main.fragments.AudioListener
 

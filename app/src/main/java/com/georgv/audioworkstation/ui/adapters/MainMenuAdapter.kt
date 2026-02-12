@@ -1,10 +1,10 @@
-package com.georgv.audioworkstation
+package com.georgv.audioworkstation.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.data.MenuItem
+import com.georgv.audioworkstation.data.model.MenuItem
 import com.georgv.audioworkstation.databinding.MenuItemBinding
 import com.georgv.audioworkstation.ui.main.fragments.MainMenuFragment
 

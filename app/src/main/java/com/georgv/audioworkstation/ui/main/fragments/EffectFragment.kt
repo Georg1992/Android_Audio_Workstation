@@ -11,8 +11,11 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.NavHostFragment
-import com.georgv.audioworkstation.audioprocessing.*
-import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.audio.effects.Compressor
+import com.georgv.audioworkstation.audio.effects.Equalizer
+import com.georgv.audioworkstation.audio.effects.Effect
+import com.georgv.audioworkstation.audio.effects.Reverb
+import com.georgv.audioworkstation.data.model.Track
 import com.georgv.audioworkstation.databinding.FragmentEffectBinding
 import com.georgv.audioworkstation.ui.main.SongViewModel
 import com.google.android.material.slider.Slider

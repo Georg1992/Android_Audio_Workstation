@@ -8,18 +8,22 @@ OboeOutput::OboeOutput(dawengine::AudioEngine* engine)
 OboeOutput::~OboeOutput() { stop(); }
 
 bool OboeOutput::start(int32_t sampleRate, int32_t channelCount) {
-	oboe::AudioStreamBuilder builder;
-	builder.setFormat(oboe::AudioFormat::Float)
-			.setSampleRate(sampleRate)
-			.setChannelCount(channelCount)
-			.setSharingMode(oboe::SharingMode::Exclusive)
-			.setPerformanceMode(oboe::PerformanceMode::LowLatency)
-			.setDirection(oboe::Direction::Output)
-			.setCallback(this);
+    auto builder = std::make_unique<oboe::AudioStreamBuilder>();
 
-	oboe::Result result = builder.openStream(m_stream);
-	if (result != oboe::Result::OK) return false;
-	return m_stream->requestStart() == oboe::Result::OK;
+    builder->setFormat(oboe::AudioFormat::Float);
+    builder->setSampleRate(sampleRate);
+    builder->setChannelCount(channelCount);
+    builder->setSharingMode(oboe::SharingMode::Exclusive);
+    builder->setPerformanceMode(oboe::PerformanceMode::LowLatency);
+    builder->setDirection(oboe::Direction::Output);
+    builder->setCallback(this);
+
+    std::shared_ptr<oboe::AudioStream> stream;
+    oboe::Result result = builder->openStream(stream);
+    if (result != oboe::Result::OK || !stream) return false;
+
+    m_stream = stream;
+    return m_stream->requestStart() == oboe::Result::OK;
 }
 
 void OboeOutput::stop() {

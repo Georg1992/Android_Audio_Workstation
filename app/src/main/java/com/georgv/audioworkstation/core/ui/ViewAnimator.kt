@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.customHandlers
+package com.georgv.audioworkstation.core.ui
 
 import android.view.View
 import android.view.ViewGroup

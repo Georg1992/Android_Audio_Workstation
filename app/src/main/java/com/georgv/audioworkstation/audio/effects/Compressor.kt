@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.audioprocessing
+package com.georgv.audioworkstation.audio.effects
 
 import kotlin.math.abs
 import kotlin.math.exp

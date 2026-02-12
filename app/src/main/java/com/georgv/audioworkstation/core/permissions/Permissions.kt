@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.customHandlers
+package com.georgv.audioworkstation.core.permissions
 
 import android.Manifest
 import android.app.Activity

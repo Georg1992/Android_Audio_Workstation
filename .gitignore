@@ -5,6 +5,7 @@
 *.dex
 /build/
 */build/
+**/build/
 .cxx/
 .externalNativeBuild/
 captures/

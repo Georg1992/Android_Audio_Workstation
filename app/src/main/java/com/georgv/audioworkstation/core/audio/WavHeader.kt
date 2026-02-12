@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.customHandlers
+package com.georgv.audioworkstation.core.audio
 
 class WavHeader(
     private var dataSize: Long,

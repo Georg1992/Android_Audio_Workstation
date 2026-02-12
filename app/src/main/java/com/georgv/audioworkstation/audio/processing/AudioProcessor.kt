@@ -1,4 +1,8 @@
-package com.georgv.audioworkstation.audioprocessing
+package com.georgv.audioworkstation.audio.processing
+
+
+import com.georgv.audioworkstation.audio.controller.AudioController
+import com.georgv.audioworkstation.audio.effects.Effect
 
 import android.Manifest
 import android.content.Context
@@ -8,12 +12,12 @@ import android.media.*
 import android.os.Handler
 import android.os.Looper
 import androidx.core.app.ActivityCompat
-import com.georgv.audioworkstation.MainActivity
-import com.georgv.audioworkstation.UiListener
-import com.georgv.audioworkstation.audioprocessing.AudioController.controllerState
-import com.georgv.audioworkstation.customHandlers.WavHeader
-import com.georgv.audioworkstation.data.Song
-import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.ui.MainActivity
+import com.georgv.audioworkstation.ui.UiListener
+import com.georgv.audioworkstation.audio.controller.AudioController.controllerState
+import com.georgv.audioworkstation.core.audio.WavHeader
+import com.georgv.audioworkstation.data.model.Song
+import com.georgv.audioworkstation.data.model.Track
 import org.apache.commons.io.FileUtils
 import java.io.*
 import java.nio.ByteBuffer
@@ -47,7 +51,7 @@ class AudioProcessor():UiListener {
             _track = value
             effects = emptyArray<Effect?>()
             file = File(track.wavFilePath)
-            volume = track.volume
+            volume = track.gain
         }
 
     private var mixprocessor = false
@@ -428,6 +432,7 @@ interface AudioProcessingCallback {
 //        }
 //    }
 //}
+
 
 
 

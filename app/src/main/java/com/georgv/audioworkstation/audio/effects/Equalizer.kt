@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.audioprocessing
+package com.georgv.audioworkstation.audio.effects
 import org.jtransforms.fft.FloatFFT_1D
 import kotlin.math.*
 import java.nio.ByteBuffer

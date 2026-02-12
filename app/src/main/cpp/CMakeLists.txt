@@ -1,38 +1,50 @@
-
-# For more information about using CMake with Android Studio, read the
-# documentation: https://d.android.com/studio/projects/add-native-code.html.
-# For more examples on how to use CMake, see https://github.com/android/ndk-samples.
-
-# Sets the minimum CMake version required for this project.
 cmake_minimum_required(VERSION 3.22.1)
 project("audioworkstation")
 
-# Find system libraries
+# Android libs
 find_library(log-lib log)
 
-# Oboe dependency
+# ==============================
+# Oboe
+# ==============================
 include(FetchContent)
+
 set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
+
+# Disable oboe tests/examples (ускоряет сборку и убирает мусор)
+set(OBOE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(OBOE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(OBOE_ENABLE_ASSERTIONS OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
-  oboe
-  GIT_REPOSITORY https://github.com/google/oboe.git
-  GIT_TAG main
-  UPDATE_COMMAND ""
+		oboe
+		GIT_REPOSITORY https://github.com/google/oboe.git
+		GIT_TAG main
 )
+
 FetchContent_MakeAvailable(oboe)
 
-# Create and name the library
+# ==============================
+# Native library
+# ==============================
 add_library(audioworkstation SHARED
-	# existing sources
-	audioworkstation.cpp
-	native-lib.cpp
-	# engine sources
-	engine/AudioEngine.cpp
-	engine/JNI_Bridge.cpp
-	engine/OboeOutput.cpp
+		audioworkstation.cpp
+		native-lib.cpp
+		engine/AudioEngine.cpp
+		engine/JNI_Bridge.cpp
+		engine/OboeOutput.cpp
 )
 
-# Link libraries to your target
-target_include_directories(audioworkstation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(audioworkstation PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}
+)
 
-target_link_libraries(audioworkstation oboe::oboe ${log-lib})
+# ==============================
+# Link
+# ==============================
+target_link_libraries(audioworkstation
+		oboe          # ← ВАЖНО: не oboe::oboe
+		${log-lib}
+		android
+)
+

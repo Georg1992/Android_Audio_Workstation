@@ -1,9 +1,12 @@
-package com.georgv.audioworkstation.audioprocessing
+package com.georgv.audioworkstation.audio.controller
+
+
+import com.georgv.audioworkstation.audio.processing.AudioProcessor
 
 import androidx.fragment.app.FragmentActivity
-import com.georgv.audioworkstation.UiListener
-import com.georgv.audioworkstation.data.Song
-import com.georgv.audioworkstation.data.Track
+import com.georgv.audioworkstation.ui.UiListener
+import com.georgv.audioworkstation.data.model.Song
+import com.georgv.audioworkstation.data.model.Track
 import com.georgv.audioworkstation.ui.main.fragments.AudioListener
 import android.util.Log
 import java.util.concurrent.CountDownLatch
@@ -116,5 +119,6 @@ object AudioController {
 
 
 }
+
 
 

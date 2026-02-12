@@ -10,9 +10,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.georgv.audioworkstation.SongListAdapter
-import com.georgv.audioworkstation.audioprocessing.AudioController
-import com.georgv.audioworkstation.data.Song
+import com.georgv.audioworkstation.ui.adapters.SongListAdapter
+import com.georgv.audioworkstation.audio.controller.AudioController
+import com.georgv.audioworkstation.data.model.Song
 import com.georgv.audioworkstation.databinding.LibraryFragmentBinding
 import com.georgv.audioworkstation.ui.main.SongViewModel
 import com.georgv.audioworkstation.ui.main.dialogs.CreateSongDialogFragment
