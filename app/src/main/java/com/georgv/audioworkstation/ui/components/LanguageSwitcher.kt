@@ -10,32 +10,32 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.localization.LanguageViewModel
+import com.georgv.audioworkstation.ui.local.LocalLanguageVm
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
 fun LanguageSwitcher(
-    languageVm: LanguageViewModel = viewModel(
-        factory = LanguageViewModel.Factory(LocalContext.current.applicationContext)),
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    val languageVm = LocalLanguageVm.current
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
-    val currentTag by languageVm.currentTag.collectAsState()
+    val currentTag = languageVm.currentTag.collectAsStateWithLifecycle().value
+        ?: return
 
     val currentLabel = when {
         currentTag.startsWith("ru") -> "RU"
-        currentTag.startsWith("zh") -> "CH"
+        currentTag.startsWith("zh") -> "ZH"
         else -> "EN"
     }
 
@@ -44,10 +44,6 @@ fun LanguageSwitcher(
         expanded = false
     }
 
-    // TODO: замени на свои AppColors/Dimens если они есть
-    val bg = Color(0xFF121212)
-    val line = Color(0xFFE0E0E0)
-    val stroke = 1.dp
     val shape = RoundedCornerShape(6.dp)
 
     Box(modifier = modifier) {
@@ -86,6 +82,7 @@ fun LanguageSwitcher(
         }
     }
 }
+
 
 
 

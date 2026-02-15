@@ -14,26 +14,30 @@ class LanguageViewModel(
     private val repo: LanguageRepository
 ) : ViewModel() {
 
-    val currentTag: StateFlow<String> =
+    val currentTag: StateFlow<String?> =
         repo.languageTagFlow.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = "en"
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = null
         )
 
-    fun setLanguage(tag: String) {
+    init {
         viewModelScope.launch {
-            repo.setLanguageTag(tag)
+            repo.ensureInitialized()
         }
+    }
+
+    fun setLanguage(tag: String) {
+        viewModelScope.launch { repo.setLanguageTag(tag) }
     }
 
     class Factory(private val appContext: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val repo = LanguageRepository(appContext)
-            return LanguageViewModel(repo) as T
+            return LanguageViewModel(LanguageRepository(appContext)) as T
         }
     }
 }
+
 
 

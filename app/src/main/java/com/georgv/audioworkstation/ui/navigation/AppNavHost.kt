@@ -17,7 +17,7 @@ import com.georgv.audioworkstation.ui.screens.projects.ProjectScreen
 
 @Composable
 fun AppNavHost(
-    navController: NavHostController = rememberNavController(),
+    navController: NavHostController = rememberNavController()
 ) {
     NavHost(
         navController = navController,
