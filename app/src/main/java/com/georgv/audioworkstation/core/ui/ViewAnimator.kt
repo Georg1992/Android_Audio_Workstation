@@ -108,17 +108,7 @@ class ViewAnimator {
     }
 
     // Optional: Handle the expansion of the menu item
-    fun expandMenuItem(clickedView: View, isReverse: Boolean) {
-        val icon = clickedView.findViewById<ImageView>(R.id.menu_icon)
-        val textView = clickedView.findViewById<TextView>(R.id.menu_item_name)
-        if (isReverse) {
-            animateView(icon, translationX = 0f, translationY = 0f)
-            animateView(textView, translationY = 0f)
-        } else {
-            animateView(icon, translationY = -400f)
-            animateView(textView, translationY = -300f)
-        }
-    }
+
 
 
 

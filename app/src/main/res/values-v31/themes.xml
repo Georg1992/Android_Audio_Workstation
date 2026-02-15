@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.MyApp.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/app_window_bg</item>
+        <item name="postSplashScreenTheme">@style/Theme.MyApp</item>
+
+        <item name="android:windowBackground">@color/app_window_bg</item>
+    </style>
+</resources>
+

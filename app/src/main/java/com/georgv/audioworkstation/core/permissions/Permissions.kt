@@ -1,31 +1,42 @@
 package com.georgv.audioworkstation.core.permissions
 
 import android.Manifest
-import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 
 object Permissions {
-    fun askForPermissions(perms: String?, activity: FragmentActivity) {
-        if(perms == "RECORD_AUDIO") {
-            activity.let {
-                Log.d("perms 0", "asking for perms: ACCESS_FINE_LOCATION + ACTIVITY_RECOGNITION")
-                if (ActivityCompat.checkSelfPermission(
-                        it,
-                        Manifest.permission.RECORD_AUDIO,
-                    ) !=
-                    PackageManager.PERMISSION_GRANTED
-                ) {
-                    ActivityCompat.requestPermissions(it, arrayOf(Manifest.permission.RECORD_AUDIO), 1001)
-                    return
-                }
-            }
+
+    fun recording(): Array<String> = arrayOf(
+        Manifest.permission.RECORD_AUDIO
+    )
+
+    fun libraryImport(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
-            Log.d("Permissions.kt","Could not find permission handler for: $perms")
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
     }
+
+    fun notifications(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            emptyArray()
+        }
+    }
+
+    fun missing(context: Context, perms: Array<String>): List<String> {
+        return perms.filter { perm ->
+            ContextCompat.checkSelfPermission(context, perm) != PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun hasAll(context: Context, perms: Array<String>): Boolean {
+        return missing(context, perms).isEmpty()
+    }
 }
+
+

@@ -1,0 +1,34 @@
+<resources>
+
+    <!-- App -->
+    <string name="app_title">音频工作站</string>
+
+    <!-- Languages -->
+    <string name="lang_english">English</string>
+    <string name="lang_russian">Русский</string>
+    <string name="lang_chinese">中文（简体）</string>
+
+    <!-- Main menu -->
+    <string name="menu_project">项目</string>
+    <string name="menu_project_sub">打开 / 创建</string>
+
+    <string name="menu_library">库</string>
+    <string name="menu_library_sub">我的音轨</string>
+
+    <string name="menu_community">社区</string>
+    <string name="menu_community_sub">发现</string>
+
+    <string name="menu_devices">设备</string>
+    <string name="menu_devices_sub">蓝牙 / 音频接口</string>
+
+    <string name="menu_quick_record">快速录音</string>
+    <string name="menu_quick_record_sub">点击开始录制</string>
+
+    <string name="screen_project">Project</string>
+    <string name="screen_library">Library</string>
+    <string name="screen_community">Community</string>
+    <string name="screen_devices">Devices</string>
+
+
+
+</resources>

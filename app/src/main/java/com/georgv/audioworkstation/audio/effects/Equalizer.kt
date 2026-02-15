@@ -40,8 +40,8 @@ class Equalizer(val band1:Int,val band2:Int,val band3:Int,val band4:Int,val band
             val band = frequencyBands[i]
             val gain = 10.0.pow(gains[i].toFloat() / 20.0).toFloat()
 
-            val startBin = (band.first * fftSize / 44100).toInt()
-            val endBin = (band.second * fftSize / 44100).toInt()
+            val startBin = (band.first * fftSize / 44100)
+            val endBin = (band.second * fftSize / 44100)
 
             for (bin in startBin until endBin) {
                 val re = complexBuffer[2 * bin]

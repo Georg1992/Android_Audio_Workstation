@@ -1,0 +1,28 @@
+<resources>
+    <string name="lang_english">English</string>
+    <string name="lang_russian">Русский</string>
+    <string name="lang_chinese"> 中文（简体）</string>
+
+    <string name="app_title">Audio Workstation</string>
+
+    <string name="menu_project">Проект</string>
+    <string name="menu_project_sub">Открыть / создать</string>
+
+    <string name="menu_library">Библиотека</string>
+    <string name="menu_library_sub">Мои треки</string>
+
+    <string name="menu_community">Сообщество</string>
+    <string name="menu_community_sub">Найти</string>
+
+    <string name="menu_devices">Устройства</string>
+    <string name="menu_devices_sub">Bluetooth / I/O</string>
+
+    <string name="menu_quick_record">Быстрая запись</string>
+    <string name="menu_quick_record_sub">Нажми, чтобы записать</string>
+
+    <string name="screen_project">Project</string>
+    <string name="screen_library">Library</string>
+    <string name="screen_community">Community</string>
+    <string name="screen_devices">Devices</string>
+
+</resources>

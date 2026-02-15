@@ -12,8 +12,6 @@ import android.media.*
 import android.os.Handler
 import android.os.Looper
 import androidx.core.app.ActivityCompat
-import com.georgv.audioworkstation.ui.MainActivity
-import com.georgv.audioworkstation.ui.UiListener
 import com.georgv.audioworkstation.audio.controller.AudioController.controllerState
 import com.georgv.audioworkstation.core.audio.WavHeader
 import com.georgv.audioworkstation.data.model.Song
@@ -40,7 +38,7 @@ private val BUFFER_SIZE_RECORDING =
     AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, PCM_16BIT_AUDIO_FORMAT)
 
 
-class AudioProcessor():UiListener {
+class AudioProcessor() {
     private lateinit var effects:Array<Effect?>
     private lateinit var file: File
 
@@ -50,7 +48,6 @@ class AudioProcessor():UiListener {
         set(value) {
             _track = value
             effects = emptyArray<Effect?>()
-            file = File(track.wavFilePath)
             volume = track.gain
         }
 
@@ -289,81 +286,9 @@ class AudioProcessor():UiListener {
 //    frame |     First     |    Second     |     Third     | ...
 //    sample | 1st L | 1st R | 2nd L | 2nd R | 3rd L | 3rd R | ... etc.
 
-    fun mixAudio(tracks: List<Track>, outputWavFile: File, callback: AudioProcessingCallback) {
-        executor.execute{
-            val handler = Handler(Looper.getMainLooper())
-            handler.post{
-                callback.onProcessingStarted()
-            }
-            val bufferSize = PLAYBACK_BUFFER_SIZE
-            var offset: Long = 44 // Skipping the WAV header
-            val outputFileSize = getLongestFileSize(tracks)
-
-            val mixed = FloatArray(bufferSize / 2)
-            val mixedShort = ShortArray(bufferSize / 2)
-            val mixedByte = ByteArray(bufferSize)
-
-            val doTimes = ((outputFileSize - offset) / bufferSize).toInt() + 1
-            //writeHeader(outputWavFile, outputFileSize)
-            repeat(doTimes) {
-                for (track in tracks) {
-                    handler.post{
-                        track.name?.let { it1 -> callback.onProcessingProgress(it1) }
-                    }
-                    val inputFile = File(track.wavFilePath)
-                    val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
-                    inputFile.inputStream().channel.read(bytesBuffer, offset)
-                    val bytes = bytesBuffer.array()
-                    val tmpBuffer = ShortArray(bufferSize / 2)
-                    ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                        .get(tmpBuffer)
-
-                    val audioFloats = FloatArray(bufferSize / 2)
-
-                    for (i in tmpBuffer.indices) {
-                        audioFloats[i] = tmpBuffer[i].toFloat() / 0x8000
-
-                        if (track == tracks[0]) {
-                            mixed[i] = audioFloats[i]
-                        } else {
-                            mixed[i] =
-                                ((mixed[i] + audioFloats[i]) * 0.8).toFloat()               //(mixed[i] + audioFloats[i]) - (mixed[i]*audioFloats[i])
-                        }
-                        if (mixed[i] > 1.0f) mixed[i] = 1.0f
-                        if (mixed[i] < -1.0f) mixed[i] = -1.0f
-
-                        mixedShort[i] = (mixed[i] * 32768.0f).toInt().toShort()
-                    }
-                }
-                offset += bufferSize
-                ByteBuffer.wrap(mixedByte).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                    .put(mixedShort)
-                FileUtils.writeByteArrayToFile(outputWavFile, mixedByte, true)
-
-            }
-            handler.post{
-                callback.onProcessingFinished()
-            }
-        }
-    }
-
-    private fun getLongestFileSize(tracks: List<Track>): Long {
-        val longestTrack = tracks.maxByOrNull { track -> track.duration ?: 0L }
-        return longestTrack?.let { File(it.wavFilePath).length() } ?: 0L
-    }
 
 
 
-
-
-
-    override fun uiCallback() {
-
-    }
-
-    override fun setValueFromUi(float: Float) {
-        controlVolume(float)
-    }
 
 }
 interface AudioProcessingCallback {
@@ -375,63 +300,6 @@ interface AudioProcessingCallback {
 
 
 
-//fun mixAudio(tracks: List<Track>, outputWavFile: File, callback: AudioProcessingCallback) {
-//    executor.execute{
-//        val handler = Handler(Looper.getMainLooper())
-//        handler.post{
-//            callback.onProcessingStarted()
-//        }
-//        val bufferSize = PLAYBACK_BUFFER_SIZE
-//        var offset: Long = 44 // Skipping the WAV header
-//        val outputFileSize = getLongestFileSize(tracks)
-//
-//        val mixed = FloatArray(bufferSize / 2)
-//        val mixedShort = ShortArray(bufferSize / 2)
-//        val mixedByte = ByteArray(bufferSize)
-//
-//        val doTimes = ((outputFileSize - offset) / bufferSize).toInt() + 1
-//        //writeHeader(outputWavFile, outputFileSize)
-//        repeat(doTimes) {
-//            for (track in tracks) {
-//                handler.post{
-//                    callback.onProcessingProgress(track.trackName)
-//                }
-//                val inputFile = File(track.wavDir)
-//                val bytesBuffer = ByteBuffer.allocateDirect(bufferSize)
-//                inputFile.inputStream().channel.read(bytesBuffer, offset)
-//                val bytes = bytesBuffer.array()
-//                val tmpBuffer = ShortArray(bufferSize / 2)
-//                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-//                    .get(tmpBuffer)
-//
-//                val audioFloats = FloatArray(bufferSize / 2)
-//
-//                for (i in tmpBuffer.indices) {
-//                    audioFloats[i] = tmpBuffer[i].toFloat() / 0x8000
-//
-//                    if (track == tracks[0]) {
-//                        mixed[i] = audioFloats[i]
-//                    } else {
-//                        mixed[i] =
-//                            ((mixed[i] + audioFloats[i]) * 0.8).toFloat()               //(mixed[i] + audioFloats[i]) - (mixed[i]*audioFloats[i])
-//                    }
-//                    if (mixed[i] > 1.0f) mixed[i] = 1.0f
-//                    if (mixed[i] < -1.0f) mixed[i] = -1.0f
-//
-//                    mixedShort[i] = (mixed[i] * 32768.0f).toInt().toShort()
-//                }
-//            }
-//            offset += bufferSize
-//            ByteBuffer.wrap(mixedByte).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-//                .put(mixedShort)
-//            FileUtils.writeByteArrayToFile(outputWavFile, mixedByte, true)
-//
-//        }
-//        handler.post{
-//            callback.onProcessingFinished()
-//        }
-//    }
-//}
 
 
 

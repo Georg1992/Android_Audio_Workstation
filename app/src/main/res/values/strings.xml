@@ -1,63 +1,29 @@
 <resources>
-    <string name="menuFastRecordButton">FastRecord</string>
-    <string name="menuDevicesButton">Devices</string>
-    <string name="menuCommunityButton">Community</string>
-    <string name="menuCreateButton">Create</string>
-    <string name="menuLibraryButton">Library</string>
-    <string name="app_name">Audio Workstation</string>
-    <string name="REC">RecordTrackButton</string>
-    <string name="PLAY">PlayTrackButton</string>
-    <string name="STOP">StopTrackButton</string>
-    <string name="PAUSE">PauseButton</string>
-    <string name="okEffect">OK</string>
-    <string name="reverb">REVERB</string>
+    <string name="lang_english">English</string>
+    <string name="lang_russian">Русский</string>
+    <string name="lang_chinese"> 中文（简体）</string>
 
-    <string name="createSong">Create Song</string>
-    <string name="OK">OK</string>
-    <string name="CANCEL">Cancel</string>
-    <string name="SaveButton">SAVE</string>
+    <string name="app_title">Audio Workstation</string>
 
-    <string name="reverbSwitch" />
-    <string name="sliderDelay" />
-    <string name="sliderDecay" />
-    <string name="sliderDryWet" />
-    <string name="sliderFeedback" />
+    <string name="menu_project">Project</string>
+    <string name="menu_project_sub">Open / create</string>
 
-    <string name="applyAllEffectsButton">ApplyEffectsButton</string>
-    <string name="delayText">Delay ms</string>
-    <string name="decayText">Decay Factor</string>
-    <string name="dryWetText">Dry/Wet</string>
-    <string name="feedbackText">Feedback</string>
-    <string name="apply_effect">Apply Effect</string>
-    <string name="equalizerText">EQUALIZER</string>
-    <string name="eqSwitch">Apply Effect</string>
-    <string name="sliderBand1" />
+    <string name="menu_library">Library</string>
+    <string name="menu_library_sub">MyTracks</string>
 
-    <string name="revTag">rev</string>
-    <string name="eqTag">eq</string>
-    <string name="compressor">COMPRESSOR</string>
-    <string name="thresholdText">Threshold</string>
-    <string name="ratioText">Ratio</string>
-    <string name="kneeText">Knee</string>
-    <string name="attackText">Attack</string>
-    <string name="compTag">comp</string>
-    <string name="gainText">Gain</string>
-    <string name="sliderThreshold">ThresholdSlider</string>
-    <string name="sliderRatio">RatioSlider</string>
-    <string name="sliderGain">Gain</string>
-    <string name="compSwitch">compSwitch</string>
-    <string name="releaseText">Release</string>
-    <string name="sliderAttack">Attack</string>
-    <string name="sliderKnee">Knee</string>
+    <string name="menu_community">Community</string>
+    <string name="menu_community_sub">Discover</string>
 
-    <string name="band1Text">lowpass</string>
-    <string name="band2Text">800Hz</string>
-    <string name="band3Text">2KHz</string>
-    <string name="band4Text">8KHz</string>
-    <string name="band5Text">15KHz</string>
-    <string name="band6Text">highpass</string>
-    <string name="fast_record">Fast Record</string>
-    <string name="play_pause">PLAY_PAUSE</string>
+    <string name="menu_devices">Devices</string>
+    <string name="menu_devices_sub">Bluetooth / I/O</string>
 
+    <string name="menu_quick_record">Quick Record</string>
+    <string name="menu_quick_record_sub">Tap to record</string>
+
+    <string name="screen_project">Project</string>
+    <string name="screen_library">Library</string>
+    <string name="screen_community">Community</string>
+    <string name="screen_devices">Devices</string>
 
 </resources>
+

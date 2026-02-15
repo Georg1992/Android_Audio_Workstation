@@ -44,3 +44,23 @@ crashlytics.properties
 crashlytics-build.properties
 fabric.properties
 
+
+# === Extra Android/AGP junk (must ignore) ===
+**/intermediates/
+**/generated/
+**/outputs/
+**/tmp/
+**/reports/
+**/global_synthetics_*/
+**/global_synthetics_project/
+
+# === CMake/NDK build dirs often created inside module ===
+app/Debug/
+app/RelWithDebInfo/
+**/.cxx/
+**/.externalNativeBuild/
+**/externalNativeBuild/
+
+# === Kotlin/Compose/Gradle caches ===
+.kotlin/
+**/.kotlin/

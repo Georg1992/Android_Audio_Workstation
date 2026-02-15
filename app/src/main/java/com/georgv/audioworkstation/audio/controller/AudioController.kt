@@ -4,10 +4,8 @@ package com.georgv.audioworkstation.audio.controller
 import com.georgv.audioworkstation.audio.processing.AudioProcessor
 
 import androidx.fragment.app.FragmentActivity
-import com.georgv.audioworkstation.ui.UiListener
 import com.georgv.audioworkstation.data.model.Song
 import com.georgv.audioworkstation.data.model.Track
-import com.georgv.audioworkstation.ui.main.fragments.AudioListener
 import android.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -23,7 +21,6 @@ object AudioController {
     }
 
     lateinit var fragmentActivitySender: FragmentActivity
-    lateinit var audioListener: AudioListener
     private val mainExecutor = Executors.newSingleThreadExecutor()
 
     var controllerState: ControllerState = ControllerState.STOP
@@ -37,15 +34,7 @@ object AudioController {
         processor.startRecording()
     }
 
-    @Synchronized
-    fun addTrackToTheTrackList(track: Track,processor: AudioProcessor?):UiListener? {
-        if(processor != null){
-            val pair = Pair(track, processor)
-            trackList.add(pair)
-            return processor
-        }
-        return null
-    }
+
 
     @Synchronized
     fun removeTrackFromTheTrackList(track: Track) {
@@ -93,7 +82,7 @@ object AudioController {
 
             }
         }
-        audioListener.uiCallback()
+
     }
 
     private fun playSong(){
