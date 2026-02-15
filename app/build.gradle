@@ -5,21 +5,21 @@ plugins {
 }
 
 android {
-    namespace 'com.georgv.audioworkstation'
-    compileSdk 36
+    namespace = 'com.georgv.audioworkstation'
+    compileSdk = 36
 
     defaultConfig {
-        applicationId "com.georgv.audioworkstation"
-        minSdk 26
-        targetSdk 35
-        versionCode 1
-        versionName "1.0"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        applicationId = "com.georgv.audioworkstation"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
-        compose true
-        buildConfig false
+        compose = true
+        buildConfig = false
     }
 
     compileOptions {
@@ -27,12 +27,9 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    // если хочешь явно выставить jvmTarget
-    // (в AGP9 лучше через kotlinCompilerOptions ниже)
 }
 
 kotlin {
-    // НОВЫЙ способ (вместо kotlinOptions внутри android {})
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
