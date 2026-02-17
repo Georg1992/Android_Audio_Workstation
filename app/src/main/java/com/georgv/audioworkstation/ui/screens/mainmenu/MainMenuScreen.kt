@@ -106,7 +106,6 @@ fun MainMenuScreen(
                     }
                 }
 
-                // QUICK RECORD ВНИЗУ
                 MainTile(
                     title = stringResource(R.string.menu_quick_record),
                     subtitle = stringResource(R.string.menu_quick_record_sub),
