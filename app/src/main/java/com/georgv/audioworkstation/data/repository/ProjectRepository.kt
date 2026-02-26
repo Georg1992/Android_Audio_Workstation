@@ -12,19 +12,26 @@ import javax.inject.Singleton
 class ProjectRepository @Inject constructor(
     private val dao: ProjectDao
 ) {
-
+    //Projects
     fun observeProjects(): Flow<List<ProjectEntity>> = dao.observeProjects()
-
-    fun observeTracks(projectId: String): Flow<List<TrackEntity>> = dao.observeTracks(projectId)
 
     suspend fun getProjectWithTracks(projectId: String): ProjectWithTracks? =
         dao.getProjectWithTracks(projectId)
 
+    suspend fun deleteProject(projectId: String) = dao.deleteProject(projectId)
+
     suspend fun upsertProject(project: ProjectEntity) = dao.upsertProject(project)
+
+    //Tracks
+    fun observeTracks(projectId: String): Flow<List<TrackEntity>> = dao.observeTracks(projectId)
+
+    suspend fun updateTracks(tracks: List<TrackEntity>) =
+        dao.updateTracks(tracks)
 
     suspend fun upsertTrack(track: TrackEntity) = dao.upsertTrack(track)
 
     suspend fun upsertTracks(tracks: List<TrackEntity>) = dao.upsertTracks(tracks)
 
-    suspend fun deleteProject(projectId: String) = dao.deleteProject(projectId)
+
+    suspend fun deleteTrack(trackId: String) = dao.deleteTrack(trackId)
 }

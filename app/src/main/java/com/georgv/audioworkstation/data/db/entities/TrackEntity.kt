@@ -26,5 +26,6 @@ data class TrackEntity(
     val timeStampStart: Long = 0L,
     val timeStampStop: Long? = null,
     val duration: Long? = null,
-    val isRecording: Boolean = false
+    val isRecording: Boolean = false,
+    val position: Int = 0
 )

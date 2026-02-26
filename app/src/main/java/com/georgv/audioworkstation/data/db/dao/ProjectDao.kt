@@ -28,8 +28,16 @@ interface ProjectDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertTracks(tracks: List<TrackEntity>)
 
-    @Query("SELECT * FROM tracks WHERE projectId = :projectId")
+    @Update
+    suspend fun updateTracks(tracks: List<TrackEntity>)
+
+
+
+    @Query("SELECT * FROM tracks WHERE projectId = :projectId ORDER BY position ASC")
     fun observeTracks(projectId: String): Flow<List<TrackEntity>>
+
+    @Query("DELETE FROM tracks WHERE id = :trackId")
+    suspend fun deleteTrack(trackId: String)
 
 
     // Relations

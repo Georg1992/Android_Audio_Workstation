@@ -13,6 +13,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -21,6 +22,9 @@ import com.georgv.audioworkstation.ui.theme.AppColors
 @Composable
 fun TransportPanel(
     isRecording: Boolean,
+    isPlaying: Boolean,
+    isPlayEnabled: Boolean,
+    isStopEnabled: Boolean,
     onPlay: () -> Unit,
     onStop: () -> Unit,
     onRecord: () -> Unit,
@@ -42,45 +46,73 @@ fun TransportPanel(
 
         TransportButton(
             color = AppColors.Green,
-            onClick = onPlay
+            enabled = isPlayEnabled,
+            onClick = onPlay,
+            isActive = isPlaying
         ) {
             Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = AppColors.Line)
         }
 
         TransportButton(
             color = AppColors.Yellow,
-            onClick = onStop
+            enabled = isStopEnabled,
+            onClick = onStop,
+            isActive = false
         ) {
             Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = AppColors.Line)
         }
 
         TransportButton(
             color = AppColors.Red,
-            onClick = onRecord
+            enabled = true,
+            onClick = onRecord,
+            isActive = isRecording
         ) {
             Icon(Icons.Filled.FiberManualRecord, contentDescription = "Record", tint = AppColors.Line)
         }
+
+
     }
 }
 
 @Composable
-private fun TransportButton(
+fun TransportButton(
     color: Color,
+    enabled: Boolean,
+    isActive: Boolean,
     onClick: () -> Unit,
-    content: @Composable () -> Unit
+    content: @Composable BoxScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(8.dp)
+
+    val bgColor = when {
+        !enabled -> AppColors.Bg
+        isActive -> color
+        else -> AppColors.Bg
+    }
+
+    val borderColor = when {
+        isActive -> AppColors.Line
+        else -> AppColors.Line
+    }
 
     Box(
         modifier = Modifier
             .size(56.dp)
             .clip(shape)
-            .background(color)
-            .border(1.dp, AppColors.Line, shape),
+            .background(bgColor)
+            .border(1.dp, borderColor, shape),
         contentAlignment = Alignment.Center
     ) {
-        IconButton(onClick = onClick) {
-            content()
+        IconButton(
+            onClick = onClick,
+            enabled = enabled
+        ) {
+            Box(
+                modifier = Modifier.alpha(if (enabled) 1f else 0.4f)
+            ) {
+                content()
+            }
         }
     }
 }
