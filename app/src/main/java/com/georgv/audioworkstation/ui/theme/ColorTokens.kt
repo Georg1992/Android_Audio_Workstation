@@ -12,4 +12,14 @@ object AppColors {
     val Cyan = Color(0xFF01FEFF)
     val Pink = Color(0xFFFFD2FF)
     val Red = Color(0xFFED575A)
+
+    val Text = Line
+    val Accent = Green
+
+    // Fader (dark track/thumb, minimal set)
+    val FaderTrack = Color(0xFF000000)
+    val FaderTrackBorder = Color(0xFF1A1A1A)
+    val FaderTick = Color(0xFF2A2A2A)
+    val FaderThumb = Color(0xFFE8E8E8)
+    val FaderThumbNotch = Color(0x33000000)
 }

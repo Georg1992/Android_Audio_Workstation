@@ -47,7 +47,7 @@ fun MainTile(
                 .border(Dimens.Stroke, AppColors.Line, shape)
                 .padding(Dimens.TileInnerPadding)
         ) {
-            val narrow = maxWidth < 170.dp
+            val narrow = maxWidth < Dimens.MainTileNarrowBreakpoint
 
             val iconSize = if (narrow) Dimens.IconTileSize * 1.15f else Dimens.IconTileSize
 

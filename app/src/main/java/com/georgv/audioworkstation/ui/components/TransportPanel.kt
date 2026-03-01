@@ -16,8 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
 fun TransportPanel(
@@ -30,16 +30,16 @@ fun TransportPanel(
     onRecord: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
+            .padding(bottom = Dimens.PanelPadding)
             .clip(shape)
             .background(AppColors.Bg)
-            .border(1.dp, AppColors.Line, shape)
-            .padding(vertical = 8.dp),
+            .border(Dimens.Stroke, AppColors.Line, shape)
+            .padding(vertical = Dimens.PanelPadding),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -83,7 +83,7 @@ fun TransportButton(
     onClick: () -> Unit,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(Dimens.MediumRadius)
 
     val bgColor = when {
         !enabled -> AppColors.Bg
@@ -91,17 +91,12 @@ fun TransportButton(
         else -> AppColors.Bg
     }
 
-    val borderColor = when {
-        isActive -> AppColors.Line
-        else -> AppColors.Line
-    }
-
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(Dimens.TransportButtonSize)
             .clip(shape)
             .background(bgColor)
-            .border(1.dp, borderColor, shape),
+            .border(Dimens.Stroke, AppColors.Line, shape),
         contentAlignment = Alignment.Center
     ) {
         IconButton(

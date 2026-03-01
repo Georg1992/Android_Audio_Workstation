@@ -11,7 +11,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.ui.theme.Dimens
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.tiles.MainTile
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -37,27 +37,26 @@ fun MainMenuScreen(
                 .fillMaxSize()
                 .background(AppColors.Bg)
                 .padding(padding)
-                .padding(12.dp)
+                .padding(Dimens.TileInnerPadding)
         ) {
 
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
             ) {
 
-                // GRID (занимает всё доступное место)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
                 ) {
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap)
                     ) {
                         MainTile(
                             title = stringResource(R.string.menu_project),
@@ -82,7 +81,7 @@ fun MainMenuScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap)
                     ) {
                         MainTile(
                             title = stringResource(R.string.menu_community),

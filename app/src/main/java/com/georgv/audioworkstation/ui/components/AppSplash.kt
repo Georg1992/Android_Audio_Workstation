@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
 fun AppSplash(
@@ -35,17 +36,16 @@ fun AppSplash(
             // low-fi “card”
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
                 modifier = Modifier
                     .padding(24.dp)
-                    .border(1.dp, AppColors.Line, RoundedCornerShape(14.dp))
+                    .border(Dimens.Stroke, AppColors.Line, RoundedCornerShape(Dimens.TransportPanelRadius))
                     .padding(horizontal = 18.dp, vertical = 14.dp)
             ) {
-                // Минималистичный “логомарк”
                 Box(
                     modifier = Modifier
                         .size(width = 88.dp, height = 22.dp)
-                        .border(1.dp, AppColors.Line, RoundedCornerShape(6.dp))
+                        .border(Dimens.Stroke, AppColors.Line, RoundedCornerShape(Dimens.SmallRadius))
                 )
 
                 Text(

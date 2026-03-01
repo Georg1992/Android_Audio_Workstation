@@ -12,14 +12,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
+import com.georgv.audioworkstation.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(onBack: () -> Unit) {
     ScreenScaffold(title = "Devices", onBack = onBack) { padding ->
-        Text("Devices Screen", modifier = Modifier.padding(padding).padding(16.dp))
+        Text("Devices Screen", modifier = Modifier.padding(padding).padding(Dimens.ScreenContentPadding))
     }
 }
 

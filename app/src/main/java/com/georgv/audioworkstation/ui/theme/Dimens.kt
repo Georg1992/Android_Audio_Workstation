@@ -7,6 +7,7 @@ object Dimens {
 
     val TileRadius = 10.dp
     val SmallRadius = 6.dp
+    val MediumRadius = 8.dp
 
     val Stroke = 1.dp
 
@@ -14,6 +15,7 @@ object Dimens {
     val IconTileSize = 36.dp
 
     val AccentBarHeight = 8.dp
+    val PanelPadding = 8.dp
 
     // top bar
     val TopBarHeight = 30.dp
@@ -21,4 +23,24 @@ object Dimens {
     // language icon
     val LangChipSize = 28.dp
     val LangChipRadius = 6.dp
+
+    // track card
+    val MenuButtonSize = 40.dp
+    val PlaceholderHeight = 42.dp
+    val FaderWidth = 44.dp
+    val FaderMinHeight = 100.dp
+    val MenuRowMinHeight = 32.dp
+
+    // transport
+    val TransportPanelRadius = 14.dp
+    val TransportButtonSize = 56.dp
+
+    // project screen
+    val PanelPlaceholderHeight = 72.dp
+
+    // placeholder screens (Community, Library, Devices)
+    val ScreenContentPadding = 16.dp
+
+    // main tile narrow breakpoint
+    val MainTileNarrowBreakpoint = 170.dp
 }
