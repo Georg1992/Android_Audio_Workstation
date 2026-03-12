@@ -1,8 +1,11 @@
 package com.georgv.audioworkstation.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,7 +39,11 @@ fun TrackCard(
     onGainChange: (Float) -> Unit,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trackId: String? = null,
+    onDragHandleStart: ((positionInRoot: Offset) -> Unit)? = null,
+    onDragHandleMove: ((positionInRoot: Offset) -> Unit)? = null,
+    onDragHandleEnd: (() -> Unit)? = null
 ) {
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
 
@@ -51,13 +62,18 @@ fun TrackCard(
     val gainClamped = gain.coerceIn(0f, 100f)
     val gainText = gainClamped.roundToInt().toString()
 
+    val showHandle = trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
             .background(bg)
             .border(Dimens.Stroke, AppColors.Line, cardShape)
-            .clickable {
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
                 if (menuExpanded) menuExpanded = false else onClick()
             }
     ) {
@@ -183,6 +199,46 @@ fun TrackCard(
                 )
             }
         }
+
+        if (showHandle) {
+            var handleCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(Dimens.SmallRadius)
+                    .size(Dimens.DragHandleSize)
+                    .onGloballyPositioned { handleCoords = it }
+                    .pointerInput(trackId) {
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                val pos = handleCoords?.localToRoot(Offset(offset.x, offset.y))
+                                if (pos != null) onDragHandleStart(pos)
+                            },
+                            onDrag = { change, _ ->
+                                val pos = handleCoords?.localToRoot(Offset(change.position.x, change.position.y))
+                                if (pos != null) onDragHandleMove(pos)
+                            },
+                            onDragEnd = { onDragHandleEnd() },
+                            onDragCancel = { onDragHandleEnd() }
+                        )
+                    }
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val color = AppColors.Line.copy(alpha = 0.85f)
+                    val dotR = minOf(w, h) * 0.07f
+                    listOf(0.72f to 0.92f, 0.84f to 0.84f, 0.92f to 0.72f).forEach { (tx, ty) ->
+                        drawCircle(
+                            color = color,
+                            radius = dotR,
+                            center = Offset(w * tx, h * ty)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -212,5 +268,3 @@ private fun MenuRowRight(
         )
     }
 }
-
-

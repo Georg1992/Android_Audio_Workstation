@@ -7,9 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 
 /**
- * Minimal controller for drag state. No UI or list dependencies.
- * Drop/hover index is computed at the call site (e.g. computeReorderDropIndex in ui.drag.reorder).
- * from [fingerPos] and list layout.
+ * Controller for drag state used by reorder (e.g. track list).
+ * Drop index is computed at call site via [com.georgv.audioworkstation.ui.drag.reorder.computeReorderDropIndex].
  */
 @Stable
 class DragController {
@@ -18,29 +17,72 @@ class DragController {
     var draggingKey: String? by mutableStateOf(null)
         private set
 
-    /** Current drag position in the same coordinate system used for hit-testing (e.g. root or list-local). */
+    /** Current drag position in root (only Y is updated during drag; X is fixed at start). */
     var fingerPos: Offset by mutableStateOf(Offset.Zero)
         private set
 
+    /**
+     * Offset from finger to the dragged item's top-left at drag start.
+     * Overlay top-left Y = fingerPos.y - dragOffset.y.
+     */
+    var dragOffset: Offset by mutableStateOf(Offset.Zero)
+        private set
+
+    /**
+     * Overlay X in list-parent coordinates (px), set once at drag start.
+     * X never changes during drag.
+     */
+    var fixedXInParentPx: Float by mutableStateOf(0f)
+        private set
+
+    /** Overlay size (px) from actual item bounds at drag start. Keeps overlay from stretching. */
+    var overlayWidthPx: Float by mutableStateOf(0f)
+        private set
+    var overlayHeightPx: Float by mutableStateOf(0f)
+        private set
+
+    /** Computed drop index in [0, itemsCount]; null until computed. */
+    var targetIndex: Int? by mutableStateOf(null)
+        internal set
+
     val isDragging: Boolean get() = draggingKey != null
 
-    /** Start a drag. Call when long-press or drag gesture is detected. */
-    fun start(key: String, startPos: Offset) {
+    /**
+     * Start a drag. [fixedXInParentPx] and [overlayWidthPx]/[overlayHeightPx] from item bounds at start.
+     */
+    fun start(
+        key: String,
+        startPos: Offset,
+        offsetFromFingerToItemTopLeft: Offset,
+        fixedXInParentPx: Float,
+        overlayWidthPx: Float,
+        overlayHeightPx: Float
+    ) {
         draggingKey = key
-        fingerPos = startPos
+        dragOffset = offsetFromFingerToItemTopLeft
+        this.fixedXInParentPx = fixedXInParentPx
+        this.overlayWidthPx = overlayWidthPx
+        this.overlayHeightPx = overlayHeightPx
+        fingerPos = Offset(startPos.x, startPos.y)
+        targetIndex = null
     }
 
-    /** Update drag position. No-op if not dragging. */
+    /** Update drag position (vertical only). Only fingerPos.y is updated. */
     fun update(pos: Offset) {
         if (!isDragging) return
-        fingerPos = pos
+        fingerPos = Offset(fingerPos.x, pos.y)
     }
 
-    /** End drag and clear state. Returns the dragged key for performing the drop; call moveTrack(draggedKey, dropIndex) at call site. */
+    /** End drag and clear state. Returns the dragged key for performing the drop. */
     fun end(): String? {
         val key = draggingKey
         draggingKey = null
         fingerPos = Offset.Zero
+        dragOffset = Offset.Zero
+        fixedXInParentPx = 0f
+        overlayWidthPx = 0f
+        overlayHeightPx = 0f
+        targetIndex = null
         return key
     }
 
@@ -48,6 +90,10 @@ class DragController {
     fun cancel() {
         draggingKey = null
         fingerPos = Offset.Zero
+        dragOffset = Offset.Zero
+        fixedXInParentPx = 0f
+        overlayWidthPx = 0f
+        overlayHeightPx = 0f
+        targetIndex = null
     }
 }
-

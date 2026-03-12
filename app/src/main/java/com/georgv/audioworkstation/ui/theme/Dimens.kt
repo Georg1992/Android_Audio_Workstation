@@ -43,4 +43,10 @@ object Dimens {
 
     // main tile narrow breakpoint
     val MainTileNarrowBreakpoint = 170.dp
+
+    // drag handle (triangle in track card)
+    val DragHandleSize = 24.dp
+
+    /** Min distance (in list Y) past a slot boundary before reorder index switches (reduces flicker). */
+    val ReorderIndexThreshold = 24.dp
 }
