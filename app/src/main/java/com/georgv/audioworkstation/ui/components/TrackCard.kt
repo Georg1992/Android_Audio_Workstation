@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,7 +49,9 @@ fun TrackCard(
     /** When true, card tap, menu, and fader do not respond. */
     interactionBlocked: Boolean = false,
     /** When true, the reorder handle consumes touches but does not start a drag (other row is being dragged). */
-    blockDragHandle: Boolean = false
+    blockDragHandle: Boolean = false,
+    /** When false, reorder handle is dimmed and does not start a drag (e.g. row clipped by list). */
+    dragHandleEnabled: Boolean = true
 ) {
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
 
@@ -219,9 +222,10 @@ fun TrackCard(
                     .align(Alignment.BottomEnd)
                     .padding(Dimens.SmallRadius)
                     .size(Dimens.DragHandleSize)
+                    .alpha(if (dragHandleEnabled) 1f else 0.35f)
                     .onGloballyPositioned { handleCoords = it }
-                    .pointerInput(trackId, blockDragHandle) {
-                        if (blockDragHandle) {
+                    .pointerInput(trackId, blockDragHandle, dragHandleEnabled) {
+                        if (blockDragHandle || !dragHandleEnabled) {
                             while (true) {
                                 awaitEachGesture {
                                     do {

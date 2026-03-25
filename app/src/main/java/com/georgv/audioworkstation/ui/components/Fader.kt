@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -71,6 +70,15 @@ fun Fader(
     val topPad = thumbH / 2f
     val bottomPadPx = 2f
 
+    fun trackYBounds(canvasHeight: Float): Pair<Float, Float> {
+        val h = canvasHeight.coerceAtLeast(0f)
+        val topY = topPad.coerceIn(0f, h)
+        val bottomY = (h - bottomPadPx).coerceIn(0f, h)
+        val low = minOf(topY, bottomY)
+        val high = maxOf(topY, bottomY)
+        return low to high
+    }
+
     Box(
         modifier = modifier
             .pointerInput(enabled) {
@@ -80,18 +88,20 @@ fun Fader(
                         val h = lastHeight
                         if (h <= 0f) return@detectDragGestures
 
-                        val usable = (h - topPad - bottomPadPx).coerceAtLeast(1f)
-                        val y = pos.y.coerceIn(topPad, h - bottomPadPx)
-                        val t = 1f - ((y - topPad) / usable)
+                        val (trackTop, trackBottom) = trackYBounds(h)
+                        val usable = (trackBottom - trackTop).coerceAtLeast(1f)
+                        val y = pos.y.coerceIn(trackTop, trackBottom)
+                        val t = 1f - ((y - trackTop) / usable)
                         onValueChange(clamp(denorm(t)))
                     },
                     onDrag = { change, _ ->
                         val h = lastHeight
                         if (h <= 0f) return@detectDragGestures
 
-                        val usable = (h - topPad - bottomPadPx).coerceAtLeast(1f)
-                        val y = change.position.y.coerceIn(topPad, h - bottomPadPx)
-                        val t = 1f - ((y - topPad) / usable)
+                        val (trackTop, trackBottom) = trackYBounds(h)
+                        val usable = (trackBottom - trackTop).coerceAtLeast(1f)
+                        val y = change.position.y.coerceIn(trackTop, trackBottom)
+                        val t = 1f - ((y - trackTop) / usable)
                         onValueChange(clamp(denorm(t)))
                     }
                 )
@@ -101,8 +111,7 @@ fun Fader(
             lastHeight = size.height
 
             val cx = size.width / 2f
-            val trackTop = topPad
-            val trackBottom = size.height - bottomPadPx
+            val (trackTop, trackBottom) = trackYBounds(size.height)
             val trackH = (trackBottom - trackTop).coerceAtLeast(0f)
             val fullH = trackH.coerceAtLeast(1f)
 

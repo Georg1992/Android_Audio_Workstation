@@ -6,12 +6,11 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -41,6 +40,13 @@ import kotlin.math.abs
 
 private fun fingerYInListSpace(fingerRootY: Float, listBoundsInRoot: Rect, viewportStartOffset: Int): Float =
     fingerRootY - (listBoundsInRoot.top - viewportStartOffset)
+
+private fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: Int): Boolean {
+    val info = listState.layoutInfo
+    val item = info.visibleItemsInfo.find { it.index == itemIndex } ?: return false
+    return item.offset >= info.viewportStartOffset &&
+        item.offset + item.size <= info.viewportEndOffset
+}
 
 /** New list order if [draggedId] is placed at [toIndex] (0..n-1 in list with dragged removed). */
 private fun reorderForDisplay(list: List<TrackEntity>, draggedId: String, toIndex: Int): List<TrackEntity> {
@@ -232,13 +238,14 @@ fun ProjectScreen(
                     verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
                     userScrollEnabled = !reorderActive
                 ) {
-                    items(
+                    itemsIndexed(
                         items = tracks,
-                        key = { it.id }
-                    ) { track ->
+                        key = { _, t -> t.id }
+                    ) { index, track ->
                         val isDragging = dragController.isDragging && dragController.draggingKey == track.id
 
                         val displayedGain = sessionGainByTrackId[track.id] ?: track.gain
+                        val rowFullyVisible = isTrackFullyVisibleInLazyList(listState, index)
 
                         Box(
                             modifier = Modifier
@@ -258,7 +265,9 @@ fun ProjectScreen(
                                 trackId = track.id,
                                 interactionBlocked = reorderActive,
                                 blockDragHandle = reorderActive && dragController.draggingKey != track.id,
+                                dragHandleEnabled = rowFullyVisible,
                                 onDragHandleStart = { positionInRoot ->
+                                    if (!isTrackFullyVisibleInLazyList(listState, index)) return@TrackCard
                                     val bounds = itemBoundsMap[track.id] ?: return@TrackCard
                                     val offsetFromFinger = positionInRoot - Offset(bounds.left, bounds.top)
                                     val fixedXInParentPx = bounds.left - listParentBoundsInRoot.left
