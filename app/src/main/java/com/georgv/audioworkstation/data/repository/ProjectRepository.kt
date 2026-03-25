@@ -34,4 +34,7 @@ class ProjectRepository @Inject constructor(
 
 
     suspend fun deleteTrack(trackId: String) = dao.deleteTrack(trackId)
+
+    suspend fun deleteTrackAndUpdatePositions(trackId: String, remaining: List<TrackEntity>) =
+        dao.deleteTrackAndUpdatePositions(trackId, remaining)
 }

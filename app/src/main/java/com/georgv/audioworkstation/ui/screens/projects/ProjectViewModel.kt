@@ -7,8 +7,12 @@ import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -43,50 +47,53 @@ class ProjectViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val projectId = MutableStateFlow<String?>(null)
+    private var boundProjectId: String? = null
 
     private val playingTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val recordingTrackId = MutableStateFlow<String?>(null)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val uiState: StateFlow<ProjectUiState> =
-        projectId
-            .filterNotNull()
-            .flatMapLatest { id ->
-                combine(
-                    repo.observeProjects().map { list -> list.firstOrNull { it.id == id } },
-                    repo.observeTracks(id),
-                    selectedTrackIds,
-                    playingTrackIds,
-                    recordingTrackId
-                ) { project, tracks, selected, playing, recording ->
-                    ProjectUiState(
-                        projectId = id,
-                        project = project,
-                        tracks = tracks,
-                        selectedTrackIds = selected,
-                        playingTrackIds = playing,
-                        recordingTrackId = recording
-                    )
-                }
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
+    /** Tracks for the open project; loaded from DB in [bind] only, then owned here until another bind. */
+    private val tracksSession = MutableStateFlow<List<TrackEntity>>(emptyList())
 
-    fun bind(projectId: String) {
+    val uiState: StateFlow<ProjectUiState> =
+        combine(
+            combine(projectId, repo.observeProjects()) { pid, allProjects -> pid to allProjects },
+            tracksSession,
+            selectedTrackIds,
+            playingTrackIds,
+            recordingTrackId
+        ) { pidProjects, tracks, selected, playing, recording ->
+            val (pid, allProjects) = pidProjects
+            val project = pid?.let { id -> allProjects.firstOrNull { it.id == id } }
+            ProjectUiState(
+                projectId = pid,
+                project = project,
+                tracks = tracks,
+                selectedTrackIds = selected,
+                playingTrackIds = playing,
+                recordingTrackId = recording
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
+
+    suspend fun bind(projectId: String) {
+        if (boundProjectId == projectId) return
+        boundProjectId = projectId
         this.projectId.value = projectId
+        tracksSession.value = repo.observeTracks(projectId).first().sortedBy { it.position }
     }
 
-    fun ensureProjectExists(projectId: String, name: String) {
-        viewModelScope.launch {
-            if (repo.getProjectWithTracks(projectId) == null) {
-                repo.upsertProject(ProjectEntity(id = projectId, name = name))
-            }
+    suspend fun ensureProjectExists(projectId: String, name: String) {
+        if (repo.getProjectWithTracks(projectId) == null) {
+            repo.upsertProject(ProjectEntity(id = projectId, name = name))
         }
     }
 
     fun addTrack(projectId: String, name: String? = null) {
+        if (this.projectId.value != projectId) return
         viewModelScope.launch {
-            val existingCount = repo.getProjectWithTracks(projectId)?.tracks?.size ?: 0
+            ensureProjectExists(projectId, "New Project")
+            val existingCount = tracksSession.value.size
             val finalName = name ?: "Take ${existingCount + 1}"
 
             val track = TrackEntity(
@@ -97,6 +104,7 @@ class ProjectViewModel @Inject constructor(
                 wavFilePath = ""
             )
             repo.upsertTracks(listOf(track))
+            tracksSession.value = tracksSession.value + track
         }
     }
 
@@ -107,13 +115,14 @@ class ProjectViewModel @Inject constructor(
 
     fun onRecordPressed(projectId: String) {
         viewModelScope.launch {
-            // stop recording
             if (recordingTrackId.value != null) {
                 recordingTrackId.value = null
                 return@launch
             }
 
-            val existingCount = repo.getProjectWithTracks(projectId)?.tracks?.size ?: 0
+            ensureProjectExists(projectId, "New Project")
+
+            val existingCount = tracksSession.value.size
             val newTrack = TrackEntity(
                 id = UUID.randomUUID().toString(),
                 projectId = projectId,
@@ -122,7 +131,7 @@ class ProjectViewModel @Inject constructor(
                 wavFilePath = ""
             )
             repo.upsertTracks(listOf(newTrack))
-
+            tracksSession.value = tracksSession.value + newTrack
             recordingTrackId.value = newTrack.id
         }
     }
@@ -131,7 +140,6 @@ class ProjectViewModel @Inject constructor(
         val selected = selectedTrackIds.value
 
         viewModelScope.launch {
-            // toggle play
             if (playingTrackIds.value.isNotEmpty()) {
                 playingTrackIds.value = emptySet()
                 return@launch
@@ -143,7 +151,6 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun onStopPressed() {
-        // stop everything
         recordingTrackId.value = null
         playingTrackIds.value = emptySet()
     }
@@ -155,36 +162,49 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Reorder support (used later by drag & drop).
-     */
-    fun moveTrack(projectId: String, trackId: String, toIndex: Int) {
+    /** In-memory order only (e.g. while dragging past threshold). DB unchanged. */
+    fun setTrackOrderSession(projectId: String, orderedTracks: List<TrackEntity>) {
+        if (this.projectId.value != projectId) return
+        if (orderedTracks.isEmpty()) return
+        val sessionById = tracksSession.value.associateBy { it.id }
+        val merged = orderedTracks
+            .filter { it.id in sessionById }
+            .mapIndexed { index, row -> sessionById.getValue(row.id).copy(position = index) }
+        if (merged.isEmpty()) return
+        val presentIds = merged.map { it.id }.toSet()
+        val trailing = tracksSession.value
+            .filter { it.id !in presentIds }
+            .sortedBy { it.position }
+            .mapIndexed { i, t -> t.copy(position = merged.size + i) }
+        tracksSession.value = merged + trailing
+    }
+
+    /** Persist current session order to DB (call on drop). */
+    fun persistTrackOrderToDb(projectId: String) {
+        if (this.projectId.value != projectId) return
+        val list = tracksSession.value
+        if (list.isEmpty()) return
         viewModelScope.launch {
-            val current = repo.getProjectWithTracks(projectId)?.tracks
-                ?.sortedBy { it.position }
-                ?.toMutableList()
-                ?: return@launch
-
-            val fromIndex = current.indexOfFirst { it.id == trackId }
-            if (fromIndex == -1) return@launch
-
-            val moved = current.removeAt(fromIndex)
-            val safeIndex = toIndex.coerceIn(0, current.size)
-            current.add(safeIndex, moved)
-
-            val updated = current.mapIndexed { index, t -> t.copy(position = index) }
-            repo.updateTracks(updated)
+            repo.updateTracks(list)
         }
     }
 
     fun deleteTrack(trackId: String) {
+        selectedTrackIds.value = selectedTrackIds.value - trackId
+        if (recordingTrackId.value == trackId) recordingTrackId.value = null
+        if (playingTrackIds.value.contains(trackId)) {
+            playingTrackIds.value = playingTrackIds.value - trackId
+        }
+        val newList = tracksSession.value
+            .filter { it.id != trackId }
+            .mapIndexed { i, t -> t.copy(position = i) }
+        tracksSession.value = newList
         viewModelScope.launch {
-            selectedTrackIds.value = selectedTrackIds.value - trackId
-            if (recordingTrackId.value == trackId) recordingTrackId.value = null
-            if (playingTrackIds.value.contains(trackId)) {
-                playingTrackIds.value = playingTrackIds.value - trackId
+            if (newList.isEmpty()) {
+                repo.deleteTrack(trackId)
+            } else {
+                repo.deleteTrackAndUpdatePositions(trackId, newList)
             }
-            repo.deleteTrack(trackId)
         }
     }
 }

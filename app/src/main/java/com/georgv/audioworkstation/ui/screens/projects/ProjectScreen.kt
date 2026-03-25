@@ -5,12 +5,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -36,13 +37,64 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
-/** Reorder [list] so that the item with [draggedId] is at [toIndex]. Used for snap-during-drag display. */
+private fun fingerYInListSpace(fingerRootY: Float, listBoundsInRoot: Rect, viewportStartOffset: Int): Float =
+    fingerRootY - (listBoundsInRoot.top - viewportStartOffset)
+
+/** New list order if [draggedId] is placed at [toIndex] (0..n-1 in list with dragged removed). */
 private fun reorderForDisplay(list: List<TrackEntity>, draggedId: String, toIndex: Int): List<TrackEntity> {
     val dragged = list.find { it.id == draggedId } ?: return list
     val rest = list.filter { it.id != draggedId }
     val idx = toIndex.coerceIn(0, rest.size)
     return rest.take(idx) + dragged + rest.drop(idx)
+}
+
+/** When threshold crossed, updates session order only (no DB). */
+private fun applyReorderTargetWithThreshold(
+    vm: ProjectViewModel,
+    projectId: String,
+    tracks: List<TrackEntity>,
+    dragController: DragController,
+    listState: LazyListState,
+    listBoundsInRoot: Rect,
+    reorderThresholdPx: Float,
+    dragStartDeadzonePx: Float,
+    reorderCenterMoveGatePx: Float
+) {
+    if (!dragController.isDragging) return
+    val key = dragController.draggingKey ?: return
+    if (abs(dragController.fingerPos.y - dragController.dragAnchorYRoot) < dragStartDeadzonePx) return
+    val layoutInfo = listState.layoutInfo
+    val fingerListLocalY = fingerYInListSpace(dragController.fingerPos.y, listBoundsInRoot, layoutInfo.viewportStartOffset)
+    val centerListLocalY = fingerListLocalY - dragController.dragOffset.y + dragController.overlayHeightPx / 2f
+    val anchor = dragController.reorderAnchorCenterListLocalY
+    if (!anchor.isNaN() && abs(centerListLocalY - anchor) < reorderCenterMoveGatePx) return
+    val itemCount = tracks.size
+    if (itemCount == 0) return
+    val candidateIndex = computeReorderDropIndex(
+        listState = listState,
+        draggedKey = key,
+        draggedCenterY = centerListLocalY,
+        itemsCount = itemCount
+    )
+    val currentIndex = tracks.indexOfFirst { it.id == key }
+    if (currentIndex < 0) return
+    if (candidateIndex == currentIndex) return
+    val visible = layoutInfo.visibleItemsInfo.filter { it.index >= 0 && it.index < itemCount }
+    val currentSlot = visible.find { it.index == currentIndex }
+    if (currentSlot == null) return
+    val slotTop = currentSlot.offset.toFloat()
+    val slotBottom = currentSlot.offset + currentSlot.size
+    val pastThreshold = when {
+        candidateIndex > currentIndex -> centerListLocalY >= slotBottom + reorderThresholdPx
+        candidateIndex < currentIndex -> centerListLocalY <= slotTop - reorderThresholdPx
+        else -> true
+    }
+    if (!pastThreshold) return
+    val ordered = reorderForDisplay(tracks, key, candidateIndex)
+    val byId = tracks.associateBy { it.id }
+    vm.setTrackOrderSession(projectId, ordered.map { byId.getValue(it.id) })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,15 +127,11 @@ fun ProjectScreen(
     val listState = rememberLazyListState()
     val dragController = remember { DragController() }
 
-    val tracks = remember(state.tracks) {
-        state.tracks.sortedBy { it.position }
-    }
+    val tracks = state.tracks
 
-    val displayList: List<TrackEntity> = remember(tracks, dragController.isDragging, dragController.draggingKey, dragController.targetIndex) {
-        if (!dragController.isDragging) return@remember tracks
-        val key = dragController.draggingKey ?: return@remember tracks
-        val targetIdx = dragController.targetIndex ?: return@remember tracks
-        reorderForDisplay(tracks, key, targetIdx)
+    val sessionGainByTrackId = remember { mutableStateMapOf<String, Float>() }
+    LaunchedEffect(projectId) {
+        sessionGainByTrackId.clear()
     }
 
     var listBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
@@ -92,42 +140,46 @@ fun ProjectScreen(
 
     val density = LocalDensity.current
     val reorderThresholdPx = with(density) { Dimens.ReorderIndexThreshold.toPx() }
+    val dragStartDeadzonePx = with(density) { Dimens.ReorderDragStartDeadzone.toPx() }
+    val reorderCenterMoveGatePx = with(density) { Dimens.ReorderCenterMoveGate.toPx() }
 
-    LaunchedEffect(dragController.fingerPos, listState, listBoundsInRoot, displayList, reorderThresholdPx) {
+    LaunchedEffect(
+        dragController.fingerPos,
+        dragController.draggingKey,
+        listState,
+        listBoundsInRoot,
+        tracks,
+        reorderThresholdPx,
+        dragStartDeadzonePx,
+        reorderCenterMoveGatePx,
+        projectId
+    ) {
         if (!dragController.isDragging) return@LaunchedEffect
-        val key = dragController.draggingKey ?: return@LaunchedEffect
-        val layoutInfo = listState.layoutInfo
-        val contentTop = listBoundsInRoot.top - layoutInfo.viewportStartOffset
-        val listLocalY = dragController.fingerPos.y - contentTop
-        val candidateIndex = computeReorderDropIndex(
+        applyReorderTargetWithThreshold(
+            vm = vm,
+            projectId = projectId,
+            tracks = tracks,
+            dragController = dragController,
             listState = listState,
-            draggedKey = key,
-            draggedCenterY = listLocalY,
-            tracksStartIndex = 0,
-            itemsCount = displayList.size
+            listBoundsInRoot = listBoundsInRoot,
+            reorderThresholdPx = reorderThresholdPx,
+            dragStartDeadzonePx = dragStartDeadzonePx,
+            reorderCenterMoveGatePx = reorderCenterMoveGatePx
         )
-        val currentIndex = dragController.targetIndex ?: 0
-        if (candidateIndex == currentIndex) {
-            dragController.targetIndex = candidateIndex
-            return@LaunchedEffect
-        }
-        val visible = layoutInfo.visibleItemsInfo.filter { it.index >= 0 && it.index < displayList.size }
-        val currentSlot = visible.find { it.index == currentIndex }
-        if (currentSlot == null) {
-            dragController.targetIndex = candidateIndex
-            return@LaunchedEffect
-        }
-        val slotTop = currentSlot.offset.toFloat()
-        val slotBottom = currentSlot.offset + currentSlot.size
-        val pastThreshold = when {
-            candidateIndex > currentIndex -> listLocalY >= slotBottom + reorderThresholdPx
-            candidateIndex < currentIndex -> listLocalY <= slotTop - reorderThresholdPx
-            else -> true
-        }
-        if (pastThreshold) dragController.targetIndex = candidateIndex
     }
 
-    ScreenScaffold(title = state.project?.name ?: "Project", onBack = onBack) { padding ->
+    fun completeDrop() {
+        if (dragController.draggingKey == null) return
+        vm.persistTrackOrderToDb(projectId)
+        dragController.end()
+    }
+
+    val reorderActive = dragController.isDragging
+
+    ScreenScaffold(
+        title = state.project?.name ?: "Project",
+        onBack = if (reorderActive) null else onBack
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -143,6 +195,22 @@ fun ProjectScreen(
                     .clip(panelShape)
                     .background(AppColors.Bg)
                     .border(Dimens.Stroke, AppColors.Line, panelShape)
+                    .then(
+                        if (reorderActive) {
+                            Modifier.pointerInput(Unit) {
+                                while (true) {
+                                    awaitEachGesture {
+                                        do {
+                                            val event = awaitPointerEvent()
+                                            event.changes.forEach { it.consume() }
+                                        } while (event.changes.any { it.pressed })
+                                    }
+                                }
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
             )
 
             Box(
@@ -161,15 +229,16 @@ fun ProjectScreen(
                         .onGloballyPositioned { coords ->
                             listBoundsInRoot = coords.boundsInRoot()
                         },
-                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
+                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                    userScrollEnabled = !reorderActive
                 ) {
                     items(
-                        items = displayList,
+                        items = tracks,
                         key = { it.id }
                     ) { track ->
                         val isDragging = dragController.isDragging && dragController.draggingKey == track.id
 
-                        var gainLocal by remember(track.id) { mutableFloatStateOf(track.gain) }
+                        val displayedGain = sessionGainByTrackId[track.id] ?: track.gain
 
                         Box(
                             modifier = Modifier
@@ -182,33 +251,37 @@ fun ProjectScreen(
                                 title = track.name ?: "Track",
                                 isSelected = state.selectedTrackIds.contains(track.id),
                                 isRecording = state.recordingTrackId == track.id,
-                                gain = gainLocal,
-                                onGainChange = { gainLocal = it },
+                                gain = displayedGain,
+                                onGainChange = { sessionGainByTrackId[track.id] = it },
                                 onClick = { vm.toggleSelect(track.id) },
                                 onDelete = { vm.deleteTrack(track.id) },
                                 trackId = track.id,
+                                interactionBlocked = reorderActive,
+                                blockDragHandle = reorderActive && dragController.draggingKey != track.id,
                                 onDragHandleStart = { positionInRoot ->
                                     val bounds = itemBoundsMap[track.id] ?: return@TrackCard
                                     val offsetFromFinger = positionInRoot - Offset(bounds.left, bounds.top)
                                     val fixedXInParentPx = bounds.left - listParentBoundsInRoot.left
+                                    val layoutInfo = listState.layoutInfo
+                                    val fingerListLocalY = fingerYInListSpace(
+                                        positionInRoot.y,
+                                        listBoundsInRoot,
+                                        layoutInfo.viewportStartOffset
+                                    )
                                     dragController.start(
                                         key = track.id,
                                         startPos = positionInRoot,
                                         offsetFromFingerToItemTopLeft = offsetFromFinger,
                                         fixedXInParentPx = fixedXInParentPx,
                                         overlayWidthPx = bounds.right - bounds.left,
-                                        overlayHeightPx = bounds.bottom - bounds.top
+                                        overlayHeightPx = bounds.bottom - bounds.top,
+                                        fingerListLocalY = fingerListLocalY
                                     )
-                                    dragController.targetIndex = tracks.indexOfFirst { it.id == track.id }
                                 },
                                 onDragHandleMove = { positionInRoot ->
                                     dragController.update(positionInRoot)
                                 },
-                                onDragHandleEnd = {
-                                    val toIndex = dragController.targetIndex ?: 0
-                                    val key = dragController.end()
-                                    if (key != null) vm.moveTrack(projectId, key, toIndex)
-                                }
+                                onDragHandleEnd = { completeDrop() }
                             )
                         }
                     }
@@ -218,9 +291,9 @@ fun ProjectScreen(
                     val draggedKey = dragController.draggingKey
                     val draggedTrack = draggedKey?.let { id -> tracks.find { it.id == id } }
                     if (draggedTrack != null) {
+                        val overlayGain = sessionGainByTrackId[draggedTrack.id] ?: draggedTrack.gain
                         val overlayYInParentPx = dragController.fingerPos.y - dragController.dragOffset.y - listParentBoundsInRoot.top
-                        var overlayCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-                        val density = LocalDensity.current
+                        var overlayCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
                         val overlayWidthDp = with(density) { dragController.overlayWidthPx.toDp() }
                         val overlayHeightDp = with(density) { dragController.overlayHeightPx.toDp() }
                         Box(
@@ -246,9 +319,7 @@ fun ProjectScreen(
                                                     }
                                                 }
                                                 PointerEventType.Release -> {
-                                                    val toIndex = dragController.targetIndex ?: 0
-                                                    val key = dragController.end()
-                                                    if (key != null) vm.moveTrack(projectId, key, toIndex)
+                                                    completeDrop()
                                                     return@awaitEachGesture
                                                 }
                                                 else -> {}
@@ -257,7 +328,6 @@ fun ProjectScreen(
                                     }
                                 }
                         ) {
-                            var gainLocal by remember(draggedTrack.id) { mutableFloatStateOf(draggedTrack.gain) }
                             val dragShape = RoundedCornerShape(Dimens.TileRadius)
                             Box(
                                 modifier = Modifier
@@ -271,10 +341,11 @@ fun ProjectScreen(
                                     title = draggedTrack.name ?: "Track",
                                     isSelected = state.selectedTrackIds.contains(draggedTrack.id),
                                     isRecording = state.recordingTrackId == draggedTrack.id,
-                                    gain = gainLocal,
-                                    onGainChange = { gainLocal = it },
+                                    gain = overlayGain,
+                                    onGainChange = { sessionGainByTrackId[draggedTrack.id] = it },
                                     onClick = { },
-                                    onDelete = { }
+                                    onDelete = { },
+                                    interactionBlocked = true
                                 )
                             }
                         }
@@ -290,6 +361,7 @@ fun ProjectScreen(
                 onPlay = { vm.onPlayPressed() },
                 onStop = { vm.onStopPressed() },
                 onRecord = { vm.onRecordPressed(projectId) },
+                inputLocked = reorderActive,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)

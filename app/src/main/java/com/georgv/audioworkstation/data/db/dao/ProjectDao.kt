@@ -39,6 +39,11 @@ interface ProjectDao {
     @Query("DELETE FROM tracks WHERE id = :trackId")
     suspend fun deleteTrack(trackId: String)
 
+    @Transaction
+    suspend fun deleteTrackAndUpdatePositions(trackId: String, remaining: List<TrackEntity>) {
+        deleteTrack(trackId)
+        if (remaining.isNotEmpty()) updateTracks(remaining)
+    }
 
     // Relations
 

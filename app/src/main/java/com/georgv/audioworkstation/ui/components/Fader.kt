@@ -9,8 +9,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -35,9 +39,11 @@ fun Fader(
     thumbHeight: Dp = 14.dp,
     tickCount: Int = 13,
 
-    // Dark look (defaults from AppColors)
     shaftBg: Color = Color(0xFF0A0A0A),
-    trackColor: Color = AppColors.FaderTrack,
+    /** Fill from track top down to thumb center (higher value / “up”). */
+    trackAboveThumb: Color = Color.White,
+    /** Fill from thumb center down to track bottom (lower value / “down”). */
+    trackBelowThumb: Color = Color.Black,
     trackBorder: Color = AppColors.FaderTrackBorder,
     tickColor: Color = AppColors.FaderTick,
     thumbColor: Color = AppColors.FaderThumb,
@@ -97,28 +103,58 @@ fun Fader(
             val cx = size.width / 2f
             val trackTop = topPad
             val trackBottom = size.height - bottomPadPx
+            val trackH = (trackBottom - trackTop).coerceAtLeast(0f)
+            val fullH = trackH.coerceAtLeast(1f)
 
             val trackLeft = cx - (trackW / 2f)
             val trackRight = cx + (trackW / 2f)
 
-            // Track
-            drawRoundRect(
-                color = trackColor,
-                topLeft = Offset(trackLeft, trackTop),
-                size = androidx.compose.ui.geometry.Size(trackW, trackBottom - trackTop),
-                cornerRadius = CornerRadius(3f, 3f)
-            )
+            val valueT = norm(value) // 0..1
+            val thumbCenterY = trackBottom - (valueT * fullH)
+
+            val trackClip = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = trackLeft,
+                        top = trackTop,
+                        right = trackRight,
+                        bottom = trackBottom,
+                        topLeftCornerRadius = CornerRadius(3f, 3f),
+                        topRightCornerRadius = CornerRadius(3f, 3f),
+                        bottomRightCornerRadius = CornerRadius(3f, 3f),
+                        bottomLeftCornerRadius = CornerRadius(3f, 3f),
+                    )
+                )
+            }
+            val splitY = thumbCenterY.coerceIn(trackTop, trackBottom)
+            clipPath(trackClip) {
+                val topH = splitY - trackTop
+                if (topH > 0f) {
+                    drawRect(
+                        color = trackAboveThumb,
+                        topLeft = Offset(trackLeft, trackTop),
+                        size = Size(trackW, topH)
+                    )
+                }
+                val botH = trackBottom - splitY
+                if (botH > 0f) {
+                    drawRect(
+                        color = trackBelowThumb,
+                        topLeft = Offset(trackLeft, splitY),
+                        size = Size(trackW, botH)
+                    )
+                }
+            }
             drawRoundRect(
                 color = trackBorder,
                 topLeft = Offset(trackLeft, trackTop),
-                size = androidx.compose.ui.geometry.Size(trackW, trackBottom - trackTop),
+                size = Size(trackW, trackH),
                 cornerRadius = CornerRadius(3f, 3f),
                 style = Stroke(width = 1f)
             )
 
             // Ticks on sides
             val ticks = tickCount.coerceAtLeast(2)
-            val fullH = (trackBottom - trackTop).coerceAtLeast(1f)
             for (i in 0 until ticks) {
                 val t = i.toFloat() / (ticks - 1).toFloat()
                 val y = trackBottom - (t * fullH)
@@ -142,12 +178,10 @@ fun Fader(
                 )
             }
 
-            // Thumb position
-            val t = norm(value) // 0..1
-            val thumbCenterY = trackBottom - (t * fullH)
-
+            // Thumb position (thumbCenterY already computed)
             val thumbLeft = cx - (thumbW / 2f)
-            val thumbTop = (thumbCenterY - thumbH / 2f).coerceIn(0f, size.height - thumbH)
+            val thumbTopMax = (size.height - thumbH).coerceAtLeast(0f)
+            val thumbTop = (thumbCenterY - thumbH / 2f).coerceIn(0f, thumbTopMax)
 
             drawRoundRect(
                 color = thumbColor,

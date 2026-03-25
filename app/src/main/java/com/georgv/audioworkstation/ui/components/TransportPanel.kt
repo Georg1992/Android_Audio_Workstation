@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -28,7 +30,8 @@ fun TransportPanel(
     onPlay: () -> Unit,
     onStop: () -> Unit,
     onRecord: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    inputLocked: Boolean = false
 ) {
     val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
 
@@ -39,14 +42,30 @@ fun TransportPanel(
             .clip(shape)
             .background(AppColors.Bg)
             .border(Dimens.Stroke, AppColors.Line, shape)
-            .padding(vertical = Dimens.PanelPadding),
+            .padding(vertical = Dimens.PanelPadding)
+            .then(
+                if (inputLocked) {
+                    Modifier.pointerInput(Unit) {
+                        while (true) {
+                            awaitEachGesture {
+                                do {
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                            }
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+            ),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
 
         TransportButton(
             color = AppColors.Green,
-            enabled = isPlayEnabled,
+            enabled = isPlayEnabled && !inputLocked,
             onClick = onPlay,
             isActive = isPlaying
         ) {
@@ -55,7 +74,7 @@ fun TransportPanel(
 
         TransportButton(
             color = AppColors.Yellow,
-            enabled = isStopEnabled,
+            enabled = isStopEnabled && !inputLocked,
             onClick = onStop,
             isActive = false
         ) {
@@ -64,7 +83,7 @@ fun TransportPanel(
 
         TransportButton(
             color = AppColors.Red,
-            enabled = true,
+            enabled = !inputLocked,
             onClick = onRecord,
             isActive = isRecording
         ) {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -43,7 +44,11 @@ fun TrackCard(
     trackId: String? = null,
     onDragHandleStart: ((positionInRoot: Offset) -> Unit)? = null,
     onDragHandleMove: ((positionInRoot: Offset) -> Unit)? = null,
-    onDragHandleEnd: (() -> Unit)? = null
+    onDragHandleEnd: (() -> Unit)? = null,
+    /** When true, card tap, menu, and fader do not respond. */
+    interactionBlocked: Boolean = false,
+    /** When true, the reorder handle consumes touches but does not start a drag (other row is being dragged). */
+    blockDragHandle: Boolean = false
 ) {
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
 
@@ -64,6 +69,10 @@ fun TrackCard(
 
     val showHandle = trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
 
+    LaunchedEffect(interactionBlocked) {
+        if (interactionBlocked) menuExpanded = false
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -72,7 +81,8 @@ fun TrackCard(
             .border(Dimens.Stroke, AppColors.Line, cardShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null
+                indication = null,
+                enabled = !interactionBlocked
             ) {
                 if (menuExpanded) menuExpanded = false else onClick()
             }
@@ -105,7 +115,7 @@ fun TrackCard(
                             .size(Dimens.MenuButtonSize)
                             .clip(buttonShape)
                             .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                            .clickable { menuExpanded = !menuExpanded },
+                            .clickable(enabled = !interactionBlocked) { menuExpanded = !menuExpanded },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -186,6 +196,7 @@ fun TrackCard(
                     value = gainClamped,
                     onValueChange = { onGainChange(it.coerceIn(0f, 100f)) },
                     valueRange = 0f..100f,
+                    enabled = !interactionBlocked,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f, fill = true)
@@ -209,19 +220,30 @@ fun TrackCard(
                     .padding(Dimens.SmallRadius)
                     .size(Dimens.DragHandleSize)
                     .onGloballyPositioned { handleCoords = it }
-                    .pointerInput(trackId) {
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                val pos = handleCoords?.localToRoot(Offset(offset.x, offset.y))
-                                if (pos != null) onDragHandleStart(pos)
-                            },
-                            onDrag = { change, _ ->
-                                val pos = handleCoords?.localToRoot(Offset(change.position.x, change.position.y))
-                                if (pos != null) onDragHandleMove(pos)
-                            },
-                            onDragEnd = { onDragHandleEnd() },
-                            onDragCancel = { onDragHandleEnd() }
-                        )
+                    .pointerInput(trackId, blockDragHandle) {
+                        if (blockDragHandle) {
+                            while (true) {
+                                awaitEachGesture {
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        event.changes.forEach { it.consume() }
+                                    } while (event.changes.any { it.pressed })
+                                }
+                            }
+                        } else {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    val pos = handleCoords?.localToRoot(Offset(offset.x, offset.y))
+                                    if (pos != null) onDragHandleStart(pos)
+                                },
+                                onDrag = { change, _ ->
+                                    val pos = handleCoords?.localToRoot(Offset(change.position.x, change.position.y))
+                                    if (pos != null) onDragHandleMove(pos)
+                                },
+                                onDragEnd = { onDragHandleEnd() },
+                                onDragCancel = { onDragHandleEnd() }
+                            )
+                        }
                     }
             ) {
                 Canvas(Modifier.fillMaxSize()) {
