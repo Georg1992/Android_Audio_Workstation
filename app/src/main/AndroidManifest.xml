@@ -7,13 +7,6 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
-    <!-- Notifications -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
-    <!-- Foreground service -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
     <application
             android:name=".MyApplication"
             android:icon="@mipmap/ic_launcher"
@@ -33,15 +26,6 @@
 
         </activity>
 
-        <service
-                android:name=".audio.streaming.AudioStreamingService"
-                android:enabled="true"
-                android:exported="false"
-                android:foregroundServiceType="mediaPlayback" />
-
     </application>
 
 </manifest>
-
-
-

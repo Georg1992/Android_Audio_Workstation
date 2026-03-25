@@ -1,8 +1,13 @@
 package com.georgv.audioworkstation.ui.screens.mainmenu
 
 import androidx.compose.foundation.background
-
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.FolderOpen
@@ -11,13 +16,12 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import com.georgv.audioworkstation.ui.theme.Dimens
+import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.ui.components.LanguageSwitcher
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.tiles.MainTile
 import com.georgv.audioworkstation.ui.theme.AppColors
-import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.ui.components.LanguageSwitcher
-
+import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
 fun MainMenuScreen(
@@ -27,11 +31,10 @@ fun MainMenuScreen(
     onOpenCommunity: () -> Unit,
     onOpenDevices: () -> Unit
 ) {
-    ScreenScaffold(title = stringResource(R.string.app_title),
-        actions = {
-            LanguageSwitcher()
-        }) { padding ->
-
+    ScreenScaffold(
+        title = stringResource(R.string.app_title),
+        actions = { LanguageSwitcher() }
+    ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -39,19 +42,16 @@ fun MainMenuScreen(
                 .padding(padding)
                 .padding(Dimens.TileInnerPadding)
         ) {
-
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
             ) {
-
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
                 ) {
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -100,8 +100,6 @@ fun MainMenuScreen(
                             onClick = onOpenDevices,
                             modifier = Modifier.weight(1f)
                         )
-
-
                     }
                 }
 
@@ -119,11 +117,3 @@ fun MainMenuScreen(
         }
     }
 }
-
-
-
-
-
-
-
-

@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TrackCard
 import com.georgv.audioworkstation.ui.components.TransportPanel
@@ -33,75 +34,9 @@ import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.drag.reorder.computeReorderDropIndex
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
-
-private fun fingerYInListSpace(fingerRootY: Float, listBoundsInRoot: Rect, viewportStartOffset: Int): Float =
-    fingerRootY - (listBoundsInRoot.top - viewportStartOffset)
-
-private fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: Int): Boolean {
-    val info = listState.layoutInfo
-    val item = info.visibleItemsInfo.find { it.index == itemIndex } ?: return false
-    return item.offset >= info.viewportStartOffset &&
-        item.offset + item.size <= info.viewportEndOffset
-}
-
-/** New list order if [draggedId] is placed at [toIndex] (0..n-1 in list with dragged removed). */
-private fun reorderForDisplay(list: List<TrackEntity>, draggedId: String, toIndex: Int): List<TrackEntity> {
-    val dragged = list.find { it.id == draggedId } ?: return list
-    val rest = list.filter { it.id != draggedId }
-    val idx = toIndex.coerceIn(0, rest.size)
-    return rest.take(idx) + dragged + rest.drop(idx)
-}
-
-/** When threshold crossed, updates session order only (no DB). */
-private fun applyReorderTargetWithThreshold(
-    vm: ProjectViewModel,
-    projectId: String,
-    tracks: List<TrackEntity>,
-    dragController: DragController,
-    listState: LazyListState,
-    listBoundsInRoot: Rect,
-    reorderThresholdPx: Float,
-    dragStartDeadzonePx: Float,
-    reorderCenterMoveGatePx: Float
-) {
-    if (!dragController.isDragging) return
-    val key = dragController.draggingKey ?: return
-    if (abs(dragController.fingerPos.y - dragController.dragAnchorYRoot) < dragStartDeadzonePx) return
-    val layoutInfo = listState.layoutInfo
-    val fingerListLocalY = fingerYInListSpace(dragController.fingerPos.y, listBoundsInRoot, layoutInfo.viewportStartOffset)
-    val centerListLocalY = fingerListLocalY - dragController.dragOffset.y + dragController.overlayHeightPx / 2f
-    val anchor = dragController.reorderAnchorCenterListLocalY
-    if (!anchor.isNaN() && abs(centerListLocalY - anchor) < reorderCenterMoveGatePx) return
-    val itemCount = tracks.size
-    if (itemCount == 0) return
-    val candidateIndex = computeReorderDropIndex(
-        listState = listState,
-        draggedKey = key,
-        draggedCenterY = centerListLocalY,
-        itemsCount = itemCount
-    )
-    val currentIndex = tracks.indexOfFirst { it.id == key }
-    if (currentIndex < 0) return
-    if (candidateIndex == currentIndex) return
-    val visible = layoutInfo.visibleItemsInfo.filter { it.index >= 0 && it.index < itemCount }
-    val currentSlot = visible.find { it.index == currentIndex }
-    if (currentSlot == null) return
-    val slotTop = currentSlot.offset.toFloat()
-    val slotBottom = currentSlot.offset + currentSlot.size
-    val pastThreshold = when {
-        candidateIndex > currentIndex -> centerListLocalY >= slotBottom + reorderThresholdPx
-        candidateIndex < currentIndex -> centerListLocalY <= slotTop - reorderThresholdPx
-        else -> true
-    }
-    if (!pastThreshold) return
-    val ordered = reorderForDisplay(tracks, key, candidateIndex)
-    val byId = tracks.associateBy { it.id }
-    vm.setTrackOrderSession(projectId, ordered.map { byId.getValue(it.id) })
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -378,3 +313,65 @@ fun ProjectScreen(
         }
     }
 }
+
+private fun applyReorderTargetWithThreshold(
+    vm: ProjectViewModel,
+    projectId: String,
+    tracks: List<TrackEntity>,
+    dragController: DragController,
+    listState: LazyListState,
+    listBoundsInRoot: Rect,
+    reorderThresholdPx: Float,
+    dragStartDeadzonePx: Float,
+    reorderCenterMoveGatePx: Float
+) {
+    if (!dragController.isDragging) return
+    val key = dragController.draggingKey ?: return
+    if (abs(dragController.fingerPos.y - dragController.dragAnchorYRoot) < dragStartDeadzonePx) return
+    val layoutInfo = listState.layoutInfo
+    val fingerListLocalY = fingerYInListSpace(dragController.fingerPos.y, listBoundsInRoot, layoutInfo.viewportStartOffset)
+    val centerListLocalY = fingerListLocalY - dragController.dragOffset.y + dragController.overlayHeightPx / 2f
+    val anchor = dragController.reorderAnchorCenterListLocalY
+    if (!anchor.isNaN() && abs(centerListLocalY - anchor) < reorderCenterMoveGatePx) return
+    val itemCount = tracks.size
+    if (itemCount == 0) return
+    val candidateIndex = computeReorderDropIndex(
+        listState = listState,
+        draggedKey = key,
+        draggedCenterY = centerListLocalY,
+        itemsCount = itemCount
+    )
+    val currentIndex = tracks.indexOfFirst { it.id == key }
+    if (currentIndex < 0) return
+    if (candidateIndex == currentIndex) return
+    val visible = layoutInfo.visibleItemsInfo.filter { it.index in 0..<itemCount }
+    val currentSlot = visible.find { it.index == currentIndex }
+    if (currentSlot == null) return
+    val slotTop = currentSlot.offset.toFloat()
+    val slotBottom = currentSlot.offset + currentSlot.size
+    val pastThreshold = when {
+        candidateIndex > currentIndex -> centerListLocalY >= slotBottom + reorderThresholdPx
+        else -> centerListLocalY <= slotTop - reorderThresholdPx
+    }
+    if (!pastThreshold) return
+    val ordered = reorderForDisplay(tracks, key, candidateIndex)
+    val byId = tracks.associateBy { it.id }
+    vm.setTrackOrderSession(projectId, ordered.map { byId.getValue(it.id) })
+}
+
+private fun reorderForDisplay(list: List<TrackEntity>, draggedId: String, toIndex: Int): List<TrackEntity> {
+    val dragged = list.find { it.id == draggedId } ?: return list
+    val rest = list.filter { it.id != draggedId }
+    val idx = toIndex.coerceIn(0, rest.size)
+    return rest.take(idx) + dragged + rest.drop(idx)
+}
+
+private fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: Int): Boolean {
+    val info = listState.layoutInfo
+    val item = info.visibleItemsInfo.find { it.index == itemIndex } ?: return false
+    return item.offset >= info.viewportStartOffset &&
+        item.offset + item.size <= info.viewportEndOffset
+}
+
+private fun fingerYInListSpace(fingerRootY: Float, listBoundsInRoot: Rect, viewportStartOffset: Int): Float =
+    fingerRootY - (listBoundsInRoot.top - viewportStartOffset)

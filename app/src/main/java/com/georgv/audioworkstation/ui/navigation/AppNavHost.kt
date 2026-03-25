@@ -8,13 +8,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import java.util.UUID
 import com.georgv.audioworkstation.ui.screens.community.CommunityScreen
 import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
 import com.georgv.audioworkstation.ui.screens.mainmenu.MainMenuScreen
 import com.georgv.audioworkstation.ui.screens.projects.ProjectScreen
-
+import java.util.UUID
 
 @Composable
 fun AppNavHost(
@@ -25,17 +24,21 @@ fun AppNavHost(
         startDestination = Routes.MAIN_MENU,
         modifier = Modifier
     ) {
-            composable(Routes.MAIN_MENU) {
-                MainMenuScreen(
-                    onOpenProject = { val id = UUID.randomUUID().toString()
-                        navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=false") },
-                    onOpenLibrary = { navController.navigateSingleTopTo(Routes.LIBRARY) },
-                    onOpenCommunity = { navController.navigateSingleTopTo(Routes.COMMUNITY) },
-                    onOpenDevices = { navController.navigateSingleTopTo(Routes.DEVICES) },
-                    onQuickRecord = { val id = UUID.randomUUID().toString()
-                        navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=true") },
-                )
-            }
+        composable(Routes.MAIN_MENU) {
+            MainMenuScreen(
+                onOpenProject = {
+                    val id = UUID.randomUUID().toString()
+                    navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=false")
+                },
+                onOpenLibrary = { navController.navigateSingleTopTo(Routes.LIBRARY) },
+                onOpenCommunity = { navController.navigateSingleTopTo(Routes.COMMUNITY) },
+                onOpenDevices = { navController.navigateSingleTopTo(Routes.DEVICES) },
+                onQuickRecord = {
+                    val id = UUID.randomUUID().toString()
+                    navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=true")
+                }
+            )
+        }
 
         composable(
             route = Routes.PROJECT_WITH_ID,
@@ -54,8 +57,6 @@ fun AppNavHost(
             )
         }
 
-
-
         composable(Routes.LIBRARY) {
             LibraryScreen(onBack = { navController.popBackStack() })
         }
@@ -69,8 +70,3 @@ fun AppNavHost(
         }
     }
 }
-
-
-
-
-

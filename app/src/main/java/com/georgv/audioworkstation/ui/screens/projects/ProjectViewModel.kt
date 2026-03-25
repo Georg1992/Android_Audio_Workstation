@@ -1,11 +1,10 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,21 +24,12 @@ data class ProjectUiState(
     val playingTrackIds: Set<String> = emptySet(),
     val recordingTrackId: String? = null
 ) {
-    val transportState: TransportState
-        get() = when {
-            recordingTrackId != null && selectedTrackIds.isNotEmpty() -> TransportState.Overdub
-            recordingTrackId != null -> TransportState.Recording
-            playingTrackIds.isNotEmpty() -> TransportState.Playing
-            else -> TransportState.Idle
-        }
-
     val isPlayEnabled: Boolean
         get() = selectedTrackIds.isNotEmpty()
 
     val isStopEnabled: Boolean
         get() = recordingTrackId != null || playingTrackIds.isNotEmpty()
 }
-
 
 @HiltViewModel
 class ProjectViewModel @Inject constructor(
@@ -53,7 +43,6 @@ class ProjectViewModel @Inject constructor(
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val recordingTrackId = MutableStateFlow<String?>(null)
 
-    /** Tracks for the open project; loaded from DB in [bind] only, then owned here until another bind. */
     private val tracksSession = MutableStateFlow<List<TrackEntity>>(emptyList())
 
     val uiState: StateFlow<ProjectUiState> =
@@ -89,6 +78,13 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    fun deleteProject() {
+        val id = projectId.value ?: return
+        viewModelScope.launch {
+            repo.deleteProject(id)
+        }
+    }
+
     fun addTrack(projectId: String, name: String? = null) {
         if (this.projectId.value != projectId) return
         viewModelScope.launch {
@@ -105,6 +101,50 @@ class ProjectViewModel @Inject constructor(
             )
             repo.upsertTracks(listOf(track))
             tracksSession.value = tracksSession.value + track
+        }
+    }
+
+    fun deleteTrack(trackId: String) {
+        selectedTrackIds.value = selectedTrackIds.value - trackId
+        if (recordingTrackId.value == trackId) recordingTrackId.value = null
+        if (playingTrackIds.value.contains(trackId)) {
+            playingTrackIds.value = playingTrackIds.value - trackId
+        }
+        val newList = tracksSession.value
+            .filter { it.id != trackId }
+            .mapIndexed { i, t -> t.copy(position = i) }
+        tracksSession.value = newList
+        viewModelScope.launch {
+            if (newList.isEmpty()) {
+                repo.deleteTrack(trackId)
+            } else {
+                repo.deleteTrackAndUpdatePositions(trackId, newList)
+            }
+        }
+    }
+
+    fun setTrackOrderSession(projectId: String, orderedTracks: List<TrackEntity>) {
+        if (this.projectId.value != projectId) return
+        if (orderedTracks.isEmpty()) return
+        val sessionById = tracksSession.value.associateBy { it.id }
+        val merged = orderedTracks
+            .filter { it.id in sessionById }
+            .mapIndexed { index, row -> sessionById.getValue(row.id).copy(position = index) }
+        if (merged.isEmpty()) return
+        val presentIds = merged.map { it.id }.toSet()
+        val trailing = tracksSession.value
+            .filter { it.id !in presentIds }
+            .sortedBy { it.position }
+            .mapIndexed { i, t -> t.copy(position = merged.size + i) }
+        tracksSession.value = merged + trailing
+    }
+
+    fun persistTrackOrderToDb(projectId: String) {
+        if (this.projectId.value != projectId) return
+        val list = tracksSession.value
+        if (list.isEmpty()) return
+        viewModelScope.launch {
+            repo.updateTracks(list)
         }
     }
 
@@ -153,58 +193,5 @@ class ProjectViewModel @Inject constructor(
     fun onStopPressed() {
         recordingTrackId.value = null
         playingTrackIds.value = emptySet()
-    }
-
-    fun deleteProject() {
-        val id = projectId.value ?: return
-        viewModelScope.launch {
-            repo.deleteProject(id)
-        }
-    }
-
-    /** In-memory order only (e.g. while dragging past threshold). DB unchanged. */
-    fun setTrackOrderSession(projectId: String, orderedTracks: List<TrackEntity>) {
-        if (this.projectId.value != projectId) return
-        if (orderedTracks.isEmpty()) return
-        val sessionById = tracksSession.value.associateBy { it.id }
-        val merged = orderedTracks
-            .filter { it.id in sessionById }
-            .mapIndexed { index, row -> sessionById.getValue(row.id).copy(position = index) }
-        if (merged.isEmpty()) return
-        val presentIds = merged.map { it.id }.toSet()
-        val trailing = tracksSession.value
-            .filter { it.id !in presentIds }
-            .sortedBy { it.position }
-            .mapIndexed { i, t -> t.copy(position = merged.size + i) }
-        tracksSession.value = merged + trailing
-    }
-
-    /** Persist current session order to DB (call on drop). */
-    fun persistTrackOrderToDb(projectId: String) {
-        if (this.projectId.value != projectId) return
-        val list = tracksSession.value
-        if (list.isEmpty()) return
-        viewModelScope.launch {
-            repo.updateTracks(list)
-        }
-    }
-
-    fun deleteTrack(trackId: String) {
-        selectedTrackIds.value = selectedTrackIds.value - trackId
-        if (recordingTrackId.value == trackId) recordingTrackId.value = null
-        if (playingTrackIds.value.contains(trackId)) {
-            playingTrackIds.value = playingTrackIds.value - trackId
-        }
-        val newList = tracksSession.value
-            .filter { it.id != trackId }
-            .mapIndexed { i, t -> t.copy(position = i) }
-        tracksSession.value = newList
-        viewModelScope.launch {
-            if (newList.isEmpty()) {
-                repo.deleteTrack(trackId)
-            } else {
-                repo.deleteTrackAndUpdatePositions(trackId, newList)
-            }
-        }
     }
 }

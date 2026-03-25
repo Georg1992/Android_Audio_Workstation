@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.drag
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
@@ -20,20 +21,19 @@ class DragController {
     var dragOffset: Offset by mutableStateOf(Offset.Zero)
         private set
 
-    var fixedXInParentPx: Float by mutableStateOf(0f)
+    var fixedXInParentPx: Float by mutableFloatStateOf(0f)
         private set
 
-    var overlayWidthPx: Float by mutableStateOf(0f)
+    var overlayWidthPx: Float by mutableFloatStateOf(0f)
         private set
 
-    var overlayHeightPx: Float by mutableStateOf(0f)
+    var overlayHeightPx: Float by mutableFloatStateOf(0f)
         private set
 
-    var dragAnchorYRoot: Float by mutableStateOf(0f)
+    var dragAnchorYRoot: Float by mutableFloatStateOf(0f)
         private set
-
-    /** Row centre Y in list space at grab; NaN until [start]. */
-    var reorderAnchorCenterListLocalY: Float by mutableStateOf(Float.NaN)
+    
+    var reorderAnchorCenterListLocalY: Float by mutableFloatStateOf(Float.NaN)
         private set
 
     val isDragging: Boolean get() = draggingKey != null

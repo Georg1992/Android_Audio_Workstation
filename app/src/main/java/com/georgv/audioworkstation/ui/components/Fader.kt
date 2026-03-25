@@ -4,7 +4,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -31,17 +35,12 @@ fun Fader(
     modifier: Modifier = Modifier,
     valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
     enabled: Boolean = true,
-
-    // Layout
     trackWidth: Dp = 10.dp,
     thumbWidth: Dp = 22.dp,
     thumbHeight: Dp = 14.dp,
     tickCount: Int = 13,
-
     shaftBg: Color = Color(0xFF0A0A0A),
-    /** Fill from track top down to thumb center (higher value / “up”). */
     trackAboveThumb: Color = Color.White,
-    /** Fill from thumb center down to track bottom (lower value / “down”). */
     trackBelowThumb: Color = Color.Black,
     trackBorder: Color = AppColors.FaderTrackBorder,
     tickColor: Color = AppColors.FaderTick,
@@ -52,6 +51,10 @@ fun Fader(
     val trackW = with(density) { trackWidth.toPx() }
     val thumbW = with(density) { thumbWidth.toPx() }
     val thumbH = with(density) { thumbHeight.toPx() }
+    val topPad = thumbH / 2f
+    val bottomPadPx = 2f
+
+    var lastHeight by remember { mutableStateOf(0f) }
 
     fun clamp(v: Float) = v.coerceIn(valueRange.start, valueRange.endInclusive)
 
@@ -65,10 +68,6 @@ fun Fader(
         val span = (valueRange.endInclusive - valueRange.start).takeIf { it != 0f } ?: 1f
         return valueRange.start + (t.coerceIn(0f, 1f) * span)
     }
-
-    var lastHeight by remember { mutableStateOf(0f) }
-    val topPad = thumbH / 2f
-    val bottomPadPx = 2f
 
     fun trackYBounds(canvasHeight: Float): Pair<Float, Float> {
         val h = canvasHeight.coerceAtLeast(0f)
@@ -118,7 +117,7 @@ fun Fader(
             val trackLeft = cx - (trackW / 2f)
             val trackRight = cx + (trackW / 2f)
 
-            val valueT = norm(value) // 0..1
+            val valueT = norm(value)
             val thumbCenterY = trackBottom - (valueT * fullH)
 
             val trackClip = Path().apply {
@@ -162,11 +161,10 @@ fun Fader(
                 style = Stroke(width = 1f)
             )
 
-            // Ticks on sides
             val ticks = tickCount.coerceAtLeast(2)
             for (i in 0 until ticks) {
-                val t = i.toFloat() / (ticks - 1).toFloat()
-                val y = trackBottom - (t * fullH)
+                val tickT = i.toFloat() / (ticks - 1).toFloat()
+                val y = trackBottom - (tickT * fullH)
 
                 val isMajor = (i == 0 || i == ticks - 1 || i == (ticks - 1) / 2)
                 val len = if (isMajor) 10f else 6f
@@ -187,7 +185,6 @@ fun Fader(
                 )
             }
 
-            // Thumb position (thumbCenterY already computed)
             val thumbLeft = cx - (thumbW / 2f)
             val thumbTopMax = (size.height - thumbH).coerceAtLeast(0f)
             val thumbTop = (thumbCenterY - thumbH / 2f).coerceIn(0f, thumbTopMax)
@@ -195,18 +192,17 @@ fun Fader(
             drawRoundRect(
                 color = thumbColor,
                 topLeft = Offset(thumbLeft, thumbTop),
-                size = androidx.compose.ui.geometry.Size(thumbW, thumbH),
+                size = Size(thumbW, thumbH),
                 cornerRadius = CornerRadius(3f, 3f)
             )
             drawRoundRect(
                 color = thumbBorder,
                 topLeft = Offset(thumbLeft, thumbTop),
-                size = androidx.compose.ui.geometry.Size(thumbW, thumbH),
+                size = Size(thumbW, thumbH),
                 cornerRadius = CornerRadius(3f, 3f),
                 style = Stroke(width = 1f)
             )
 
-            // Thumb notch
             drawLine(
                 color = AppColors.FaderThumbNotch,
                 start = Offset(thumbLeft + 4f, thumbCenterY),

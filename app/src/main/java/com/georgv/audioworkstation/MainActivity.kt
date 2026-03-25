@@ -10,18 +10,11 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
-    lateinit var permissionRequester: com.georgv.audioworkstation.core.permissions.PermissionRequester
-        private set
-
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        permissionRequester = com.georgv.audioworkstation.core.permissions.PermissionRequester(this)
         setContent {
             AppRoot()
         }
     }
 }
-
-
-

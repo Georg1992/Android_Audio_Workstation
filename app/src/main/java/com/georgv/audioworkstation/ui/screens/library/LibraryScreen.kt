@@ -11,8 +11,12 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(onBack: () -> Unit) {
-    ScreenScaffold(title = "Library", onBack = onBack) {padding ->
-        Text("Library Screen", modifier = Modifier.padding(padding).padding(Dimens.ScreenContentPadding))
+    ScreenScaffold(title = "Library", onBack = onBack) { padding ->
+        Text(
+            text = "Library Screen",
+            modifier = Modifier
+                .padding(padding)
+                .padding(Dimens.ScreenContentPadding)
+        )
     }
 }
-

@@ -20,7 +20,6 @@ class LanguageRepository(context: Context) {
         val LANG_TAG = stringPreferencesKey("lang_tag")
     }
 
-    // null = ещё не инициализировано
     val languageTagFlow: Flow<String?> =
         dataStore.data.map { it[Keys.LANG_TAG] }.distinctUntilChanged()
 
@@ -28,7 +27,7 @@ class LanguageRepository(context: Context) {
         val prefs = dataStore.data.first()
         val saved = prefs[Keys.LANG_TAG]
         if (saved == null) {
-            val systemTag = Locale.getDefault().toLanguageTag() // e.g. "ru-RU"
+            val systemTag = Locale.getDefault().toLanguageTag()
             dataStore.edit { it[Keys.LANG_TAG] = systemTag }
             applyLocales(systemTag)
         } else {
@@ -47,5 +46,3 @@ class LanguageRepository(context: Context) {
         )
     }
 }
-
-
