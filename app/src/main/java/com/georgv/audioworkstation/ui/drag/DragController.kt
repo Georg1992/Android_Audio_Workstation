@@ -32,7 +32,7 @@ class DragController {
 
     var dragAnchorYRoot: Float by mutableFloatStateOf(0f)
         private set
-    
+
     var reorderAnchorCenterListLocalY: Float by mutableFloatStateOf(Float.NaN)
         private set
 

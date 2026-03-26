@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.georgv.audioworkstation.core.localization.LanguageViewModel
+import com.georgv.audioworkstation.core.localization.ProvideAppLocale
 import com.georgv.audioworkstation.ui.components.AppSplash
 import com.georgv.audioworkstation.ui.local.LocalLanguageVm
 import com.georgv.audioworkstation.ui.navigation.AppNavHost
@@ -24,17 +25,20 @@ fun AppRoot() {
     val tag by languageVm.currentTag.collectAsStateWithLifecycle()
 
     MaterialTheme {
-        if (tag == null) {
+        val languageTag = tag
+        if (languageTag == null) {
             AppSplash(true)
             return@MaterialTheme
         }
 
-        CompositionLocalProvider(LocalLanguageVm provides languageVm) {
-            val navController = rememberNavController()
+        ProvideAppLocale(languageTag = languageTag) {
+            CompositionLocalProvider(LocalLanguageVm provides languageVm) {
+                val navController = rememberNavController()
 
-            Scaffold { padding ->
-                Surface(Modifier.padding(padding)) {
-                    AppNavHost(navController = navController)
+                Scaffold { padding ->
+                    Surface(Modifier.padding(padding)) {
+                        AppNavHost(navController = navController)
+                    }
                 }
             }
         }

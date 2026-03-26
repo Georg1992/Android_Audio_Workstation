@@ -20,9 +20,9 @@
     <string name="menu_quick_record">Быстрая запись</string>
     <string name="menu_quick_record_sub">Нажми, чтобы записать</string>
 
-    <string name="screen_project">Project</string>
-    <string name="screen_library">Library</string>
-    <string name="screen_community">Community</string>
-    <string name="screen_devices">Devices</string>
+    <string name="screen_project">Проект</string>
+    <string name="screen_library">Библиотека</string>
+    <string name="screen_community">Сообщество</string>
+    <string name="screen_devices">Устройства</string>
 
 </resources>

@@ -1,8 +1,6 @@
 package com.georgv.audioworkstation.core.localization.data
 
 import android.content.Context
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.os.LocaleListCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
@@ -29,20 +27,10 @@ class LanguageRepository(context: Context) {
         if (saved == null) {
             val systemTag = Locale.getDefault().toLanguageTag()
             dataStore.edit { it[Keys.LANG_TAG] = systemTag }
-            applyLocales(systemTag)
-        } else {
-            applyLocales(saved)
         }
     }
 
     suspend fun setLanguageTag(tag: String) {
         dataStore.edit { it[Keys.LANG_TAG] = tag }
-        applyLocales(tag)
-    }
-
-    private fun applyLocales(tag: String) {
-        AppCompatDelegate.setApplicationLocales(
-            LocaleListCompat.forLanguageTags(tag)
-        )
     }
 }

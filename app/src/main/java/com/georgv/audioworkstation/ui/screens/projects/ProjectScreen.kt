@@ -24,7 +24,9 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
@@ -118,7 +120,7 @@ fun ProjectScreen(
     val reorderActive = dragController.isDragging
 
     ScreenScaffold(
-        title = state.project?.name ?: "Project",
+        title = state.project?.name ?: stringResource(R.string.screen_project),
         onBack = if (reorderActive) null else onBack
     ) { padding ->
         Column(
