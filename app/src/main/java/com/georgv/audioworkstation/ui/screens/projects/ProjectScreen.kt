@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -65,7 +66,7 @@ fun ProjectScreen(
         }
     }
 
-    val state by vm.uiState.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val dragController = remember { DragController() }
 

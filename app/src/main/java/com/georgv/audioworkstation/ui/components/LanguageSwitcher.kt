@@ -32,12 +32,12 @@ fun LanguageSwitcher(
     val languageVm = LocalLanguageVm.current
     var expanded by rememberSaveable { mutableStateOf(false) }
 
-    val currentTag = languageVm.currentTag.collectAsStateWithLifecycle().value
-        ?: return
+    val currentTag by languageVm.currentTag.collectAsStateWithLifecycle()
+    val tag = currentTag ?: return
 
     val currentLabel = when {
-        currentTag.startsWith("ru") -> "RU"
-        currentTag.startsWith("zh") -> "ZH"
+        tag.startsWith("ru") -> "RU"
+        tag.startsWith("zh") -> "ZH"
         else -> "EN"
     }
 
