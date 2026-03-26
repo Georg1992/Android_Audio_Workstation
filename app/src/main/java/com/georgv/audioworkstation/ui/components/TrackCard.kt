@@ -6,13 +6,17 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -22,10 +26,20 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -41,6 +55,7 @@ fun TrackCard(
     onGainChange: (Float) -> Unit,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onRename: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     trackId: String? = null,
     onDragHandleStart: ((positionInRoot: Offset) -> Unit)? = null,
@@ -61,7 +76,13 @@ fun TrackCard(
         else -> AppColors.Bg
     }
 
-    var menuExpanded by remember { mutableStateOf(false) }
+    var menuExpanded by remember(trackId) { mutableStateOf(false) }
+    var isRenaming by remember(trackId) { mutableStateOf(false) }
+    var renameFieldValue by remember(trackId, title) { mutableStateOf(TextFieldValue(title)) }
+    var renameFieldWasFocused by remember(trackId) { mutableStateOf(false) }
+    val focusRequester = remember(trackId) { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val menuShape = RoundedCornerShape(Dimens.TileRadius)
     val buttonShape = RoundedCornerShape(Dimens.MediumRadius)
@@ -73,7 +94,25 @@ fun TrackCard(
     val showHandle = trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
 
     LaunchedEffect(interactionBlocked) {
-        if (interactionBlocked) menuExpanded = false
+        if (interactionBlocked) {
+            menuExpanded = false
+            isRenaming = false
+            renameFieldWasFocused = false
+        }
+    }
+
+    LaunchedEffect(isRenaming) {
+        if (isRenaming) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
+    fun commitRename() {
+        if (!isRenaming) return
+        isRenaming = false
+        renameFieldWasFocused = false
+        onRename?.invoke(renameFieldValue.text.trim())
     }
 
     Box(
@@ -85,7 +124,7 @@ fun TrackCard(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                enabled = !interactionBlocked
+                enabled = !interactionBlocked && !isRenaming
             ) {
                 if (menuExpanded) menuExpanded = false else onClick()
             }
@@ -105,20 +144,60 @@ fun TrackCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = title,
-                        color = AppColors.Line,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (isRenaming) {
+                        TextField(
+                            value = renameFieldValue,
+                            onValueChange = { renameFieldValue = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        renameFieldWasFocused = true
+                                    } else if (renameFieldWasFocused) {
+                                        commitRename()
+                                    }
+                                },
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    commitRename()
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                }
+                            ),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = AppColors.Bg,
+                                unfocusedContainerColor = AppColors.Bg,
+                                disabledContainerColor = AppColors.Bg,
+                                focusedTextColor = AppColors.Line,
+                                unfocusedTextColor = AppColors.Line,
+                                focusedIndicatorColor = AppColors.Line,
+                                unfocusedIndicatorColor = AppColors.Line,
+                                cursorColor = AppColors.Line
+                            )
+                        )
+                    } else {
+                        Text(
+                            text = title,
+                            color = AppColors.Line,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
 
                     Box(
                         modifier = Modifier
                             .size(Dimens.MenuButtonSize)
                             .clip(buttonShape)
                             .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                            .clickable(enabled = !interactionBlocked) { menuExpanded = !menuExpanded },
+                            .clickable(enabled = !interactionBlocked && !isRenaming) { menuExpanded = !menuExpanded },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -158,10 +237,10 @@ fun TrackCard(
                         }
 
                         MenuRowRight(
-                            text = "Placeholder",
+                            text = "Rename",
                             icon = {
                                 Icon(
-                                    imageVector = Icons.Filled.BrokenImage,
+                                    imageVector = Icons.Filled.Edit,
                                     contentDescription = null,
                                     tint = AppColors.Line
                                 )
@@ -169,6 +248,12 @@ fun TrackCard(
                             shape = itemShape
                         ) {
                             menuExpanded = false
+                            renameFieldValue = TextFieldValue(
+                                text = title,
+                                selection = TextRange(0, title.length)
+                            )
+                            renameFieldWasFocused = false
+                            isRenaming = true
                         }
                     }
                 }

@@ -123,6 +123,16 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    fun renameTrack(trackId: String, newName: String) {
+        val updatedTrack = tracksSession.value.find { it.id == trackId }?.copy(name = newName) ?: return
+        tracksSession.value = tracksSession.value.map { track ->
+            if (track.id == trackId) updatedTrack else track
+        }
+        viewModelScope.launch {
+            repo.upsertTrack(updatedTrack)
+        }
+    }
+
     fun setTrackOrderSession(projectId: String, orderedTracks: List<TrackEntity>) {
         if (this.projectId.value != projectId) return
         if (orderedTracks.isEmpty()) return

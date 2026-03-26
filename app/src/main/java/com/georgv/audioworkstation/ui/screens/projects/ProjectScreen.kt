@@ -209,6 +209,7 @@ fun ProjectScreen(
                                 onGainChange = { sessionGainByTrackId[track.id] = it },
                                 onClick = { vm.toggleSelect(track.id) },
                                 onDelete = { vm.deleteTrack(track.id) },
+                                onRename = { vm.renameTrack(track.id, it) },
                                 trackId = track.id,
                                 interactionBlocked = reorderActive,
                                 blockDragHandle = reorderActive && dragController.draggingKey != track.id,
