@@ -25,17 +25,14 @@ fun maybeNeighborSwap(
 
     val visible = layoutInfo.visibleItemsInfo
 
-    val neighborBelow = visible.find { it.index == currentIndex + 1 }
-    if (shouldSwapWithNext(draggedCenterY, neighborBelow)) {
-        return moveTrack(tracks, currentIndex, currentIndex + 1)
-    }
+    val targetIndex = computeNeighborSwapTarget(
+        currentIndex = currentIndex,
+        draggedCenterY = draggedCenterY,
+        previousNeighborCenterY = visible.find { it.index == currentIndex - 1 }?.centerY(),
+        nextNeighborCenterY = visible.find { it.index == currentIndex + 1 }?.centerY()
+    ) ?: return null
 
-    val neighborAbove = visible.find { it.index == currentIndex - 1 }
-    if (shouldSwapWithPrevious(draggedCenterY, neighborAbove)) {
-        return moveTrack(tracks, currentIndex, currentIndex - 1)
-    }
-
-    return null
+    return moveTrack(tracks, currentIndex, targetIndex)
 }
 
 fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: Int): Boolean {
@@ -45,25 +42,32 @@ fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: Int): Boo
         item.offset + item.size <= info.viewportEndOffset
 }
 
-private fun moveTrack(tracks: List<TrackEntity>, fromIndex: Int, toIndex: Int): List<TrackEntity> {
+fun moveTrack(tracks: List<TrackEntity>, fromIndex: Int, toIndex: Int): List<TrackEntity> {
     return tracks.toMutableList().also {
         val item = it.removeAt(fromIndex)
         it.add(toIndex, item)
     }
 }
 
-private fun shouldSwapWithNext(
+fun computeNeighborSwapTarget(
+    currentIndex: Int,
     draggedCenterY: Float,
-    neighbor: LazyListItemInfo?
-): Boolean = neighbor != null && draggedCenterY > neighbor.offset + neighbor.size / 2f
-
-private fun shouldSwapWithPrevious(
-    draggedCenterY: Float,
-    neighbor: LazyListItemInfo?
-): Boolean = neighbor != null && draggedCenterY < neighbor.offset + neighbor.size / 2f
+    previousNeighborCenterY: Float?,
+    nextNeighborCenterY: Float?
+): Int? {
+    if (nextNeighborCenterY != null && draggedCenterY > nextNeighborCenterY) {
+        return currentIndex + 1
+    }
+    if (previousNeighborCenterY != null && draggedCenterY < previousNeighborCenterY) {
+        return currentIndex - 1
+    }
+    return null
+}
 
 fun fingerYInListSpace(
     fingerRootY: Float,
     listBoundsInRoot: Rect,
     viewportStartOffset: Int
 ): Float = fingerRootY - (listBoundsInRoot.top - viewportStartOffset)
+
+private fun LazyListItemInfo.centerY(): Float = offset + size / 2f
