@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,10 +55,17 @@ fun ProjectScreen(
     val state by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val dragController = remember { DragController() }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val sessionGainByTrackId = remember { mutableStateMapOf<String, Float>() }
     LaunchedEffect(projectId) {
         sessionGainByTrackId.clear()
+    }
+
+    LaunchedEffect(vm) {
+        vm.userMessages.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
     }
 
     LaunchedEffect(state.recordingTrackId, state.tracks.size) {
@@ -72,7 +81,8 @@ fun ProjectScreen(
 
     ScreenScaffold(
         title = state.project?.name ?: stringResource(R.string.screen_project),
-        onBack = if (reorderActive) null else onBack
+        onBack = if (reorderActive) null else onBack,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier

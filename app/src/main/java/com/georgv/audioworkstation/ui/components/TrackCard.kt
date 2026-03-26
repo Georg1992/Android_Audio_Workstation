@@ -105,7 +105,7 @@ fun TrackCard(
         if (!isRenaming) return
         isRenaming = false
         renameFieldWasFocused = false
-        onRename?.invoke(renameFieldValue.text.trim())
+        onRename?.invoke(renameFieldValue.text)
     }
 
     Box(

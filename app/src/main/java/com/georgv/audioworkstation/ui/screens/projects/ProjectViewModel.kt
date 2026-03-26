@@ -6,11 +6,13 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -42,8 +44,11 @@ class ProjectViewModel @Inject constructor(
     private val playingTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val recordingTrackId = MutableStateFlow<String?>(null)
+    private val messages = Channel<String>(capacity = Channel.BUFFERED)
 
     private val tracksSession = MutableStateFlow<List<TrackEntity>>(emptyList())
+
+    val userMessages = messages.receiveAsFlow()
 
     val uiState: StateFlow<ProjectUiState> =
         combine(
@@ -69,67 +74,116 @@ class ProjectViewModel @Inject constructor(
         if (boundProjectId == projectId) return
         boundProjectId = projectId
         this.projectId.value = projectId
-        tracksSession.value = repo.observeTracks(projectId).first().sortedBy { it.position }
+        runCatching {
+            repo.observeTracks(projectId).first().sortedBy { it.position }
+        }.onSuccess { tracks ->
+            tracksSession.value = tracks
+        }.onFailure {
+            tracksSession.value = emptyList()
+            messages.send("Failed to load project tracks.")
+        }
     }
 
-    suspend fun ensureProjectExists(projectId: String, name: String) {
-        if (repo.getProjectWithTracks(projectId) == null) {
-            repo.upsertProject(ProjectEntity(id = projectId, name = name))
-        }
+    suspend fun ensureProjectExists(projectId: String, name: String): Boolean {
+        return runCatching {
+            if (repo.getProjectWithTracks(projectId) == null) {
+                repo.upsertProject(ProjectEntity(id = projectId, name = name))
+            }
+            true
+        }.onFailure {
+            messages.send("Failed to create project.")
+        }.getOrDefault(false)
     }
 
     fun deleteProject() {
         val id = projectId.value ?: return
         viewModelScope.launch {
-            repo.deleteProject(id)
+            runCatching {
+                repo.deleteProject(id)
+            }.onFailure {
+                messages.send("Failed to delete project.")
+            }
         }
     }
 
     fun addTrack(projectId: String, name: String? = null) {
         if (this.projectId.value != projectId) return
         viewModelScope.launch {
-            ensureProjectExists(projectId, "New Project")
-            val existingCount = tracksSession.value.size
-            val finalName = name ?: "Take ${existingCount + 1}"
+            runCatching {
+                if (!ensureProjectExists(projectId, "New Project")) return@launch
+                val existingCount = tracksSession.value.size
+                val finalName = name ?: "Take ${existingCount + 1}"
 
-            val track = TrackEntity(
-                id = UUID.randomUUID().toString(),
-                projectId = projectId,
-                position = existingCount,
-                name = finalName,
-                wavFilePath = ""
-            )
-            repo.upsertTracks(listOf(track))
-            tracksSession.value = tracksSession.value + track
+                val track = TrackEntity(
+                    id = UUID.randomUUID().toString(),
+                    projectId = projectId,
+                    position = existingCount,
+                    name = finalName,
+                    wavFilePath = ""
+                )
+                repo.upsertTracks(listOf(track))
+                tracksSession.value = tracksSession.value + track
+            }.onFailure {
+                messages.send("Failed to add track.")
+            }
         }
     }
 
     fun deleteTrack(trackId: String) {
+        val previousSelected = selectedTrackIds.value
+        val previousPlaying = playingTrackIds.value
+        val previousRecording = recordingTrackId.value
+        val previousTracks = tracksSession.value
+
         selectedTrackIds.value = selectedTrackIds.value - trackId
         if (recordingTrackId.value == trackId) recordingTrackId.value = null
         if (playingTrackIds.value.contains(trackId)) {
             playingTrackIds.value = playingTrackIds.value - trackId
         }
-        val newList = tracksSession.value
+        val newList = previousTracks
             .filter { it.id != trackId }
             .mapIndexed { i, t -> t.copy(position = i) }
         tracksSession.value = newList
         viewModelScope.launch {
-            if (newList.isEmpty()) {
-                repo.deleteTrack(trackId)
-            } else {
-                repo.deleteTrackAndUpdatePositions(trackId, newList)
+            runCatching {
+                if (newList.isEmpty()) {
+                    repo.deleteTrack(trackId)
+                } else {
+                    repo.deleteTrackAndUpdatePositions(trackId, newList)
+                }
+            }.onFailure {
+                selectedTrackIds.value = previousSelected
+                playingTrackIds.value = previousPlaying
+                recordingTrackId.value = previousRecording
+                tracksSession.value = previousTracks
+                messages.send("Failed to delete track.")
             }
         }
     }
 
     fun renameTrack(trackId: String, newName: String) {
-        val updatedTrack = tracksSession.value.find { it.id == trackId }?.copy(name = newName) ?: return
-        tracksSession.value = tracksSession.value.map { track ->
+        val previousTracks = tracksSession.value
+        val currentTrack = previousTracks.find { it.id == trackId } ?: return
+        val validation = validateTrackName(newName)
+        if (validation is TrackNameValidationResult.Invalid) {
+            messages.trySend(validation.message)
+            return
+        }
+
+        val normalizedName = (validation as TrackNameValidationResult.Valid).normalizedName
+        if (normalizedName == (currentTrack.name ?: "").trim()) return
+
+        val updatedTrack = currentTrack.copy(name = normalizedName)
+        tracksSession.value = previousTracks.map { track ->
             if (track.id == trackId) updatedTrack else track
         }
         viewModelScope.launch {
-            repo.upsertTrack(updatedTrack)
+            runCatching {
+                repo.upsertTrack(updatedTrack)
+            }.onFailure {
+                tracksSession.value = previousTracks
+                messages.send("Failed to rename track.")
+            }
         }
     }
 
@@ -156,7 +210,11 @@ class ProjectViewModel @Inject constructor(
         val list = tracksSession.value
         if (list.isEmpty()) return
         viewModelScope.launch {
-            repo.updateTracks(list)
+            runCatching {
+                repo.updateTracks(list)
+            }.onFailure {
+                messages.send("Failed to save track order.")
+            }
         }
     }
 
@@ -167,24 +225,28 @@ class ProjectViewModel @Inject constructor(
 
     fun onRecordPressed(projectId: String) {
         viewModelScope.launch {
-            if (recordingTrackId.value != null) {
-                recordingTrackId.value = null
-                return@launch
+            runCatching {
+                if (recordingTrackId.value != null) {
+                    recordingTrackId.value = null
+                    return@launch
+                }
+
+                if (!ensureProjectExists(projectId, "New Project")) return@launch
+
+                val existingCount = tracksSession.value.size
+                val newTrack = TrackEntity(
+                    id = UUID.randomUUID().toString(),
+                    projectId = projectId,
+                    position = existingCount,
+                    name = "Take ${existingCount + 1}",
+                    wavFilePath = ""
+                )
+                repo.upsertTracks(listOf(newTrack))
+                tracksSession.value = tracksSession.value + newTrack
+                recordingTrackId.value = newTrack.id
+            }.onFailure {
+                messages.send("Failed to create recording track.")
             }
-
-            ensureProjectExists(projectId, "New Project")
-
-            val existingCount = tracksSession.value.size
-            val newTrack = TrackEntity(
-                id = UUID.randomUUID().toString(),
-                projectId = projectId,
-                position = existingCount,
-                name = "Take ${existingCount + 1}",
-                wavFilePath = ""
-            )
-            repo.upsertTracks(listOf(newTrack))
-            tracksSession.value = tracksSession.value + newTrack
-            recordingTrackId.value = newTrack.id
         }
     }
 

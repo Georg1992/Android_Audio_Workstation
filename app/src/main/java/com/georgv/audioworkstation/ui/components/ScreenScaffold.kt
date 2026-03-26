@@ -27,10 +27,12 @@ fun ScreenScaffold(
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = snackbarHost,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {

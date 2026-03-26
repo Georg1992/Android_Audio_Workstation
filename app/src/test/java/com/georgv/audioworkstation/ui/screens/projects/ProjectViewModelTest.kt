@@ -121,6 +121,24 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `renameTrack rejects blank names and emits feedback`() = runTest {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, name = "Old")))
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.renameTrack("a", "   ")
+        advanceUntilIdle()
+        val message = vm.userMessages.first()
+
+        assertEquals("Old", vm.uiState.value.tracks.single().name)
+        assertEquals("Track name cannot be blank.", message)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `setTrackOrderSession and persistTrackOrderToDb keep reordered positions`() = runTest {
         val dao = FakeProjectDao(
             projects = listOf(project()),
