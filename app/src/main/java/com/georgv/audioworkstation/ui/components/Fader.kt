@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -19,6 +21,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -54,7 +57,8 @@ fun Fader(
     val topPad = thumbH / 2f
     val bottomPadPx = 2f
 
-    var lastHeight by remember { mutableStateOf(0f) }
+    var lastHeightPx by remember { mutableFloatStateOf(0f) }
+    val latestOnValueChange by rememberUpdatedState(onValueChange)
 
     fun clamp(v: Float) = v.coerceIn(valueRange.start, valueRange.endInclusive)
 
@@ -80,35 +84,34 @@ fun Fader(
 
     Box(
         modifier = modifier
+            .onSizeChanged { lastHeightPx = it.height.toFloat() }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 detectDragGestures(
                     onDragStart = { pos ->
-                        val h = lastHeight
+                        val h = lastHeightPx
                         if (h <= 0f) return@detectDragGestures
 
                         val (trackTop, trackBottom) = trackYBounds(h)
                         val usable = (trackBottom - trackTop).coerceAtLeast(1f)
                         val y = pos.y.coerceIn(trackTop, trackBottom)
                         val t = 1f - ((y - trackTop) / usable)
-                        onValueChange(clamp(denorm(t)))
+                        latestOnValueChange(clamp(denorm(t)))
                     },
                     onDrag = { change, _ ->
-                        val h = lastHeight
+                        val h = lastHeightPx
                         if (h <= 0f) return@detectDragGestures
 
                         val (trackTop, trackBottom) = trackYBounds(h)
                         val usable = (trackBottom - trackTop).coerceAtLeast(1f)
                         val y = change.position.y.coerceIn(trackTop, trackBottom)
                         val t = 1f - ((y - trackTop) / usable)
-                        onValueChange(clamp(denorm(t)))
+                        latestOnValueChange(clamp(denorm(t)))
                     }
                 )
             }
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            lastHeight = size.height
-
             val cx = size.width / 2f
             val (trackTop, trackBottom) = trackYBounds(size.height)
             val trackH = (trackBottom - trackTop).coerceAtLeast(0f)
