@@ -46,13 +46,4 @@ object Dimens {
 
     // drag handle (triangle in track card)
     val DragHandleSize = 24.dp
-
-    /** Min distance (in list Y) past a slot boundary before reorder index switches (reduces flicker). */
-    val ReorderIndexThreshold = 24.dp
-
-    /** Min finger movement in root Y before reorder index may change (handle is at card bottom; avoids instant false "move down"). */
-    val ReorderDragStartDeadzone = 20.dp
-
-    /** Min movement of the dragged row center in list Y before slot / threshold logic runs (avoids snap on lift). */
-    val ReorderCenterMoveGate = 28.dp
 }

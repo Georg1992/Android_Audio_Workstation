@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -18,7 +19,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -33,13 +33,11 @@ import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TrackCard
 import com.georgv.audioworkstation.ui.components.TransportPanel
 import com.georgv.audioworkstation.ui.drag.DragController
-import com.georgv.audioworkstation.ui.drag.reorder.computeReorderDropIndex
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlinx.coroutines.yield
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,36 +87,16 @@ fun ProjectScreen(
 
     var listBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
     var listParentBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
+    var dragHostCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val itemBoundsMap = remember { mutableStateMapOf<String, Rect>() }
-
-    val density = LocalDensity.current
-    val reorderThresholdPx = with(density) { Dimens.ReorderIndexThreshold.toPx() }
-    val dragStartDeadzonePx = with(density) { Dimens.ReorderDragStartDeadzone.toPx() }
-    val reorderCenterMoveGatePx = with(density) { Dimens.ReorderCenterMoveGate.toPx() }
 
     LaunchedEffect(
         dragController.fingerPos,
         dragController.draggingKey,
-        listState,
-        listBoundsInRoot,
-        tracks,
-        reorderThresholdPx,
-        dragStartDeadzonePx,
-        reorderCenterMoveGatePx,
-        projectId
+        listBoundsInRoot
     ) {
         if (!dragController.isDragging) return@LaunchedEffect
-        applyReorderTargetWithThreshold(
-            vm = vm,
-            projectId = projectId,
-            tracks = tracks,
-            dragController = dragController,
-            listState = listState,
-            listBoundsInRoot = listBoundsInRoot,
-            reorderThresholdPx = reorderThresholdPx,
-            dragStartDeadzonePx = dragStartDeadzonePx,
-            reorderCenterMoveGatePx = reorderCenterMoveGatePx
-        )
+        checkNeighborSwap(vm, projectId, tracks, dragController, listState, listBoundsInRoot)
     }
 
     fun completeDrop() {
@@ -127,7 +105,10 @@ fun ProjectScreen(
         dragController.end()
     }
 
+    val latestCompleteDrop by rememberUpdatedState(::completeDrop)
+
     val reorderActive = dragController.isDragging
+    val density = LocalDensity.current
 
     ScreenScaffold(
         title = state.project?.name ?: stringResource(R.string.screen_project),
@@ -172,6 +153,25 @@ fun ProjectScreen(
                     .fillMaxWidth()
                     .onGloballyPositioned { coords ->
                         listParentBoundsInRoot = coords.boundsInRoot()
+                        dragHostCoords = coords
+                    }
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            do {
+                                val event = awaitPointerEvent()
+                                if (dragController.isDragging) {
+                                    val pressed = event.changes.firstOrNull { it.pressed }
+                                    val coords = dragHostCoords
+                                    if (pressed != null && coords != null) {
+                                        dragController.update(coords.localToRoot(pressed.position))
+                                        pressed.consume()
+                                    }
+                                    if (event.changes.none { it.pressed }) {
+                                        latestCompleteDrop()
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+                        }
                     }
             ) {
                 LazyColumn(
@@ -186,8 +186,7 @@ fun ProjectScreen(
                     userScrollEnabled = !reorderActive
                 ) {
                     itemsIndexed(
-                        items = tracks,
-                        key = { _, t -> t.id }
+                        items = tracks
                     ) { index, track ->
                         val isDragging = dragController.isDragging && dragController.draggingKey == track.id
 
@@ -218,26 +217,19 @@ fun ProjectScreen(
                                     val bounds = itemBoundsMap[track.id] ?: return@TrackCard
                                     val offsetFromFinger = positionInRoot - Offset(bounds.left, bounds.top)
                                     val fixedXInParentPx = bounds.left - listParentBoundsInRoot.left
-                                    val layoutInfo = listState.layoutInfo
-                                    val fingerListLocalY = fingerYInListSpace(
-                                        positionInRoot.y,
-                                        listBoundsInRoot,
-                                        layoutInfo.viewportStartOffset
-                                    )
                                     dragController.start(
                                         key = track.id,
                                         startPos = positionInRoot,
                                         offsetFromFingerToItemTopLeft = offsetFromFinger,
                                         fixedXInParentPx = fixedXInParentPx,
                                         overlayWidthPx = bounds.right - bounds.left,
-                                        overlayHeightPx = bounds.bottom - bounds.top,
-                                        fingerListLocalY = fingerListLocalY
+                                        overlayHeightPx = bounds.bottom - bounds.top
                                     )
                                 },
                                 onDragHandleMove = { positionInRoot ->
                                     dragController.update(positionInRoot)
                                 },
-                                onDragHandleEnd = { completeDrop() }
+                                onDragHandleEnd = { }
                             )
                         }
                     }
@@ -249,7 +241,6 @@ fun ProjectScreen(
                     if (draggedTrack != null) {
                         val overlayGain = sessionGainByTrackId[draggedTrack.id] ?: draggedTrack.gain
                         val overlayYInParentPx = dragController.fingerPos.y - dragController.dragOffset.y - listParentBoundsInRoot.top
-                        var overlayCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
                         val overlayWidthDp = with(density) { dragController.overlayWidthPx.toDp() }
                         val overlayHeightDp = with(density) { dragController.overlayHeightPx.toDp() }
                         Box(
@@ -259,30 +250,6 @@ fun ProjectScreen(
                                     x = with(density) { dragController.fixedXInParentPx.toDp() },
                                     y = with(density) { overlayYInParentPx.toDp() }
                                 )
-                                .onGloballyPositioned { overlayCoords = it }
-                                .pointerInput(draggedKey) {
-                                    awaitEachGesture {
-                                        do {
-                                            val event = awaitPointerEvent()
-                                            val coords = overlayCoords
-                                            when (event.type) {
-                                                PointerEventType.Move -> {
-                                                    event.changes.firstOrNull()?.let { change ->
-                                                        if (coords != null) {
-                                                            val rootPos = coords.localToRoot(change.position)
-                                                            dragController.update(rootPos)
-                                                        }
-                                                    }
-                                                }
-                                                PointerEventType.Release -> {
-                                                    completeDrop()
-                                                    return@awaitEachGesture
-                                                }
-                                                else -> {}
-                                            }
-                                        } while (true)
-                                    }
-                                }
                         ) {
                             val dragShape = RoundedCornerShape(Dimens.TileRadius)
                             Box(
@@ -326,57 +293,57 @@ fun ProjectScreen(
     }
 }
 
-private fun applyReorderTargetWithThreshold(
+/** Reorders live by checking only the dragged item's immediate neighbors. */
+private fun checkNeighborSwap(
     vm: ProjectViewModel,
     projectId: String,
     tracks: List<TrackEntity>,
     dragController: DragController,
     listState: LazyListState,
-    listBoundsInRoot: Rect,
-    reorderThresholdPx: Float,
-    dragStartDeadzonePx: Float,
-    reorderCenterMoveGatePx: Float
+    listBoundsInRoot: Rect
 ) {
-    if (!dragController.isDragging) return
     val key = dragController.draggingKey ?: return
-    if (abs(dragController.fingerPos.y - dragController.dragAnchorYRoot) < dragStartDeadzonePx) return
-    val layoutInfo = listState.layoutInfo
-    val fingerListLocalY = fingerYInListSpace(dragController.fingerPos.y, listBoundsInRoot, layoutInfo.viewportStartOffset)
-    val centerListLocalY = fingerListLocalY - dragController.dragOffset.y + dragController.overlayHeightPx / 2f
-    val anchor = dragController.reorderAnchorCenterListLocalY
-    if (!anchor.isNaN() && abs(centerListLocalY - anchor) < reorderCenterMoveGatePx) return
-    val itemCount = tracks.size
-    if (itemCount == 0) return
-    val candidateIndex = computeReorderDropIndex(
-        listState = listState,
-        draggedKey = key,
-        draggedCenterY = centerListLocalY,
-        itemsCount = itemCount
-    )
     val currentIndex = tracks.indexOfFirst { it.id == key }
     if (currentIndex < 0) return
-    if (candidateIndex == currentIndex) return
-    val visible = layoutInfo.visibleItemsInfo.filter { it.index in 0..<itemCount }
-    val currentSlot = visible.find { it.index == currentIndex }
-    if (currentSlot == null) return
-    val slotTop = currentSlot.offset.toFloat()
-    val slotBottom = currentSlot.offset + currentSlot.size
-    val pastThreshold = when {
-        candidateIndex > currentIndex -> centerListLocalY >= slotBottom + reorderThresholdPx
-        else -> centerListLocalY <= slotTop - reorderThresholdPx
+
+    val layoutInfo = listState.layoutInfo
+    val draggedCenterY = fingerYInListSpace(
+        dragController.fingerPos.y,
+        listBoundsInRoot,
+        layoutInfo.viewportStartOffset
+    ) - dragController.dragOffset.y + dragController.overlayHeightPx / 2f
+
+    val visible = layoutInfo.visibleItemsInfo
+
+    val neighborBelow = visible.find { it.index == currentIndex + 1 }
+    if (shouldSwapWithNext(draggedCenterY, neighborBelow)) {
+        vm.setTrackOrderSession(projectId, swapInList(tracks, currentIndex, currentIndex + 1))
+        return
     }
-    if (!pastThreshold) return
-    val ordered = reorderForDisplay(tracks, key, candidateIndex)
-    val byId = tracks.associateBy { it.id }
-    vm.setTrackOrderSession(projectId, ordered.map { byId.getValue(it.id) })
+
+    val neighborAbove = visible.find { it.index == currentIndex - 1 }
+    if (shouldSwapWithPrevious(draggedCenterY, neighborAbove)) {
+        vm.setTrackOrderSession(projectId, swapInList(tracks, currentIndex, currentIndex - 1))
+    }
 }
 
-private fun reorderForDisplay(list: List<TrackEntity>, draggedId: String, toIndex: Int): List<TrackEntity> {
-    val dragged = list.find { it.id == draggedId } ?: return list
-    val rest = list.filter { it.id != draggedId }
-    val idx = toIndex.coerceIn(0, rest.size)
-    return rest.take(idx) + dragged + rest.drop(idx)
+/** Moves the item at [fromIndex] to [toIndex] by remove + insert (adjacent swap for reorder). */
+private fun swapInList(tracks: List<TrackEntity>, fromIndex: Int, toIndex: Int): List<TrackEntity> {
+    return tracks.toMutableList().also {
+        val item = it.removeAt(fromIndex)
+        it.add(toIndex, item)
+    }
 }
+
+private fun shouldSwapWithNext(
+    draggedCenterY: Float,
+    neighbor: LazyListItemInfo?
+): Boolean = neighbor != null && draggedCenterY > neighbor.offset + neighbor.size / 2f
+
+private fun shouldSwapWithPrevious(
+    draggedCenterY: Float,
+    neighbor: LazyListItemInfo?
+): Boolean = neighbor != null && draggedCenterY < neighbor.offset + neighbor.size / 2f
 
 private fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: Int): Boolean {
     val info = listState.layoutInfo
@@ -385,5 +352,6 @@ private fun isTrackFullyVisibleInLazyList(listState: LazyListState, itemIndex: I
         item.offset + item.size <= info.viewportEndOffset
 }
 
+/** Converts a root-space Y coordinate to the LazyList's content coordinate space. */
 private fun fingerYInListSpace(fingerRootY: Float, listBoundsInRoot: Rect, viewportStartOffset: Int): Float =
     fingerRootY - (listBoundsInRoot.top - viewportStartOffset)

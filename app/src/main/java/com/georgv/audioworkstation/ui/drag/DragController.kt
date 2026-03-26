@@ -7,17 +7,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 
-/** Drag state for list reorder; drop index is derived in the screen (see reorder package). */
+/** Minimal drag state for live adjacent-swap reorder. */
 @Stable
 class DragController {
 
     var draggingKey: String? by mutableStateOf(null)
         private set
 
+    /** Current finger position in root coordinates. */
     var fingerPos: Offset by mutableStateOf(Offset.Zero)
         private set
 
-    /** Finger minus item top-left at start; overlay top Y = fingerPos.y - dragOffset.y */
+    /** Finger minus item top-left at drag start; overlay top Y = fingerPos.y - dragOffset.y */
     var dragOffset: Offset by mutableStateOf(Offset.Zero)
         private set
 
@@ -30,12 +31,6 @@ class DragController {
     var overlayHeightPx: Float by mutableFloatStateOf(0f)
         private set
 
-    var dragAnchorYRoot: Float by mutableFloatStateOf(0f)
-        private set
-
-    var reorderAnchorCenterListLocalY: Float by mutableFloatStateOf(Float.NaN)
-        private set
-
     val isDragging: Boolean get() = draggingKey != null
 
     fun start(
@@ -44,17 +39,14 @@ class DragController {
         offsetFromFingerToItemTopLeft: Offset,
         fixedXInParentPx: Float,
         overlayWidthPx: Float,
-        overlayHeightPx: Float,
-        fingerListLocalY: Float
+        overlayHeightPx: Float
     ) {
         draggingKey = key
         dragOffset = offsetFromFingerToItemTopLeft
         this.fixedXInParentPx = fixedXInParentPx
         this.overlayWidthPx = overlayWidthPx
         this.overlayHeightPx = overlayHeightPx
-        fingerPos = Offset(startPos.x, startPos.y)
-        dragAnchorYRoot = startPos.y
-        reorderAnchorCenterListLocalY = fingerListLocalY - dragOffset.y + overlayHeightPx / 2f
+        fingerPos = startPos
     }
 
     fun update(pos: Offset) {
@@ -69,7 +61,5 @@ class DragController {
         fixedXInParentPx = 0f
         overlayWidthPx = 0f
         overlayHeightPx = 0f
-        dragAnchorYRoot = 0f
-        reorderAnchorCenterListLocalY = Float.NaN
     }
 }

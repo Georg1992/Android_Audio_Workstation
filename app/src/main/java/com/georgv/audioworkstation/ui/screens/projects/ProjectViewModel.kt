@@ -136,7 +136,9 @@ class ProjectViewModel @Inject constructor(
             .filter { it.id !in presentIds }
             .sortedBy { it.position }
             .mapIndexed { i, t -> t.copy(position = merged.size + i) }
-        tracksSession.value = merged + trailing
+        val next = merged + trailing
+        if (next.map { it.id } == tracksSession.value.map { it.id }) return
+        tracksSession.value = next
     }
 
     fun persistTrackOrderToDb(projectId: String) {
