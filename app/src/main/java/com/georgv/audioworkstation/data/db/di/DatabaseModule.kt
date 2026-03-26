@@ -25,7 +25,6 @@ object DatabaseModule {
             AppDatabase::class.java,
             "audioworkstation.db"
         )
-            .fallbackToDestructiveMigration() // тебе ок пока
             .build()
 
     @Provides
