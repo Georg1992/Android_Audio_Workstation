@@ -36,6 +36,7 @@ import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.drag.reorder.computeReorderDropIndex
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
+import kotlinx.coroutines.yield
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
@@ -75,6 +76,15 @@ fun ProjectScreen(
     val sessionGainByTrackId = remember { mutableStateMapOf<String, Float>() }
     LaunchedEffect(projectId) {
         sessionGainByTrackId.clear()
+    }
+
+    LaunchedEffect(state.recordingTrackId, tracks.size) {
+        val id = state.recordingTrackId ?: return@LaunchedEffect
+        yield()
+        val index = vm.uiState.value.tracks.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            listState.scrollToItem(index)
+        }
     }
 
     var listBoundsInRoot by remember { mutableStateOf(Rect.Zero) }

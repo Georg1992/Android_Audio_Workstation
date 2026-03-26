@@ -35,8 +35,8 @@ object Dimens {
     val TransportPanelRadius = 14.dp
     val TransportButtonSize = 56.dp
 
-    // project screen
-    val PanelPlaceholderHeight = 72.dp
+    // project screen (top placeholder strip)
+    val PanelPlaceholderHeight = 36.dp
 
     // placeholder screens (Community, Library, Devices)
     val ScreenContentPadding = 16.dp
