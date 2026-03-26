@@ -2,7 +2,6 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -23,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
@@ -49,22 +48,7 @@ fun TransportPanel(
             .background(AppColors.Bg)
             .border(Dimens.Stroke, AppColors.Line, shape)
             .padding(vertical = Dimens.PanelPadding)
-            .then(
-                if (inputLocked) {
-                    Modifier.pointerInput(Unit) {
-                        while (true) {
-                            awaitEachGesture {
-                                do {
-                                    val event = awaitPointerEvent()
-                                    event.changes.forEach { it.consume() }
-                                } while (event.changes.any { it.pressed })
-                            }
-                        }
-                    }
-                } else {
-                    Modifier
-                }
-            ),
+            .consumeAllPointers(enabled = inputLocked),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {

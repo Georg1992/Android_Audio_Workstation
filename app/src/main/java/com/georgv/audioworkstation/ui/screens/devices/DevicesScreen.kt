@@ -1,24 +1,15 @@
 package com.georgv.audioworkstation.ui.screens.devices
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.ui.components.ScreenScaffold
-import com.georgv.audioworkstation.ui.theme.Dimens
+import com.georgv.audioworkstation.ui.screens.common.PlaceholderScreen
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(onBack: () -> Unit) {
-    ScreenScaffold(title = stringResource(R.string.screen_devices), onBack = onBack) { padding ->
-        Text(
-            text = "Devices Screen",
-            modifier = Modifier
-                .padding(padding)
-                .padding(Dimens.ScreenContentPadding)
-        )
-    }
+    PlaceholderScreen(
+        title = stringResource(R.string.screen_devices),
+        body = "Devices Screen",
+        onBack = onBack
+    )
 }
