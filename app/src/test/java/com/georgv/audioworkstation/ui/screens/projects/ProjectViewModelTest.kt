@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -139,6 +140,29 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `renameTrack rolls back when persistence fails`() = runTest {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, name = "Old")),
+            failUpsertTrack = true
+        )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.renameTrack("a", "New Name")
+        advanceUntilIdle()
+        val message = vm.userMessages.first()
+
+        assertEquals("Old", vm.uiState.value.tracks.single().name)
+        assertEquals("Old", dao.observeTracks(PROJECT_ID).first().single().name)
+        assertEquals("Failed to rename track.", message)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `setTrackOrderSession and persistTrackOrderToDb keep reordered positions`() = runTest {
         val dao = FakeProjectDao(
             projects = listOf(project()),
@@ -206,6 +230,54 @@ class ProjectViewModelTest {
         collectJob.cancel()
     }
 
+    @Test
+    fun `deleteTrack rolls back when persistence fails`() = runTest {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(
+                track(id = "a", position = 0),
+                track(id = "b", position = 1)
+            ),
+            failDeleteTrackAndUpdatePositions = true
+        )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+
+        vm.deleteTrack("a")
+        advanceUntilIdle()
+        val message = vm.userMessages.first()
+
+        assertEquals(listOf("a", "b"), vm.uiState.value.tracks.map { it.id })
+        assertEquals(setOf("a"), vm.uiState.value.selectedTrackIds)
+        assertEquals(listOf("a", "b"), dao.observeTracks(PROJECT_ID).first().map { it.id })
+        assertEquals("Failed to delete track.", message)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `addTrack creates missing project before adding track`() = runTest {
+        val dao = FakeProjectDao()
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.addTrack(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNotNull(vm.uiState.value.project)
+        assertEquals(PROJECT_ID, vm.uiState.value.project?.id)
+        assertEquals(listOf("Take 1"), vm.uiState.value.tracks.map { it.name })
+        assertEquals(PROJECT_ID, dao.observeProject(PROJECT_ID).first()?.id)
+        collectJob.cancel()
+    }
+
     private fun createViewModel(dao: FakeProjectDao): ProjectViewModel {
         return ProjectViewModel(ProjectRepository(dao))
     }
@@ -226,7 +298,10 @@ class ProjectViewModelTest {
 
 private class FakeProjectDao(
     projects: List<ProjectEntity> = emptyList(),
-    tracks: List<TrackEntity> = emptyList()
+    tracks: List<TrackEntity> = emptyList(),
+    private val failUpsertProject: Boolean = false,
+    private val failUpsertTrack: Boolean = false,
+    private val failDeleteTrackAndUpdatePositions: Boolean = false
 ) : ProjectDao {
     private val projectsFlow = MutableStateFlow(projects.sortedByDescending { it.createdAt })
     private val tracksByProject = tracks.groupBy { it.projectId }
@@ -234,6 +309,7 @@ private class FakeProjectDao(
         .toMutableMap()
 
     override suspend fun upsertProject(project: ProjectEntity) {
+        if (failUpsertProject) error("upsertProject failed")
         projectsFlow.value = (projectsFlow.value.filterNot { it.id == project.id } + project)
             .sortedByDescending { it.createdAt }
     }
@@ -255,6 +331,7 @@ private class FakeProjectDao(
         tracksByProject.getOrPut(projectId) { MutableStateFlow(emptyList()) }
 
     override suspend fun upsertTrack(track: TrackEntity) {
+        if (failUpsertTrack) error("upsertTrack failed")
         val flow = tracksByProject.getOrPut(track.projectId) { MutableStateFlow(emptyList()) }
         flow.value = (flow.value.filterNot { it.id == track.id } + track).sortedBy { it.position }
     }
@@ -273,5 +350,10 @@ private class FakeProjectDao(
         tracksByProject.values.forEach { flow ->
             flow.value = flow.value.filterNot { it.id == trackId }
         }
+    }
+
+    override suspend fun deleteTrackAndUpdatePositions(trackId: String, remaining: List<TrackEntity>) {
+        if (failDeleteTrackAndUpdatePositions) error("deleteTrackAndUpdatePositions failed")
+        super.deleteTrackAndUpdatePositions(trackId, remaining)
     }
 }
