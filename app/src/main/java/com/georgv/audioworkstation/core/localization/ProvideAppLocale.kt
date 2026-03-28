@@ -31,11 +31,6 @@ fun ProvideAppLocale(
     }
 }
 
-/**
- * Wraps the original context (typically the Activity) so Hilt and other code
- * that unwraps [ContextWrapper] still see an Activity, while [getResources]
- * uses the locale from [Context.createConfigurationContext].
- */
 private class LocaleResourcesContext(
     base: Context,
     private val localizedResources: Resources

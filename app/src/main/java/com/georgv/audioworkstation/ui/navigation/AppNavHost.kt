@@ -16,6 +16,8 @@ import java.util.UUID
 
 @Composable
 fun AppNavHost(
+    currentLanguageTag: String,
+    onSetLanguage: (String) -> Unit,
     navController: NavHostController
 ) {
     NavHost(
@@ -25,6 +27,8 @@ fun AppNavHost(
     ) {
         composable(Routes.MAIN_MENU) {
             MainMenuScreen(
+                currentLanguageTag = currentLanguageTag,
+                onSetLanguage = onSetLanguage,
                 onOpenProject = {
                     val id = UUID.randomUUID().toString()
                     navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=false")

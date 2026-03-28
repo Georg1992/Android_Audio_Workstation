@@ -3,13 +3,17 @@ package com.georgv.audioworkstation.core.localization.data
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.Locale
+import javax.inject.Inject
 
-class LanguageRepository(context: Context) {
+class LanguageRepository @Inject constructor(
+    @ApplicationContext context: Context
+) {
 
     private val appContext = context.applicationContext
     private val dataStore = appContext.languageDataStore

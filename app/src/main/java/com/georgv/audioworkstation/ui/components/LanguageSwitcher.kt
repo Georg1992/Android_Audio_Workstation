@@ -18,20 +18,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.ui.local.LocalLanguageVm
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
 fun LanguageSwitcher(
+    currentTag: String,
+    onSetLanguage: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val languageVm = LocalLanguageVm.current
     var expanded by rememberSaveable { mutableStateOf(false) }
-
-    val currentTag by languageVm.currentTag.collectAsStateWithLifecycle()
 
     val currentLabel = when {
         currentTag.startsWith("ru") -> "RU"
@@ -40,7 +37,7 @@ fun LanguageSwitcher(
     }
 
     fun setLang(tag: String) {
-        languageVm.setLanguage(tag)
+        onSetLanguage(tag)
         expanded = false
     }
 

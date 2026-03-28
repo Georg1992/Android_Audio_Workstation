@@ -1,16 +1,17 @@
 package com.georgv.audioworkstation.core.localization
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.core.localization.data.LanguageRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class LanguageViewModel(
+@HiltViewModel
+class LanguageViewModel @Inject constructor(
     private val repo: LanguageRepository
 ) : ViewModel() {
 
@@ -29,12 +30,5 @@ class LanguageViewModel(
 
     fun setLanguage(tag: String) {
         viewModelScope.launch { repo.setLanguageTag(tag) }
-    }
-
-    class Factory(private val appContext: Context) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return LanguageViewModel(LanguageRepository(appContext)) as T
-        }
     }
 }

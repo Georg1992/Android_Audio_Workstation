@@ -25,6 +25,8 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
 fun MainMenuScreen(
+    currentLanguageTag: String,
+    onSetLanguage: (String) -> Unit,
     onQuickRecord: () -> Unit,
     onOpenProject: () -> Unit,
     onOpenLibrary: () -> Unit,
@@ -33,7 +35,12 @@ fun MainMenuScreen(
 ) {
     ScreenScaffold(
         title = stringResource(R.string.app_title),
-        actions = { LanguageSwitcher() }
+        actions = {
+            LanguageSwitcher(
+                currentTag = currentLanguageTag,
+                onSetLanguage = onSetLanguage
+            )
+        }
     ) { padding ->
         Box(
             modifier = Modifier
