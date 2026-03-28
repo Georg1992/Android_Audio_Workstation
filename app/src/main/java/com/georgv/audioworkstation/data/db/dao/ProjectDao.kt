@@ -8,7 +8,6 @@ import androidx.room.Transaction
 import androidx.room.Update
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.data.db.relations.ProjectWithTracks
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -19,6 +18,12 @@ interface ProjectDao {
 
     @Query("SELECT * FROM projects ORDER BY createdAt DESC")
     fun observeProjects(): Flow<List<ProjectEntity>>
+
+    @Query("SELECT * FROM projects WHERE id = :projectId")
+    fun observeProject(projectId: String): Flow<ProjectEntity?>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM projects WHERE id = :projectId)")
+    suspend fun projectExists(projectId: String): Boolean
 
     @Query("DELETE FROM projects WHERE id = :projectId")
     suspend fun deleteProject(projectId: String)
@@ -43,8 +48,4 @@ interface ProjectDao {
         deleteTrack(trackId)
         if (remaining.isNotEmpty()) updateTracks(remaining)
     }
-
-    @Transaction
-    @Query("SELECT * FROM projects WHERE id = :projectId")
-    suspend fun getProjectWithTracks(projectId: String): ProjectWithTracks?
 }

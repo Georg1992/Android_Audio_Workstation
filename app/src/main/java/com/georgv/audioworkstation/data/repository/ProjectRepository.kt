@@ -3,7 +3,6 @@ package com.georgv.audioworkstation.data.repository
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.data.db.relations.ProjectWithTracks
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,8 +14,9 @@ class ProjectRepository @Inject constructor(
 
     fun observeProjects(): Flow<List<ProjectEntity>> = dao.observeProjects()
 
-    suspend fun getProjectWithTracks(projectId: String): ProjectWithTracks? =
-        dao.getProjectWithTracks(projectId)
+    fun observeProject(projectId: String): Flow<ProjectEntity?> = dao.observeProject(projectId)
+
+    suspend fun projectExists(projectId: String): Boolean = dao.projectExists(projectId)
 
     suspend fun deleteProject(projectId: String) = dao.deleteProject(projectId)
 

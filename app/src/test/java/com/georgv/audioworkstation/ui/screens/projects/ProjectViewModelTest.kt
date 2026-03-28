@@ -3,12 +3,12 @@ package com.georgv.audioworkstation.ui.screens.projects
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.data.db.relations.ProjectWithTracks
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -240,6 +240,12 @@ private class FakeProjectDao(
 
     override fun observeProjects(): Flow<List<ProjectEntity>> = projectsFlow
 
+    override fun observeProject(projectId: String): Flow<ProjectEntity?> =
+        projectsFlow.map { projects -> projects.firstOrNull { it.id == projectId } }
+
+    override suspend fun projectExists(projectId: String): Boolean =
+        projectsFlow.value.any { it.id == projectId }
+
     override suspend fun deleteProject(projectId: String) {
         projectsFlow.value = projectsFlow.value.filterNot { it.id == projectId }
         tracksByProject.remove(projectId)
@@ -267,11 +273,5 @@ private class FakeProjectDao(
         tracksByProject.values.forEach { flow ->
             flow.value = flow.value.filterNot { it.id == trackId }
         }
-    }
-
-    override suspend fun getProjectWithTracks(projectId: String): ProjectWithTracks? {
-        val project = projectsFlow.value.firstOrNull { it.id == projectId } ?: return null
-        val tracks = tracksByProject[projectId]?.value.orEmpty().sortedBy { it.position }
-        return ProjectWithTracks(project = project, tracks = tracks)
     }
 }
