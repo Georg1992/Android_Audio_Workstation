@@ -20,7 +20,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.core.localization.LanguageViewModel
 import com.georgv.audioworkstation.ui.local.LocalLanguageVm
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -33,11 +32,10 @@ fun LanguageSwitcher(
     var expanded by rememberSaveable { mutableStateOf(false) }
 
     val currentTag by languageVm.currentTag.collectAsStateWithLifecycle()
-    val tag = currentTag
 
     val currentLabel = when {
-        tag.startsWith("ru") -> "RU"
-        tag.startsWith("zh") -> "ZH"
+        currentTag.startsWith("ru") -> "RU"
+        currentTag.startsWith("zh") -> "ZH"
         else -> "EN"
     }
 

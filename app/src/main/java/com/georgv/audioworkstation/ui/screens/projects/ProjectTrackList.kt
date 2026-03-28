@@ -135,7 +135,7 @@ fun ProjectTrackList(
                         blockDragHandle = reorderActive && dragController.draggingKey != track.id,
                         dragHandleEnabled = rowFullyVisible,
                         onDragHandleStart = { positionInRoot ->
-                            if (!isTrackFullyVisibleInLazyList(listState, index)) return@TrackCard
+                            if (!rowFullyVisible) return@TrackCard
                             val bounds = itemBoundsMap[track.id] ?: return@TrackCard
                             val offsetFromFinger = positionInRoot - Offset(bounds.left, bounds.top)
                             val fixedXInParentPx = bounds.left - listParentBoundsInRoot.left

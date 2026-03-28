@@ -75,7 +75,7 @@ class ProjectViewModel @Inject constructor(
         boundProjectId = projectId
         this.projectId.value = projectId
         runCatching {
-            repo.observeTracks(projectId).first().sortedBy { it.position }
+            repo.observeTracks(projectId).first()
         }.onSuccess { tracks ->
             tracksSession.value = tracks
         }.onFailure {
