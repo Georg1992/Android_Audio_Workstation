@@ -13,20 +13,22 @@ class LanguageRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val dataStore = appContext.languageDataStore
+    val defaultLanguageTag: String = Locale.getDefault().toLanguageTag()
 
     private object Keys {
         val LANG_TAG = stringPreferencesKey("lang_tag")
     }
 
-    val languageTagFlow: Flow<String?> =
-        dataStore.data.map { it[Keys.LANG_TAG] }.distinctUntilChanged()
+    val languageTagFlow: Flow<String> =
+        dataStore.data
+            .map { it[Keys.LANG_TAG] ?: defaultLanguageTag }
+            .distinctUntilChanged()
 
     suspend fun ensureInitialized() {
         val prefs = dataStore.data.first()
         val saved = prefs[Keys.LANG_TAG]
         if (saved == null) {
-            val systemTag = Locale.getDefault().toLanguageTag()
-            dataStore.edit { it[Keys.LANG_TAG] = systemTag }
+            dataStore.edit { it[Keys.LANG_TAG] = defaultLanguageTag }
         }
     }
 

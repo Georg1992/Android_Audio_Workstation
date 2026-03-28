@@ -14,11 +14,11 @@ class LanguageViewModel(
     private val repo: LanguageRepository
 ) : ViewModel() {
 
-    val currentTag: StateFlow<String?> =
+    val currentTag: StateFlow<String> =
         repo.languageTagFlow.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null
+            initialValue = repo.defaultLanguageTag
         )
 
     init {
