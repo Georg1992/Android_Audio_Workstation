@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.data.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -11,9 +12,10 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
         ProjectEntity::class,
         TrackEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
+@TypeConverters(AudioConfigConverters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun projectDao(): ProjectDao

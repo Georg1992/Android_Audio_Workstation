@@ -52,7 +52,7 @@ fun TrackCard(
     isSelected: Boolean,
     isRecording: Boolean,
     gain: Float,
-    onGainChange: (Float) -> Unit,
+    onGainChange: ((Float) -> Unit)?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onRename: ((String) -> Unit)? = null,
@@ -232,7 +232,7 @@ fun TrackCard(
             TrackGainSection(
                 gain = gain,
                 onGainChange = onGainChange,
-                enabled = !interactionBlocked
+                enabled = !interactionBlocked && onGainChange != null
             )
         }
 

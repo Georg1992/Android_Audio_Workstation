@@ -9,7 +9,10 @@ data class ProjectEntity(
     val name: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val lastOpened: Long = System.currentTimeMillis(),
-    val bpm: Int = 120,
-    val sampleRate: Int = 44100,
+    val sampleRate: Int = 48_000,
+    val fileBitDepth: Int = 16,
+    val tempo: Float = 120f,
+    val timeSignatureNumerator: Int = 4,
+    val timeSignatureDenominator: Int = 4
 )
 

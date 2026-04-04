@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
 @Composable
 fun TrackGainSection(
     gain: Float,
-    onGainChange: (Float) -> Unit,
+    onGainChange: ((Float) -> Unit)?,
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -36,7 +36,7 @@ fun TrackGainSection(
     ) {
         Fader(
             value = gainClamped,
-            onValueChange = { onGainChange(it.coerceIn(0f, 100f)) },
+            onValueChange = { value -> onGainChange?.invoke(value.coerceIn(0f, 100f)) },
             valueRange = 0f..100f,
             enabled = enabled,
             modifier = Modifier

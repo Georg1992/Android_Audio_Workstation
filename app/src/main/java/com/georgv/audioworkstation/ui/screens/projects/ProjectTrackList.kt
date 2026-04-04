@@ -37,9 +37,9 @@ fun ProjectTrackList(
     recordingTrackId: String?,
     listState: LazyListState,
     dragController: DragController,
-    sessionGainByTrackId: MutableMap<String, Float>,
     onToggleSelect: (String) -> Unit,
     onDeleteTrack: (String) -> Unit,
+    onGainChange: (String, Float) -> Unit,
     onRenameTrack: (String, String) -> Unit,
     onReorderTracks: (List<TrackEntity>) -> Unit,
     onPersistTrackOrder: () -> Unit,
@@ -111,7 +111,6 @@ fun ProjectTrackList(
         ) {
             itemsIndexed(items = tracks) { index, track ->
                 val isDragging = reorderActive && dragController.draggingKey == track.id
-                val displayedGain = sessionGainByTrackId[track.id] ?: track.gain
                 val rowFullyVisible = isTrackFullyVisibleInLazyList(listState, index)
 
                 Box(
@@ -125,8 +124,8 @@ fun ProjectTrackList(
                         title = track.name ?: "Track",
                         isSelected = selectedTrackIds.contains(track.id),
                         isRecording = recordingTrackId == track.id,
-                        gain = displayedGain,
-                        onGainChange = { sessionGainByTrackId[track.id] = it },
+                        gain = track.gain,
+                        onGainChange = { gain -> onGainChange(track.id, gain) },
                         onClick = { onToggleSelect(track.id) },
                         onDelete = { onDeleteTrack(track.id) },
                         onRename = { onRenameTrack(track.id, it) },
@@ -166,10 +165,10 @@ fun ProjectTrackList(
                     track = draggedTrack,
                     isSelected = selectedTrackIds.contains(draggedTrack.id),
                     isRecording = recordingTrackId == draggedTrack.id,
-                    gain = sessionGainByTrackId[draggedTrack.id] ?: draggedTrack.gain,
+                    gain = draggedTrack.gain,
                     dragController = dragController,
                     parentTopInRootPx = listParentBoundsInRoot.top,
-                    onGainChange = { sessionGainByTrackId[draggedTrack.id] = it }
+                    onGainChange = { gain -> onGainChange(draggedTrack.id, gain) }
                 )
             }
         }

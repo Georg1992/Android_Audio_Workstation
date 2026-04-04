@@ -21,6 +21,6 @@ public:
 										int32_t numFrames) override;
 
 private:
-	dawengine::AudioEngine* m_engine;
-	std::shared_ptr<oboe::AudioStream> m_stream;
+    dawengine::AudioEngine* m_engine;
+    std::shared_ptr<oboe::AudioStream> m_stream;
 };

@@ -1,55 +1,121 @@
 #include <jni.h>
+
 #include <memory>
 #include <string>
+#include <vector>
+
 #include "AudioEngine.h"
 #include "OboeOutput.h"
 
-static std::unique_ptr<dawengine::AudioEngine> g_engine;
-static std::unique_ptr<OboeOutput> g_output;
+namespace {
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeInit(JNIEnv*, jobject){
-	if(!g_engine){
-		g_engine = std::make_unique<dawengine::AudioEngine>();
-	}
+std::unique_ptr<dawengine::AudioEngine> g_engine;
+std::unique_ptr<OboeOutput> g_output;
+
+dawengine::AudioEngine *EnsureEngine() {
+    if (!g_engine) {
+        g_engine = std::make_unique<dawengine::AudioEngine>();
+    }
+    return g_engine.get();
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeRelease(JNIEnv*, jobject){
-	if (g_output) { g_output->stop(); g_output.reset(); }
-	g_engine.reset();
+std::string JStringToString(JNIEnv *env, jstring value) {
+    if (!env || !value) return "";
+    const char *chars = env->GetStringUTFChars(value, nullptr);
+    const std::string result = chars ? chars : "";
+    if (chars) {
+        env->ReleaseStringUTFChars(value, chars);
+    }
+    return result;
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeClearTracks(JNIEnv*, jobject){
-	if(g_engine){ g_engine->clearTracks(); }
+void StopOutput() {
+    if (g_output) {
+        g_output->stop();
+    }
 }
 
+} // namespace
+
 extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeAddTrack(JNIEnv* env, jobject, jstring path){
-	if(!g_engine) return;
-	const char* cpath = env->GetStringUTFChars(path, nullptr);
-	g_engine->addTrack(std::string(cpath ? cpath : ""));
-	env->ReleaseStringUTFChars(path, cpath);
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeRelease(JNIEnv *, jobject) {
+    StopOutput();
+    g_output.reset();
+    if (g_engine) {
+        g_engine->stopPlayback();
+        g_engine->stopRecording();
+    }
+    g_engine.reset();
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeOfflineMixToWav(JNIEnv* env, jobject, jstring outPath){
-	if(!g_engine) return JNI_FALSE;
-	const char* cout = env->GetStringUTFChars(outPath, nullptr);
-	bool ok = g_engine->offlineMixToWav(std::string(cout ? cout : ""));
-	env->ReleaseStringUTFChars(outPath, cout);
-	return ok ? JNI_TRUE : JNI_FALSE;
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartRecording(
+        JNIEnv *env,
+        jobject,
+        jint sampleRate,
+        jint fileBitDepth,
+        jint channelMode,
+        jstring outputPath) {
+    auto *engine = EnsureEngine();
+    if (!engine) return JNI_FALSE;
+
+    engine->configureProject(sampleRate, fileBitDepth);
+    const int32_t channelCount = channelMode == 1 ? 2 : 1;
+    return engine->startRecording(channelCount, JStringToString(env, outputPath)) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStart(JNIEnv*, jobject){
-	if(!g_engine) return JNI_FALSE;
-	if(!g_output) g_output = std::make_unique<OboeOutput>(g_engine.get());
-	return g_output->start() ? JNI_TRUE : JNI_FALSE;
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopRecording(JNIEnv *, jobject) {
+    return g_engine && g_engine->stopRecording() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
+        JNIEnv *env,
+        jobject,
+        jint sampleRate,
+        jstring wavPath,
+        jfloat gain) {
+    auto *engine = EnsureEngine();
+    if (!engine) return JNI_FALSE;
+
+    engine->configureProject(sampleRate, 16);
+    engine->clearTracks();
+    engine->addTrack(JStringToString(env, wavPath));
+    if (!engine->startPlayback(gain)) {
+        return JNI_FALSE;
+    }
+
+    if (!g_output) {
+        g_output = std::make_unique<OboeOutput>(engine);
+    }
+    if (!g_output->start(sampleRate, 2)) {
+        engine->stopPlayback();
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStop(JNIEnv*, jobject){
-	if(g_output) g_output->stop();
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetPlaybackGain(
+        JNIEnv *,
+        jobject,
+        jfloat gain) {
+    if (g_engine) {
+        g_engine->setPlaybackGain(gain);
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsPlaybackActive(JNIEnv *, jobject) {
+    return g_engine && g_engine->isPlaybackActive() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopPlayback(JNIEnv *, jobject) {
+    StopOutput();
+    if (g_engine) {
+        g_engine->stopPlayback();
+    }
+    return JNI_TRUE;
 }

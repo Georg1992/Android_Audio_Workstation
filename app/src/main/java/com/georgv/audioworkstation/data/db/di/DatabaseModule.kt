@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.data.db.di
 import android.content.Context
 import androidx.room.Room
 import com.georgv.audioworkstation.data.db.AppDatabase
+import com.georgv.audioworkstation.data.db.MIGRATION_3_4
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import dagger.Module
 import dagger.Provides
@@ -25,6 +26,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             "audioworkstation.db"
         )
+            .addMigrations(MIGRATION_3_4)
             .build()
 
     @Provides

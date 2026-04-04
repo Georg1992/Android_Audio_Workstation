@@ -10,6 +10,7 @@ plugins {
 android {
     namespace = 'com.georgv.audioworkstation'
     compileSdk = 36
+    ndkVersion = "25.2.9519653"
 
     defaultConfig {
         applicationId = "com.georgv.audioworkstation"
@@ -28,6 +29,13 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            version "3.22.1"
+        }
     }
 }
 

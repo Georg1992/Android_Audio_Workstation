@@ -1,5 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,16 +15,21 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.ContextCompat
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TransportPanel
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.Modifier
@@ -34,6 +43,38 @@ fun ProjectScreen(
     onBack: () -> Unit,
     vm: ProjectViewModel = hiltViewModel()
 ) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val dragController = remember { DragController() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var pendingRecordProjectName by remember(projectId) { mutableStateOf<String?>(null) }
+
+    val startRecordingIfPermitted: (String) -> Unit = { projectName ->
+        if (state.recordingTrackId != null ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        ) {
+            vm.onRecordPressed(projectId, projectName)
+        } else {
+            pendingRecordProjectName = projectName
+        }
+    }
+
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pendingProjectName = pendingRecordProjectName
+        pendingRecordProjectName = null
+        if (granted && pendingProjectName != null) {
+            vm.onRecordPressed(projectId, pendingProjectName)
+        } else if (!granted) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Microphone permission required.")
+            }
+        }
+    }
+
     LaunchedEffect(projectId, quickRecord) {
         vm.bind(projectId)
 
@@ -45,21 +86,17 @@ fun ProjectScreen(
             "New Project"
         }
 
-        vm.ensureProjectExists(projectId, projectName)
-
         if (quickRecord) {
-            vm.addTrack(projectId)
+            startRecordingIfPermitted(projectName)
+        } else {
+            vm.ensureProjectExists(projectId, projectName)
         }
     }
 
-    val state by vm.uiState.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
-    val dragController = remember { DragController() }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    val sessionGainByTrackId = remember { mutableStateMapOf<String, Float>() }
-    LaunchedEffect(projectId) {
-        sessionGainByTrackId.clear()
+    LaunchedEffect(pendingRecordProjectName) {
+        if (pendingRecordProjectName != null) {
+            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     LaunchedEffect(vm) {
@@ -97,9 +134,9 @@ fun ProjectScreen(
                 recordingTrackId = state.recordingTrackId,
                 listState = listState,
                 dragController = dragController,
-                sessionGainByTrackId = sessionGainByTrackId,
                 onToggleSelect = vm::toggleSelect,
                 onDeleteTrack = vm::deleteTrack,
+                onGainChange = vm::setTrackGain,
                 onRenameTrack = vm::renameTrack,
                 onReorderTracks = { vm.setTrackOrderSession(projectId, it) },
                 onPersistTrackOrder = { vm.persistTrackOrderToDb(projectId) },
@@ -113,7 +150,7 @@ fun ProjectScreen(
                 isStopEnabled = state.isStopEnabled,
                 onPlay = { vm.onPlayPressed() },
                 onStop = { vm.onStopPressed() },
-                onRecord = { vm.onRecordPressed(projectId) },
+                onRecord = { startRecordingIfPermitted("New Project") },
                 inputLocked = reorderActive,
                 modifier = Modifier
                     .fillMaxWidth()
