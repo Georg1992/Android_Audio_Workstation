@@ -26,6 +26,7 @@ fun ScreenScaffold(
     title: String,
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    titleContent: @Composable (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
@@ -36,7 +37,7 @@ fun ScreenScaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text(
+                    titleContent?.invoke() ?: Text(
                         text = title,
                         style = AppText.TopBarTitle,
                         color = AppColors.Line

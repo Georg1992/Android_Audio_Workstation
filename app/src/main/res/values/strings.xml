@@ -20,10 +20,22 @@
     <string name="menu_quick_record">Quick Record</string>
     <string name="menu_quick_record_sub">Tap to record</string>
 
+    <string name="screen_create_project">Create Project</string>
     <string name="screen_project">Project</string>
     <string name="screen_library">Library</string>
     <string name="screen_community">Community</string>
     <string name="screen_devices">Devices</string>
+
+    <string name="create_project_name_label">Project name</string>
+    <string name="create_project_name_placeholder">Enter project name</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_create_project">Create Project</string>
+    <string name="action_delete">Delete</string>
+    <string name="library_empty_state">No projects yet.</string>
+    <string name="library_open_project_hint">Tap to open project</string>
+    <string name="library_untitled_project">Untitled Project</string>
+    <string name="library_delete_project_title">Delete project?</string>
+    <string name="library_delete_project_message">This will permanently delete %1$s and all its tracks.</string>
 
 </resources>
 

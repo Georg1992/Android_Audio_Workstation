@@ -9,6 +9,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,19 +18,23 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectViewModelTest {
 
     @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    val mainDispatcherRule = ProjectViewModelMainDispatcherRule()
 
     @Test
     fun `bind loads tracks ordered by position`() = runTest {
@@ -223,6 +228,60 @@ class ProjectViewModelTest {
         assertEquals("Old", vm.uiState.value.tracks.single().name)
         assertEquals("Old", dao.observeTracks(PROJECT_ID).first().single().name)
         assertEquals("Failed to rename track.", message)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `renameProject updates project and persists to dao`() = runTest {
+        val dao = FakeProjectDao(projects = listOf(project(name = "Old Project")))
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.renameProject("New Project")
+        advanceUntilIdle()
+
+        assertEquals("New Project", vm.uiState.value.project?.name)
+        assertEquals("New Project", dao.observeProject(PROJECT_ID).first()?.name)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `renameProject rejects blank names and emits feedback`() = runTest {
+        val dao = FakeProjectDao(projects = listOf(project(name = "Old Project")))
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.renameProject("   ")
+        advanceUntilIdle()
+
+        assertEquals("Old Project", vm.uiState.value.project?.name)
+        assertEquals("Project name cannot be blank.", vm.userMessages.first())
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `renameProject emits error when persistence fails`() = runTest {
+        val dao = FakeProjectDao(
+            projects = listOf(project(name = "Old Project")),
+            failUpsertProject = true
+        )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.renameProject("New Project")
+        advanceUntilIdle()
+
+        assertEquals("Old Project", dao.observeProject(PROJECT_ID).first()?.name)
+        assertEquals("Failed to rename project.", vm.userMessages.first())
         collectJob.cancel()
     }
 
@@ -563,7 +622,7 @@ class ProjectViewModelTest {
         return ProjectViewModel(ProjectRepository(dao), audioController)
     }
 
-    private fun project() = ProjectEntity(id = PROJECT_ID, name = "Project")
+    private fun project(name: String = "Project") = ProjectEntity(id = PROJECT_ID, name = name)
 
     private fun track(
         id: String,
@@ -696,5 +755,16 @@ private class FakeProjectDao(
     override suspend fun deleteTrackAndUpdatePositions(trackId: String, remaining: List<TrackEntity>) {
         if (failDeleteTrackAndUpdatePositions) error("deleteTrackAndUpdatePositions failed")
         super.deleteTrackAndUpdatePositions(trackId, remaining)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProjectViewModelMainDispatcherRule : TestWatcher() {
+    override fun starting(description: Description) {
+        Dispatchers.setMain(kotlinx.coroutines.test.StandardTestDispatcher())
+    }
+
+    override fun finished(description: Description) {
+        Dispatchers.resetMain()
     }
 }

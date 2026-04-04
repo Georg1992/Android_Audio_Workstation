@@ -182,6 +182,25 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    fun renameProject(newName: String) {
+        val currentProject = uiState.value.project ?: return
+        val normalizedName = when (val validation = validateProjectName(newName)) {
+            is ProjectNameValidationResult.Invalid -> {
+                tryShowMessage(validation.message)
+                return
+            }
+            is ProjectNameValidationResult.Valid -> validation.normalizedName
+        }
+        if (normalizedName == (currentProject.name ?: "").trim()) return
+
+        val updatedProject = currentProject.copy(name = normalizedName)
+        viewModelScope.launch {
+            runDbAction("Failed to rename project.") {
+                repo.upsertProject(updatedProject)
+            }
+        }
+    }
+
     fun addTrack(projectId: String, name: String? = null) {
         if (this.projectId.value != projectId) return
         viewModelScope.launch {

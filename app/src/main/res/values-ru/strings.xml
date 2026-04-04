@@ -20,9 +20,21 @@
     <string name="menu_quick_record">Быстрая запись</string>
     <string name="menu_quick_record_sub">Нажми, чтобы записать</string>
 
+    <string name="screen_create_project">Создать проект</string>
     <string name="screen_project">Проект</string>
     <string name="screen_library">Библиотека</string>
     <string name="screen_community">Сообщество</string>
     <string name="screen_devices">Устройства</string>
+
+    <string name="create_project_name_label">Название проекта</string>
+    <string name="create_project_name_placeholder">Введите название проекта</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_create_project">Создать проект</string>
+    <string name="action_delete">Удалить</string>
+    <string name="library_empty_state">Проектов пока нет.</string>
+    <string name="library_open_project_hint">Нажмите, чтобы открыть проект</string>
+    <string name="library_untitled_project">Проект без названия</string>
+    <string name="library_delete_project_title">Удалить проект?</string>
+    <string name="library_delete_project_message">Это навсегда удалит %1$s и все его дорожки.</string>
 
 </resources>

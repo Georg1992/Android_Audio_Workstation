@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.ui.screens.community.CommunityScreen
 import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
 import com.georgv.audioworkstation.ui.screens.mainmenu.MainMenuScreen
+import com.georgv.audioworkstation.ui.screens.projects.CreateProjectScreen
 import com.georgv.audioworkstation.ui.screens.projects.ProjectScreen
 import java.util.UUID
 
@@ -29,16 +30,25 @@ fun AppNavHost(
             MainMenuScreen(
                 currentLanguageTag = currentLanguageTag,
                 onSetLanguage = onSetLanguage,
-                onOpenProject = {
-                    val id = UUID.randomUUID().toString()
-                    navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=false")
-                },
+                onOpenProject = { navController.navigateSingleTopTo(Routes.CREATE_PROJECT) },
                 onOpenLibrary = { navController.navigateSingleTopTo(Routes.LIBRARY) },
                 onOpenCommunity = { navController.navigateSingleTopTo(Routes.COMMUNITY) },
                 onOpenDevices = { navController.navigateSingleTopTo(Routes.DEVICES) },
                 onQuickRecord = {
                     val id = UUID.randomUUID().toString()
                     navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=true")
+                }
+            )
+        }
+
+        composable(Routes.CREATE_PROJECT) {
+            CreateProjectScreen(
+                onBack = { navController.popBackStack() },
+                onProjectCreated = { projectId ->
+                    navController.navigate("${Routes.PROJECT}/$projectId?quick=false") {
+                        popUpTo(Routes.CREATE_PROJECT) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -61,7 +71,14 @@ fun AppNavHost(
         }
 
         composable(Routes.LIBRARY) {
-            LibraryScreen(onBack = { navController.popBackStack() })
+            LibraryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenProject = { projectId ->
+                    navController.navigate("${Routes.PROJECT}/$projectId?quick=false") {
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
 
         composable(Routes.COMMUNITY) {

@@ -11,7 +11,7 @@ object AppColors {
     val Yellow = Color(0xFFFDFF1F)
     val Cyan = Color(0xFF01FEFF)
     val Pink = Color(0xFFFFD2FF)
-    val Red = Color(0xFFFF1F23)
+    val Red = Color(0xFFFF726C)
 
     val Text = Line
     val Accent = Green
