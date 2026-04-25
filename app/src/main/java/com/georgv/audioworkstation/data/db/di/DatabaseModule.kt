@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.room.Room
 import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.MIGRATION_3_4
+import com.georgv.audioworkstation.data.db.MIGRATION_4_5
+import com.georgv.audioworkstation.data.db.MIGRATION_5_6
+import com.georgv.audioworkstation.data.db.MIGRATION_6_7
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import dagger.Module
 import dagger.Provides
@@ -26,11 +29,9 @@ object DatabaseModule {
             AppDatabase::class.java,
             "audioworkstation.db"
         )
-            .addMigrations(MIGRATION_3_4)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
 
     @Provides
     fun provideProjectDao(db: AppDatabase): ProjectDao = db.projectDao()
 }
-
-

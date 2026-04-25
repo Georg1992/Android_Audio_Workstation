@@ -1,11 +1,13 @@
 <resources>
     <style name="Theme.MyApp" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@android:color/darker_gray</item>
+        <!-- Status bar tinted to match the Compose app body (AppColors.Bg). -->
+        <item name="android:statusBarColor">@color/app_window_bg</item>
         <item name="android:windowBackground">@color/app_window_bg</item>
     </style>
 
     <style name="Theme.MyApp.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/app_window_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.MyApp</item>
         <item name="android:windowBackground">@color/app_window_bg</item>
     </style>

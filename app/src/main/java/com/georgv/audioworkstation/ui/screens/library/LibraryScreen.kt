@@ -34,7 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import androidx.compose.ui.platform.LocalContext
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -50,11 +52,12 @@ fun LibraryScreen(
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var pendingDeleteProject by remember { mutableStateOf<ProjectEntity?>(null) }
 
     LaunchedEffect(vm) {
         vm.userMessages.collect { message ->
-            snackbarHostState.showSnackbar(message)
+            snackbarHostState.showSnackbar(message.resolve(context))
         }
     }
 

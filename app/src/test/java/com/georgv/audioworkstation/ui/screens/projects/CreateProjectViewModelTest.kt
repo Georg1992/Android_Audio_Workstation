@@ -1,5 +1,8 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.audio.ProjectFileStore
+import com.georgv.audioworkstation.core.audio.ProjectSampleRate
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -30,20 +33,20 @@ class CreateProjectViewModelTest {
     @Test
     fun `createProject rejects blank names`() = runTest {
         val dao = FakeCreateProjectDao()
-        val vm = CreateProjectViewModel(ProjectRepository(dao))
+        val vm = CreateProjectViewModel(ProjectRepository(dao, NoopCreateProjectFileStore))
 
         vm.onProjectNameChange("   ")
         vm.createProject()
         advanceUntilIdle()
 
-        assertEquals("Project name cannot be blank.", vm.userMessages.first())
+        assertEquals(R.string.error_project_name_blank, vm.userMessages.first().resId)
         assertTrueProjects(emptyList(), dao.observeProjects().first())
     }
 
     @Test
     fun `createProject trims name persists defaults and emits created project id`() = runTest {
         val dao = FakeCreateProjectDao()
-        val vm = CreateProjectViewModel(ProjectRepository(dao))
+        val vm = CreateProjectViewModel(ProjectRepository(dao, NoopCreateProjectFileStore))
 
         vm.onProjectNameChange("  Demo Project  ")
         vm.createProject()
@@ -60,15 +63,43 @@ class CreateProjectViewModelTest {
     }
 
     @Test
+    fun `onSampleRateChange updates ui state`() = runTest {
+        val dao = FakeCreateProjectDao()
+        val vm = CreateProjectViewModel(ProjectRepository(dao, NoopCreateProjectFileStore))
+
+        assertEquals(ProjectSampleRate.Default, vm.uiState.value.sampleRate)
+
+        vm.onSampleRateChange(ProjectSampleRate.RATE_44_100)
+        assertEquals(ProjectSampleRate.RATE_44_100, vm.uiState.value.sampleRate)
+
+        vm.onSampleRateChange(ProjectSampleRate.RATE_48_000)
+        assertEquals(ProjectSampleRate.RATE_48_000, vm.uiState.value.sampleRate)
+    }
+
+    @Test
+    fun `createProject persists selected sample rate`() = runTest {
+        val dao = FakeCreateProjectDao()
+        val vm = CreateProjectViewModel(ProjectRepository(dao, NoopCreateProjectFileStore))
+
+        vm.onProjectNameChange("Mixtape")
+        vm.onSampleRateChange(ProjectSampleRate.RATE_44_100)
+        vm.createProject()
+        advanceUntilIdle()
+
+        val createdProject = dao.observeProjects().first().single()
+        assertEquals(44_100, createdProject.sampleRate)
+    }
+
+    @Test
     fun `createProject emits error when persistence fails`() = runTest {
         val dao = FakeCreateProjectDao(failUpsertProject = true)
-        val vm = CreateProjectViewModel(ProjectRepository(dao))
+        val vm = CreateProjectViewModel(ProjectRepository(dao, NoopCreateProjectFileStore))
 
         vm.onProjectNameChange("Demo Project")
         vm.createProject()
         advanceUntilIdle()
 
-        assertEquals("Failed to create project.", vm.userMessages.first())
+        assertEquals(R.string.error_create_project_failed, vm.userMessages.first().resId)
         assertTrueProjects(emptyList(), dao.observeProjects().first())
         assertFalse(vm.uiState.value.isSaving)
     }
@@ -76,6 +107,11 @@ class CreateProjectViewModelTest {
     private fun assertTrueProjects(expected: List<ProjectEntity>, actual: List<ProjectEntity>) {
         assertEquals(expected, actual)
     }
+}
+
+private object NoopCreateProjectFileStore : ProjectFileStore {
+    override suspend fun deleteTrackFile(track: TrackEntity) = Unit
+    override suspend fun deleteProjectFolder(projectId: String) = Unit
 }
 
 private class FakeCreateProjectDao(

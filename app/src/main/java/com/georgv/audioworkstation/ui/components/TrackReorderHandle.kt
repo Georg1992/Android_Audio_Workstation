@@ -18,8 +18,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
+import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
+
+/** Radius (as fraction of the smaller drag-handle dimension) for each indicator dot. */
+private const val DragDotRadiusFraction = 0.07f
 
 @Composable
 fun TrackReorderHandle(
@@ -38,7 +42,7 @@ fun TrackReorderHandle(
         modifier = modifier
             .padding(Dimens.SmallRadius)
             .size(Dimens.DragHandleSize)
-            .alpha(if (dragHandleEnabled) 1f else 0.35f)
+            .alpha(if (dragHandleEnabled) 1f else Alphas.HandleIdle)
             .onGloballyPositioned { handleCoords = it }
             .consumeAllPointers(enabled = isBlocked)
             .then(
@@ -63,8 +67,8 @@ fun TrackReorderHandle(
             )
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val color = AppColors.Line.copy(alpha = 0.85f)
-            val dotR = minOf(size.width, size.height) * 0.07f
+            val color = AppColors.Line.copy(alpha = Alphas.HandleActive)
+            val dotR = minOf(size.width, size.height) * DragDotRadiusFraction
             listOf(0.72f to 0.92f, 0.84f to 0.84f, 0.92f to 0.72f).forEach { (tx, ty) ->
                 drawCircle(
                     color = color,

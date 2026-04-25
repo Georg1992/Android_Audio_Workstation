@@ -46,4 +46,24 @@ object Dimens {
 
     // drag handle (triangle in track card)
     val DragHandleSize = 24.dp
+
+    // glow effect (reusable "bulb" halo around icons/buttons)
+    val GlowBlur = 10.dp
+    // spacing between adjacent icons so their glows don't cross into each other
+    val IconGlowSpacing = 12.dp
+
+    // tight separators (e.g. between fader and its numeric readout)
+    val TightGap = 2.dp
+
+    // drag overlay (track card lifted while reordering)
+    val DragOverlayShadow = 24.dp
+    val DragOverlayBorder = 2.dp
+
+    // fader internals
+    val FaderTrackWidth = 10.dp
+    val FaderThumbWidth = 22.dp
+    val FaderThumbHeight = 14.dp
+    val FaderTickShortLen = 3.dp
+    val FaderTickMidLen = 6.dp
+    val FaderTickGap = 3.dp
 }

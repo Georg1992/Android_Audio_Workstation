@@ -1,10 +1,12 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -20,31 +22,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.core.audio.GainRange
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.Dimens
+
+/** Corner radius (px) for the track and thumb. Visual constant, no UX significance. */
+private const val FaderRoundedCornerPx = 3f
+/** Stroke width for the track border, thumb border, ticks and notch. */
+private const val FaderStrokePx = 1f
+/** Bottom padding (px) so the bottom tick doesn't kiss the canvas edge. */
+private const val FaderBottomPadPx = 2f
+/** Inset (px) of the thumb's center notch from the thumb's left/right edge. */
+private const val FaderThumbNotchInsetPx = 4f
+/** Alpha for the off-center tick marks (the center 50% mark is full alpha). */
+private const val FaderOffCenterTickAlpha = 0.8f
 
 /**
  * Minimal DAW-like vertical fader (Waves-ish), fully custom drawn.
- * Range default is 0..100 for casual UX.
+ * Range default is the gain percent range so the casual UX stays consistent across the app.
  */
 @Composable
 fun Fader(
     value: Float,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
-    valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
+    onValueChangeFinished: (() -> Unit)? = null,
+    valueRange: ClosedFloatingPointRange<Float> = GainRange.Range,
     enabled: Boolean = true,
-    trackWidth: Dp = 10.dp,
-    thumbWidth: Dp = 22.dp,
-    thumbHeight: Dp = 14.dp,
+    trackWidth: Dp = Dimens.FaderTrackWidth,
+    thumbWidth: Dp = Dimens.FaderThumbWidth,
+    thumbHeight: Dp = Dimens.FaderThumbHeight,
     tickCount: Int = 13,
-    shaftBg: Color = Color(0xFF0A0A0A),
-    trackAboveThumb: Color = Color.White,
-    trackBelowThumb: Color = Color.Black,
+    trackAboveThumb: Color = AppColors.FaderTrackAbove,
+    trackBelowThumb: Color = AppColors.FaderTrackBelow,
     trackBorder: Color = AppColors.FaderTrackBorder,
     tickColor: Color = AppColors.FaderTick,
     thumbColor: Color = AppColors.FaderThumb,
@@ -54,11 +70,14 @@ fun Fader(
     val trackW = with(density) { trackWidth.toPx() }
     val thumbW = with(density) { thumbWidth.toPx() }
     val thumbH = with(density) { thumbHeight.toPx() }
+    val tickShortLenPx = with(density) { Dimens.FaderTickShortLen.toPx() }
+    val tickMidLenPx = with(density) { Dimens.FaderTickMidLen.toPx() }
+    val tickGapPx = with(density) { Dimens.FaderTickGap.toPx() }
     val topPad = thumbH / 2f
-    val bottomPadPx = 2f
 
     var lastHeightPx by remember { mutableFloatStateOf(0f) }
     val latestOnValueChange by rememberUpdatedState(onValueChange)
+    val latestOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
 
     fun clamp(v: Float) = v.coerceIn(valueRange.start, valueRange.endInclusive)
 
@@ -76,10 +95,27 @@ fun Fader(
     fun trackYBounds(canvasHeight: Float): Pair<Float, Float> {
         val h = canvasHeight.coerceAtLeast(0f)
         val topY = topPad.coerceIn(0f, h)
-        val bottomY = (h - bottomPadPx).coerceIn(0f, h)
+        val bottomY = (h - FaderBottomPadPx).coerceIn(0f, h)
         val low = minOf(topY, bottomY)
         val high = maxOf(topY, bottomY)
         return low to high
+    }
+
+    // The thumb is rendered from localValue so it tracks the finger directly,
+    // independent of recompositions driven by external state. External changes
+    // are pulled into localValue only when the user isn't actively dragging.
+    var isDragging by remember { mutableStateOf(false) }
+    var localValue by remember { mutableFloatStateOf(clamp(value)) }
+    LaunchedEffect(value) {
+        if (!isDragging) localValue = clamp(value)
+    }
+
+    fun yToValue(y: Float, canvasHeight: Float): Float {
+        val (trackTop, trackBottom) = trackYBounds(canvasHeight)
+        val usable = (trackBottom - trackTop).coerceAtLeast(1f)
+        val clampedY = y.coerceIn(trackTop, trackBottom)
+        val t = 1f - ((clampedY - trackTop) / usable)
+        return clamp(denorm(t))
     }
 
     Box(
@@ -87,28 +123,35 @@ fun Fader(
             .onSizeChanged { lastHeightPx = it.height.toFloat() }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
-                detectDragGestures(
-                    onDragStart = { pos ->
-                        val h = lastHeightPx
-                        if (h <= 0f) return@detectDragGestures
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
+                    val h = lastHeightPx
+                    if (h <= 0f) return@awaitEachGesture
 
-                        val (trackTop, trackBottom) = trackYBounds(h)
-                        val usable = (trackBottom - trackTop).coerceAtLeast(1f)
-                        val y = pos.y.coerceIn(trackTop, trackBottom)
-                        val t = 1f - ((y - trackTop) / usable)
-                        latestOnValueChange(clamp(denorm(t)))
-                    },
-                    onDrag = { change, _ ->
-                        val h = lastHeightPx
-                        if (h <= 0f) return@detectDragGestures
+                    // Consume the down so parent scrollables (LazyColumn) don't win the slop race.
+                    down.consume()
+                    isDragging = true
+                    val initialValue = yToValue(down.position.y, h)
+                    localValue = initialValue
+                    latestOnValueChange(initialValue)
 
-                        val (trackTop, trackBottom) = trackYBounds(h)
-                        val usable = (trackBottom - trackTop).coerceAtLeast(1f)
-                        val y = change.position.y.coerceIn(trackTop, trackBottom)
-                        val t = 1f - ((y - trackTop) / usable)
-                        latestOnValueChange(clamp(denorm(t)))
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            if (change.positionChange() != Offset.Zero) {
+                                val v = yToValue(change.position.y, lastHeightPx.coerceAtLeast(1f))
+                                localValue = v
+                                latestOnValueChange(v)
+                                change.consume()
+                            }
+                        }
+                    } finally {
+                        isDragging = false
+                        latestOnValueChangeFinished?.invoke()
                     }
-                )
+                }
             }
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -120,9 +163,10 @@ fun Fader(
             val trackLeft = cx - (trackW / 2f)
             val trackRight = cx + (trackW / 2f)
 
-            val valueT = norm(value)
+            val valueT = norm(localValue)
             val thumbCenterY = trackBottom - (valueT * fullH)
 
+            val trackCornerRadius = CornerRadius(FaderRoundedCornerPx, FaderRoundedCornerPx)
             val trackClip = Path().apply {
                 addRoundRect(
                     RoundRect(
@@ -130,10 +174,10 @@ fun Fader(
                         top = trackTop,
                         right = trackRight,
                         bottom = trackBottom,
-                        topLeftCornerRadius = CornerRadius(3f, 3f),
-                        topRightCornerRadius = CornerRadius(3f, 3f),
-                        bottomRightCornerRadius = CornerRadius(3f, 3f),
-                        bottomLeftCornerRadius = CornerRadius(3f, 3f),
+                        topLeftCornerRadius = trackCornerRadius,
+                        topRightCornerRadius = trackCornerRadius,
+                        bottomRightCornerRadius = trackCornerRadius,
+                        bottomLeftCornerRadius = trackCornerRadius,
                     )
                 )
             }
@@ -160,31 +204,31 @@ fun Fader(
                 color = trackBorder,
                 topLeft = Offset(trackLeft, trackTop),
                 size = Size(trackW, trackH),
-                cornerRadius = CornerRadius(3f, 3f),
-                style = Stroke(width = 1f)
+                cornerRadius = trackCornerRadius,
+                style = Stroke(width = FaderStrokePx)
             )
 
             val ticks = tickCount.coerceAtLeast(2)
+            val midIndex = (ticks - 1) / 2
             for (i in 0 until ticks) {
                 val tickT = i.toFloat() / (ticks - 1).toFloat()
                 val y = trackBottom - (tickT * fullH)
 
-                val isMajor = (i == 0 || i == ticks - 1 || i == (ticks - 1) / 2)
-                val len = if (isMajor) 10f else 6f
-                val gap = 8f
-                val alpha = if (isMajor) 0.9f else 0.65f
+                val isCenter = (i == midIndex)
+                val len = if (isCenter) tickMidLenPx else tickShortLenPx
+                val alpha = if (isCenter) 1f else FaderOffCenterTickAlpha
 
                 drawLine(
                     color = tickColor.copy(alpha = alpha),
-                    start = Offset(trackLeft - gap - len, y),
-                    end = Offset(trackLeft - gap, y),
-                    strokeWidth = 1f
+                    start = Offset(trackLeft - tickGapPx - len, y),
+                    end = Offset(trackLeft - tickGapPx, y),
+                    strokeWidth = FaderStrokePx
                 )
                 drawLine(
                     color = tickColor.copy(alpha = alpha),
-                    start = Offset(trackRight + gap, y),
-                    end = Offset(trackRight + gap + len, y),
-                    strokeWidth = 1f
+                    start = Offset(trackRight + tickGapPx, y),
+                    end = Offset(trackRight + tickGapPx + len, y),
+                    strokeWidth = FaderStrokePx
                 )
             }
 
@@ -196,21 +240,21 @@ fun Fader(
                 color = thumbColor,
                 topLeft = Offset(thumbLeft, thumbTop),
                 size = Size(thumbW, thumbH),
-                cornerRadius = CornerRadius(3f, 3f)
+                cornerRadius = trackCornerRadius
             )
             drawRoundRect(
                 color = thumbBorder,
                 topLeft = Offset(thumbLeft, thumbTop),
                 size = Size(thumbW, thumbH),
-                cornerRadius = CornerRadius(3f, 3f),
-                style = Stroke(width = 1f)
+                cornerRadius = trackCornerRadius,
+                style = Stroke(width = FaderStrokePx)
             )
 
             drawLine(
                 color = AppColors.FaderThumbNotch,
-                start = Offset(thumbLeft + 4f, thumbCenterY),
-                end = Offset(thumbLeft + thumbW - 4f, thumbCenterY),
-                strokeWidth = 1f
+                start = Offset(thumbLeft + FaderThumbNotchInsetPx, thumbCenterY),
+                end = Offset(thumbLeft + thumbW - FaderThumbNotchInsetPx, thumbCenterY),
+                strokeWidth = FaderStrokePx
             )
         }
     }

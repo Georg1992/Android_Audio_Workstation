@@ -16,6 +16,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -23,42 +25,54 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenScaffold(
-    title: String,
+    title: String = "",
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     titleContent: @Composable (() -> Unit)? = null,
+    topBarAlertMessage: String? = null,
+    topBarAlertColor: Color = AppColors.Red,
     actions: @Composable RowScope.() -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
+    val topBarContainerColor = if (topBarAlertMessage != null) topBarAlertColor else AppColors.Bg
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         snackbarHost = snackbarHost,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    titleContent?.invoke() ?: Text(
-                        text = title,
-                        style = AppText.TopBarTitle,
-                        color = AppColors.Line
-                    )
+                    if (topBarAlertMessage != null) {
+                        Text(
+                            text = topBarAlertMessage,
+                            style = AppText.TopBarTitle,
+                            color = AppColors.Line
+                        )
+                    } else {
+                        titleContent?.invoke() ?: Text(
+                            text = title,
+                            style = AppText.TopBarTitle,
+                            color = AppColors.Line
+                        )
+                    }
                 },
                 modifier = Modifier.height(Dimens.TopBarHeight),
                 navigationIcon = {
                     if (onBack != null) {
                         IconButton(onClick = onBack) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = AppColors.Line
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.cd_back),
+                            tint = AppColors.Line
                             )
                         }
                     }
                 },
                 actions = actions,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppColors.Bg,
-                    scrolledContainerColor = AppColors.Bg,
+                    containerColor = topBarContainerColor,
+                    scrolledContainerColor = topBarContainerColor,
                     navigationIconContentColor = AppColors.Line,
                     titleContentColor = AppColors.Line,
                     actionIconContentColor = AppColors.Line

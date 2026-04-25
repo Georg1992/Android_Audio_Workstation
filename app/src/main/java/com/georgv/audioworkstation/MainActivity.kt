@@ -1,10 +1,10 @@
 package com.georgv.audioworkstation
 
-import AppRoot
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.georgv.audioworkstation.ui.AppRoot
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint

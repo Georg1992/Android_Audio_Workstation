@@ -28,9 +28,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
+
+/** Icon size multiplier applied when the tile is below [Dimens.MainTileNarrowBreakpoint]. */
+private const val NarrowIconScale = 1.15f
 
 @Composable
 fun MainTile(
@@ -59,7 +63,7 @@ fun MainTile(
                 .padding(Dimens.TileInnerPadding)
         ) {
             val narrow = maxWidth < Dimens.MainTileNarrowBreakpoint
-            val iconSize = if (narrow) Dimens.IconTileSize * 1.15f else Dimens.IconTileSize
+            val iconSize = if (narrow) Dimens.IconTileSize * NarrowIconScale else Dimens.IconTileSize
 
             if (narrow) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -91,7 +95,7 @@ fun MainTile(
                                 Text(
                                     text = subtitle,
                                     style = AppText.TileSubtitle,
-                                    color = AppColors.Line.copy(alpha = 0.65f),
+                                    color = AppColors.Line.copy(alpha = Alphas.MutedIcon),
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
@@ -128,7 +132,7 @@ fun MainTile(
                             Text(
                                 text = subtitle,
                                 style = AppText.TileSubtitle,
-                                color = AppColors.Line.copy(alpha = 0.65f),
+                                color = AppColors.Line.copy(alpha = Alphas.MutedIcon),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )

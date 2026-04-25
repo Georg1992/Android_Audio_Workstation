@@ -1,5 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.library
 
+import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -9,7 +11,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -33,7 +34,7 @@ class LibraryViewModelTest {
         val newerProject = project(id = "project-b", name = "Beta", createdAt = 2L)
         val olderProject = project(id = "project-a", name = "Alpha", createdAt = 1L)
         val dao = FakeLibraryProjectDao(projects = listOf(olderProject, newerProject))
-        val vm = LibraryViewModel(ProjectRepository(dao))
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore))
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -51,7 +52,7 @@ class LibraryViewModelTest {
                 project(id = "project-b", name = "Beta", createdAt = 2L)
             )
         )
-        val vm = LibraryViewModel(ProjectRepository(dao))
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore))
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -68,21 +69,25 @@ class LibraryViewModelTest {
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
             failDeleteProject = true
         )
-        val vm = LibraryViewModel(ProjectRepository(dao))
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore))
 
         vm.deleteProject("project-a")
         advanceUntilIdle()
 
-        assertEquals("Failed to delete project.", vm.userMessages.first())
+        assertEquals(R.string.error_delete_project_failed, vm.userMessages.first().resId)
         assertEquals(listOf("project-a"), dao.observeProjects().first().map { it.id })
     }
 
     private fun project(id: String, name: String, createdAt: Long) = ProjectEntity(
         id = id,
         name = name,
-        createdAt = createdAt,
-        lastOpened = createdAt
+        createdAt = createdAt
     )
+}
+
+private object NoopLibraryProjectFileStore : ProjectFileStore {
+    override suspend fun deleteTrackFile(track: TrackEntity) = Unit
+    override suspend fun deleteProjectFolder(projectId: String) = Unit
 }
 
 private class FakeLibraryProjectDao(

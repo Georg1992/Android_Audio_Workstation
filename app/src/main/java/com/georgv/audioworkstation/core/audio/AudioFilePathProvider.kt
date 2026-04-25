@@ -6,13 +6,17 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+interface AudioFilePathProvider {
+    fun trackOutputPath(projectId: String, trackId: String): String?
+}
+
 @Singleton
-class AudioFilePathProvider @Inject constructor(
+class DefaultAudioFilePathProvider @Inject constructor(
     @ApplicationContext context: Context
-) {
+) : AudioFilePathProvider {
     private val appContext = context.applicationContext
 
-    fun recordingOutputPath(projectId: String, trackId: String): String? {
+    override fun trackOutputPath(projectId: String, trackId: String): String? {
         val projectDir = File(appContext.filesDir, "audio/projects/$projectId")
         if (!projectDir.exists() && !projectDir.mkdirs()) {
             return null

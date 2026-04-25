@@ -33,10 +33,6 @@ class NativeEngine @Inject constructor() {
 
     fun stopPlayback(): Boolean = nativeStopPlayback()
 
-    fun release() {
-        nativeRelease()
-    }
-
     private external fun nativeStartRecording(
         sampleRate: Int,
         fileBitDepth: Int,
@@ -57,8 +53,6 @@ class NativeEngine @Inject constructor() {
     private external fun nativeIsPlaybackActive(): Boolean
 
     private external fun nativeStopPlayback(): Boolean
-
-    private external fun nativeRelease()
 
     private companion object {
         init {

@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
@@ -42,7 +44,7 @@ fun TrackOverflowMenu(
         verticalArrangement = Arrangement.spacedBy(Dimens.Stroke)
     ) {
         TrackMenuRow(
-            text = "Delete",
+            text = stringResource(R.string.action_delete),
             shape = itemShape,
             icon = {
                 Icon(
@@ -55,7 +57,7 @@ fun TrackOverflowMenu(
         )
 
         TrackMenuRow(
-            text = "Rename",
+            text = stringResource(R.string.action_rename),
             shape = itemShape,
             icon = {
                 Icon(

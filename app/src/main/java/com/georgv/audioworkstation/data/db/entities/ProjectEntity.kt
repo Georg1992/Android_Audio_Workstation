@@ -8,11 +8,6 @@ data class ProjectEntity(
     @PrimaryKey val id: String,
     val name: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val lastOpened: Long = System.currentTimeMillis(),
     val sampleRate: Int = 48_000,
-    val fileBitDepth: Int = 16,
-    val tempo: Float = 120f,
-    val timeSignatureNumerator: Int = 4,
-    val timeSignatureDenominator: Int = 4
+    val fileBitDepth: Int = 16
 )
-

@@ -1,21 +1,33 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Project ProGuard / R8 rules. Keep this list curated to what we actually use.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Preserve symbols that are referenced through reflection by JNI from C++ (engine bridge).
+-keepclassmembers class com.georgv.audioworkstation.engine.NativeEngine {
+    *;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Hilt: generated component classes are referenced through reflection at runtime.
+-keep class dagger.hilt.** { *; }
+-keep class androidx.hilt.** { *; }
+-keep class * extends dagger.hilt.android.internal.GeneratedComponent { *; }
+-keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager { *; }
+-dontwarn dagger.hilt.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Room: keep generated DAO/Database implementations and entity types.
+-keep class androidx.room.** { *; }
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Database class * { *; }
+-keep @androidx.room.Dao class * { *; }
+-keepclassmembers class * {
+    @androidx.room.* <methods>;
+}
+
+# Oboe / native audio: the JNI layer only sees these via dlsym, so keep the bridge surface.
+-keep class com.georgv.audioworkstation.engine.** { *; }
+-dontwarn com.google.oboe.**
+
+# Compose runtime / lifecycle helpers shouldn't be obfuscated through reflection paths.
+-dontwarn kotlinx.coroutines.flow.**
+
+# Keep crash-friendly stack traces in shipped builds.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

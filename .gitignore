@@ -21,6 +21,9 @@ local.properties
 *.ipr
 *.iws
 
+# === VSCode (personal IDE settings) ===
+.vscode/
+
 # === OS files ===
 .DS_Store
 Thumbs.db

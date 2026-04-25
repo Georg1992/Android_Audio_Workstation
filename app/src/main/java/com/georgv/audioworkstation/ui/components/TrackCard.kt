@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -35,12 +36,14 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import androidx.compose.foundation.text.KeyboardActions
@@ -53,9 +56,12 @@ fun TrackCard(
     isRecording: Boolean,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
+    onGainCommit: ((Float) -> Unit)? = null,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onRename: ((String) -> Unit)? = null,
+    onToggleLoop: (() -> Unit)? = null,
+    isLoop: Boolean = false,
     modifier: Modifier = Modifier,
     trackId: String? = null,
     onDragHandleStart: ((positionInRoot: Offset) -> Unit)? = null,
@@ -185,19 +191,58 @@ fun TrackCard(
                         )
                     }
 
+                    if (onToggleLoop != null) {
+                        Box(
+                            modifier = Modifier
+                                .width(Dimens.MenuButtonSize)
+                                .height(Dimens.MenuButtonSize)
+                                .then(
+                                    if (isLoop) Modifier.glow(
+                                        color = AppColors.Yellow,
+                                        blurRadius = Dimens.GlowBlur,
+                                        cornerRadius = Dimens.MediumRadius
+                                    ) else Modifier
+                                )
+                                .clip(buttonShape)
+                                .background(if (isLoop) AppColors.Accent else AppColors.Bg)
+                                .border(Dimens.Stroke, AppColors.Line, buttonShape)
+                                .clickable(enabled = !interactionBlocked && !isRenaming) {
+                                    onToggleLoop()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Loop,
+                                contentDescription = stringResource(
+                                    if (isLoop) R.string.cd_loop_on else R.string.cd_loop_off
+                                ),
+                                tint = if (isLoop) AppColors.Red else AppColors.Line
+                            )
+                        }
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
+                    }
+
                     Box(
                         modifier = Modifier
                             .width(Dimens.MenuButtonSize)
                             .height(Dimens.MenuButtonSize)
+                            .then(
+                                if (menuExpanded) Modifier.glow(
+                                    color = AppColors.Yellow,
+                                    blurRadius = Dimens.GlowBlur,
+                                    cornerRadius = Dimens.MediumRadius
+                                ) else Modifier
+                            )
                             .clip(buttonShape)
+                            .background(if (menuExpanded) AppColors.Accent else AppColors.Bg)
                             .border(Dimens.Stroke, AppColors.Line, buttonShape)
                             .clickable(enabled = !interactionBlocked && !isRenaming) { menuExpanded = !menuExpanded },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "Track menu",
-                            tint = AppColors.Line
+                            contentDescription = stringResource(R.string.cd_track_menu),
+                            tint = if (menuExpanded) AppColors.Red else AppColors.Line
                         )
                     }
                 }
@@ -232,6 +277,7 @@ fun TrackCard(
             TrackGainSection(
                 gain = gain,
                 onGainChange = onGainChange,
+                onGainCommit = onGainCommit,
                 enabled = !interactionBlocked && onGainChange != null
             )
         }

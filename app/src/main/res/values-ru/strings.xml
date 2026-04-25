@@ -26,15 +26,75 @@
     <string name="screen_community">Сообщество</string>
     <string name="screen_devices">Устройства</string>
 
+    <!-- Create Project screen -->
     <string name="create_project_name_label">Название проекта</string>
     <string name="create_project_name_placeholder">Введите название проекта</string>
+    <string name="create_project_sample_rate_label">Частота дискретизации</string>
+    <string name="create_project_sample_rate_44100">44,1 кГц</string>
+    <string name="create_project_sample_rate_44100_caption">Музыка / импорт</string>
+    <string name="create_project_sample_rate_48000">48 кГц</string>
+    <string name="create_project_sample_rate_48000_caption">Запись / видео</string>
+
+    <!-- Generic actions -->
     <string name="action_cancel">Отмена</string>
     <string name="action_create_project">Создать проект</string>
     <string name="action_delete">Удалить</string>
+    <string name="action_rename">Переименовать</string>
+
+    <!-- Library screen -->
     <string name="library_empty_state">Проектов пока нет.</string>
     <string name="library_open_project_hint">Нажмите, чтобы открыть проект</string>
     <string name="library_untitled_project">Проект без названия</string>
     <string name="library_delete_project_title">Удалить проект?</string>
     <string name="library_delete_project_message">Это навсегда удалит %1$s и все его дорожки.</string>
 
+    <!-- Content descriptions (accessibility) -->
+    <string name="cd_back">Назад</string>
+    <string name="cd_play">Воспроизвести</string>
+    <string name="cd_stop">Остановить</string>
+    <string name="cd_record">Записать</string>
+    <string name="cd_import_audio">Импорт аудио</string>
+    <string name="cd_loop_on">Цикл включён</string>
+    <string name="cd_loop_off">Цикл выключен</string>
+    <string name="cd_track_menu">Меню дорожки</string>
+
+    <!-- Validation errors -->
+    <string name="error_project_name_blank">Название проекта не может быть пустым.</string>
+    <string name="error_project_name_too_long">Название проекта должно быть не длиннее %1$d символов.</string>
+    <string name="error_track_name_blank">Название дорожки не может быть пустым.</string>
+    <string name="error_track_name_too_long">Название дорожки должно быть не длиннее %1$d символов.</string>
+
+    <!-- Audio import failures -->
+    <string name="import_failure_file_not_readable">Не удалось прочитать выбранный файл.</string>
+    <string name="import_failure_invalid_wav">Файл не является корректным WAV.</string>
+    <string name="import_failure_unsupported_encoding">Поддерживается только PCM WAV.</string>
+    <string name="import_failure_unsupported_channels">Поддерживается только моно или стерео.</string>
+    <string name="import_failure_sample_rate_mismatch">Частота %1$d Гц не совпадает с %2$d Гц проекта.</string>
+    <string name="import_failure_bit_depth_mismatch">Разрядность %1$d бит не совпадает с %2$d бит проекта.</string>
+    <string name="import_failure_write_failed">Не удалось импортировать аудио: %1$s</string>
+
+    <!-- Project / track flow errors -->
+    <string name="error_microphone_permission_required">Требуется доступ к микрофону.</string>
+    <string name="error_project_audio_unavailable">Аудионастройки проекта недоступны.</string>
+    <string name="error_stop_recording_to_delete_track">Остановите запись перед удалением дорожки.</string>
+    <string name="error_stop_playback_to_delete_track">Остановите воспроизведение перед удалением дорожки.</string>
+    <string name="error_stop_recording_to_import">Остановите запись перед импортом.</string>
+    <string name="error_import_storage_unavailable">Не удалось подготовить хранилище для импорта.</string>
+    <string name="error_stop_recording_to_record">Остановите запись перед началом новой.</string>
+    <string name="error_recording_failed_to_start">Не удалось начать запись.</string>
+    <string name="error_stop_playback_first">Остановите воспроизведение перед повторным запуском.</string>
+    <string name="error_single_track_playback_only">Сейчас поддерживается воспроизведение только одной дорожки.</string>
+    <string name="error_no_audio_for_selected_tracks">У выбранных дорожек ещё нет аудио.</string>
+    <string name="error_playback_failed_to_start">Не удалось начать воспроизведение.</string>
+    <string name="error_create_project_failed">Не удалось создать проект.</string>
+    <string name="error_delete_project_failed">Не удалось удалить проект.</string>
+    <string name="error_delete_track_failed">Не удалось удалить дорожку.</string>
+    <string name="error_rename_project_failed">Не удалось переименовать проект.</string>
+    <string name="error_rename_track_failed">Не удалось переименовать дорожку.</string>
+    <string name="error_loop_update_failed">Не удалось обновить настройку цикла.</string>
+    <string name="error_gain_update_failed">Не удалось обновить громкость дорожки.</string>
+    <string name="error_save_track_order_failed">Не удалось сохранить порядок дорожек.</string>
+    <string name="error_save_imported_track_failed">Не удалось сохранить импортированную дорожку.</string>
+    <string name="error_recording_metadata_failed">Не удалось обновить метаданные записи.</string>
+    <string name="error_create_recording_track_failed">Не удалось создать дорожку для записи.</string>
 </resources>

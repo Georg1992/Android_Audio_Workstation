@@ -26,16 +26,75 @@
     <string name="screen_community">Community</string>
     <string name="screen_devices">Devices</string>
 
+    <!-- Create Project screen -->
     <string name="create_project_name_label">Project name</string>
     <string name="create_project_name_placeholder">Enter project name</string>
+    <string name="create_project_sample_rate_label">Sample rate</string>
+    <string name="create_project_sample_rate_44100">44.1 kHz</string>
+    <string name="create_project_sample_rate_44100_caption">Music / imports</string>
+    <string name="create_project_sample_rate_48000">48 kHz</string>
+    <string name="create_project_sample_rate_48000_caption">Recording / video</string>
+
+    <!-- Generic actions -->
     <string name="action_cancel">Cancel</string>
     <string name="action_create_project">Create Project</string>
     <string name="action_delete">Delete</string>
+    <string name="action_rename">Rename</string>
+
+    <!-- Library screen -->
     <string name="library_empty_state">No projects yet.</string>
     <string name="library_open_project_hint">Tap to open project</string>
     <string name="library_untitled_project">Untitled Project</string>
     <string name="library_delete_project_title">Delete project?</string>
     <string name="library_delete_project_message">This will permanently delete %1$s and all its tracks.</string>
 
-</resources>
+    <!-- Content descriptions (accessibility) -->
+    <string name="cd_back">Back</string>
+    <string name="cd_play">Play</string>
+    <string name="cd_stop">Stop</string>
+    <string name="cd_record">Record</string>
+    <string name="cd_import_audio">Import audio</string>
+    <string name="cd_loop_on">Loop on</string>
+    <string name="cd_loop_off">Loop off</string>
+    <string name="cd_track_menu">Track menu</string>
 
+    <!-- Validation errors -->
+    <string name="error_project_name_blank">Project name cannot be blank.</string>
+    <string name="error_project_name_too_long">Project name must be %1$d characters or less.</string>
+    <string name="error_track_name_blank">Track name cannot be blank.</string>
+    <string name="error_track_name_too_long">Track name must be %1$d characters or less.</string>
+
+    <!-- Audio import failures -->
+    <string name="import_failure_file_not_readable">Unable to read the selected file.</string>
+    <string name="import_failure_invalid_wav">File is not a valid WAV.</string>
+    <string name="import_failure_unsupported_encoding">Only PCM WAV is supported right now.</string>
+    <string name="import_failure_unsupported_channels">Only mono or stereo audio is supported.</string>
+    <string name="import_failure_sample_rate_mismatch">Sample rate %1$d Hz does not match project %2$d Hz.</string>
+    <string name="import_failure_bit_depth_mismatch">Bit depth %1$d-bit does not match project %2$d-bit.</string>
+    <string name="import_failure_write_failed">Failed to import audio: %1$s</string>
+
+    <!-- Project / track flow errors -->
+    <string name="error_microphone_permission_required">Microphone permission required.</string>
+    <string name="error_project_audio_unavailable">Project audio settings are unavailable.</string>
+    <string name="error_stop_recording_to_delete_track">Stop recording before deleting this track.</string>
+    <string name="error_stop_playback_to_delete_track">Stop playback before deleting this track.</string>
+    <string name="error_stop_recording_to_import">Stop recording before importing.</string>
+    <string name="error_import_storage_unavailable">Could not prepare storage for the imported track.</string>
+    <string name="error_stop_recording_to_record">Stop recording before starting a new take.</string>
+    <string name="error_recording_failed_to_start">Failed to start recording.</string>
+    <string name="error_stop_playback_first">Stop playback before starting playback again.</string>
+    <string name="error_single_track_playback_only">Playback currently supports one selected track at a time.</string>
+    <string name="error_no_audio_for_selected_tracks">Selected tracks have no audio yet.</string>
+    <string name="error_playback_failed_to_start">Failed to start playback.</string>
+    <string name="error_create_project_failed">Failed to create project.</string>
+    <string name="error_delete_project_failed">Failed to delete project.</string>
+    <string name="error_delete_track_failed">Failed to delete track.</string>
+    <string name="error_rename_project_failed">Failed to rename project.</string>
+    <string name="error_rename_track_failed">Failed to rename track.</string>
+    <string name="error_loop_update_failed">Failed to update loop setting.</string>
+    <string name="error_gain_update_failed">Failed to update track gain.</string>
+    <string name="error_save_track_order_failed">Failed to save track order.</string>
+    <string name="error_save_imported_track_failed">Failed to save imported track.</string>
+    <string name="error_recording_metadata_failed">Failed to update recording metadata.</string>
+    <string name="error_create_recording_track_failed">Failed to create recording track.</string>
+</resources>

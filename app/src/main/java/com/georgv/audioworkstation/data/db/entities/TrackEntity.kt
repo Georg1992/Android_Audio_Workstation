@@ -20,15 +20,16 @@ import com.georgv.audioworkstation.core.audio.ChannelMode
 )
 data class TrackEntity(
     @PrimaryKey val id: String,
-    val projectId: String,          // вместо songId
+    val projectId: String,
     val name: String? = null,
     val channelMode: ChannelMode = ChannelMode.MONO,
-    val inputChannel: Int = 0,
     val gain: Float = 100f,
     val wavFilePath: String = "",
     val timeStampStart: Long = 0L,
     val timeStampStop: Long? = null,
     val duration: Long? = null,
     val isRecording: Boolean = false,
+    val isLoop: Boolean = false,
+    val isImported: Boolean = false,
     val position: Int = 0
 )

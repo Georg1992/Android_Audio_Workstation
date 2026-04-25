@@ -12,12 +12,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TrackCard
 import com.georgv.audioworkstation.ui.drag.DragController
+import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
+
+/** Visual lift applied to the dragged track card so it pops above the rest. */
+private const val DragOverlayLiftScale = 1.05f
 
 @Composable
 fun TrackDragOverlay(
@@ -47,9 +50,14 @@ fun TrackDragOverlay(
         Box(
             modifier = Modifier
                 .size(overlayWidthDp, overlayHeightDp)
-                .scale(1.05f)
-                .shadow(24.dp, dragShape, clip = false, spotColor = AppColors.Line.copy(alpha = 0.6f))
-                .border(2.dp, AppColors.Line, dragShape)
+                .scale(DragOverlayLiftScale)
+                .shadow(
+                    elevation = Dimens.DragOverlayShadow,
+                    shape = dragShape,
+                    clip = false,
+                    spotColor = AppColors.Line.copy(alpha = Alphas.OverlayShadow)
+                )
+                .border(Dimens.DragOverlayBorder, AppColors.Line, dragShape)
                 .clip(dragShape)
         ) {
             TrackCard(
@@ -60,6 +68,7 @@ fun TrackDragOverlay(
                 onGainChange = onGainChange,
                 onClick = { },
                 onDelete = { },
+                isLoop = track.isLoop,
                 interactionBlocked = true
             )
         }

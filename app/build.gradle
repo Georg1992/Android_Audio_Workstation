@@ -18,7 +18,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -37,6 +36,37 @@ android {
             version "3.22.1"
         }
     }
+
+    signingConfigs {
+        // Placeholder release config — populate with real keystore credentials before shipping.
+        // The keystore path is read from `gradle.properties`/CI secrets so the keys never live
+        // in source control. Until then, `assembleRelease` falls back to the debug signing key.
+        release {
+            def storeFilePath = project.findProperty("RELEASE_STORE_FILE")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+                storePassword = project.findProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = project.findProperty("RELEASE_KEY_ALIAS")
+                keyPassword = project.findProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Default debug type: no minification so iteration is fast and stack traces are clean.
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Use the placeholder release signing config when configured, otherwise fall back to
+            // the debug key so that `:app:assembleRelease` still produces a smoke-testable APK.
+            signingConfig project.hasProperty("RELEASE_STORE_FILE")
+                ? signingConfigs.release
+                : signingConfigs.debug
+        }
+    }
 }
 
 kotlin {
@@ -49,28 +79,24 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.datastore:datastore-preferences:1.2.0")
 
-    // -------- Hilt (через KSP) --------
+    // Hilt (KSP)
     implementation "com.google.dagger:hilt-android:2.59.2"
-    implementation 'androidx.compose.material3:material3:1.4.0'
     ksp "com.google.dagger:hilt-compiler:2.59.2"
     implementation "androidx.hilt:hilt-navigation-compose:1.3.0"
 
-    // -------- Compose --------
+    // Compose (BoM-pinned)
     def composeBom = platform("androidx.compose:compose-bom:2026.02.00")
     implementation composeBom
-    androidTestImplementation composeBom
 
     implementation "androidx.compose.ui:ui"
     implementation "androidx.compose.material3:material3"
     implementation "androidx.compose.ui:ui-tooling-preview"
     implementation "androidx.compose.material:material-icons-extended"
     debugImplementation "androidx.compose.ui:ui-tooling"
-    implementation(platform("androidx.compose:compose-bom:2026.02.00"))
-    debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("androidx.core:core-splashscreen:1.2.0")
 
-    // Navigation Compose
+    // Navigation
     implementation "androidx.navigation:navigation-compose:2.9.7"
 
     // Lifecycle
@@ -78,34 +104,19 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.10.0"
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
 
-    // -------- Room (через KSP) --------
+    // Room (KSP)
     implementation "androidx.room:room-runtime:2.8.4"
     implementation "androidx.room:room-ktx:2.8.4"
     ksp "androidx.room:room-compiler:2.8.4"
 
-    // -------- Core --------
+    // Core
     implementation "androidx.core:core-ktx:1.17.0"
     implementation "androidx.activity:activity-compose:1.12.4"
 
-    // -------- Coroutines --------
+    // Coroutines
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
 
-    // -------- Audio --------
-    implementation 'commons-io:commons-io:2.21.0'
-    implementation 'com.github.wendykierp:JTransforms:3.2'
-    implementation 'com.google.oboe:oboe:1.10.0'
-
-    // -------- Test --------
+    // Test
     testImplementation 'junit:junit:4.13.2'
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2"
-    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
-
-    implementation "com.google.android.material:material:1.13.0"
 }
-
-
-
-
-
-

@@ -22,7 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
+import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
@@ -58,7 +61,11 @@ fun TransportPanel(
             onClick = onPlay,
             isActive = isPlaying
         ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = AppColors.Line)
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = stringResource(R.string.cd_play),
+                tint = AppColors.Line
+            )
         }
 
         TransportButton(
@@ -67,7 +74,11 @@ fun TransportPanel(
             onClick = onStop,
             isActive = false
         ) {
-            Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = AppColors.Line)
+            Icon(
+                Icons.Filled.Stop,
+                contentDescription = stringResource(R.string.cd_stop),
+                tint = AppColors.Line
+            )
         }
 
         TransportButton(
@@ -76,7 +87,11 @@ fun TransportPanel(
             onClick = onRecord,
             isActive = isRecording
         ) {
-            Icon(Icons.Filled.FiberManualRecord, contentDescription = "Record", tint = AppColors.Line)
+            Icon(
+                Icons.Filled.FiberManualRecord,
+                contentDescription = stringResource(R.string.cd_record),
+                tint = AppColors.Line
+            )
         }
     }
 }
@@ -110,7 +125,7 @@ private fun TransportButton(
             enabled = enabled
         ) {
             Box(
-                modifier = Modifier.alpha(if (enabled) 1f else 0.4f)
+                modifier = Modifier.alpha(if (enabled) 1f else Alphas.Disabled)
             ) {
                 content()
             }

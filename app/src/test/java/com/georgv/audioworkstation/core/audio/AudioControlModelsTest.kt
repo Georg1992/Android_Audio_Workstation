@@ -14,8 +14,7 @@ class AudioControlModelsTest {
         val track = TrackEntity(
             id = "track-1",
             projectId = "project-1",
-            channelMode = ChannelMode.STEREO,
-            inputChannel = 2
+            channelMode = ChannelMode.STEREO
         )
 
         val spec = project.toRecordingSpec(track)

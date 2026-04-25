@@ -2,7 +2,6 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "AudioEngine.h"
 #include "OboeOutput.h"
@@ -36,17 +35,6 @@ void StopOutput() {
 }
 
 } // namespace
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeRelease(JNIEnv *, jobject) {
-    StopOutput();
-    g_output.reset();
-    if (g_engine) {
-        g_engine->stopPlayback();
-        g_engine->stopRecording();
-    }
-    g_engine.reset();
-}
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartRecording(
