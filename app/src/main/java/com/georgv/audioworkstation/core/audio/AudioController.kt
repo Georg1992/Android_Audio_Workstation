@@ -15,4 +15,12 @@ interface AudioController {
     fun startPlayback(spec: PlaybackSpec): Boolean
     fun setPlaybackGain(gain: Float)
     fun stopPlayback(): Boolean
+
+    /**
+     * Releases the underlying audio engine: tears down the persistent output
+     * stream, joins the streaming I/O thread, and closes any open audio
+     * source. Call when the project screen is disposed so the audio device
+     * isn't kept awake in the background.
+     */
+    fun release()
 }

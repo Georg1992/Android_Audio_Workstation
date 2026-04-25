@@ -469,6 +469,11 @@ class ProjectViewModel @Inject constructor(
 
     override fun onCleared() {
         onStopPressed()
+        // Release the persistent Oboe stream and streaming I/O thread once the
+        // project screen goes away. Without this we'd keep the audio device
+        // open for the lifetime of the process even after the user navigates
+        // out, which is wasteful on battery.
+        audioController.release()
         super.onCleared()
     }
 

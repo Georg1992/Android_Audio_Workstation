@@ -157,3 +157,25 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_projectId ON tracks(projectId)")
     }
 }
+
+/**
+ * Adds collaboration plumbing to [projects] and [tracks]. New rows continue
+ * to default to a "LOCAL" sync state; the columns are unused by current code
+ * and exist only so future online-collaboration work doesn't need another
+ * disruptive migration. SQLite ADD COLUMN is the cheap path here — no table
+ * rebuild required.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE projects ADD COLUMN remoteUrl TEXT")
+        db.execSQL("ALTER TABLE projects ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'LOCAL'")
+        db.execSQL("ALTER TABLE projects ADD COLUMN ownerUserId TEXT")
+        db.execSQL("ALTER TABLE projects ADD COLUMN editLamport INTEGER NOT NULL DEFAULT 0")
+
+        db.execSQL("ALTER TABLE tracks ADD COLUMN remoteUrl TEXT")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN contentHash TEXT")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'LOCAL'")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN ownerUserId TEXT")
+        db.execSQL("ALTER TABLE tracks ADD COLUMN editLamport INTEGER NOT NULL DEFAULT 0")
+    }
+}

@@ -63,6 +63,13 @@ class NativeAudioController @Inject constructor(
         return ok
     }
 
+    override fun release() {
+        monitorJob?.cancel()
+        monitorJob = null
+        _playbackState.value = false
+        nativeEngine.releaseEngine()
+    }
+
     private companion object {
         const val POLL_INTERVAL_MS = 50L
     }

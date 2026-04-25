@@ -23,6 +23,7 @@ FetchContent_MakeAvailable(oboe)
 add_library(audioworkstation SHARED
     engine/AudioEngine.cpp
     engine/JNI_Bridge.cpp
+    engine/LocalWavSource.cpp
     engine/OboeOutput.cpp
 )
 

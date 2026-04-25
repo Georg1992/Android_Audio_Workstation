@@ -31,5 +31,15 @@ data class TrackEntity(
     val isRecording: Boolean = false,
     val isLoop: Boolean = false,
     val isImported: Boolean = false,
-    val position: Int = 0
+    val position: Int = 0,
+
+    // Collaboration plumbing — see [ProjectEntity] for the same set of fields.
+    // Tracks additionally carry [contentHash] because audio payload is the
+    // expensive thing to upload/download and we want a cheap equality check
+    // before transferring bytes.
+    val remoteUrl: String? = null,
+    val contentHash: String? = null,
+    val syncStatus: SyncStatus = SyncStatus.LOCAL,
+    val ownerUserId: String? = null,
+    val editLamport: Long = 0L
 )

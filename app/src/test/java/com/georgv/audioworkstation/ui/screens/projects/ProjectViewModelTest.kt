@@ -888,6 +888,14 @@ private class FakeAudioController(
         _playbackState.value = false
         return stopPlaybackResult
     }
+
+    var releaseCalls = 0
+        private set
+
+    override fun release() {
+        releaseCalls += 1
+        _playbackState.value = false
+    }
 }
 
 private class FakeProjectDao(

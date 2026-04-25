@@ -18,6 +18,13 @@ dawengine::AudioEngine *EnsureEngine() {
     return g_engine.get();
 }
 
+OboeOutput *EnsureOutput(dawengine::AudioEngine *engine) {
+    if (!g_output) {
+        g_output = std::make_unique<OboeOutput>(engine);
+    }
+    return g_output.get();
+}
+
 std::string JStringToString(JNIEnv *env, jstring value) {
     if (!env || !value) return "";
     const char *chars = env->GetStringUTFChars(value, nullptr);
@@ -26,12 +33,6 @@ std::string JStringToString(JNIEnv *env, jstring value) {
         env->ReleaseStringUTFChars(value, chars);
     }
     return result;
-}
-
-void StopOutput() {
-    if (g_output) {
-        g_output->stop();
-    }
 }
 
 } // namespace
@@ -68,16 +69,22 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
     if (!engine) return JNI_FALSE;
 
     engine->configureProject(sampleRate, 16);
-    engine->clearTracks();
-    engine->addTrack(JStringToString(env, wavPath));
-    if (!engine->startPlayback(gain)) {
+    const std::string path = JStringToString(env, wavPath);
+
+    // Arm the engine first so the source is ready before we start the audio
+    // device. The engine handles "same path" cheaply (rewind only) so repeat
+    // plays don't reopen the WAV.
+    if (!engine->setPlaybackSource(path, gain)) {
         return JNI_FALSE;
     }
 
-    if (!g_output) {
-        g_output = std::make_unique<OboeOutput>(engine);
+    auto *output = EnsureOutput(engine);
+    if (!output) {
+        engine->stopPlayback();
+        return JNI_FALSE;
     }
-    if (!g_output->start(sampleRate, 2)) {
+
+    if (!output->ensureStarted(sampleRate, 2)) {
         engine->stopPlayback();
         return JNI_FALSE;
     }
@@ -101,9 +108,22 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsPlaybackActive(JNIE
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopPlayback(JNIEnv *, jobject) {
-    StopOutput();
     if (g_engine) {
+        // Pause but keep the source open and the output stream running so the
+        // next press is instant. Holding the audio device open is cheap as
+        // long as the screen is alive; [nativeReleaseEngine] tears it down
+        // when the project screen is disposed.
         g_engine->stopPlayback();
     }
     return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeReleaseEngine(JNIEnv *, jobject) {
+    if (g_output) {
+        g_output->release();
+    }
+    if (g_engine) {
+        g_engine->releasePlaybackResources();
+    }
 }
