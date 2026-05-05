@@ -132,6 +132,9 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeReleaseEngine(JNIEnv 
         g_output->release();
     }
     if (g_engine) {
+        // Ensure input capture is torn down (joins record thread, closes mic stream)
+        // before dropping playback I/O — releasePlaybackResources must not run mid-record.
+        g_engine->stopRecording();
         g_engine->releasePlaybackResources();
     }
 }
