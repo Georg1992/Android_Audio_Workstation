@@ -38,6 +38,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.max
 import javax.inject.Inject
 
@@ -80,6 +82,8 @@ class ProjectViewModel @Inject constructor(
      * same id ordering, after which the DB stream takes over again.
      */
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
+    /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
+    private val trackOrderPersistMutex = Mutex()
     private var playbackMonitorJob: Job? = null
 
     private val project = projectId
@@ -323,14 +327,18 @@ class ProjectViewModel @Inject constructor(
 
     fun persistTrackOrderToDb(projectId: String) {
         if (this.projectId.value != projectId) return
-        val list = uiState.value.tracks.mapIndexed { index, track -> track.copy(position = index) }
-        if (list.isEmpty()) return
         viewModelScope.launch {
-            runDbActionWithRollback(
-                errorResId = R.string.error_save_track_order_failed,
-                rollback = { optimisticTracks.value = null }
-            ) {
-                repo.updateTracks(list)
+            trackOrderPersistMutex.withLock {
+                if (this@ProjectViewModel.projectId.value != projectId) return@withLock
+                val list =
+                    uiState.value.tracks.mapIndexed { index, track -> track.copy(position = index) }
+                if (list.isEmpty()) return@withLock
+                runDbActionWithRollback(
+                    errorResId = R.string.error_save_track_order_failed,
+                    rollback = { optimisticTracks.value = null }
+                ) {
+                    repo.updateTracks(list)
+                }
             }
         }
     }
