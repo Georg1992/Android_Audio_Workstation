@@ -37,6 +37,12 @@ constexpr int kIoIdleSleepMs = 4;
 // against typical Oboe burst sizes (96..480 frames).
 constexpr int32_t kPrerollFrames = 1'440;
 
+// Upper bound for one Oboe output callback (frames). Low-latency streams stay
+// well under this; the cap avoids heap growth on the realtime thread.
+constexpr int32_t kMaxRenderFramesPerCallback = 4'096;
+constexpr std::size_t kRenderScratchFloatCount =
+    static_cast<std::size_t>(kMaxRenderFramesPerCallback) * 2u;
+
 void WriteUint16LE(FILE *file, uint16_t value) {
     const std::array<uint8_t, 2> bytes = {
         static_cast<uint8_t>(value & 0xFFu),
@@ -262,6 +268,9 @@ bool AudioEngine::setPlaybackSource(const std::string &wavPath, float gain) {
 
     m_sourceExhausted.store(false, std::memory_order_release);
 
+    // Grow once on the JNI thread while Oboe is paused — [render] never resizes.
+    m_renderScratch.resize(kRenderScratchFloatCount);
+
     // Pre-roll: pull some PCM synchronously so the very first audio callback
     // already has data. Without this the first ~10 ms of every play would be
     // silence while the I/O thread spins up.
@@ -400,15 +409,9 @@ void AudioEngine::render(float *outputInterleaved,
     const int32_t srcChannels = m_sourceChannelCount.load(std::memory_order_acquire);
     if (srcChannels <= 0) return;
 
-    // Pre-allocated render scratch sized for the largest reasonable callback.
-    // Oboe LowLatency callbacks max out around 1024 frames; using a static
-    // thread-local keeps us out of the heap on the audio thread.
-    static thread_local std::vector<float> renderScratch;
     const std::size_t neededFloats = static_cast<std::size_t>(numFrames) *
                                      static_cast<std::size_t>(srcChannels);
-    if (renderScratch.size() < neededFloats) {
-        renderScratch.resize(neededFloats);
-    }
+    const std::size_t scratchFloats = std::min(neededFloats, m_renderScratch.size());
 
     // Snapshot the ring pointer locally. Both this and `m_ring` are only ever
     // mutated under `m_playbackMutex` from the JNI thread, and the I/O thread
@@ -417,7 +420,7 @@ void AudioEngine::render(float *outputInterleaved,
     RingBuffer *ring = m_ring.get();
     if (!ring) return;
 
-    const std::size_t floatsRead = ring->read(renderScratch.data(), neededFloats);
+    const std::size_t floatsRead = ring->read(m_renderScratch.data(), scratchFloats);
     const int32_t framesRead = static_cast<int32_t>(floatsRead / static_cast<std::size_t>(srcChannels));
 
     const float gain = m_playbackGain.load(std::memory_order_acquire);
@@ -429,7 +432,7 @@ void AudioEngine::render(float *outputInterleaved,
             // for our sources (validated at open time).
             const int32_t sourceChannel = std::min(channel, srcChannels - 1);
             outputInterleaved[static_cast<std::size_t>(frame * channels + channel)] =
-                renderScratch[srcBase + static_cast<std::size_t>(sourceChannel)] * gain;
+                m_renderScratch[srcBase + static_cast<std::size_t>(sourceChannel)] * gain;
         }
     }
 

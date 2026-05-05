@@ -26,7 +26,7 @@ class IAudioSource;
  *  - A dedicated I/O worker thread reads from the source in batches and pushes
  *    PCM frames into a lock-free [RingBuffer].
  *  - The Oboe render callback (audio thread) drains the ring buffer in
- *    [render], with no file I/O and no allocations.
+ *    [render], with no file I/O and no heap allocation on the callback thread.
  *
  * The engine deliberately keeps state minimal: a single playable source, no
  * mixer, no time stretching. Multi-track mixing is the next layer of the
@@ -106,6 +106,12 @@ private:
     std::atomic<bool> m_sourceExhausted{false};
     std::atomic<float> m_playbackGain{1.0f};
     std::atomic<int32_t> m_sourceChannelCount{0};
+
+    /**
+     * Scratch for [render]. Sized on the JNI thread in [setPlaybackSource] to a
+     * fixed maximum so the audio thread never calls [resize].
+     */
+    std::vector<float> m_renderScratch;
 };
 
 } // namespace dawengine
