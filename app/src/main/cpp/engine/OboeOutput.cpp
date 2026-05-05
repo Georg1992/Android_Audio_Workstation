@@ -17,6 +17,15 @@ bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
         return true;
     }
 
+    // JNI may have paused the stream before [setPlaybackSource] / [stopPlayback].
+    // Resume without rebuilding the device.
+    if (m_stream &&
+        m_openedSampleRate == sampleRate &&
+        m_openedChannelCount == channelCount &&
+        m_stream->getState() == oboe::StreamState::Paused) {
+        return m_stream->requestStart() == oboe::Result::OK;
+    }
+
     // Format change (rare — only happens if the user switches projects with a
     // different sample rate). Tear down before reopening; we can't reuse a
     // stream across format changes.
@@ -55,6 +64,34 @@ void OboeOutput::release() {
     }
     m_openedSampleRate = 0;
     m_openedChannelCount = 0;
+}
+
+void OboeOutput::pauseForSafeEngineMutation() {
+    if (!m_stream) return;
+    oboe::StreamState currentState = m_stream->getState();
+    if (currentState != oboe::StreamState::Started &&
+        currentState != oboe::StreamState::Starting) {
+        return;
+    }
+
+    if (m_stream->requestPause() != oboe::Result::OK) return;
+
+    constexpr int64_t kStepTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
+    for (int guard = 0; guard < 100; ++guard) {
+        currentState = m_stream->getState();
+        if (currentState == oboe::StreamState::Paused) return;
+        if (currentState != oboe::StreamState::Started &&
+            currentState != oboe::StreamState::Starting &&
+            currentState != oboe::StreamState::Pausing) {
+            return;
+        }
+        oboe::StreamState nextState = oboe::StreamState::Unknown;
+        const oboe::Result result =
+            m_stream->waitForStateChange(currentState, &nextState, kStepTimeoutNanos);
+        if (result != oboe::Result::OK && result != oboe::Result::ErrorTimeout) {
+            return;
+        }
+    }
 }
 
 oboe::DataCallbackResult OboeOutput::onAudioReady(oboe::AudioStream *stream,

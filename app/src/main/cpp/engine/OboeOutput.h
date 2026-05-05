@@ -37,6 +37,13 @@ public:
     /** Closes the stream. Safe to call repeatedly. */
     void release();
 
+    /**
+     * Pauses the output stream and blocks until Oboe leaves [Started] / [Starting].
+     * Call from the JNI thread before mutating [AudioEngine] playback state (ring / source)
+     * so [onAudioReady] cannot run [AudioEngine::render] concurrently with those changes.
+     */
+    void pauseForSafeEngineMutation();
+
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream,
                                           void *audioData,
                                           int32_t numFrames) override;

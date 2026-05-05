@@ -71,6 +71,12 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
     engine->configureProject(sampleRate, 16);
     const std::string path = JStringToString(env, wavPath);
 
+    // Pause Oboe first so no [onAudioReady] call can be inside [AudioEngine::render]
+    // while the JNI thread replaces or resets the ring / source.
+    if (g_output) {
+        g_output->pauseForSafeEngineMutation();
+    }
+
     // Arm the engine first so the source is ready before we start the audio
     // device. The engine handles "same path" cheaply (rewind only) so repeat
     // plays don't reopen the WAV.
@@ -108,11 +114,13 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsPlaybackActive(JNIE
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopPlayback(JNIEnv *, jobject) {
+    if (g_output) {
+        g_output->pauseForSafeEngineMutation();
+    }
     if (g_engine) {
-        // Pause but keep the source open and the output stream running so the
-        // next press is instant. Holding the audio device open is cheap as
-        // long as the screen is alive; [nativeReleaseEngine] tears it down
-        // when the project screen is disposed.
+        // Keep the source open; [ensureStarted] resumes the paused stream on
+        // the next play so we don't pay reopen cost while the project screen
+        // is alive.
         g_engine->stopPlayback();
     }
     return JNI_TRUE;
