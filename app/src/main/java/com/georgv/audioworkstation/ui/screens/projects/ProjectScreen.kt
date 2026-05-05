@@ -2,8 +2,6 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -45,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.ContextCompat
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ContentResolverAudioImportSource
+import com.georgv.audioworkstation.core.content.resolveDisplayName
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
@@ -295,17 +294,3 @@ private val IMPORT_AUDIO_MIME_TYPES = arrayOf(
     "audio/vnd.wave",
     "audio/wave"
 )
-
-private fun resolveDisplayName(context: android.content.Context, uri: Uri): String? {
-    val resolver = context.contentResolver
-    val cursor = runCatching {
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-    }.getOrNull() ?: return null
-    cursor.use {
-        if (!it.moveToFirst()) return null
-        val columnIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        if (columnIndex < 0) return null
-        val rawName = it.getString(columnIndex) ?: return null
-        return rawName.substringBeforeLast('.', rawName).ifBlank { null }
-    }
-}
