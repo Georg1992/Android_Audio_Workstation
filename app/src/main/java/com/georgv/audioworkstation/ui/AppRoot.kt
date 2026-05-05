@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
-import com.georgv.audioworkstation.core.localization.LanguageViewModel
+import com.georgv.audioworkstation.ui.localization.LanguageViewModel
 import com.georgv.audioworkstation.core.localization.ProvideAppLocale
 import com.georgv.audioworkstation.ui.navigation.AppNavHost
 

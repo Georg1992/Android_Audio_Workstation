@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.core.localization
+package com.georgv.audioworkstation.ui.localization
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
