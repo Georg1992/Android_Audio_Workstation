@@ -20,6 +20,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(oboe)
 
+option(BUILD_RINGBUFFER_GTESTS "Build RingBuffer GoogleTest executable" OFF)
+
+if(BUILD_RINGBUFFER_GTESTS)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.14.0
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    add_executable(ringbuffer_tests tests/RingBuffer_test.cpp)
+    target_include_directories(ringbuffer_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_features(ringbuffer_tests PRIVATE cxx_std_17)
+    target_link_libraries(ringbuffer_tests PRIVATE GTest::gtest_main)
+endif()
+
 add_library(audioworkstation SHARED
     engine/AudioEngine.cpp
     engine/JNI_Bridge.cpp
