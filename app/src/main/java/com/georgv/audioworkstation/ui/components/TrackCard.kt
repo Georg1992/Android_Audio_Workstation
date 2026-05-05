@@ -198,7 +198,7 @@ fun TrackCard(
                                 .height(Dimens.MenuButtonSize)
                                 .then(
                                     if (isLoop) Modifier.glow(
-                                        color = AppColors.Yellow,
+                                        color = AppColors.Accent,
                                         blurRadius = Dimens.GlowBlur,
                                         cornerRadius = Dimens.MediumRadius
                                     ) else Modifier
@@ -228,7 +228,7 @@ fun TrackCard(
                             .height(Dimens.MenuButtonSize)
                             .then(
                                 if (menuExpanded) Modifier.glow(
-                                    color = AppColors.Yellow,
+                                    color = AppColors.Accent,
                                     blurRadius = Dimens.GlowBlur,
                                     cornerRadius = Dimens.MediumRadius
                                 ) else Modifier
