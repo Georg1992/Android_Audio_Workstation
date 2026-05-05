@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.core.audio
 
+import com.georgv.audioworkstation.diagnostics.RecordingLatencyTrace
 import com.georgv.audioworkstation.engine.NativeEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,9 +27,17 @@ class NativeAudioController @Inject constructor(
     override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
 
     override fun startRecording(spec: RecordingSpec): String? {
-        val outputPath = audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId) ?: return null
+        RecordingLatencyTrace.log("before_track_output_path")
+        val outputPath = audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId) ?: run {
+            RecordingLatencyTrace.log("track_output_path_unavailable")
+            return null
+        }
+        RecordingLatencyTrace.log("after_track_output_path")
         val request = spec.toRecordingRequest(outputPath)
-        return outputPath.takeIf { nativeEngine.startRecording(request) }
+        RecordingLatencyTrace.log("before_native_start_recording_jni")
+        val ok = nativeEngine.startRecording(request)
+        RecordingLatencyTrace.log("after_native_start_recording_jni_ok_$ok")
+        return outputPath.takeIf { ok }
     }
 
     override fun stopRecording(): Boolean = nativeEngine.stopRecording()

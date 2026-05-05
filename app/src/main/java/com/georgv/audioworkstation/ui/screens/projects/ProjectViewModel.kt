@@ -19,6 +19,7 @@ import com.georgv.audioworkstation.core.validation.NameValidationResult
 import com.georgv.audioworkstation.core.validation.toProjectNameUiMessage
 import com.georgv.audioworkstation.core.validation.toTrackNameUiMessage
 import com.georgv.audioworkstation.core.validation.validateName
+import com.georgv.audioworkstation.diagnostics.RecordingLatencyTrace
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -49,7 +50,8 @@ data class ProjectUiState(
     val tracks: List<TrackEntity> = emptyList(),
     val selectedTrackIds: Set<String> = emptySet(),
     val playingTrackIds: Set<String> = emptySet(),
-    val recordingTrackId: String? = null
+    val recordingTrackId: String? = null,
+    val isRecordingStartup: Boolean = false
 ) {
     val isPlayEnabled: Boolean
         get() = selectedTrackIds.isNotEmpty()
@@ -72,6 +74,7 @@ class ProjectViewModel @Inject constructor(
     private val playingTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val recordingTrackId = MutableStateFlow<String?>(null)
+    private val recordingStartup = MutableStateFlow(false)
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
 
     /**
@@ -160,18 +163,20 @@ class ProjectViewModel @Inject constructor(
             combine(projectTracks, optimisticTracks) { tracks, optimistic ->
                 optimistic ?: tracks
             },
-            selectedTrackIds,
-            playingTrackIds,
-            recordingTrackId
-        ) { pidProject, tracks, selected, playing, recording ->
+            combine(selectedTrackIds, playingTrackIds) { selected, playing -> selected to playing },
+            combine(recordingTrackId, recordingStartup) { recordingId, startup -> recordingId to startup }
+        ) { pidProject, tracks, selPlay, recStartup ->
             val (pid, project) = pidProject
+            val (selected, playing) = selPlay
+            val (recording, startup) = recStartup
             ProjectUiState(
                 projectId = pid,
                 project = project,
                 tracks = tracks,
                 selectedTrackIds = selected,
                 playingTrackIds = playing,
-                recordingTrackId = recording
+                recordingTrackId = recording,
+                isRecordingStartup = startup
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
 
@@ -182,6 +187,7 @@ class ProjectViewModel @Inject constructor(
             selectedTrackIds.value = emptySet()
             playingTrackIds.value = emptySet()
             recordingTrackId.value = null
+            recordingStartup.value = false
         }
         this.projectId.value = projectId
     }
@@ -351,7 +357,7 @@ class ProjectViewModel @Inject constructor(
     fun importAudio(projectId: String, source: AudioImportSource, suggestedName: String?) {
         if (this.projectId.value != projectId) return
         viewModelScope.launch {
-            if (recordingTrackId.value != null) {
+            if (recordingTrackId.value != null || recordingStartup.value) {
                 emitMessage(R.string.error_stop_recording_to_import)
                 return@launch
             }
@@ -396,35 +402,69 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
+        if (recordingTrackId.value != null) {
+            emitMessage(R.string.error_stop_recording_to_record)
+            return
+        }
+        if (recordingStartup.value) {
+            return
+        }
+
+        recordingStartup.value = true
+        RecordingLatencyTrace.log("vm_recording_startup_armed_sync")
+
         viewModelScope.launch {
-            if (recordingTrackId.value != null) {
-                emitMessage(R.string.error_stop_recording_to_record)
-                return@launch
-            }
+            try {
+                RecordingLatencyTrace.log("vm_onRecordPressed_launch")
 
-            val currentProject = ensureProject(projectId, projectName) ?: return@launch
+                val currentProject = ensureProject(projectId, projectName) ?: run {
+                    recordingStartup.value = false
+                    RecordingLatencyTrace.log("recording_startup_cleared_ensure_failed")
+                    return@launch
+                }
+                RecordingLatencyTrace.log("after_repo_ensure_project")
 
-            val pendingTrack = repo.appendTrackToProject(
-                projectId = projectId,
-                name = "Take ${uiState.value.tracks.size + 1}"
-            )
-            val outputPath = audioController.startRecording(currentProject.toRecordingSpec(pendingTrack))
-            if (outputPath == null) {
-                emitMessage(R.string.error_recording_failed_to_start)
-                return@launch
-            }
-            val newTrack = pendingTrack.copy(
-                wavFilePath = outputPath,
-                timeStampStart = System.currentTimeMillis(),
-                isRecording = true
-            )
+                val pendingTrack = repo.appendTrackToProject(
+                    projectId = projectId,
+                    name = "Take ${uiState.value.tracks.size + 1}"
+                )
+                RecordingLatencyTrace.log("after_repo_append_track_pending")
+                val outputPath =
+                    audioController.startRecording(currentProject.toRecordingSpec(pendingTrack))
+                if (outputPath == null) {
+                    recordingStartup.value = false
+                    RecordingLatencyTrace.log("recording_startup_cleared_native_failed")
+                    emitMessage(R.string.error_recording_failed_to_start)
+                    return@launch
+                }
+                RecordingLatencyTrace.log("after_audio_startRecording_return")
+                val newTrack = pendingTrack.copy(
+                    wavFilePath = outputPath,
+                    timeStampStart = System.currentTimeMillis(),
+                    isRecording = true
+                )
 
-            runDbActionWithRollback(
-                errorResId = R.string.error_create_recording_track_failed,
-                rollback = { audioController.stopRecording() }
-            ) {
-                repo.upsertTracks(listOf(newTrack))
                 recordingTrackId.value = newTrack.id
+                recordingStartup.value = false
+                RecordingLatencyTrace.log("recording_track_id_set_before_db")
+
+                RecordingLatencyTrace.log("before_db_upsert_recording_track")
+                try {
+                    repo.upsertTracks(listOf(newTrack))
+                    RecordingLatencyTrace.log("after_db_upsert_and_recording_track_id_state")
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    RecordingLatencyTrace.log("db_upsert_recording_track_failed")
+                    recordingTrackId.value = null
+                    recordingStartup.value = false
+                    audioController.stopRecording()
+                    emitMessage(R.string.error_create_recording_track_failed)
+                }
+            } finally {
+                if (recordingTrackId.value == null && recordingStartup.value) {
+                    recordingStartup.value = false
+                }
             }
         }
     }
@@ -464,6 +504,7 @@ class ProjectViewModel @Inject constructor(
     fun onStopPressed() {
         playbackMonitorJob?.cancel()
         playbackMonitorJob = null
+        recordingStartup.value = false
         val activeRecordingTrackId = recordingTrackId.value
         if (activeRecordingTrackId != null && audioController.stopRecording()) {
             finalizeRecordingTrack(activeRecordingTrackId)
