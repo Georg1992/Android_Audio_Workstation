@@ -95,8 +95,11 @@ fun ProjectScreen(
         vm.renameProject(projectNameFieldValue.text)
     }
 
-    val startRecordingIfPermitted: (String) -> Unit = { projectName ->
-        if (state.recordingTrackId != null || state.isRecordingStartup) {
+    val startRecordingIfPermitted: (String) -> Unit = startup@{ projectName ->
+        if (state.isRecordingStartup) {
+            return@startup
+        }
+        if (state.recordingTrackId != null) {
             vm.onRecordPressed(projectId, projectName)
         } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
