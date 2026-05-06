@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import kotlin.math.abs
 import com.georgv.audioworkstation.core.audio.GainRange
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -42,6 +43,8 @@ private const val FaderBottomPadPx = 2f
 private const val FaderThumbNotchInsetPx = 4f
 /** Alpha for the off-center tick marks (the center 50% mark is full alpha). */
 private const val FaderOffCenterTickAlpha = 0.8f
+/** Max difference between external prop and last local-at-commit treated as matching (float noise). */
+private const val FaderCommittedMatchEpsilon = 0.05f
 
 /**
  * Minimal DAW-like vertical fader (Waves-ish), fully custom drawn.
@@ -101,13 +104,23 @@ fun Fader(
         return low to high
     }
 
-    // The thumb is rendered from localValue so it tracks the finger directly,
-    // independent of recompositions driven by external state. External changes
-    // are pulled into localValue only when the user isn't actively dragging.
+    // Thumb follows localValue while dragging; external `value` applies only when not dragging
+    // and either there is no pending commit, or the external value matches the last local commit.
     var isDragging by remember { mutableStateOf(false) }
     var localValue by remember { mutableFloatStateOf(clamp(value)) }
+    /** Non-null only after a finished gesture with [onValueChangeFinished]: local value awaiting matching external `value`. */
+    var pendingCommittedLocal by remember { mutableStateOf<Float?>(null) }
     LaunchedEffect(value) {
-        if (!isDragging) localValue = clamp(value)
+        if (isDragging) return@LaunchedEffect
+        val incoming = clamp(value)
+        val pending = pendingCommittedLocal
+        if (pending != null && abs(incoming - pending) > FaderCommittedMatchEpsilon) {
+            return@LaunchedEffect
+        }
+        if (pending != null) {
+            pendingCommittedLocal = null
+        }
+        localValue = incoming
     }
 
     fun yToValue(y: Float, canvasHeight: Float): Float {
@@ -122,14 +135,19 @@ fun Fader(
         modifier = modifier
             .onSizeChanged { lastHeightPx = it.height.toFloat() }
             .pointerInput(enabled) {
-                if (!enabled) return@pointerInput
+                if (!enabled) {
+                    return@pointerInput
+                }
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
                     val h = lastHeightPx
-                    if (h <= 0f) return@awaitEachGesture
+                    if (h <= 0f) {
+                        return@awaitEachGesture
+                    }
 
                     // Consume the down so parent scrollables (LazyColumn) don't win the slop race.
                     down.consume()
+                    pendingCommittedLocal = null
                     isDragging = true
                     val initialValue = yToValue(down.position.y, h)
                     localValue = initialValue
@@ -149,6 +167,9 @@ fun Fader(
                         }
                     } finally {
                         isDragging = false
+                        if (latestOnValueChangeFinished != null) {
+                            pendingCommittedLocal = clamp(localValue)
+                        }
                         latestOnValueChangeFinished?.invoke()
                     }
                 }

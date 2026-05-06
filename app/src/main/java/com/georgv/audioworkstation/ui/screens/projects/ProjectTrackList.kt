@@ -111,7 +111,7 @@ fun ProjectTrackList(
             verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
             userScrollEnabled = !reorderActive
         ) {
-            itemsIndexed(items = tracks) { index, track ->
+            itemsIndexed(items = tracks, key = { _, track -> track.id }) { index, track ->
                 val isDragging = reorderActive && dragController.draggingKey == track.id
                 val rowFullyVisible = isTrackFullyVisibleInLazyList(listState, index)
 

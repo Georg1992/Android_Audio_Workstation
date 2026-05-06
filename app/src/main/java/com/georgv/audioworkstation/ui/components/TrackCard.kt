@@ -278,7 +278,7 @@ fun TrackCard(
                 gain = gain,
                 onGainChange = onGainChange,
                 onGainCommit = onGainCommit,
-                enabled = !interactionBlocked && onGainChange != null
+                enabled = !interactionBlocked && onGainChange != null,
             )
         }
 

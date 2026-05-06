@@ -19,7 +19,6 @@ import com.georgv.audioworkstation.core.validation.NameValidationResult
 import com.georgv.audioworkstation.core.validation.toProjectNameUiMessage
 import com.georgv.audioworkstation.core.validation.toTrackNameUiMessage
 import com.georgv.audioworkstation.core.validation.validateName
-import com.georgv.audioworkstation.diagnostics.RecordingLatencyTrace
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -294,7 +293,10 @@ class ProjectViewModel @Inject constructor(
      * The final value is persisted via [commitTrackGain] on release.
      */
     fun setTrackGain(trackId: String, gain: Float) {
-        if (uiState.value.tracks.none { it.id == trackId }) return
+        val contains = uiState.value.tracks.any { it.id == trackId }
+        if (!contains) {
+            return
+        }
         if (playingTrackIds.value.contains(trackId)) {
             audioController.setPlaybackGain(GainRange.toUnit(gain))
         }
@@ -302,8 +304,13 @@ class ProjectViewModel @Inject constructor(
 
     /** Commit the latest gain value to the DB. Called when the user releases the fader. */
     fun commitTrackGain(trackId: String, gain: Float) {
-        val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-        if (gain == currentTrack.gain) return
+        val currentTrack = uiState.value.tracks.find { it.id == trackId }
+        if (currentTrack == null) {
+            return
+        }
+        if (gain == currentTrack.gain) {
+            return
+        }
 
         val updatedTrack = currentTrack.copy(gain = gain)
         viewModelScope.launch {
@@ -411,33 +418,25 @@ class ProjectViewModel @Inject constructor(
         }
 
         recordingStartup.value = true
-        RecordingLatencyTrace.log("vm_recording_startup_armed_sync")
 
         viewModelScope.launch {
             try {
-                RecordingLatencyTrace.log("vm_onRecordPressed_launch")
-
                 val currentProject = ensureProject(projectId, projectName) ?: run {
                     recordingStartup.value = false
-                    RecordingLatencyTrace.log("recording_startup_cleared_ensure_failed")
                     return@launch
                 }
-                RecordingLatencyTrace.log("after_repo_ensure_project")
 
                 val pendingTrack = repo.appendTrackToProject(
                     projectId = projectId,
                     name = "Take ${uiState.value.tracks.size + 1}"
                 )
-                RecordingLatencyTrace.log("after_repo_append_track_pending")
                 val outputPath =
                     audioController.startRecording(currentProject.toRecordingSpec(pendingTrack))
                 if (outputPath == null) {
                     recordingStartup.value = false
-                    RecordingLatencyTrace.log("recording_startup_cleared_native_failed")
                     emitMessage(R.string.error_recording_failed_to_start)
                     return@launch
                 }
-                RecordingLatencyTrace.log("after_audio_startRecording_return")
                 val newTrack = pendingTrack.copy(
                     wavFilePath = outputPath,
                     timeStampStart = System.currentTimeMillis(),
@@ -446,16 +445,12 @@ class ProjectViewModel @Inject constructor(
 
                 recordingTrackId.value = newTrack.id
                 recordingStartup.value = false
-                RecordingLatencyTrace.log("recording_track_id_set_before_db")
 
-                RecordingLatencyTrace.log("before_db_upsert_recording_track")
                 try {
                     repo.upsertTracks(listOf(newTrack))
-                    RecordingLatencyTrace.log("after_db_upsert_and_recording_track_id_state")
                 } catch (cancel: CancellationException) {
                     throw cancel
                 } catch (_: Exception) {
-                    RecordingLatencyTrace.log("db_upsert_recording_track_failed")
                     recordingTrackId.value = null
                     recordingStartup.value = false
                     audioController.stopRecording()

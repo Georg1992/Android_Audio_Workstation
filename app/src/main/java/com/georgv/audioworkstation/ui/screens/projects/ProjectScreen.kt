@@ -44,7 +44,6 @@ import androidx.core.content.ContextCompat
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ContentResolverAudioImportSource
 import com.georgv.audioworkstation.core.content.resolveDisplayName
-import com.georgv.audioworkstation.diagnostics.RecordingLatencyTrace
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
@@ -104,11 +103,8 @@ fun ProjectScreen(
         } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            RecordingLatencyTrace.anchorTapNow()
             vm.onRecordPressed(projectId, projectName)
         } else {
-            RecordingLatencyTrace.anchorTapNow()
-            RecordingLatencyTrace.log("needs_permission_launch")
             pendingRecordProjectName = projectName
         }
     }
@@ -122,7 +118,6 @@ fun ProjectScreen(
         val pendingProjectName = pendingRecordProjectName
         pendingRecordProjectName = null
         if (granted && pendingProjectName != null) {
-            RecordingLatencyTrace.log("permission_granted_invoke_vm")
             vm.onRecordPressed(projectId, pendingProjectName)
         } else if (!granted) {
             topBarAlertState.show(coroutineScope, microphonePermissionError)
@@ -184,7 +179,6 @@ fun ProjectScreen(
         val index = snapshotFlow { vm.uiState.value.tracks.indexOfFirst { it.id == id } }
             .first { it >= 0 }
         listState.scrollToItem(index)
-        RecordingLatencyTrace.log("ui_scroll_to_recording_track_done")
     }
 
     val reorderActive = dragController.isDragging

@@ -27,7 +27,7 @@ fun TrackGainSection(
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)?,
     enabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     // Local UI state: the thumb and label follow the finger immediately
     // and are only re-synced from the DB when `gain` changes externally.
