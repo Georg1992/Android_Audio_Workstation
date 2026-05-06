@@ -84,6 +84,11 @@ class ProjectViewModel @Inject constructor(
      * same id ordering, after which the DB stream takes over again.
      */
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
+    /**
+     * Recording row shown before [projectTracks] observes the upsert. Cleared when Room contains
+     * the same id so the list never duplicates.
+     */
+    private val optimisticRecordingTrack = MutableStateFlow<TrackEntity?>(null)
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
     private var playbackMonitorJob: Job? = null
@@ -110,6 +115,15 @@ class ProjectViewModel @Inject constructor(
             }.collect { (tracks, optimistic) ->
                 if (optimistic != null && tracks.map { it.id } == optimistic.map { it.id }) {
                     optimisticTracks.value = null
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(projectTracks, optimisticRecordingTrack) { tracks, optRecording ->
+                tracks to optRecording
+            }.collect { (tracks, optRecording) ->
+                if (optRecording != null && tracks.any { it.id == optRecording.id }) {
+                    optimisticRecordingTrack.value = null
                 }
             }
         }
@@ -141,6 +155,21 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    /** Base list for UI: reorder override, then Room; append optimistic recording only if that id is absent. */
+    private fun visibleTracksWithRecordingOptimistic(
+        projectTracksList: List<TrackEntity>,
+        optimisticOrder: List<TrackEntity>?,
+        optimisticRecording: TrackEntity?,
+    ): List<TrackEntity> {
+        val base = optimisticOrder ?: projectTracksList
+        val pending = optimisticRecording ?: return base
+        return if (base.any { it.id == pending.id }) {
+            base
+        } else {
+            base + pending
+        }
+    }
+
     private suspend inline fun runDbActionWithRollback(
         @StringRes errorResId: Int,
         rollback: () -> Unit,
@@ -159,8 +188,16 @@ class ProjectViewModel @Inject constructor(
     val uiState: StateFlow<ProjectUiState> =
         combine(
             combine(projectId, project) { pid, project -> pid to project },
-            combine(projectTracks, optimisticTracks) { tracks, optimistic ->
-                optimistic ?: tracks
+            combine(projectTracks, optimisticTracks, optimisticRecordingTrack) {
+                    projectTracksList,
+                    optimisticOrder,
+                    optimisticRecording,
+                ->
+                visibleTracksWithRecordingOptimistic(
+                    projectTracksList,
+                    optimisticOrder,
+                    optimisticRecording,
+                )
             },
             combine(selectedTrackIds, playingTrackIds) { selected, playing -> selected to playing },
             combine(recordingTrackId, recordingStartup) { recordingId, startup -> recordingId to startup }
@@ -183,6 +220,7 @@ class ProjectViewModel @Inject constructor(
         if (this.projectId.value != projectId) {
             playbackMonitorJob?.cancel()
             optimisticTracks.value = null
+            optimisticRecordingTrack.value = null
             selectedTrackIds.value = emptySet()
             playingTrackIds.value = emptySet()
             recordingTrackId.value = null
@@ -443,6 +481,7 @@ class ProjectViewModel @Inject constructor(
                     isRecording = true
                 )
 
+                optimisticRecordingTrack.value = newTrack
                 recordingTrackId.value = newTrack.id
                 recordingStartup.value = false
 
@@ -451,6 +490,7 @@ class ProjectViewModel @Inject constructor(
                 } catch (cancel: CancellationException) {
                     throw cancel
                 } catch (_: Exception) {
+                    optimisticRecordingTrack.value = null
                     recordingTrackId.value = null
                     recordingStartup.value = false
                     audioController.stopRecording()
@@ -508,6 +548,7 @@ class ProjectViewModel @Inject constructor(
             audioController.stopPlayback()
         }
         recordingTrackId.value = null
+        optimisticRecordingTrack.value = null
         playingTrackIds.value = emptySet()
     }
 

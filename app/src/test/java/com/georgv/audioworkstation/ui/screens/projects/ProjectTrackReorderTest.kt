@@ -99,7 +99,7 @@ class ProjectTrackReorderTest {
     }
 
     @Test
-    fun `moves down using current row bottom when next neighbor not laid out in viewport`() {
+    fun `does not move down when next neighbor center is unavailable`() {
         val target = computeNeighborSwapTarget(
             currentIndex = 1,
             listSize = 4,
@@ -110,11 +110,11 @@ class ProjectTrackReorderTest {
             currentItemBottom = 300f,
         )
 
-        assertEquals(2, target)
+        assertNull(target)
     }
 
     @Test
-    fun `moves up using current row top when previous neighbor not laid out in viewport`() {
+    fun `does not move up when previous neighbor center is unavailable`() {
         val target = computeNeighborSwapTarget(
             currentIndex = 2,
             listSize = 4,
@@ -125,7 +125,7 @@ class ProjectTrackReorderTest {
             currentItemBottom = 280f,
         )
 
-        assertEquals(1, target)
+        assertNull(target)
     }
 
     @Test
@@ -190,17 +190,6 @@ class ProjectTrackReorderTest {
                 currentItemBottom = 300f,
             )
         )
-    }
-
-    @Test
-    fun `fingerYInListSpace converts root position into list space`() {
-        val listSpaceY = fingerYInListSpace(
-            fingerRootY = 320f,
-            listBoundsInRoot = androidx.compose.ui.geometry.Rect(0f, 100f, 200f, 500f),
-            viewportStartOffset = 20
-        )
-
-        assertEquals(240f, listSpaceY)
     }
 
     private fun testTracks(): List<TrackEntity> = listOf(

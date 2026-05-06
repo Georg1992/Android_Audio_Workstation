@@ -9,14 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -43,6 +46,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -63,6 +68,11 @@ fun TrackCard(
     onToggleLoop: (() -> Unit)? = null,
     isLoop: Boolean = false,
     modifier: Modifier = Modifier,
+    /**
+     * When set (project track list policy), row height matches a computed viewport slot so a
+     * screenful fits whole cards. When null, height follows intrinsic fader + chrome.
+     */
+    trackSlotHeight: Dp? = null,
     trackId: String? = null,
     onDragHandleStart: ((positionInRoot: Offset) -> Unit)? = null,
     onDragHandleMove: ((positionInRoot: Offset) -> Unit)? = null,
@@ -77,6 +87,9 @@ fun TrackCard(
      * Non-interactive overlay: same chrome and layout density as a normal card, without gestures.
      */
     dragPreview: Boolean = false,
+    isMenuOpen: Boolean = false,
+    onMenuOpen: () -> Unit = {},
+    onMenuDismiss: () -> Unit = {},
 ) {
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
     val bg = when {
@@ -85,7 +98,6 @@ fun TrackCard(
         else -> AppColors.Bg
     }
 
-    var menuExpanded by remember(trackId) { mutableStateOf(false) }
     var isRenaming by remember(trackId) { mutableStateOf(false) }
     var renameFieldValue by remember(trackId, title) { mutableStateOf(TextFieldValue(title)) }
     var renameFieldWasFocused by remember(trackId) { mutableStateOf(false) }
@@ -100,7 +112,7 @@ fun TrackCard(
 
     LaunchedEffect(interactionBlocked, dragPreview) {
         if (interactionBlocked || dragPreview) {
-            menuExpanded = false
+            onMenuDismiss()
             isRenaming = false
             renameFieldWasFocused = false
         }
@@ -124,6 +136,13 @@ fun TrackCard(
         modifier =
             modifier
                 .fillMaxWidth()
+                .then(
+                    if (trackSlotHeight != null) {
+                        Modifier.height(trackSlotHeight)
+                    } else {
+                        Modifier
+                    }
+                )
                 .clip(cardShape)
                 .background(bg)
                 .border(Dimens.Stroke, AppColors.Line, cardShape)
@@ -136,7 +155,11 @@ fun TrackCard(
                             indication = null,
                             enabled = !interactionBlocked && !isRenaming
                         ) {
-                            if (menuExpanded) menuExpanded = false else onClick()
+                            if (isMenuOpen) {
+                                onMenuDismiss()
+                            } else {
+                                onClick()
+                            }
                         }
                     }
                 )
@@ -144,7 +167,13 @@ fun TrackCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
+                .then(
+                    if (trackSlotHeight != null) {
+                        Modifier.fillMaxHeight()
+                    } else {
+                        Modifier.height(IntrinsicSize.Min)
+                    }
+                )
                 .padding(Dimens.TileInnerPadding),
             verticalAlignment = Alignment.Top
         ) {
@@ -245,63 +274,98 @@ fun TrackCard(
                         Spacer(Modifier.width(Dimens.IconGlowSpacing))
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .width(Dimens.MenuButtonSize)
-                            .height(Dimens.MenuButtonSize)
-                            .then(
-                                if (!dragPreview && menuExpanded) Modifier.glow(
-                                    color = AppColors.Accent,
-                                    blurRadius = Dimens.GlowBlur,
-                                    cornerRadius = Dimens.MediumRadius
-                                ) else Modifier
+                    val menuDropdownShape = RoundedCornerShape(Dimens.TileRadius)
+                    Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .width(Dimens.MenuButtonSize)
+                                    .height(Dimens.MenuButtonSize)
+                                    .then(
+                                        if (!dragPreview && isMenuOpen) {
+                                            Modifier.glow(
+                                                color = AppColors.Accent,
+                                                blurRadius = Dimens.GlowBlur,
+                                                cornerRadius = Dimens.MediumRadius
+                                            )
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .clip(buttonShape)
+                                    .background(
+                                        if (!dragPreview && isMenuOpen) {
+                                            AppColors.Accent
+                                        } else {
+                                            AppColors.Bg
+                                        }
+                                    )
+                                    .border(Dimens.Stroke, AppColors.Line, buttonShape)
+                                    .then(
+                                        if (dragPreview ||
+                                            interactionBlocked ||
+                                            isRenaming
+                                        ) {
+                                            Modifier
+                                        } else {
+                                            Modifier.clickable {
+                                                if (isMenuOpen) {
+                                                    onMenuDismiss()
+                                                } else {
+                                                    onMenuOpen()
+                                                }
+                                            }
+                                        }
+                                    ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = stringResource(R.string.cd_track_menu),
+                                tint =
+                                    if (!dragPreview && isMenuOpen) {
+                                        AppColors.Red
+                                    } else {
+                                        AppColors.Line
+                                    }
                             )
-                            .clip(buttonShape)
-                            .background(
-                                if (!dragPreview && menuExpanded) AppColors.Accent else AppColors.Bg
-                            )
-                            .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                            .then(
-                                if (dragPreview || interactionBlocked || isRenaming) {
-                                    Modifier
-                                } else {
-                                    Modifier.clickable { menuExpanded = !menuExpanded }
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(R.string.cd_track_menu),
-                            tint =
-                                if (!dragPreview && menuExpanded) {
-                                    AppColors.Red
-                                } else {
-                                    AppColors.Line
-                                }
-                        )
-                    }
-                }
-
-                if (menuExpanded && !dragPreview) {
-                    Spacer(Modifier.height(Dimens.PanelPadding))
-                    TrackOverflowMenu(
-                        modifier = Modifier
-                            .align(Alignment.End),
-                        onDelete = {
-                            menuExpanded = false
-                            onDelete()
-                        },
-                        onRename = {
-                            menuExpanded = false
-                            renameFieldValue = TextFieldValue(
-                                text = title,
-                                selection = TextRange(0, title.length)
-                            )
-                            renameFieldWasFocused = false
-                            isRenaming = true
                         }
-                    )
+                        DropdownMenu(
+                            expanded =
+                                !dragPreview &&
+                                    !interactionBlocked &&
+                                    !isRenaming &&
+                                    isMenuOpen,
+                            onDismissRequest = onMenuDismiss,
+                            modifier =
+                                Modifier.border(
+                                    Dimens.Stroke,
+                                    AppColors.Line,
+                                    menuDropdownShape,
+                                ),
+                            shape = menuDropdownShape,
+                            containerColor = AppColors.Bg,
+                            tonalElevation = 0.dp,
+                        ) {
+                            TrackOverflowMenuBody(
+                                modifier = Modifier.padding(Dimens.Stroke),
+                                onDelete = {
+                                    onMenuDismiss()
+                                    onDelete()
+                                },
+                                onRename = {
+                                    onMenuDismiss()
+                                    renameFieldValue =
+                                        TextFieldValue(
+                                            text = title,
+                                            selection = TextRange(0, title.length)
+                                        )
+                                    renameFieldWasFocused = false
+                                    isRenaming = true
+                                },
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(Dimens.PanelPadding))

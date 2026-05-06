@@ -24,7 +24,7 @@ object Dimens {
     val LangChipSize = 28.dp
     val LangChipRadius = 6.dp
 
-    // track card
+    // track card (layout policy also drives project list row height — see projectTrackLayoutSpec)
     val MenuButtonSize = 40.dp
     val PlaceholderHeight = 42.dp
     val FaderWidth = 44.dp

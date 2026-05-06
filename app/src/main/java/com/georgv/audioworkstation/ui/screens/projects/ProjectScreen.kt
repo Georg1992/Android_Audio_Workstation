@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.background
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +52,6 @@ import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
-import kotlinx.coroutines.flow.first
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.res.stringResource
@@ -63,6 +60,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,8 +71,8 @@ fun ProjectScreen(
     vm: ProjectViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
     val dragController = remember { DragController() }
+    var trackPagingSummary by remember(projectId) { mutableStateOf("1/1") }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val topBarAlertState = rememberTopBarAlertState()
@@ -171,16 +169,6 @@ fun ProjectScreen(
         }
     }
 
-    // When a recording session begins, scroll to the freshly inserted track exactly once.
-    // Keying on `recordingTrackId` keeps the effect stable across unrelated track-list mutations,
-    // and `snapshotFlow` waits until the new track actually appears in the LazyColumn data set.
-    LaunchedEffect(state.recordingTrackId) {
-        val id = state.recordingTrackId ?: return@LaunchedEffect
-        val index = snapshotFlow { vm.uiState.value.tracks.indexOfFirst { it.id == id } }
-            .first { it >= 0 }
-        listState.scrollToItem(index)
-    }
-
     val reorderActive = dragController.isDragging
 
     ScreenScaffold(
@@ -236,6 +224,14 @@ fun ProjectScreen(
             }
         },
         onBack = if (reorderActive) null else onBack,
+        actions = {
+            Text(
+                text = trackPagingSummary,
+                style = AppText.TopBarTitle.copy(fontSize = 11.sp),
+                color = AppColors.Line.copy(alpha = 0.72f),
+                modifier = Modifier.padding(end = Dimens.TileInnerPadding),
+            )
+        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -249,7 +245,6 @@ fun ProjectScreen(
                 tracks = state.tracks,
                 selectedTrackIds = state.selectedTrackIds,
                 recordingTrackId = state.recordingTrackId,
-                listState = listState,
                 dragController = dragController,
                 onToggleSelect = vm::toggleSelect,
                 onDeleteTrack = vm::deleteTrack,
@@ -259,6 +254,7 @@ fun ProjectScreen(
                 onToggleLoop = vm::toggleTrackLoop,
                 onReorderTracks = { vm.setTrackOrderSession(projectId, it) },
                 onPersistTrackOrder = { vm.persistTrackOrderToDb(projectId) },
+                onTrackPagingSummaryChange = { trackPagingSummary = it },
                 modifier = Modifier.weight(1f)
             )
 

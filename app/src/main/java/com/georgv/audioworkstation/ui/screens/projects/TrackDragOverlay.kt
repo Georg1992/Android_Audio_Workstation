@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -29,10 +30,14 @@ fun TrackDragOverlay(
     gain: Float,
     dragController: DragController,
     parentTopInRootPx: Float,
+    parentHeightPx: Float,
     modifier: Modifier = Modifier
 ) {
-    val translationY =
+    val rawTranslationY =
         dragController.fingerPos.y - dragController.dragOffset.y - parentTopInRootPx
+    val maxTranslationY =
+        (parentHeightPx - dragController.overlayHeightPx).coerceAtLeast(0f)
+    val translationY = rawTranslationY.coerceIn(0f, maxTranslationY)
     TrackDragFloatingCard(
         track = track,
         isSelected = isSelected,
@@ -100,6 +105,7 @@ private fun TrackDragFloatingCard(
             modifier = Modifier
                 .size(overlayWidthDp, overlayHeightDp)
                 .scale(DragOverlayLiftScale)
+                .border(Dimens.Stroke, AppColors.Line, dragShape)
                 .shadow(
                     elevation = Dimens.DragOverlayShadow,
                     shape = dragShape,
@@ -109,6 +115,7 @@ private fun TrackDragFloatingCard(
                 .clip(dragShape)
         ) {
             TrackCard(
+                modifier = Modifier.fillMaxSize(),
                 title = track.name ?: "Track",
                 isSelected = isSelected,
                 isRecording = isRecording,

@@ -26,22 +26,17 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
+/** Menu rows only (no framed panel); embed in inline surface or DropdownMenu container. */
 @Composable
-fun TrackOverflowMenu(
+fun TrackOverflowMenuBody(
     onDelete: () -> Unit,
     onRename: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val menuShape = RoundedCornerShape(Dimens.TileRadius)
     val itemShape = RoundedCornerShape(Dimens.MediumRadius)
-
     Column(
-        modifier = modifier
-            .wrapContentWidth()
-            .background(AppColors.Bg, menuShape)
-            .border(Dimens.Stroke, AppColors.Line, menuShape)
-            .padding(Dimens.Stroke),
-        verticalArrangement = Arrangement.spacedBy(Dimens.Stroke)
+        modifier = modifier.wrapContentWidth(),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Stroke),
     ) {
         TrackMenuRow(
             text = stringResource(R.string.action_delete),
@@ -69,6 +64,25 @@ fun TrackOverflowMenu(
             onClick = onRename
         )
     }
+}
+
+@Composable
+fun TrackOverflowMenu(
+    onDelete: () -> Unit,
+    onRename: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val menuShape = RoundedCornerShape(Dimens.TileRadius)
+    TrackOverflowMenuBody(
+        onDelete = onDelete,
+        onRename = onRename,
+        modifier =
+            modifier
+                .wrapContentWidth()
+                .background(AppColors.Bg, menuShape)
+                .border(Dimens.Stroke, AppColors.Line, menuShape)
+                .padding(Dimens.Stroke),
+    )
 }
 
 @Composable
