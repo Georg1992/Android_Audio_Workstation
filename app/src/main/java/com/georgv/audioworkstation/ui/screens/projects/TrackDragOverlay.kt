@@ -1,9 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -11,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TrackCard
@@ -19,8 +18,8 @@ import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
-/** Visual lift applied to the dragged track card so it pops above the rest. */
-private const val DragOverlayLiftScale = 1.05f
+/** Slight scale so the overlay reads as lifted without drifting from list row size. */
+private const val DragOverlayLiftScale = 1.02f
 
 @Composable
 fun TrackDragOverlay(
@@ -30,22 +29,72 @@ fun TrackDragOverlay(
     gain: Float,
     dragController: DragController,
     parentTopInRootPx: Float,
-    onGainChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val translationY =
+        dragController.fingerPos.y - dragController.dragOffset.y - parentTopInRootPx
+    TrackDragFloatingCard(
+        track = track,
+        isSelected = isSelected,
+        isRecording = isRecording,
+        gain = gain,
+        translationXInParentPx = dragController.fixedXInParentPx,
+        translationYInParentPx = translationY,
+        overlayWidthPx = dragController.overlayWidthPx,
+        overlayHeightPx = dragController.overlayHeightPx,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TrackDragSettlingOverlay(
+    track: TrackEntity,
+    isSelected: Boolean,
+    isRecording: Boolean,
+    gain: Float,
+    translationXInParentPx: Float,
+    translationYInParentPx: Float,
+    overlayWidthPx: Float,
+    overlayHeightPx: Float,
+    modifier: Modifier = Modifier,
+) {
+    TrackDragFloatingCard(
+        track = track,
+        isSelected = isSelected,
+        isRecording = isRecording,
+        gain = gain,
+        translationXInParentPx = translationXInParentPx,
+        translationYInParentPx = translationYInParentPx,
+        overlayWidthPx = overlayWidthPx,
+        overlayHeightPx = overlayHeightPx,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun TrackDragFloatingCard(
+    track: TrackEntity,
+    isSelected: Boolean,
+    isRecording: Boolean,
+    gain: Float,
+    translationXInParentPx: Float,
+    translationYInParentPx: Float,
+    overlayWidthPx: Float,
+    overlayHeightPx: Float,
+    modifier: Modifier = Modifier,
+) {
     val density = LocalDensity.current
-    val overlayYInParentPx = dragController.fingerPos.y - dragController.dragOffset.y - parentTopInRootPx
-    val overlayWidthDp = with(density) { dragController.overlayWidthPx.toDp() }
-    val overlayHeightDp = with(density) { dragController.overlayHeightPx.toDp() }
+    val overlayWidthDp = with(density) { overlayWidthPx.toDp() }
+    val overlayHeightDp = with(density) { overlayHeightPx.toDp() }
     val dragShape = RoundedCornerShape(Dimens.TileRadius)
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .offset(
-                x = with(density) { dragController.fixedXInParentPx.toDp() },
-                y = with(density) { overlayYInParentPx.toDp() }
-            )
+            .graphicsLayer {
+                translationX = translationXInParentPx
+                translationY = translationYInParentPx
+            }
     ) {
         Box(
             modifier = Modifier
@@ -57,7 +106,6 @@ fun TrackDragOverlay(
                     clip = false,
                     spotColor = AppColors.Line.copy(alpha = Alphas.OverlayShadow)
                 )
-                .border(Dimens.DragOverlayBorder, AppColors.Line, dragShape)
                 .clip(dragShape)
         ) {
             TrackCard(
@@ -65,11 +113,11 @@ fun TrackDragOverlay(
                 isSelected = isSelected,
                 isRecording = isRecording,
                 gain = gain,
-                onGainChange = onGainChange,
+                onGainChange = null,
                 onClick = { },
                 onDelete = { },
                 isLoop = track.isLoop,
-                interactionBlocked = true
+                dragPreview = true,
             )
         }
     }

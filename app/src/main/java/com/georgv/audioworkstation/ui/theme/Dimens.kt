@@ -56,8 +56,7 @@ object Dimens {
     val TightGap = 2.dp
 
     // drag overlay (track card lifted while reordering)
-    val DragOverlayShadow = 24.dp
-    val DragOverlayBorder = 2.dp
+    val DragOverlayShadow = 12.dp
 
     // fader internals
     val FaderTrackWidth = 10.dp

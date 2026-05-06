@@ -72,7 +72,11 @@ fun TrackCard(
     /** When true, the reorder handle consumes touches but does not start a drag (other row is being dragged). */
     blockDragHandle: Boolean = false,
     /** When false, reorder handle is dimmed and does not start a drag (e.g. row clipped by list). */
-    dragHandleEnabled: Boolean = true
+    dragHandleEnabled: Boolean = true,
+    /**
+     * Non-interactive overlay: same chrome and layout density as a normal card, without gestures.
+     */
+    dragPreview: Boolean = false,
 ) {
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
     val bg = when {
@@ -90,10 +94,12 @@ fun TrackCard(
     val keyboardController = LocalSoftwareKeyboardController.current
     val buttonShape = RoundedCornerShape(Dimens.MediumRadius)
 
-    val showHandle = trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
+    val showHandle =
+        !dragPreview && trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
+    val showLoopChrome = dragPreview || onToggleLoop != null
 
-    LaunchedEffect(interactionBlocked) {
-        if (interactionBlocked) {
+    LaunchedEffect(interactionBlocked, dragPreview) {
+        if (interactionBlocked || dragPreview) {
             menuExpanded = false
             isRenaming = false
             renameFieldWasFocused = false
@@ -101,32 +107,39 @@ fun TrackCard(
     }
 
     LaunchedEffect(isRenaming) {
-        if (isRenaming) {
+        if (!dragPreview && isRenaming) {
             focusRequester.requestFocus()
             keyboardController?.show()
         }
     }
 
     fun commitRename() {
-        if (!isRenaming) return
+        if (dragPreview || !isRenaming) return
         isRenaming = false
         renameFieldWasFocused = false
         onRename?.invoke(renameFieldValue.text)
     }
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(cardShape)
-            .background(bg)
-            .border(Dimens.Stroke, AppColors.Line, cardShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                enabled = !interactionBlocked && !isRenaming
-            ) {
-                if (menuExpanded) menuExpanded = false else onClick()
-            }
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .background(bg)
+                .border(Dimens.Stroke, AppColors.Line, cardShape)
+                .then(
+                    if (dragPreview) {
+                        Modifier
+                    } else {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            enabled = !interactionBlocked && !isRenaming
+                        ) {
+                            if (menuExpanded) menuExpanded = false else onClick()
+                        }
+                    }
+                )
     ) {
         Row(
             modifier = Modifier
@@ -143,7 +156,7 @@ fun TrackCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isRenaming) {
+                    if (!dragPreview && isRenaming) {
                         TextField(
                             value = renameFieldValue,
                             onValueChange = { renameFieldValue = it },
@@ -191,7 +204,13 @@ fun TrackCard(
                         )
                     }
 
-                    if (onToggleLoop != null) {
+                    if (showLoopChrome) {
+                        val toggleLoop = onToggleLoop
+                        val loopInteractive =
+                            !dragPreview &&
+                                toggleLoop != null &&
+                                !interactionBlocked &&
+                                !isRenaming
                         Box(
                             modifier = Modifier
                                 .width(Dimens.MenuButtonSize)
@@ -206,9 +225,13 @@ fun TrackCard(
                                 .clip(buttonShape)
                                 .background(if (isLoop) AppColors.Accent else AppColors.Bg)
                                 .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                                .clickable(enabled = !interactionBlocked && !isRenaming) {
-                                    onToggleLoop()
-                                },
+                                .then(
+                                    if (loopInteractive) {
+                                        Modifier.clickable { toggleLoop.invoke() }
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -227,27 +250,40 @@ fun TrackCard(
                             .width(Dimens.MenuButtonSize)
                             .height(Dimens.MenuButtonSize)
                             .then(
-                                if (menuExpanded) Modifier.glow(
+                                if (!dragPreview && menuExpanded) Modifier.glow(
                                     color = AppColors.Accent,
                                     blurRadius = Dimens.GlowBlur,
                                     cornerRadius = Dimens.MediumRadius
                                 ) else Modifier
                             )
                             .clip(buttonShape)
-                            .background(if (menuExpanded) AppColors.Accent else AppColors.Bg)
+                            .background(
+                                if (!dragPreview && menuExpanded) AppColors.Accent else AppColors.Bg
+                            )
                             .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                            .clickable(enabled = !interactionBlocked && !isRenaming) { menuExpanded = !menuExpanded },
+                            .then(
+                                if (dragPreview || interactionBlocked || isRenaming) {
+                                    Modifier
+                                } else {
+                                    Modifier.clickable { menuExpanded = !menuExpanded }
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
                             contentDescription = stringResource(R.string.cd_track_menu),
-                            tint = if (menuExpanded) AppColors.Red else AppColors.Line
+                            tint =
+                                if (!dragPreview && menuExpanded) {
+                                    AppColors.Red
+                                } else {
+                                    AppColors.Line
+                                }
                         )
                     }
                 }
 
-                if (menuExpanded) {
+                if (menuExpanded && !dragPreview) {
                     Spacer(Modifier.height(Dimens.PanelPadding))
                     TrackOverflowMenu(
                         modifier = Modifier
@@ -276,9 +312,9 @@ fun TrackCard(
 
             TrackGainSection(
                 gain = gain,
-                onGainChange = onGainChange,
-                onGainCommit = onGainCommit,
-                enabled = !interactionBlocked && onGainChange != null,
+                onGainChange = if (dragPreview) null else onGainChange,
+                onGainCommit = if (dragPreview) null else onGainCommit,
+                enabled = !dragPreview && !interactionBlocked && onGainChange != null,
             )
         }
 

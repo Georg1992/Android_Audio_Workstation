@@ -1,5 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,11 +15,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
@@ -28,7 +34,6 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TrackCard
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.theme.Dimens
-import androidx.compose.foundation.gestures.awaitEachGesture
 
 @Composable
 fun ProjectTrackList(
@@ -51,27 +56,71 @@ fun ProjectTrackList(
     var listParentBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
     var dragHostCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val itemBoundsMap = remember { mutableStateMapOf<String, Rect>() }
+    var dropSettle by remember { mutableStateOf<DropSettleSnap?>(null) }
+    var nextSettleUid by remember { mutableLongStateOf(1L) }
 
     val currentTracks by rememberUpdatedState(tracks)
     val latestOnReorderTracks by rememberUpdatedState(onReorderTracks)
 
-    LaunchedEffect(
-        dragController.fingerPos,
-        dragController.draggingKey,
-        listBoundsInRoot
-    ) {
-        if (!dragController.isDragging) return@LaunchedEffect
-        maybeNeighborSwap(currentTracks, dragController, listState, listBoundsInRoot)
-            ?.let(latestOnReorderTracks)
+    LaunchedEffect(dragController.draggingKey, listBoundsInRoot) {
+        if (dragController.draggingKey == null) return@LaunchedEffect
+        snapshotFlow { dragController.fingerPos }.collect {
+            if (!dragController.isDragging) return@collect
+            maybeNeighborSwap(currentTracks, dragController, listState, listBoundsInRoot)
+                ?.let(latestOnReorderTracks)
+        }
     }
 
     fun completeDrop() {
-        if (dragController.draggingKey == null) return
+        val key = dragController.draggingKey ?: return
+        val trackEntity = tracks.find { it.id == key }
+        val bounds = itemBoundsMap[key]
+        val parentTop = listParentBoundsInRoot.top
+
+        fun finishImmediate() {
+            onPersistTrackOrder()
+            dragController.end()
+        }
+
+        if (trackEntity == null || bounds == null) {
+            finishImmediate()
+            return
+        }
+
+        val startY = dragController.fingerPos.y - dragController.dragOffset.y - parentTop
+        val targetY = bounds.top - parentTop
+        val wPx = dragController.overlayWidthPx
+        val hPx = dragController.overlayHeightPx
+
+        if (!startY.isFinite() || !targetY.isFinite() ||
+            wPx <= 0f || hPx <= 0f ||
+            bounds.isEmpty ||
+            !bounds.top.isFinite() ||
+            !bounds.left.isFinite()
+        ) {
+            finishImmediate()
+            return
+        }
+
+        dropSettle = DropSettleSnap(
+            settleUid = nextSettleUid++,
+            trackId = key,
+            track = trackEntity,
+            isSelected = selectedTrackIds.contains(key),
+            isRecording = recordingTrackId == key,
+            gain = trackEntity.gain,
+            fixedXInParentPx = dragController.fixedXInParentPx,
+            overlayWidthPx = wPx,
+            overlayHeightPx = hPx,
+            startTranslationYPx = startY,
+            targetTranslationYPx = targetY,
+        )
         onPersistTrackOrder()
         dragController.end()
     }
 
     val latestCompleteDrop by rememberUpdatedState(::completeDrop)
+    val listInteractionLocked = dragController.isDragging || dropSettle != null
     val reorderActive = dragController.isDragging
 
     Box(
@@ -109,18 +158,22 @@ fun ProjectTrackList(
                     listBoundsInRoot = coords.boundsInRoot()
                 },
             verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            userScrollEnabled = !reorderActive
+            userScrollEnabled = !listInteractionLocked
         ) {
             itemsIndexed(items = tracks, key = { _, track -> track.id }) { index, track ->
-                val isDragging = reorderActive && dragController.draggingKey == track.id
+                val settlingId = dropSettle?.trackId
+                val isGhostRow =
+                    (reorderActive && dragController.draggingKey == track.id) ||
+                        (settlingId == track.id)
                 val rowFullyVisible = isTrackFullyVisibleInLazyList(listState, index)
 
                 Box(
                     modifier = Modifier
+                        .animateItem(fadeInSpec = null, fadeOutSpec = null)
                         .onGloballyPositioned { coords ->
                             itemBoundsMap[track.id] = coords.boundsInRoot()
                         }
-                        .alpha(if (isDragging) 0f else 1f)
+                        .alpha(if (isGhostRow) 0f else 1f)
                 ) {
                     TrackCard(
                         title = track.name ?: "Track",
@@ -135,8 +188,10 @@ fun ProjectTrackList(
                         onToggleLoop = { onToggleLoop(track.id) },
                         isLoop = track.isLoop,
                         trackId = track.id,
-                        interactionBlocked = reorderActive,
-                        blockDragHandle = reorderActive && dragController.draggingKey != track.id,
+                        interactionBlocked = listInteractionLocked,
+                        blockDragHandle =
+                            (reorderActive && dragController.draggingKey != track.id) ||
+                                dropSettle != null,
                         dragHandleEnabled = rowFullyVisible,
                         onDragHandleStart = { positionInRoot ->
                             if (!rowFullyVisible) return@TrackCard
@@ -161,6 +216,7 @@ fun ProjectTrackList(
             }
         }
 
+        val settleSnap = dropSettle
         if (dragController.isDragging) {
             val draggedTrack = dragController.draggingKey?.let { draggedId ->
                 tracks.find { it.id == draggedId }
@@ -173,9 +229,52 @@ fun ProjectTrackList(
                     gain = draggedTrack.gain,
                     dragController = dragController,
                     parentTopInRootPx = listParentBoundsInRoot.top,
-                    onGainChange = { gain -> onGainChange(draggedTrack.id, gain) }
                 )
             }
+        } else if (settleSnap != null) {
+            val settleYAnim = remember(settleSnap.settleUid) {
+                Animatable(settleSnap.startTranslationYPx)
+            }
+            LaunchedEffect(settleSnap.settleUid) {
+                settleYAnim.snapTo(settleSnap.startTranslationYPx)
+                settleYAnim.animateTo(
+                    settleSnap.targetTranslationYPx,
+                    animationSpec =
+                        tween(
+                            durationMillis = DropSettleDurationMs,
+                            easing = FastOutSlowInEasing,
+                        ),
+                )
+                if (dropSettle?.settleUid == settleSnap.settleUid) {
+                    dropSettle = null
+                }
+            }
+            TrackDragSettlingOverlay(
+                track = settleSnap.track,
+                isSelected = settleSnap.isSelected,
+                isRecording = settleSnap.isRecording,
+                gain = settleSnap.gain,
+                translationXInParentPx = settleSnap.fixedXInParentPx,
+                translationYInParentPx = settleYAnim.value,
+                overlayWidthPx = settleSnap.overlayWidthPx,
+                overlayHeightPx = settleSnap.overlayHeightPx,
+            )
         }
     }
 }
+
+private data class DropSettleSnap(
+    val settleUid: Long,
+    val trackId: String,
+    val track: TrackEntity,
+    val isSelected: Boolean,
+    val isRecording: Boolean,
+    val gain: Float,
+    val fixedXInParentPx: Float,
+    val overlayWidthPx: Float,
+    val overlayHeightPx: Float,
+    val startTranslationYPx: Float,
+    val targetTranslationYPx: Float,
+)
+
+private const val DropSettleDurationMs = 150
