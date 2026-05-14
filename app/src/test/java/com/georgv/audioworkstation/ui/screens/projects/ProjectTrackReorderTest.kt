@@ -130,7 +130,7 @@ class ProjectTrackReorderTest {
 
     @Test
     fun `moves down before next neighbor center when current bottom and neighbor center known`() {
-        val frac = 0.38f
+        val frac = ReorderVisibleNeighborEarlyFraction
         val bottom = 220f
         val nextCenter = 280f
         val threshold = bottom + frac * (nextCenter - bottom)
@@ -162,7 +162,7 @@ class ProjectTrackReorderTest {
 
     @Test
     fun `moves up before previous neighbor center when current top and neighbor center known`() {
-        val frac = 0.38f
+        val frac = ReorderVisibleNeighborEarlyFraction
         val prevCenter = 100f
         val currentTop = 220f
         val threshold = prevCenter + frac * (currentTop - prevCenter)

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -93,6 +95,48 @@ private fun TrackDragFloatingCard(
     val overlayHeightDp = with(density) { overlayHeightPx.toDp() }
     val dragShape = RoundedCornerShape(Dimens.TileRadius)
 
+    val cardStack =
+        remember(
+            density,
+            track.id,
+            track.name,
+            track.isLoop,
+            isSelected,
+            isRecording,
+            gain,
+            overlayWidthPx,
+            overlayHeightPx,
+        ) {
+            movableContentOf {
+                Box(
+                    modifier = Modifier
+                        .size(overlayWidthDp, overlayHeightDp)
+                        .scale(DragOverlayLiftScale)
+                        .border(Dimens.Stroke, AppColors.Line, dragShape)
+                        .shadow(
+                            elevation = Dimens.DragOverlayShadow,
+                            shape = dragShape,
+                            clip = false,
+                            spotColor = AppColors.Line.copy(alpha = Alphas.OverlayShadow)
+                        )
+                        .clip(dragShape)
+                ) {
+                    TrackCard(
+                        modifier = Modifier.fillMaxSize(),
+                        title = track.name ?: "Track",
+                        isSelected = isSelected,
+                        isRecording = isRecording,
+                        gain = gain,
+                        onGainChange = null,
+                        onClick = { },
+                        onDelete = { },
+                        isLoop = track.isLoop,
+                        dragPreview = true,
+                    )
+                }
+            }
+        }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -101,31 +145,6 @@ private fun TrackDragFloatingCard(
                 translationY = translationYInParentPx
             }
     ) {
-        Box(
-            modifier = Modifier
-                .size(overlayWidthDp, overlayHeightDp)
-                .scale(DragOverlayLiftScale)
-                .border(Dimens.Stroke, AppColors.Line, dragShape)
-                .shadow(
-                    elevation = Dimens.DragOverlayShadow,
-                    shape = dragShape,
-                    clip = false,
-                    spotColor = AppColors.Line.copy(alpha = Alphas.OverlayShadow)
-                )
-                .clip(dragShape)
-        ) {
-            TrackCard(
-                modifier = Modifier.fillMaxSize(),
-                title = track.name ?: "Track",
-                isSelected = isSelected,
-                isRecording = isRecording,
-                gain = gain,
-                onGainChange = null,
-                onClick = { },
-                onDelete = { },
-                isLoop = track.isLoop,
-                dragPreview = true,
-            )
-        }
+        cardStack()
     }
 }

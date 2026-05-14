@@ -4,14 +4,15 @@ import androidx.compose.ui.geometry.Rect
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.drag.DragController
 
-/**
- * When the next/previous neighbor is laid out on the same page (non-null bounds and centers),
- * swap after crossing the early fraction toward that neighbor center. Neighbors outside the laid-out
- * page window are omitted (no invisible-neighbor fallback).
- */
-private const val ReorderVisibleNeighborEarlyFraction = 0.38f
+/** Lower = swap down earlier (see computeNeighborSwapTarget down-branch). */
+internal const val ReorderVisibleNeighborEarlyFraction = 0.30f
 
-fun maybeNeighborSwapOnPage(
+/**
+ * Returns a new track list with the dragged item moved one step toward an adjacent **on-page**
+ * neighbor if finger geometry crosses the swap threshold; otherwise **null** (no layout-only
+ * neighbors: missing [boundsByTrackId] for a neighbor skips that direction).
+ */
+fun neighborSwapOnPageOrNull(
     tracks: List<TrackEntity>,
     dragController: DragController,
     pageStartGlobalIndex: Int,
