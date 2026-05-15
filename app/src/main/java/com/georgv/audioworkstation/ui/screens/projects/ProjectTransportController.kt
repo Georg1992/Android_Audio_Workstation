@@ -1,30 +1,25 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
 /**
  * Thin façade for coordinated transport teardown and playback reset when the bound project changes.
  *
- * Recording row state remains in [ProjectViewModel]; this type only sequences engine + session calls
- * and drives the ViewModel-supplied clears/finalize callback.
+ * Recording transport/session markers live in [RecordingSessionController]; this type sequences engine
+ * + session calls and invokes the ViewModel-supplied finalize callback after a successful recorder stop.
  *
  * **Stop ordering (behavior preserved from Phase 0):**
  * 1. Cancel playback completion monitoring ([PlaybackSessionController.cancelCompletionMonitorForTransportStop]).
- * 2. Set recording startup flag to false.
+ * 2. Set recording startup flag to false ([RecordingSessionController.clearStartupFlagForTransportStop]).
  * 3. If a recording row was active (non-null id) and [AudioController.stopRecording] succeeds, invoke finalize callback.
  * 4. If playback was marked active, [AudioController.stopPlayback].
- * 5. Clear [recordingTrackId] (via callback).
- * 6. Clear [optimisticRecordingTrack] (via callback).
- * 7. Clear playing markers ([PlaybackSessionController.clearPlayingTransportState]).
+ * 5. Clear recording markers ([RecordingSessionController.clearRecordingTransportMarkers]).
+ * 6. Clear playing markers ([PlaybackSessionController.clearPlayingTransportState]).
  */
 class ProjectTransportController(
     private val audioController: AudioController,
     private val playbackSession: PlaybackSessionController,
-    private val getRecordingTrackId: () -> String?,
-    private val setRecordingTrackId: (String?) -> Unit,
-    private val setOptimisticRecordingTrack: (TrackEntity?) -> Unit,
-    private val setRecordingStartup: (Boolean) -> Unit,
+    private val recordingSession: RecordingSessionController,
     private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String) -> Unit,
 ) {
 
@@ -32,17 +27,16 @@ class ProjectTransportController(
     fun stopAll() {
         playbackSession.cancelCompletionMonitorForTransportStop()
 
-        setRecordingStartup(false)
+        recordingSession.clearStartupFlagForTransportStop()
 
-        val activeRecordingTrackId = getRecordingTrackId()
+        val activeRecordingTrackId = recordingSession.activeRecordingTrackIdForTransport()
         if (activeRecordingTrackId != null && audioController.stopRecording()) {
             finalizeRecordingTrackAfterSuccessfulEngineStop(activeRecordingTrackId)
         }
 
         playbackSession.stopEngineIfMarkedPlaying()
 
-        setRecordingTrackId(null)
-        setOptimisticRecordingTrack(null)
+        recordingSession.clearRecordingTransportMarkers()
         playbackSession.clearPlayingTransportState()
     }
 

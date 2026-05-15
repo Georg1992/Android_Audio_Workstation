@@ -62,6 +62,50 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `bind to a different project resets recording session`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project(id = PROJECT_ID), project(id = PROJECT_2_ID, name = "P2")),
+                tracks = emptyList(),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.recordingTrackId)
+
+        vm.bind(PROJECT_2_ID)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertFalse(vm.uiState.value.isRecordingStartup)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onRecordPressed rolls back session state when track upsert fails`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList(), failUpsertTrack = true)
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertFalse(vm.uiState.value.isRecordingStartup)
+        assertEquals(1, audioController.stopRecordingCalls)
+        assertEquals(R.string.error_create_recording_track_failed, vm.userMessages.first().resId)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `toggleSelect adds and removes selected track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0)))
         val vm = createViewModel(dao)
@@ -1006,7 +1050,7 @@ class ProjectViewModelTest {
         )
     }
 
-    private fun project(name: String = "Project") = ProjectEntity(id = PROJECT_ID, name = name)
+    private fun project(name: String = "Project", id: String = PROJECT_ID) = ProjectEntity(id = id, name = name)
 
     private fun track(
         id: String,
@@ -1025,10 +1069,11 @@ class ProjectViewModelTest {
 
     private companion object {
         const val PROJECT_ID = "project-1"
+        const val PROJECT_2_ID = "project-2"
     }
 }
 
-private object NoopProjectFileStore : ProjectFileStore {
+internal object NoopProjectFileStore : ProjectFileStore {
     override suspend fun deleteTrackFile(track: TrackEntity) = Unit
     override suspend fun deleteProjectFolder(projectId: String) = Unit
 }
@@ -1069,7 +1114,7 @@ private class FakeAudioFilePathProvider(
         "$basePath/$projectId/$trackId.wav"
 }
 
-private class FakeAudioController(
+internal class FakeAudioController(
     private val startRecordingPath: String? = "recordings/project-1/default.wav",
     private val stopRecordingResult: Boolean = true,
     private val startPlaybackResult: Boolean = true,
@@ -1133,7 +1178,7 @@ private class FakeAudioController(
     }
 }
 
-private class FakeProjectDao(
+internal class FakeProjectDao(
     projects: List<ProjectEntity> = emptyList(),
     tracks: List<TrackEntity> = emptyList(),
     private val failUpsertProject: Boolean = false,

@@ -8,7 +8,6 @@ import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
 import com.georgv.audioworkstation.core.audio.toPlaybackSpec
-import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.validation.NameValidationResult
@@ -65,8 +64,6 @@ class ProjectViewModel @Inject constructor(
     private val projectId = MutableStateFlow<String?>(null)
 
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
-    private val recordingTrackId = MutableStateFlow<String?>(null)
-    private val recordingStartup = MutableStateFlow(false)
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
 
     /**
@@ -77,11 +74,12 @@ class ProjectViewModel @Inject constructor(
      * same id ordering, after which the DB stream takes over again.
      */
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
-    /**
-     * Recording row shown before [projectTracks] observes the upsert. Cleared when Room contains
-     * the same id so the list never duplicates.
-     */
-    private val optimisticRecordingTrack = MutableStateFlow<TrackEntity?>(null)
+    private val recordingSession =
+        RecordingSessionController(
+            scope = viewModelScope,
+            audioController = audioController,
+            recordingCoordinator = recordingCoordinator,
+        )
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
 
@@ -105,7 +103,7 @@ class ProjectViewModel @Inject constructor(
             visibleTracksWithRecordingOptimistic(
                 projectTracks.value,
                 optimisticTracks.value,
-                optimisticRecordingTrack.value,
+                recordingSession.optimisticRecordingTrack.value,
             )
         },
     )
@@ -113,10 +111,7 @@ class ProjectViewModel @Inject constructor(
     private val transportController = ProjectTransportController(
         audioController = audioController,
         playbackSession = playbackSession,
-        getRecordingTrackId = { recordingTrackId.value },
-        setRecordingTrackId = { recordingTrackId.value = it },
-        setOptimisticRecordingTrack = { optimisticRecordingTrack.value = it },
-        setRecordingStartup = { recordingStartup.value = it },
+        recordingSession = recordingSession,
         finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId -> finalizeRecordingTrack(trackId) },
     )
 
@@ -135,11 +130,11 @@ class ProjectViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            combine(projectTracks, optimisticRecordingTrack) { tracks, optRecording ->
+            combine(projectTracks, recordingSession.optimisticRecordingTrack) { tracks, optRecording ->
                 tracks to optRecording
             }.collect { (tracks, optRecording) ->
                 if (optRecording != null && tracks.any { it.id == optRecording.id }) {
-                    optimisticRecordingTrack.value = null
+                    recordingSession.clearOptimisticRecordingRow()
                 }
             }
         }
@@ -204,7 +199,7 @@ class ProjectViewModel @Inject constructor(
     val uiState: StateFlow<ProjectUiState> =
         combine(
             combine(projectId, resolvedProject) { pid, proj -> pid to proj },
-            combine(projectTracks, optimisticTracks, optimisticRecordingTrack) {
+            combine(projectTracks, optimisticTracks, recordingSession.optimisticRecordingTrack) {
                     projectTracksList,
                     optimisticOrder,
                     optimisticRecording,
@@ -216,7 +211,7 @@ class ProjectViewModel @Inject constructor(
                 )
             },
             combine(selectedTrackIds, playbackSession.playingTrackIds) { selected, playing -> selected to playing },
-            combine(recordingTrackId, recordingStartup) { recordingId, startup -> recordingId to startup }
+            combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup -> recordingId to startup }
         ) { pidProject, tracks, selPlay, recStartup ->
             val (pid, proj) = pidProject
             val (selected, playing) = selPlay
@@ -236,10 +231,8 @@ class ProjectViewModel @Inject constructor(
         if (this.projectId.value != projectId) {
             transportController.resetPlaybackForProjectChange()
             optimisticTracks.value = null
-            optimisticRecordingTrack.value = null
+            recordingSession.resetWhenBoundProjectChanges()
             selectedTrackIds.value = emptySet()
-            recordingTrackId.value = null
-            recordingStartup.value = false
         }
         this.projectId.value = projectId
     }
@@ -283,7 +276,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun deleteTrack(trackId: String) {
-        if (recordingTrackId.value == trackId) {
+        if (recordingSession.recordingTrackId.value == trackId) {
             emitMessage(R.string.error_stop_recording_to_delete_track)
             return
         }
@@ -412,7 +405,7 @@ class ProjectViewModel @Inject constructor(
     fun importAudio(projectId: String, source: AudioImportSource, suggestedName: String?) {
         if (this.projectId.value != projectId) return
         viewModelScope.launch {
-            if (recordingTrackId.value != null || recordingStartup.value) {
+            if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) {
                 emitMessage(R.string.error_stop_recording_to_import)
                 return@launch
             }
@@ -442,62 +435,25 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
-        if (recordingTrackId.value != null) {
+        if (recordingSession.hasActiveRecordingTake()) {
             emitMessage(R.string.error_stop_recording_to_record)
             return
         }
-        if (recordingStartup.value) {
+        if (recordingSession.isStartupInFlight()) {
             return
         }
 
-        recordingStartup.value = true
+        recordingSession.armRecordingStartup()
 
-        viewModelScope.launch {
-            try {
-                val currentProject = ensureProject(projectId, projectName) ?: run {
-                    recordingStartup.value = false
-                    return@launch
-                }
-
-                val visibleTrackCount = uiState.value.tracks.size
-                val newTrack =
-                    when (
-                        val startOutcome =
-                            recordingCoordinator.beginRecording(
-                                projectId = projectId,
-                                project = currentProject,
-                                visibleTrackCount = visibleTrackCount,
-                            )
-                    ) {
-                        RecordingStartOutcome.EngineStartFailed -> {
-                            recordingStartup.value = false
-                            emitMessage(R.string.error_recording_failed_to_start)
-                            return@launch
-                        }
-                        is RecordingStartOutcome.ReadyToPersistRecordingRow -> startOutcome.newTrack
-                    }
-
-                optimisticRecordingTrack.value = newTrack
-                recordingTrackId.value = newTrack.id
-                recordingStartup.value = false
-
-                try {
-                    repo.upsertTracks(listOf(newTrack))
-                } catch (cancel: CancellationException) {
-                    throw cancel
-                } catch (_: Exception) {
-                    optimisticRecordingTrack.value = null
-                    recordingTrackId.value = null
-                    recordingStartup.value = false
-                    audioController.stopRecording()
-                    emitMessage(R.string.error_create_recording_track_failed)
-                }
-            } finally {
-                if (recordingTrackId.value == null && recordingStartup.value) {
-                    recordingStartup.value = false
-                }
-            }
-        }
+        recordingSession.launchRecordPressed(
+            projectId = projectId,
+            projectName = projectName,
+            ensureProject = { pid, name -> ensureProject(pid, name) },
+            visibleTrackCount = { uiState.value.tracks.size },
+            persistRecordingRow = { repo.upsertTracks(listOf(it)) },
+            notifyEngineStartFailed = { emitMessage(R.string.error_recording_failed_to_start) },
+            notifyPersistFailed = { emitMessage(R.string.error_create_recording_track_failed) },
+        )
     }
 
     fun onPlayPressed() {

@@ -6,6 +6,8 @@ import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.data.repository.ProjectRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,15 +42,22 @@ class ProjectTransportControllerTest {
             channelMode = ChannelMode.MONO,
         )
 
+    private fun recordingSessionSharingEngine(
+        scope: CoroutineScope,
+        audio: AudioController,
+    ): RecordingSessionController {
+        val repo = ProjectRepository(FakeProjectDao(projects = listOf(project()), tracks = emptyList()), NoopProjectFileStore)
+        val coordinator = ProjectRecordingCoordinator(repo, audio)
+        return RecordingSessionController(scope, audio, coordinator)
+    }
+
     @Test
     fun `stopAll clears recording markers and stops recorder before playback engine when both active`() =
         runTest(mainDispatcherRule.dispatcher) {
             val journal = mutableListOf<String>()
             val audio = JournalAudioController(journal)
-
-            var recId: String? = "a"
-            var optimistic: TrackEntity? = track("a")
-            var startupFlag = true
+            val recordingSession = recordingSessionSharingEngine(this, audio)
+            recordingSession.seedRecordingStateForTests("a", track("a"), startup = true)
             val finalizedIds = mutableListOf<String>()
 
             val playback = PlaybackSessionController(
@@ -66,18 +75,15 @@ class ProjectTransportControllerTest {
             val sut = ProjectTransportController(
                 audioController = audio,
                 playbackSession = playback,
-                getRecordingTrackId = { recId },
-                setRecordingTrackId = { recId = it },
-                setOptimisticRecordingTrack = { optimistic = it },
-                setRecordingStartup = { startupFlag = it },
+                recordingSession = recordingSession,
                 finalizeRecordingTrackAfterSuccessfulEngineStop = { finalizedIds += it },
             )
 
             sut.stopAll()
 
-            assertEquals(false, startupFlag)
-            assertNull(recId)
-            assertNull(optimistic)
+            assertEquals(false, recordingSession.recordingStartup.value)
+            assertNull(recordingSession.recordingTrackId.value)
+            assertNull(recordingSession.optimisticRecordingTrack.value)
             assertEquals(emptySet<String>(), playback.playingTrackIds.value)
             assertEquals(listOf("a"), finalizedIds)
             assertEquals(listOf("stopRecording", "stopPlayback"), audio.engineStopJournal)
@@ -88,8 +94,9 @@ class ProjectTransportControllerTest {
         runTest(mainDispatcherRule.dispatcher) {
             val journal = mutableListOf<String>()
             val audio = JournalAudioController(journal)
+            val recordingSession = recordingSessionSharingEngine(this, audio)
+            recordingSession.seedRecordingStateForTests(null, null, startup = false)
 
-            var recId: String? = null
             val playback = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
@@ -104,10 +111,7 @@ class ProjectTransportControllerTest {
             val sut = ProjectTransportController(
                 audioController = audio,
                 playbackSession = playback,
-                getRecordingTrackId = { recId },
-                setRecordingTrackId = { recId = it },
-                setOptimisticRecordingTrack = { },
-                setRecordingStartup = { },
+                recordingSession = recordingSession,
                 finalizeRecordingTrackAfterSuccessfulEngineStop = { error("finalize not expected") },
             )
 
@@ -120,6 +124,7 @@ class ProjectTransportControllerTest {
     fun `resetPlaybackForProjectChange clears playing markers via session`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = JournalAudioController(mutableListOf())
+            val recordingSession = recordingSessionSharingEngine(this, audio)
             val playback = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
@@ -135,10 +140,7 @@ class ProjectTransportControllerTest {
                 ProjectTransportController(
                     audioController = audio,
                     playbackSession = playback,
-                    getRecordingTrackId = { null },
-                    setRecordingTrackId = { },
-                    setOptimisticRecordingTrack = { },
-                    setRecordingStartup = { },
+                    recordingSession = recordingSession,
                     finalizeRecordingTrackAfterSuccessfulEngineStop = { },
                 )
             sut.resetPlaybackForProjectChange()
@@ -148,7 +150,7 @@ class ProjectTransportControllerTest {
         }
 
     /** Records [stopRecording]/[stopPlayback] relative order only; stubs other [AudioController] surface used in tests. */
-    private class JournalAudioController(private val journal: MutableList<String>) : AudioController {
+    private class JournalAudioController(val journal: MutableList<String>) : AudioController {
 
         private var startPlaybackCalls = 0
         private val _playbackState = MutableStateFlow(false)
