@@ -110,6 +110,16 @@ class ProjectViewModel @Inject constructor(
         },
     )
 
+    private val transportController = ProjectTransportController(
+        audioController = audioController,
+        playbackSession = playbackSession,
+        getRecordingTrackId = { recordingTrackId.value },
+        setRecordingTrackId = { recordingTrackId.value = it },
+        setOptimisticRecordingTrack = { optimisticRecordingTrack.value = it },
+        setRecordingStartup = { recordingStartup.value = it },
+        finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId -> finalizeRecordingTrack(trackId) },
+    )
+
     val userMessages = messages.receiveAsFlow()
 
     init {
@@ -224,7 +234,7 @@ class ProjectViewModel @Inject constructor(
 
     suspend fun bind(projectId: String) {
         if (this.projectId.value != projectId) {
-            playbackSession.resetWhenProjectChanges()
+            transportController.resetPlaybackForProjectChange()
             optimisticTracks.value = null
             optimisticRecordingTrack.value = null
             selectedTrackIds.value = emptySet()
@@ -521,37 +531,9 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    /** Stops all active transport; sequencing is [ProjectTransportController.stopAll]. */
     fun onStopPressed() {
-        performTransportStopSequence()
-    }
-
-    /**
-     * **Phase 0 — explicit transport teardown order.** Preserves historical behavior; reordering
-     * risks races with [NativeAudioController] completion polling, VM loop restart, and finalize.
-     *
-     * 1. **Cancel playback completion monitor** — so it cannot drive another loop pass or touch
-     *    [PlaybackSessionController] playing markers while native audio is torn down.
-     * 2. **Prepare recording stop** — clear [recordingStartup] (unchanged legacy position before engine stop).
-     * 3. **Stop native recording + finalize** — if a take is active, [AudioController.stopRecording];
-     *    on success, enqueue metadata persist via [finalizeRecordingTrack].
-     * 4. **Stop native playback** — if transport still marks playback active, stop the engine stream.
-     * 5. **Clear MutableStateFlows** — [recordingTrackId], [optimisticRecordingTrack], playback markers in [PlaybackSessionController].
-     */
-    private fun performTransportStopSequence() {
-        playbackSession.cancelCompletionMonitorForTransportStop()
-
-        recordingStartup.value = false
-
-        val activeRecordingTrackId = recordingTrackId.value
-        if (activeRecordingTrackId != null && audioController.stopRecording()) {
-            finalizeRecordingTrack(activeRecordingTrackId)
-        }
-
-        playbackSession.stopEngineIfMarkedPlaying()
-
-        recordingTrackId.value = null
-        optimisticRecordingTrack.value = null
-        playbackSession.clearPlayingTransportState()
+        transportController.stopAll()
     }
 
     override fun onCleared() {
