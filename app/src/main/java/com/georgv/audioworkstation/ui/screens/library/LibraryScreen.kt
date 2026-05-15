@@ -29,8 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -110,6 +111,8 @@ fun LibraryScreen(
         pendingDeleteProject?.let { project ->
             AlertDialog(
                 onDismissRequest = { pendingDeleteProject = null },
+                containerColor = AppColors.Bg,
+                tonalElevation = 0.dp,
                 title = {
                     Text(
                         text = stringResource(R.string.library_delete_project_title),
@@ -168,7 +171,7 @@ private fun LibraryProjectRow(
     Surface(
         onClick = onClick,
         shape = shape,
-        color = AppColors.Bg,
+        color = AppColors.SurfacePanel,
         shadowElevation = Dimens.Stroke,
         modifier = Modifier.fillMaxWidth()
     ) {

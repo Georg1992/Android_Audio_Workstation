@@ -34,7 +34,7 @@ fun ImportAudioButton(
         modifier = modifier
             .size(Dimens.TransportButtonSize)
             .clip(shape)
-            .background(AppColors.Bg)
+            .background(AppColors.SurfacePanel)
             .border(Dimens.Stroke, AppColors.Line, shape)
             .consumeAllPointers(enabled = inputLocked),
         contentAlignment = Alignment.Center

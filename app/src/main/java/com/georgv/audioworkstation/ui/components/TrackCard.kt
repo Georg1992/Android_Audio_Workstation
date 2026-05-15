@@ -95,7 +95,7 @@ fun TrackCard(
     val bg = when {
         isRecording -> AppColors.Red
         isSelected -> AppColors.Green
-        else -> AppColors.Bg
+        else -> AppColors.SurfacePanel
     }
 
     var isRenaming by remember(trackId) { mutableStateOf(false) }

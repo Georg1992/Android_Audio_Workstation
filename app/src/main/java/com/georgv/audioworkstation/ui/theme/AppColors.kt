@@ -3,32 +3,39 @@ package com.georgv.audioworkstation.ui.theme
 import androidx.compose.ui.graphics.Color
 
 object AppColors {
-    // pipette palette
-    /** App window / scaffold background — keep in sync with `@color/app_window_bg` for themes.xml. */
-    val Bg = Color(0xFFF2F2F2)
-    val Line = Color(0xFF000000)
 
+    /** App shell background; splash still uses `@color/app_window_bg` until activity starts — keep that hex aligned when changing [Bg]. */
+    val Bg = Color(0xFFF3EFE4)
+
+    val SurfacePanel = Color(0xFFF7F4EE)
+    val SurfaceRaised = Color(0xFFFFFFFF)
+    val SurfacePressed = Color(0xFFE4E0D8)
+
+    // Core lines/text
+    val Line = Color(0xFF111111)
+
+    // Accent palette
     val Green = Color(0xFF02FC57)
     val Yellow = Color(0xFFFDFF1F)
-    val Cyan = Color(0xFF01FEFF)
+    val Cyan = Color(0xFF00FFF6)
     val Pink = Color(0xFFFFD2FF)
     val Red = Color(0xFFFF2E4A)
 
+    // Semantic aliases
     val Text = Line
-    /**
-     * Highlight color used to mark "activated" affordances (toggled loop, open overflow menu,
-     * selected sample rate). Points at the palette's [Yellow] so a future accent swap is a
-     * one-line change here.
-     */
     val Accent = Yellow
 
-    // Fader (palette-colored moving parts)
-    val FaderTrackAbove = Color(0xFFFFFFFF)
-    val FaderTrackBelow = Color(0xFF000000)
+    // Utility neutrals
+    val WhiteSoft = Color(0xFFFFFCF7)
+    val BlackSoftTransparent = Color(0x66000000)
+
+    // Fader
+    val FaderTrackAbove = WhiteSoft
+    val FaderTrackBelow = Line
     val FaderTrackBorder = Line
-    val FaderTick = Cyan
-    val FaderThumb = Bg
-    val FaderThumbNotch = Color(0x66000000)
+    val FaderTick = Line
+    val FaderThumb = SurfaceRaised
+    val FaderThumbNotch = BlackSoftTransparent
 }
 
 /** Reusable alpha tokens. Keep in lockstep with palette swaps. */

@@ -15,6 +15,8 @@ import androidx.navigation.compose.rememberNavController
 import com.georgv.audioworkstation.ui.localization.LanguageViewModel
 import com.georgv.audioworkstation.core.localization.ProvideAppLocale
 import com.georgv.audioworkstation.ui.navigation.AppNavHost
+import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.appLightColorScheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,7 +25,7 @@ fun AppRoot() {
 
     val tag by languageVm.currentTag.collectAsStateWithLifecycle()
 
-    MaterialTheme {
+    MaterialTheme(colorScheme = appLightColorScheme()) {
         // Material's default ripple animation didn't fit the flat / palette aesthetic, so we
         // disable it globally. Providing `null` to LocalRippleConfiguration removes the indication
         // entirely without having to override every interactive component's `indication` modifier.
@@ -32,7 +34,8 @@ fun AppRoot() {
                 val navController = rememberNavController()
 
                 Surface(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    color = AppColors.Bg,
                 ) {
                     AppNavHost(
                         currentLanguageTag = tag,

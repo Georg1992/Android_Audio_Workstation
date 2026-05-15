@@ -29,7 +29,7 @@ fun TopToolbarPanel(
             .fillMaxWidth()
             .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
             .height(Dimens.PanelPlaceholderHeight)
-            .background(AppColors.Bg, shape)
+            .background(AppColors.SurfacePanel, shape)
             .border(Dimens.Stroke, AppColors.Line, shape)
             .consumeAllPointers(enabled = inputLocked)
             .padding(horizontal = Dimens.TileInnerPadding),

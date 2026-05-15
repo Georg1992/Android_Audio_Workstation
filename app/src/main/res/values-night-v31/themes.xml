@@ -4,5 +4,7 @@
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.MyApp</item>
         <item name="android:windowBackground">@color/app_window_bg</item>
+        <item name="android:statusBarColor">@color/app_window_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -48,7 +49,7 @@ fun LanguageSwitcher(
             Box(
                 modifier = Modifier
                     .size(Dimens.LangChipSize)
-                    .background(AppColors.Bg)
+                    .background(AppColors.SurfacePanel)
                     .border(Dimens.Stroke, AppColors.Line, shape),
                 contentAlignment = Alignment.Center
             ) {
@@ -62,7 +63,9 @@ fun LanguageSwitcher(
 
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            containerColor = AppColors.Bg,
+            tonalElevation = 0.dp,
         ) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.lang_english)) },

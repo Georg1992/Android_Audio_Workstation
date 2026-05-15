@@ -110,9 +110,9 @@ fun CreateProjectScreen(
                     }
                 ),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = AppColors.Bg,
-                    unfocusedContainerColor = AppColors.Bg,
-                    disabledContainerColor = AppColors.Bg,
+                    focusedContainerColor = AppColors.SurfacePanel,
+                    unfocusedContainerColor = AppColors.SurfacePanel,
+                    disabledContainerColor = AppColors.SurfacePanel,
                     focusedTextColor = AppColors.Line,
                     unfocusedTextColor = AppColors.Line,
                     disabledTextColor = AppColors.Line,
@@ -143,7 +143,7 @@ fun CreateProjectScreen(
             ) {
                 CreateProjectActionButton(
                     text = stringResource(R.string.action_cancel),
-                    fillColor = AppColors.Bg,
+                    fillColor = AppColors.SurfacePanel,
                     onClick = onBack,
                     enabled = !state.isSaving
                 )
@@ -202,7 +202,7 @@ private fun SampleRateOption(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
-    val fillColor: Color = if (isSelected) AppColors.Accent else AppColors.Bg
+    val fillColor: Color = if (isSelected) AppColors.Accent else AppColors.SurfacePanel
 
     Column(
         modifier = modifier
@@ -242,7 +242,7 @@ private fun CreateProjectActionButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        color = AppColors.Bg,
+        color = AppColors.SurfacePanel,
         shadowElevation = Dimens.Stroke
     ) {
         Row(

@@ -39,6 +39,7 @@ fun ScreenScaffold(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = AppColors.Bg,
         snackbarHost = snackbarHost,
         topBar = {
             CenterAlignedTopAppBar(

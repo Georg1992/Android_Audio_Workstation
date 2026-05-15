@@ -48,7 +48,7 @@ fun TransportPanel(
             .fillMaxWidth()
             .padding(bottom = Dimens.PanelPadding)
             .clip(shape)
-            .background(AppColors.Bg)
+            .background(AppColors.SurfacePanel)
             .border(Dimens.Stroke, AppColors.Line, shape)
             .padding(vertical = Dimens.PanelPadding)
             .consumeAllPointers(enabled = inputLocked),

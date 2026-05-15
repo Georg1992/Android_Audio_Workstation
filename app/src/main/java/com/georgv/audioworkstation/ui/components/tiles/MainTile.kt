@@ -51,7 +51,7 @@ fun MainTile(
     Surface(
         onClick = onClick,
         shape = shape,
-        color = AppColors.Bg,
+        color = AppColors.SurfacePanel,
         shadowElevation = 0.dp,
         modifier = modifier
     ) {
