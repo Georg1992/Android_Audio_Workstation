@@ -16,7 +16,6 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,18 +25,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.TestWatcher
-import org.junit.runner.Description
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectViewModelTest {
@@ -46,7 +43,7 @@ class ProjectViewModelTest {
     val mainDispatcherRule = ProjectViewModelMainDispatcherRule()
 
     @Test
-    fun `bind loads tracks ordered by position`() = runTest {
+    fun `bind loads tracks ordered by position`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -65,7 +62,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `toggleSelect adds and removes selected track`() = runTest {
+    fun `toggleSelect adds and removes selected track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0)))
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -84,7 +81,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onPlayPressed starts playback and requires explicit stop before restart`() = runTest {
+    fun `onPlayPressed starts playback and requires explicit stop before restart`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
         val audioController = FakeAudioController()
         val vm = createViewModel(dao, audioController)
@@ -110,7 +107,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onPlayPressed rejects multi-track playback requests`() = runTest {
+    fun `onPlayPressed rejects multi-track playback requests`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -138,7 +135,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onRecordPressed requires explicit stop before starting a new take`() = runTest {
+    fun `onRecordPressed requires explicit stop before starting a new take`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()))
         val audioController = FakeAudioController()
         val vm = createViewModel(dao, audioController)
@@ -161,7 +158,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onStopPressed clears recording and playing state`() = runTest {
+    fun `onStopPressed clears recording and playing state`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -183,7 +180,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `renameTrack updates session and persists to dao`() = runTest {
+    fun `renameTrack updates session and persists to dao`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, name = "Old")))
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -200,7 +197,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `renameTrack rejects blank names and emits feedback`() = runTest {
+    fun `renameTrack rejects blank names and emits feedback`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, name = "Old")))
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -218,7 +215,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `renameTrack rolls back when persistence fails`() = runTest {
+    fun `renameTrack rolls back when persistence fails`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(track(id = "a", position = 0, name = "Old")),
@@ -241,7 +238,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `renameProject updates project and persists to dao`() = runTest {
+    fun `renameProject updates project and persists to dao`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project(name = "Old Project")))
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -258,7 +255,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `renameProject rejects blank names and emits feedback`() = runTest {
+    fun `renameProject rejects blank names and emits feedback`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project(name = "Old Project")))
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -275,7 +272,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `renameProject emits error when persistence fails`() = runTest {
+    fun `renameProject emits error when persistence fails`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project(name = "Old Project")),
             failUpsertProject = true
@@ -295,7 +292,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `commitTrackGain persists gain to dao`() = runTest {
+    fun `commitTrackGain persists gain to dao`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f))
@@ -315,7 +312,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `setTrackGain does not write to dao during live drag`() = runTest {
+    fun `setTrackGain does not write to dao during live drag`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f))
@@ -337,7 +334,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `setTrackGain pushes live gain to active playback`() = runTest {
+    fun `setTrackGain pushes live gain to active playback`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f))
@@ -363,7 +360,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `setTrackOrderSession and persistTrackOrderToDb keep reordered positions`() = runTest {
+    fun `setTrackOrderSession and persistTrackOrderToDb keep reordered positions`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -397,7 +394,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `setTrackOrderSession swaps two adjacent tracks with updated positions only on those rows`() = runTest {
+    fun `setTrackOrderSession swaps two adjacent tracks with updated positions only on those rows`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -425,7 +422,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `persistTrackOrderToDb keeps local reordered UI while db write is pending`() = runTest {
+    fun `persistTrackOrderToDb keeps local reordered UI while db write is pending`() = runTest(mainDispatcherRule.dispatcher) {
         val updateTracksGate = CompletableDeferred<Unit>()
         val dao = FakeProjectDao(
             projects = listOf(project()),
@@ -467,7 +464,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `deleteTrack blocks deleting active recording track`() = runTest {
+    fun `deleteTrack blocks deleting active recording track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -496,7 +493,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `deleteTrack blocks deleting active playback track`() = runTest {
+    fun `deleteTrack blocks deleting active playback track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -525,7 +522,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `deleteTrack removes inactive track renumbers positions and clears selection`() = runTest {
+    fun `deleteTrack removes inactive track renumbers positions and clears selection`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -550,7 +547,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `deleteTrack rolls back when persistence fails`() = runTest {
+    fun `deleteTrack rolls back when persistence fails`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
@@ -579,7 +576,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onRecordPressed creates missing project with provided name and default track settings`() = runTest {
+    fun `onRecordPressed creates missing project with provided name and default track settings`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao()
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -604,7 +601,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onCleared stops active transport`() = runTest {
+    fun `onCleared stops active transport`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
         val audioController = FakeAudioController()
         val vm = createViewModel(dao, audioController)
@@ -613,21 +610,31 @@ class ProjectViewModelTest {
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
         vm.toggleSelect("a")
+        advanceUntilIdle()
+
         vm.onPlayPressed()
+        advanceUntilIdle()
+        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+
         vm.onRecordPressed(PROJECT_ID)
-        runCurrent()
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.recordingTrackId)
 
         val onCleared = vm.javaClass.getDeclaredMethod("onCleared")
         onCleared.isAccessible = true
         onCleared.invoke(vm)
-
+        advanceUntilIdle()
         assertEquals(1, audioController.stopRecordingCalls)
         assertEquals(1, audioController.stopPlaybackCalls)
+        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertFalse(vm.uiState.value.isRecordingStartup)
+        assertEquals(1, audioController.releaseCalls)
         collectJob.cancel()
     }
 
     @Test
-    fun `toggleTrackLoop flips loop flag and persists to dao`() = runTest {
+    fun `toggleTrackLoop flips loop flag and persists to dao`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(track(id = "a", position = 0))
@@ -653,7 +660,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `playback monitor restarts playback when looping track completes`() = runTest {
+    fun `playback monitor restarts playback when looping track completes`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav"))
@@ -686,7 +693,38 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `importAudio persists imported track with suggested name and flag`() = runTest {
+    fun `loop completion clears playing when loop restart fails`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav"))
+        )
+        val audioController = FakeAudioController(startPlaybackPermitted = { invocation -> invocation != 1 })
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleTrackLoop("a")
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+
+        vm.onPlayPressed()
+        advanceUntilIdle()
+        assertEquals(1, audioController.startPlaybackCalls)
+        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+
+        audioController.completePlayback()
+        advanceUntilIdle()
+
+        assertEquals(2, audioController.startPlaybackCalls)
+        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `importAudio persists imported track with suggested name and flag`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val importer = FakeAudioImporter(
             result = AudioImportResult.Success(durationMs = 2_500L, channelMode = ChannelMode.STEREO)
@@ -712,7 +750,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `importAudio uses default take name when suggested name is blank`() = runTest {
+    fun `importAudio uses default take name when suggested name is blank`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val importer = FakeAudioImporter()
         val vm = createViewModel(dao, audioImporter = importer)
@@ -730,7 +768,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `importAudio surfaces failure message and does not insert track`() = runTest {
+    fun `importAudio surfaces failure message and does not insert track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val importer = FakeAudioImporter(
             result = AudioImportResult.Failure.SampleRateMismatch(expected = 48_000, actual = 44_100)
@@ -752,7 +790,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `importAudio is blocked while recording`() = runTest {
+    fun `importAudio is blocked while recording`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val audioController = FakeAudioController()
         val importer = FakeAudioImporter()
@@ -776,7 +814,74 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `playback monitor clears playing state when native playback completes`() = runTest {
+    fun `ProjectAudioImportCoordinator returns StorageUnavailable without importing`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val repo = ProjectRepository(dao, NoopProjectFileStore)
+        val importer = FakeAudioImporter()
+        val coordinator =
+            ProjectAudioImportCoordinator(repo, importer, NullTrackOutputPathProvider)
+        val outcome =
+            coordinator.run(
+                projectId = PROJECT_ID,
+                project = project(),
+                visibleTrackCount = 0,
+                source = AudioImportSource { null },
+                suggestedName = "x",
+            )
+        assertEquals(ProjectAudioImportOutcome.StorageUnavailable, outcome)
+        assertEquals(0, importer.importCalls)
+    }
+
+    @Test
+    fun `ProjectAudioImportCoordinator maps success to ReadyToPersist`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val repo = ProjectRepository(dao, NoopProjectFileStore)
+        val importer =
+            FakeAudioImporter(
+                result =
+                    AudioImportResult.Success(
+                        durationMs = 100L,
+                        channelMode = ChannelMode.MONO,
+                    )
+            )
+        val coordinator =
+            ProjectAudioImportCoordinator(repo, importer, FakeAudioFilePathProvider())
+        val outcome =
+            coordinator.run(
+                projectId = PROJECT_ID,
+                project = project(),
+                visibleTrackCount = 2,
+                source = AudioImportSource { null },
+                suggestedName = null,
+            )
+        assertTrue(outcome is ProjectAudioImportOutcome.ReadyToPersist)
+        val track = (outcome as ProjectAudioImportOutcome.ReadyToPersist).importedTrack
+        assertEquals("Take 3 (imported)", track.name)
+        assertEquals(true, track.isImported)
+        assertEquals(100L, track.duration)
+    }
+
+    @Test
+    fun `ProjectRecordingCoordinator returns EngineStartFailed when startRecording yields null`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val audio =
+                FakeAudioController(
+                    startRecordingPath = null,
+                )
+            val coord = ProjectRecordingCoordinator(repo, audio)
+            val outcome =
+                coord.beginRecording(
+                    projectId = PROJECT_ID,
+                    project = project(),
+                    visibleTrackCount = 0,
+                )
+            assertEquals(RecordingStartOutcome.EngineStartFailed, outcome)
+        }
+
+    @Test
+    fun `playback monitor clears playing state when native playback completes`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
         val audioController = FakeAudioController()
         val vm = createViewModel(dao, audioController)
@@ -798,17 +903,106 @@ class ProjectViewModelTest {
         collectJob.cancel()
     }
 
+    @Test
+    fun `transport stop during playback only invokes stopPlayback`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+        vm.onPlayPressed()
+        runCurrent()
+
+        vm.onStopPressed()
+        runCurrent()
+
+        assertEquals(0, audioController.stopRecordingCalls)
+        assertEquals(1, audioController.stopPlaybackCalls)
+        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertNull(vm.uiState.value.recordingTrackId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `transport stop during recording only invokes stopRecording not stopPlayback`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.recordingTrackId)
+
+        vm.onStopPressed()
+        runCurrent()
+
+        assertEquals(1, audioController.stopRecordingCalls)
+        assertEquals(0, audioController.stopPlaybackCalls)
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `transport stop with loop active does not process further completions`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")),
+        )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleTrackLoop("a")
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+
+        vm.onPlayPressed()
+        runCurrent()
+        assertEquals(1, audioController.startPlaybackCalls)
+
+        audioController.completePlayback()
+        runCurrent()
+        assertEquals(2, audioController.startPlaybackCalls)
+        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+
+        vm.onStopPressed()
+        runCurrent()
+        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+
+        audioController.completePlayback()
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(2, audioController.startPlaybackCalls)
+        collectJob.cancel()
+    }
+
     private fun createViewModel(
         dao: FakeProjectDao,
         audioController: AudioController = FakeAudioController(),
         audioImporter: AudioImporter = FakeAudioImporter(),
         audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider()
     ): ProjectViewModel {
+        val repo = ProjectRepository(dao, NoopProjectFileStore)
+        val audioImportCoordinator =
+            ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider)
+        val recordingCoordinator = ProjectRecordingCoordinator(repo, audioController)
         return ProjectViewModel(
-            ProjectRepository(dao, NoopProjectFileStore),
+            repo,
             audioController,
-            audioImporter,
-            audioFilePathProvider
+            audioImportCoordinator,
+            recordingCoordinator,
         )
     }
 
@@ -837,6 +1031,10 @@ class ProjectViewModelTest {
 private object NoopProjectFileStore : ProjectFileStore {
     override suspend fun deleteTrackFile(track: TrackEntity) = Unit
     override suspend fun deleteProjectFolder(projectId: String) = Unit
+}
+
+private object NullTrackOutputPathProvider : AudioFilePathProvider {
+    override fun trackOutputPath(projectId: String, trackId: String): String? = null
 }
 
 private class FakeAudioImporter(
@@ -875,7 +1073,12 @@ private class FakeAudioController(
     private val startRecordingPath: String? = "recordings/project-1/default.wav",
     private val stopRecordingResult: Boolean = true,
     private val startPlaybackResult: Boolean = true,
-    private val stopPlaybackResult: Boolean = true
+    private val stopPlaybackResult: Boolean = true,
+    /**
+     * Per-invocation gate for [startPlayback]. Index is 0-based across the test lifetime.
+     * Return value is AND-ed with [startPlaybackResult] for both the return and [playbackState].
+     */
+    private val startPlaybackPermitted: (Int) -> Boolean = { _ -> true },
 ) : AudioController {
     var startPlaybackCalls = 0
         private set
@@ -885,6 +1088,7 @@ private class FakeAudioController(
         private set
     var stopPlaybackCalls = 0
         private set
+    private var startPlaybackInvocationIndex = 0
     private val _playbackState = MutableStateFlow(false)
     override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
 
@@ -904,8 +1108,10 @@ private class FakeAudioController(
     override fun startPlayback(spec: PlaybackSpec): Boolean {
         startPlaybackCalls += 1
         lastPlaybackGain = spec.gain
-        _playbackState.value = startPlaybackResult
-        return startPlaybackResult
+        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
+        val playing = permitted && startPlaybackResult
+        _playbackState.value = playing
+        return playing
     }
 
     override fun setPlaybackGain(gain: Float) {
@@ -988,16 +1194,5 @@ private class FakeProjectDao(
     override suspend fun deleteTrackAndUpdatePositions(trackId: String, remaining: List<TrackEntity>) {
         if (failDeleteTrackAndUpdatePositions) error("deleteTrackAndUpdatePositions failed")
         super.deleteTrackAndUpdatePositions(trackId, remaining)
-    }
-}
-
-@OptIn(ExperimentalCoroutinesApi::class)
-class ProjectViewModelMainDispatcherRule : TestWatcher() {
-    override fun starting(description: Description) {
-        Dispatchers.setMain(kotlinx.coroutines.test.StandardTestDispatcher())
-    }
-
-    override fun finished(description: Description) {
-        Dispatchers.resetMain()
     }
 }

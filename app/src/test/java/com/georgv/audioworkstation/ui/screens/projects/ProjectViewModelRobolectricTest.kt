@@ -81,12 +81,7 @@ class ProjectViewModelRobolectricTest {
             )
         }
 
-        val vm = ProjectViewModel(
-            repo,
-            NoOpAudioControllerForRobolectric(),
-            ThrowingAudioImporterForRobolectric(),
-            NullablePathAudioFileProvider(null),
-        )
+        val vm = robolectricVm(repo)
         backgroundScope.launch { vm.uiState.collect { } }
         runCurrent()
 
@@ -128,12 +123,7 @@ class ProjectViewModelRobolectricTest {
             )
         }
 
-        val vm = ProjectViewModel(
-            repo,
-            NoOpAudioControllerForRobolectric(),
-            ThrowingAudioImporterForRobolectric(),
-            NullablePathAudioFileProvider(null),
-        )
+        val vm = robolectricVm(repo)
         backgroundScope.launch { vm.uiState.collect { } }
         runCurrent()
 
@@ -157,12 +147,7 @@ class ProjectViewModelRobolectricTest {
         runBlocking {
             repo.upsertProject(ProjectEntity(id = "p1", name = "My Project"))
         }
-        val vm = ProjectViewModel(
-            repo,
-            NoOpAudioControllerForRobolectric(),
-            ThrowingAudioImporterForRobolectric(),
-            NullablePathAudioFileProvider(null),
-        )
+        val vm = robolectricVm(repo)
         backgroundScope.launch { vm.uiState.collect { } }
         runCurrent()
 
@@ -181,12 +166,7 @@ class ProjectViewModelRobolectricTest {
         runBlocking {
             repo.upsertProject(ProjectEntity(id = "p1", name = "My Project"))
         }
-        val vm = ProjectViewModel(
-            repo,
-            NoOpAudioControllerForRobolectric(),
-            ThrowingAudioImporterForRobolectric(),
-            NullablePathAudioFileProvider(null),
-        )
+        val vm = robolectricVm(repo)
         backgroundScope.launch { vm.uiState.collect { } }
         runCurrent()
 
@@ -205,12 +185,7 @@ class ProjectViewModelRobolectricTest {
         runBlocking {
             repo.upsertProject(ProjectEntity(id = "p1", name = "My Project"))
         }
-        val vm = ProjectViewModel(
-            repo,
-            NoOpAudioControllerForRobolectric(),
-            ThrowingAudioImporterForRobolectric(),
-            NullablePathAudioFileProvider(null),
-        )
+        val vm = robolectricVm(repo)
         backgroundScope.launch { vm.uiState.collect { } }
         runCurrent()
 
@@ -232,12 +207,7 @@ class ProjectViewModelRobolectricTest {
             repo.upsertProject(ProjectEntity(id = "p1", name = "P"))
             repo.upsertTracks(listOf(trackEntity("tr", "p1", 0, name = "Track")))
         }
-        val vm = ProjectViewModel(
-            repo,
-            NoOpAudioControllerForRobolectric(),
-            ThrowingAudioImporterForRobolectric(),
-            NullablePathAudioFileProvider(null),
-        )
+        val vm = robolectricVm(repo)
         backgroundScope.launch { vm.uiState.collect { } }
         runCurrent()
 
@@ -248,6 +218,20 @@ class ProjectViewModelRobolectricTest {
         vm.renameTrack("tr", " \t ")
         advanceUntilIdle()
         assertEquals(R.string.error_track_name_blank, pending.await().resId)
+    }
+
+    private fun robolectricVm(
+        repo: ProjectRepository,
+        audioImporter: AudioImporter = ThrowingAudioImporterForRobolectric(),
+        audioFilePathProvider: AudioFilePathProvider = NullablePathAudioFileProvider(null),
+    ): ProjectViewModel {
+        val audio = NoOpAudioControllerForRobolectric()
+        return ProjectViewModel(
+            repo,
+            audio,
+            ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider),
+            ProjectRecordingCoordinator(repo, audio),
+        )
     }
 
     private fun trackEntity(
