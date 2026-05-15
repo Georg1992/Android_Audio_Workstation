@@ -227,6 +227,12 @@ class ProjectViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
 
+    /**
+     * Wires repository/audio observation to [projectId] for this screen instance.
+     *
+     * Call once when [ProjectScreen] enters composition for a route argument. Switching projects should
+     * navigate to a new `project/{projectId}` destination (new ViewModel), not repeatedly [bind] one VM.
+     */
     suspend fun bind(projectId: String) {
         if (this.projectId.value != projectId) {
             transportController.resetPlaybackForProjectChange()

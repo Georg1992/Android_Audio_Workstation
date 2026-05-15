@@ -1129,6 +1129,10 @@ internal class FakeAudioController(
         private set
     var lastPlaybackGain: Float? = null
         private set
+
+    /** Test hook invoked at the beginning of native [startRecording] (before JNI work). */
+    var onEnterStartRecording: (() -> Unit)? = null
+
     var stopRecordingCalls = 0
         private set
     var stopPlaybackCalls = 0
@@ -1142,8 +1146,10 @@ internal class FakeAudioController(
         _playbackState.value = false
     }
 
-    override fun startRecording(spec: RecordingSpec): String? =
-        startRecordingPath?.replace("default", spec.trackId)
+    override fun startRecording(spec: RecordingSpec): String? {
+        onEnterStartRecording?.invoke()
+        return startRecordingPath?.replace("default", spec.trackId)
+    }
 
     override fun stopRecording(): Boolean {
         stopRecordingCalls += 1

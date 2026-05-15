@@ -71,7 +71,69 @@ class RecordingSessionControllerTest {
 
             assertTrue(notified)
             assertNull(sut.recordingTrackId.value)
+            assertNull(sut.optimisticRecordingTrack.value)
             assertFalse(sut.recordingStartup.value)
+            advanceUntilIdle()
+        }
+
+    @Test
+    fun `optimistic recording row is set before native startRecording completes`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+            val audio = FakeAudioController()
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val coord = ProjectRecordingCoordinator(repo, audio)
+            val sut = RecordingSessionController(this, audio, coord)
+            var sawOptimisticBeforeEngineReturn = false
+            audio.onEnterStartRecording = {
+                assertNotNull(sut.optimisticRecordingTrack.value)
+                assertNotNull(sut.recordingTrackId.value)
+                assertEquals(sut.recordingTrackId.value, sut.optimisticRecordingTrack.value?.id)
+                assertFalse(sut.recordingStartup.value)
+                sawOptimisticBeforeEngineReturn = true
+            }
+
+            sut.executeRecordPressed(
+                projectId = PID,
+                projectName = "New",
+                ensureProject = { _, _ -> project() },
+                visibleTrackCount = { 0 },
+                persistRecordingRow = { repo.upsertTracks(listOf(it)) },
+                notifyEngineStartFailed = { throw AssertionError("engine OK") },
+                notifyPersistFailed = { throw AssertionError("persist OK") },
+            )
+
+            assertTrue(sawOptimisticBeforeEngineReturn)
+            advanceUntilIdle()
+        }
+
+    @Test
+    fun `persistRecordingRow runs after optimistic flows are already populated`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+            val audio = FakeAudioController()
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val coord = ProjectRecordingCoordinator(repo, audio)
+            val sut = RecordingSessionController(this, audio, coord)
+            lateinit var idAtPersistEntry: String
+
+            sut.executeRecordPressed(
+                projectId = PID,
+                projectName = "New",
+                ensureProject = { _, _ -> project() },
+                visibleTrackCount = { 0 },
+                persistRecordingRow = { track ->
+                    idAtPersistEntry = track.id
+                    assertNotNull(sut.recordingTrackId.value)
+                    assertEquals(track.id, sut.recordingTrackId.value)
+                    assertNotNull(sut.optimisticRecordingTrack.value)
+                    repo.upsertTracks(listOf(track))
+                },
+                notifyEngineStartFailed = { throw AssertionError("engine OK") },
+                notifyPersistFailed = { throw AssertionError("persist OK") },
+            )
+
+            assertTrue(idAtPersistEntry.isNotEmpty())
             advanceUntilIdle()
         }
 

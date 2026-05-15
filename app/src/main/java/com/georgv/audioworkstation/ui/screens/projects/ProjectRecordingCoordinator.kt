@@ -26,16 +26,20 @@ class ProjectRecordingCoordinator @Inject constructor(
     private val audioController: AudioController,
 ) {
 
-    suspend fun beginRecording(
-        projectId: String,
-        project: ProjectEntity,
-        visibleTrackCount: Int,
-    ): RecordingStartOutcome {
-        val pendingTrack =
-            repo.appendTrackToProject(
-                projectId = projectId,
-                name = "Take ${visibleTrackCount + 1}",
-            )
+    /**
+     * Reserve the next logical take row without starting the recorder (fast path for optimistic UI).
+     */
+    suspend fun allocatePendingRecordingTrack(projectId: String, visibleTrackCount: Int): TrackEntity =
+        repo.appendTrackToProject(
+            projectId = projectId,
+            name = "Take ${visibleTrackCount + 1}",
+        )
+
+    /**
+     * Start native capture for a row already published to the recording session flows.
+     * On success returns the row enriched with output path + recording timestamps.
+     */
+    suspend fun startEngineForAllocatedTrack(project: ProjectEntity, pendingTrack: TrackEntity): RecordingStartOutcome {
         val outputPath =
             audioController.startRecording(project.toRecordingSpec(pendingTrack))
                 ?: return RecordingStartOutcome.EngineStartFailed
@@ -46,6 +50,15 @@ class ProjectRecordingCoordinator @Inject constructor(
                 isRecording = true,
             )
         return RecordingStartOutcome.ReadyToPersistRecordingRow(newTrack)
+    }
+
+    suspend fun beginRecording(
+        projectId: String,
+        project: ProjectEntity,
+        visibleTrackCount: Int,
+    ): RecordingStartOutcome {
+        val pendingTrack = allocatePendingRecordingTrack(projectId, visibleTrackCount)
+        return startEngineForAllocatedTrack(project, pendingTrack)
     }
 
     /**

@@ -36,7 +36,7 @@ fun AppNavHost(
                 onOpenDevices = { navController.navigateSingleTopTo(Routes.DEVICES) },
                 onQuickRecord = {
                     val id = UUID.randomUUID().toString()
-                    navController.navigateSingleTopTo("${Routes.PROJECT}/$id?quick=true")
+                    navController.navigate("${Routes.PROJECT}/$id?quick=true")
                 }
             )
         }
@@ -47,12 +47,17 @@ fun AppNavHost(
                 onProjectCreated = { projectId ->
                     navController.navigate("${Routes.PROJECT}/$projectId?quick=false") {
                         popUpTo(Routes.CREATE_PROJECT) { inclusive = true }
-                        launchSingleTop = true
                     }
                 }
             )
         }
 
+        /**
+         * Project editor/detail route — each navigation pushes a fresh destination so [ProjectScreen]
+         * gets a new ViewModel instance; switching projects should go through navigation here, not by
+         * rebinding an existing VM. [ProjectViewModel.bind] is only for establishing that screen's initial
+         * project after composition (single binding per destination lifecycle).
+         */
         composable(
             route = Routes.PROJECT_WITH_ID,
             arguments = listOf(
@@ -74,9 +79,7 @@ fun AppNavHost(
             LibraryScreen(
                 onBack = { navController.popBackStack() },
                 onOpenProject = { projectId ->
-                    navController.navigate("${Routes.PROJECT}/$projectId?quick=false") {
-                        launchSingleTop = true
-                    }
+                    navController.navigate("${Routes.PROJECT}/$projectId?quick=false")
                 }
             )
         }

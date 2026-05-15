@@ -60,7 +60,11 @@ class RecordingSessionController(
         }
     }
 
-    /** Inlined legacy [ProjectViewModel.onRecordPressed] coroutine body (same try/finally and rollback). */
+    /**
+     * Recording entry: publish an optimistic row immediately after pending allocation, then start
+     * the native recorder and persist — same rollback/stop semantics as the pre–Phase-3 flow except
+     * for earlier UI updates.
+     */
     suspend fun executeRecordPressed(
         projectId: String,
         projectName: String,
@@ -76,16 +80,27 @@ class RecordingSessionController(
                 return
             }
 
+            val pendingTrack =
+                recordingCoordinator.allocatePendingRecordingTrack(
+                    projectId = projectId,
+                    visibleTrackCount = visibleTrackCount(),
+                )
+
+            _optimisticRecordingTrack.value = pendingTrack.copy(isRecording = true)
+            _recordingTrackId.value = pendingTrack.id
+            _recordingStartup.value = false
+
             val newTrack =
                 when (
                     val startOutcome =
-                        recordingCoordinator.beginRecording(
-                            projectId = projectId,
+                        recordingCoordinator.startEngineForAllocatedTrack(
                             project = currentProject,
-                            visibleTrackCount = visibleTrackCount(),
+                            pendingTrack = pendingTrack,
                         )
                 ) {
                     RecordingStartOutcome.EngineStartFailed -> {
+                        _optimisticRecordingTrack.value = null
+                        _recordingTrackId.value = null
                         _recordingStartup.value = false
                         notifyEngineStartFailed()
                         return
@@ -94,8 +109,6 @@ class RecordingSessionController(
                 }
 
             _optimisticRecordingTrack.value = newTrack
-            _recordingTrackId.value = newTrack.id
-            _recordingStartup.value = false
 
             try {
                 persistRecordingRow(newTrack)
