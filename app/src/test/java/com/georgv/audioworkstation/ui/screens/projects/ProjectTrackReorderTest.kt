@@ -1,9 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.drag.DragController
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

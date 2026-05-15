@@ -36,7 +36,7 @@ fun TrackDragOverlay(
     modifier: Modifier = Modifier
 ) {
     val rawTranslationY =
-        dragController.fingerPos.y - dragController.dragOffset.y - parentTopInRootPx
+        dragController.fingerY - dragController.dragOffset.y - parentTopInRootPx
     val maxTranslationY =
         (parentHeightPx - dragController.overlayHeightPx).coerceAtLeast(0f)
     val translationY = rawTranslationY.coerceIn(0f, maxTranslationY)

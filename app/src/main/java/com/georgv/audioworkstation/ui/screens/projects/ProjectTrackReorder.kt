@@ -29,7 +29,7 @@ fun neighborSwapOnPageOrNull(
     }
 
     val draggedCenterRootY =
-        dragController.fingerPos.y -
+        dragController.fingerY -
             dragController.dragOffset.y +
             dragController.overlayHeightPx / 2f
 

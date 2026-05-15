@@ -14,11 +14,11 @@ class DragController {
     var draggingKey: String? by mutableStateOf(null)
         private set
 
-    /** Current finger position in root coordinates. */
-    var fingerPos: Offset by mutableStateOf(Offset.Zero)
+    /** Finger Y in root coordinates; only Y changes during drag (narrower invalidation than full [Offset]). */
+    var fingerY: Float by mutableFloatStateOf(0f)
         private set
 
-    /** Finger minus item top-left at drag start; overlay top Y = fingerPos.y - dragOffset.y */
+    /** Finger minus item top-left at drag start; overlay top Y = fingerY - dragOffset.y */
     var dragOffset: Offset by mutableStateOf(Offset.Zero)
         private set
 
@@ -46,17 +46,17 @@ class DragController {
         this.fixedXInParentPx = fixedXInParentPx
         this.overlayWidthPx = overlayWidthPx
         this.overlayHeightPx = overlayHeightPx
-        fingerPos = startPos
+        fingerY = startPos.y
     }
 
     fun update(pos: Offset) {
         if (!isDragging) return
-        fingerPos = Offset(fingerPos.x, pos.y)
+        fingerY = pos.y
     }
 
     fun end() {
         draggingKey = null
-        fingerPos = Offset.Zero
+        fingerY = 0f
         dragOffset = Offset.Zero
         fixedXInParentPx = 0f
         overlayWidthPx = 0f

@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +44,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -191,7 +191,6 @@ fun ProjectTrackList(
 
     var listBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
     var listParentBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
-    var dragHostCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val itemBoundsMap = remember { mutableStateMapOf<String, Rect>() }
     var dropSettle by remember { mutableStateOf<DropSettleSnap?>(null) }
     var nextSettleUid by remember { mutableLongStateOf(1L) }
@@ -205,10 +204,29 @@ fun ProjectTrackList(
 
     var neighborSwapCooldownUntilMs by remember { mutableLongStateOf(0L) }
     var lastNeighborSwapEvalUptimeMs by remember { mutableLongStateOf(0L) }
+    var draggingGlobalIndex by remember { mutableIntStateOf(-1) }
 
     fun emitLocalReorderIfChanged(reordered: List<TrackEntity>): Boolean {
-        if (reordered.map { it.id } == tracksSnap.map { it.id }) return false
-        latestOnReorderTracks(reordered)
+        val cur = tracksSnap
+        if (reordered.size != cur.size) {
+            latestOnReorderTracks(reordered)
+            return true
+        }
+        for (i in reordered.indices) {
+            if (reordered[i].id != cur[i].id) {
+                latestOnReorderTracks(reordered)
+                return true
+            }
+        }
+        return false
+    }
+
+    fun emitReorderAndRefreshDraggingIndex(reordered: List<TrackEntity>): Boolean {
+        if (!emitLocalReorderIfChanged(reordered)) return false
+        val k = dragController.draggingKey
+        if (k != null) {
+            draggingGlobalIndex = reordered.indexOfFirst { it.id == k }
+        }
         return true
     }
 
@@ -216,6 +234,7 @@ fun ProjectTrackList(
         if (dragController.draggingKey == null) {
             neighborSwapCooldownUntilMs = 0L
             lastNeighborSwapEvalUptimeMs = 0L
+            draggingGlobalIndex = -1
         }
     }
 
@@ -281,7 +300,7 @@ fun ProjectTrackList(
                 val hPx = dragController.overlayHeightPx
 
                 val startY =
-                    (dragController.fingerPos.y -
+                    (dragController.fingerY -
                         dragController.dragOffset.y -
                         parentTop).coerceIn(
                         0f,
@@ -455,8 +474,9 @@ fun ProjectTrackList(
                     with(density) { 44.dp.toPx() }
                 }
 
-            // Do not key on listBoundsInRoot or currentPage: layout + onGloballyPositioned restarts
-            // would reset the edge-hold timer so the boundary swap never fires.
+            // Movement updates come only from TrackReorderHandle (captures pointer during drag).
+            // This block detects release -> completeDrop. Do not duplicate dragController.update here.
+            // Do not key on listBoundsInRoot or currentPage: layout restarts would reset edge-hold state.
             LaunchedEffect(dragController.draggingKey, pageSize, edgeBandPx) {
                 if (dragController.draggingKey == null) {
                     edgeHoldBanner = EdgeHoldBanner.None
@@ -466,7 +486,7 @@ fun ProjectTrackList(
                 var zoneEnterUptimeMs = 0L
                 snapshotFlow {
                     EdgeHoldSnapshot(
-                        fingerYRoot = dragController.fingerPos.y,
+                        fingerYRoot = dragController.fingerY,
                         draggingKey = dragController.draggingKey,
                         listBounds = listBoundsInRoot,
                         currentPage = pagerState.currentPage,
@@ -476,93 +496,97 @@ fun ProjectTrackList(
                     val draggingKeySnap = snap.draggingKey
                     val lb = snap.listBounds
                     val currentPageIdxSnap = snap.currentPage
-                    if (draggingKeySnap == null) {
-                        edgeHoldBanner = EdgeHoldBanner.None
-                        armedZone = EdgeHoldZone.None
-                        return@collect
-                    }
-                    val list = tracksSnap
-                    val key = draggingKeySnap
-                    val gi = list.indexOfFirst { it.id == key }
-                    if (gi < 0 || lb.isEmpty) {
-                        edgeHoldBanner = EdgeHoldBanner.None
-                        armedZone = EdgeHoldZone.None
-                        return@collect
-                    }
-                    val currentPageIdx = currentPageIdxSnap.coerceAtLeast(0)
-                    val start = pageStartIndex(currentPageIdx, pageSize)
-                    val end = pageEndExclusive(list.size, currentPageIdx, pageSize)
-                    val inBottomBand = fingerYRoot >= lb.bottom - edgeBandPx
-                    val inTopBand = fingerYRoot <= lb.top + edgeBandPx
-                    val canMoveDown = gi == end - 1 && end < list.size
-                    val canMoveUp = gi == start && start > 0
-                    val now = SystemClock.uptimeMillis()
-                    val candidate =
-                        when {
-                            canMoveDown && inBottomBand -> EdgeHoldZone.Bottom
-                            canMoveUp && inTopBand -> EdgeHoldZone.Top
-                            else -> EdgeHoldZone.None
-                        }
-                    if (candidate == EdgeHoldZone.None) {
-                        armedZone = EdgeHoldZone.None
-                        edgeHoldBanner = EdgeHoldBanner.None
-                        return@collect
-                    }
-                    if (candidate != armedZone) {
-                        armedZone = candidate
-                        zoneEnterUptimeMs = now
-                    }
-                    val heldMs = now - zoneEnterUptimeMs
-                    if (heldMs < PageEdgeHoldMs) {
-                        val p = heldMs / PageEdgeHoldMs.toFloat()
-                        edgeHoldBanner =
-                            when (armedZone) {
-                                EdgeHoldZone.Bottom -> EdgeHoldBanner.Bottom(p)
-                                EdgeHoldZone.Top -> EdgeHoldBanner.Top(p)
-                                EdgeHoldZone.None -> EdgeHoldBanner.None
-                            }
-                        return@collect
-                    }
-                    val reordered =
-                        when (armedZone) {
-                            EdgeHoldZone.Bottom -> swapAdjacentAtBoundaryDown(list, gi)
-                            EdgeHoldZone.Top -> swapAdjacentAtBoundaryUp(list, gi)
-                            EdgeHoldZone.None -> null
-                        }
-                    val transitionDown = armedZone == EdgeHoldZone.Bottom
-                    val transitionUp = armedZone == EdgeHoldZone.Top
-                    armedZone = EdgeHoldZone.None
-                    edgeHoldBanner = EdgeHoldBanner.None
-                    zoneEnterUptimeMs = SystemClock.uptimeMillis()
-                    if (reordered != null) {
-                        emitLocalReorderIfChanged(reordered)
-                        val lastPage = pageCount(reordered.size, pageSize).coerceAtLeast(1) - 1
-                        when {
-                            transitionDown ->
-                                pagerState.scrollToPage(
-                                    (currentPageIdx + 1).coerceAtMost(lastPage),
-                                )
-                            transitionUp ->
-                                pagerState.scrollToPage(
-                                    (currentPageIdx - 1).coerceAtLeast(0),
-                                )
-                        }
-                    }
-                }
-            }
 
-            LaunchedEffect(dragController.draggingKey, pageSize) {
-                if (dragController.draggingKey == null) return@LaunchedEffect
-                snapshotFlow {
-                    Pair(dragController.fingerPos, pagerState.currentPage)
-                }.collect { (_, _) ->
+                    if (draggingKeySnap != null) {
+                        val list = tracksSnap
+                        val key = draggingKeySnap
+                        val gi =
+                            draggingGlobalIndex.let { cached ->
+                                if (cached >= 0 && cached < list.size && list[cached].id == key) {
+                                    cached
+                                } else {
+                                    val found = list.indexOfFirst { it.id == key }
+                                    if (found >= 0) draggingGlobalIndex = found
+                                    found
+                                }
+                            }
+
+                        if (gi < 0 || lb.isEmpty) {
+                            edgeHoldBanner = EdgeHoldBanner.None
+                            armedZone = EdgeHoldZone.None
+                        } else {
+                            val currentPageIdx = currentPageIdxSnap.coerceAtLeast(0)
+                            val start = pageStartIndex(currentPageIdx, pageSize)
+                            val end = pageEndExclusive(list.size, currentPageIdx, pageSize)
+                            val inBottomBand = fingerYRoot >= lb.bottom - edgeBandPx
+                            val inTopBand = fingerYRoot <= lb.top + edgeBandPx
+                            val canMoveDown = gi == end - 1 && end < list.size
+                            val canMoveUp = gi == start && start > 0
+                            val now = SystemClock.uptimeMillis()
+                            val candidate =
+                                when {
+                                    canMoveDown && inBottomBand -> EdgeHoldZone.Bottom
+                                    canMoveUp && inTopBand -> EdgeHoldZone.Top
+                                    else -> EdgeHoldZone.None
+                                }
+                            if (candidate == EdgeHoldZone.None) {
+                                armedZone = EdgeHoldZone.None
+                                edgeHoldBanner = EdgeHoldBanner.None
+                            } else {
+                                if (candidate != armedZone) {
+                                    armedZone = candidate
+                                    zoneEnterUptimeMs = now
+                                }
+                                val heldMs = now - zoneEnterUptimeMs
+                                if (heldMs < PageEdgeHoldMs) {
+                                    val p = heldMs / PageEdgeHoldMs.toFloat()
+                                    edgeHoldBanner =
+                                        when (armedZone) {
+                                            EdgeHoldZone.Bottom -> EdgeHoldBanner.Bottom(p)
+                                            EdgeHoldZone.Top -> EdgeHoldBanner.Top(p)
+                                            EdgeHoldZone.None -> EdgeHoldBanner.None
+                                        }
+                                } else {
+                                    val reordered =
+                                        when (armedZone) {
+                                            EdgeHoldZone.Bottom -> swapAdjacentAtBoundaryDown(list, gi)
+                                            EdgeHoldZone.Top -> swapAdjacentAtBoundaryUp(list, gi)
+                                            EdgeHoldZone.None -> null
+                                        }
+                                    val transitionDown = armedZone == EdgeHoldZone.Bottom
+                                    val transitionUp = armedZone == EdgeHoldZone.Top
+                                    armedZone = EdgeHoldZone.None
+                                    edgeHoldBanner = EdgeHoldBanner.None
+                                    zoneEnterUptimeMs = SystemClock.uptimeMillis()
+                                    if (reordered != null) {
+                                        emitReorderAndRefreshDraggingIndex(reordered)
+                                        val lastPage = pageCount(reordered.size, pageSize).coerceAtLeast(1) - 1
+                                        when {
+                                            transitionDown ->
+                                                pagerState.scrollToPage(
+                                                    (currentPageIdx + 1).coerceAtMost(lastPage),
+                                                )
+                                            transitionUp ->
+                                                pagerState.scrollToPage(
+                                                    (currentPageIdx - 1).coerceAtLeast(0),
+                                                )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        edgeHoldBanner = EdgeHoldBanner.None
+                        armedZone = EdgeHoldZone.None
+                    }
+
                     if (!dragController.isDragging) return@collect
-                    val now = SystemClock.uptimeMillis()
-                    if (now < neighborSwapCooldownUntilMs) return@collect
-                    if (now - lastNeighborSwapEvalUptimeMs < NeighborSwapEvalMinIntervalMs) {
+                    val nowNeighbor = SystemClock.uptimeMillis()
+                    if (nowNeighbor < neighborSwapCooldownUntilMs) return@collect
+                    if (nowNeighbor - lastNeighborSwapEvalUptimeMs < NeighborSwapEvalMinIntervalMs) {
                         return@collect
                     }
-                    lastNeighborSwapEvalUptimeMs = now
+                    lastNeighborSwapEvalUptimeMs = nowNeighbor
                     val currentPageIdx = pagerState.currentPage.coerceAtLeast(0)
                     val start = pageStartIndex(currentPageIdx, pageSize)
                     val end =
@@ -576,8 +600,8 @@ fun ProjectTrackList(
                             itemBoundsMap,
                         )
                             ?: return@collect
-                    if (emitLocalReorderIfChanged(reordered)) {
-                        neighborSwapCooldownUntilMs = now + ReorderSwapCooldownMs
+                    if (emitReorderAndRefreshDraggingIndex(reordered)) {
+                        neighborSwapCooldownUntilMs = nowNeighbor + ReorderSwapCooldownMs
                     }
                 }
             }
@@ -588,22 +612,12 @@ fun ProjectTrackList(
                         .fillMaxSize()
                         .onGloballyPositioned { coords ->
                             listParentBoundsInRoot = coords.boundsInRoot()
-                            dragHostCoords = coords
                         }
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 do {
                                     val event = awaitPointerEvent()
                                     if (dragController.isDragging) {
-                                        val pressed =
-                                            event.changes.firstOrNull {
-                                                it.pressed
-                                            }
-                                        val coords = dragHostCoords
-                                        if (pressed != null && coords != null) {
-                                            dragController.update(coords.localToRoot(pressed.position))
-                                            pressed.consume()
-                                        }
                                         if (event.changes.none { it.pressed }) {
                                             latestCompleteDrop()
                                         }
@@ -694,11 +708,13 @@ fun ProjectTrackList(
                                             overlayWidthPx = bounds.right - bounds.left,
                                             overlayHeightPx = bounds.bottom - bounds.top
                                         )
+                                        draggingGlobalIndex =
+                                            tracksSnap.indexOfFirst { it.id == track.id }
                                     },
                                     onDragHandleMove = { positionInRoot ->
                                         dragController.update(positionInRoot)
                                     },
-                                    onDragHandleEnd = { },
+                                    onDragHandleEnd = { latestCompleteDrop() },
                                     isMenuOpen = openOverflowMenuTrackId == track.id,
                                     onMenuOpen = {
                                         openOverflowMenuTrackId = track.id
