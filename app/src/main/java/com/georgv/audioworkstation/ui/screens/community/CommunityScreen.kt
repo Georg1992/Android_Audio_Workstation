@@ -9,7 +9,7 @@ import com.georgv.audioworkstation.ui.screens.common.PlaceholderScreen
 fun CommunityScreen(onBack: () -> Unit) {
     PlaceholderScreen(
         title = stringResource(R.string.screen_community),
-        body = "Community Screen",
+        body = stringResource(R.string.screen_community_placeholder_body),
         onBack = onBack
     )
 }

@@ -13,6 +13,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * JNI-backed [AudioController]. After [startPlayback] succeeds, [playbackState] is updated from a
+ * background poll of [NativeEngine.isPlaybackActive]. Screen code may also observe the same flow
+ * for sequencing (for example loop restarts)—keep behavior aligned if either side changes.
+ */
 @Singleton
 class NativeAudioController @Inject constructor(
     private val nativeEngine: NativeEngine,

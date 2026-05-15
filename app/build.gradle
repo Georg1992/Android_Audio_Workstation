@@ -22,7 +22,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments "-DBUILD_RINGBUFFER_GTESTS=ON"
+                // Keeps CMake from pulling GoogleTest/FetchContent on every dev build. To run native
+                // RingBuffer tests, temporarily use ON here or duplicate this block under `debug`.
+                arguments "-DBUILD_RINGBUFFER_GTESTS=OFF"
             }
         }
     }

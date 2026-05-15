@@ -22,6 +22,7 @@ import com.georgv.audioworkstation.core.validation.validateName
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -361,18 +362,13 @@ class ProjectViewModel @Inject constructor(
     fun setTrackOrderSession(projectId: String, orderedTracks: List<TrackEntity>) {
         if (this.projectId.value != projectId) return
         if (orderedTracks.isEmpty()) return
-        val live = uiState.value.tracks.associateBy { it.id }
-        val merged = orderedTracks
-            .filter { it.id in live }
-            .mapIndexed { index, row -> live.getValue(row.id).copy(position = index) }
-        if (merged.isEmpty()) return
-        val presentIds = merged.map { it.id }.toSet()
-        val trailing = uiState.value.tracks
-            .filter { it.id !in presentIds }
-            .sortedBy { it.position }
-            .mapIndexed { i, t -> t.copy(position = merged.size + i) }
-        val next = merged + trailing
-        if (next.map { it.id } == uiState.value.tracks.map { it.id }) return
+
+        val next =
+            OptimisticTrackOrder.applySession(
+                liveTracks = uiState.value.tracks,
+                proposedOrder = orderedTracks,
+            )
+                ?: return
         optimisticTracks.value = next
     }
 
@@ -604,4 +600,5 @@ class ProjectViewModel @Inject constructor(
             }
         }
     }
+
 }

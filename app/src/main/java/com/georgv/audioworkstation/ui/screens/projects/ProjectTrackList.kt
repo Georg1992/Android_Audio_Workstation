@@ -598,6 +598,7 @@ fun ProjectTrackList(
                             start,
                             end,
                             itemBoundsMap,
+                            knownGlobalIndex = draggingGlobalIndex,
                         )
                             ?: return@collect
                     if (emitReorderAndRefreshDraggingIndex(reordered)) {

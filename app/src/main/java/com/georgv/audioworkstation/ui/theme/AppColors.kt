@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 object AppColors {
     // pipette palette
+    /** App window / scaffold background — keep in sync with `@color/app_window_bg` for themes.xml. */
     val Bg = Color(0xFFF2F2F2)
     val Line = Color(0xFF000000)
 

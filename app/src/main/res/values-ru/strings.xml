@@ -25,6 +25,8 @@
     <string name="screen_library">Библиотека</string>
     <string name="screen_community">Сообщество</string>
     <string name="screen_devices">Устройства</string>
+    <string name="screen_community_placeholder_body">Здесь позже появятся функции сообщества.</string>
+    <string name="screen_devices_placeholder_body">Здесь появятся аудиоустройства и управление Bluetooth.</string>
 
     <!-- Create Project screen -->
     <string name="create_project_name_label">Название проекта</string>

@@ -25,6 +25,8 @@
     <string name="screen_library">Library</string>
     <string name="screen_community">Community</string>
     <string name="screen_devices">Devices</string>
+    <string name="screen_community_placeholder_body">Community features will appear here.</string>
+    <string name="screen_devices_placeholder_body">Audio devices and Bluetooth controls will appear here.</string>
 
     <!-- Create Project screen -->
     <string name="create_project_name_label">Project name</string>

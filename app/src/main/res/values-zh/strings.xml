@@ -29,6 +29,8 @@
     <string name="screen_library">库</string>
     <string name="screen_community">社区</string>
     <string name="screen_devices">设备</string>
+    <string name="screen_community_placeholder_body">社区功能将在此处提供。</string>
+    <string name="screen_devices_placeholder_body">音频设备与蓝牙控制将在此处提供。</string>
 
     <!-- Create Project screen -->
     <string name="create_project_name_label">项目名称</string>

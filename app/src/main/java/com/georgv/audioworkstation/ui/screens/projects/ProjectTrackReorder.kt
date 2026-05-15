@@ -18,9 +18,19 @@ fun neighborSwapOnPageOrNull(
     pageStartGlobalIndex: Int,
     pageEndExclusiveGlobal: Int,
     boundsByTrackId: Map<String, Rect>,
+    /** If [tracks] at this index holds [dragController.draggingKey], avoids a full list scan. Use -1 when unknown. */
+    knownGlobalIndex: Int = -1,
 ): List<TrackEntity>? {
     val key = dragController.draggingKey ?: return null
-    val globalIdx = tracks.indexOfFirst { it.id == key }
+    val globalIdx =
+        if (knownGlobalIndex >= 0 &&
+            knownGlobalIndex < tracks.size &&
+            tracks[knownGlobalIndex].id == key
+        ) {
+            knownGlobalIndex
+        } else {
+            tracks.indexOfFirst { it.id == key }
+        }
     if (globalIdx < 0 ||
         globalIdx < pageStartGlobalIndex ||
         globalIdx >= pageEndExclusiveGlobal

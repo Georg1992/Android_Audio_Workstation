@@ -11,8 +11,9 @@ import kotlinx.coroutines.flow.map
 import java.util.Locale
 import javax.inject.Inject
 
-class LanguageRepository @Inject constructor(
-    @ApplicationContext context: Context
+/** Persists the user-selected locale tag via Datastore (not a Room/domain repository). */
+class AppLanguageStore @Inject constructor(
+    @ApplicationContext context: Context,
 ) {
 
     private val appContext = context.applicationContext

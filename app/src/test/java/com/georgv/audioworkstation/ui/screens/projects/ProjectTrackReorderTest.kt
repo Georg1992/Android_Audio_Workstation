@@ -1,6 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.drag.DragController
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -59,6 +62,103 @@ class ProjectTrackReorderTest {
         assertEquals(2, target)
     }
 
+    @Test
+    fun `neighborSwapOnPageOrNull uses knownGlobalIndex when it matches dragging key`() {
+        val tracks = testTracks()
+        val listTop = 100f
+        val slotH = 50f
+        val gap = 10f
+        val stride = slotH + gap
+        val bounds =
+            tracks.mapIndexed { index, t ->
+                val top = listTop + index * stride
+                t.id to Rect(0f, top, 200f, top + slotH)
+            }.toMap()
+        val dc = DragController()
+        val b = bounds.getValue("2")
+        val finger = Offset(10f, (b.top + b.bottom) / 2f)
+        dc.start(
+            key = "2",
+            startPos = finger,
+            offsetFromFingerToItemTopLeft = finger - Offset(b.left, b.top),
+            fixedXInParentPx = 0f,
+            overlayWidthPx = b.width,
+            overlayHeightPx = b.height,
+        )
+        val nextCenter = listTop + 2 * stride + slotH / 2f
+        val threshold = b.bottom + ReorderVisibleNeighborEarlyFraction * (nextCenter - b.bottom)
+        dc.update(Offset(10f, threshold + 5f))
+
+        val withHint =
+            neighborSwapOnPageOrNull(
+                tracks,
+                dc,
+                pageStartGlobalIndex = 0,
+                pageEndExclusiveGlobal = 4,
+                boundsByTrackId = bounds,
+                knownGlobalIndex = 1,
+            )
+        val withoutHint =
+            neighborSwapOnPageOrNull(
+                tracks,
+                dc,
+                pageStartGlobalIndex = 0,
+                pageEndExclusiveGlobal = 4,
+                boundsByTrackId = bounds,
+                knownGlobalIndex = -1,
+            )
+        assertEquals(withHint?.map { it.id }, withoutHint?.map { it.id })
+    }
+
+    @Test
+    fun `neighborSwapOnPageOrNull ignores knownGlobalIndex when id does not match`() {
+        val tracks = testTracks()
+        val listTop = 100f
+        val slotH = 50f
+        val gap = 10f
+        val stride = slotH + gap
+        val bounds =
+            tracks.mapIndexed { index, t ->
+                val top = listTop + index * stride
+                t.id to Rect(0f, top, 200f, top + slotH)
+            }.toMap()
+        val dc = DragController()
+        val b = bounds.getValue("2")
+        val finger = Offset(10f, (b.top + b.bottom) / 2f)
+        dc.start(
+            key = "2",
+            startPos = finger,
+            offsetFromFingerToItemTopLeft = finger - Offset(b.left, b.top),
+            fixedXInParentPx = 0f,
+            overlayWidthPx = b.width,
+            overlayHeightPx = b.height,
+        )
+        val nextCenter = listTop + 2 * stride + slotH / 2f
+        val threshold = b.bottom + ReorderVisibleNeighborEarlyFraction * (nextCenter - b.bottom)
+        dc.update(Offset(10f, threshold + 5f))
+
+        val wrongHint =
+            neighborSwapOnPageOrNull(
+                tracks,
+                dc,
+                pageStartGlobalIndex = 0,
+                pageEndExclusiveGlobal = 4,
+                boundsByTrackId = bounds,
+                knownGlobalIndex = 0,
+            )
+        val withoutHint =
+            neighborSwapOnPageOrNull(
+                tracks,
+                dc,
+                pageStartGlobalIndex = 0,
+                pageEndExclusiveGlobal = 4,
+                boundsByTrackId = bounds,
+                knownGlobalIndex = -1,
+            )
+        assertEquals(wrongHint?.map { it.id }, withoutHint?.map { it.id })
+    }
+
+    @Test
     fun `moveTrack moves first item down one step`() {
         val reordered = moveTrack(testTracks(), fromIndex = 0, toIndex = 1)
 

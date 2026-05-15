@@ -33,6 +33,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestWatcher
@@ -392,6 +393,34 @@ class ProjectViewModelTest {
         val persisted = dao.observeTracks(PROJECT_ID).first()
         assertEquals(listOf("b", "c", "a"), persisted.map { it.id })
         assertEquals(listOf(0, 1, 2), persisted.map { it.position })
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `setTrackOrderSession swaps two adjacent tracks with updated positions only on those rows`() = runTest {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(
+                track(id = "a", position = 0),
+                track(id = "b", position = 1),
+                track(id = "c", position = 2)
+            )
+        )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        val before = vm.uiState.value.tracks
+        val proposed = listOf(before[1], before[0], before[2])
+        vm.setTrackOrderSession(PROJECT_ID, proposed)
+        advanceUntilIdle()
+
+        val after = vm.uiState.value.tracks
+        assertEquals(listOf("b", "a", "c"), after.map { it.id })
+        assertEquals(listOf(0, 1, 2), after.map { it.position })
+        assertSame(before[2], after[2])
         collectJob.cancel()
     }
 

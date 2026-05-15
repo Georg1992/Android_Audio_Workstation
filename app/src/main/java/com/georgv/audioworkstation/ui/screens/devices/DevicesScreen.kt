@@ -9,7 +9,7 @@ import com.georgv.audioworkstation.ui.screens.common.PlaceholderScreen
 fun DevicesScreen(onBack: () -> Unit) {
     PlaceholderScreen(
         title = stringResource(R.string.screen_devices),
-        body = "Devices Screen",
+        body = stringResource(R.string.screen_devices_placeholder_body),
         onBack = onBack
     )
 }
