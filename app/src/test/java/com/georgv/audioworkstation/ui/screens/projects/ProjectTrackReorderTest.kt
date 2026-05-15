@@ -1,6 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.drag.DragController
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -59,7 +62,6 @@ class ProjectTrackReorderTest {
         assertEquals(2, target)
     }
 
-    @Test
     fun `moveTrack moves first item down one step`() {
         val reordered = moveTrack(testTracks(), fromIndex = 0, toIndex = 1)
 

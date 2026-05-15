@@ -74,23 +74,6 @@ private const val DropSettleDurationMs = 150
 
 private const val PageEdgeHoldMs = 850
 
-/** Single owner of drag visuals: idle, finger-driven overlay, or settle overlay (never two). */
-private enum class DragVisualPhase {
-    Idle,
-    Dragging,
-    Settling,
-}
-
-private fun dragVisualPhase(
-    dropSettle: DropSettleSnap?,
-    draggingKey: String?,
-): DragVisualPhase =
-    when {
-        dropSettle != null -> DragVisualPhase.Settling
-        draggingKey != null -> DragVisualPhase.Dragging
-        else -> DragVisualPhase.Idle
-    }
-
 /** Ignore subpixel onGloballyPositioned noise so layout during placement does not rewrite bounds map. */
 private const val ItemBoundsEpsilonPx = 1f
 
@@ -240,8 +223,7 @@ fun ProjectTrackList(
         if (recordingTrackId == null) lastRecordingPageJumpForId = null
     }
 
-    val dragPhase = dragVisualPhase(dropSettle, dragController.draggingKey)
-    val listInteractionLocked = dragPhase != DragVisualPhase.Idle
+    val listInteractionLocked = dragController.isDragging || dropSettle != null
     val reorderActive = dragController.isDragging
 
     LaunchedEffect(listInteractionLocked) {
@@ -730,13 +712,8 @@ fun ProjectTrackList(
                             }
 
                             val isGhostRow =
-                                when (dragPhase) {
-                                    DragVisualPhase.Dragging ->
-                                        dragController.draggingKey == track.id
-                                    DragVisualPhase.Settling ->
-                                        dropSettle?.trackId == track.id
-                                    DragVisualPhase.Idle -> false
-                                }
+                                (reorderActive && dragController.draggingKey == track.id) ||
+                                    (dropSettle?.trackId == track.id)
 
                             val currentPagerPage = pagerState.currentPage
                             val incomingSession =
@@ -842,46 +819,44 @@ fun ProjectTrackList(
                     }
                 }
 
-                when (dragPhase) {
-                    DragVisualPhase.Settling -> {
-                        val settleSnap = dropSettle
-                        if (settleSnap != null) {
-                            val settleYAnim =
-                                remember(settleSnap.settleUid) {
-                                    Animatable(settleSnap.startTranslationYPx)
-                                }
-                            LaunchedEffect(settleSnap.settleUid) {
-                                try {
-                                    settleYAnim.snapTo(settleSnap.startTranslationYPx)
-                                    settleYAnim.animateTo(
-                                        settleSnap.targetTranslationYPx,
-                                        animationSpec =
-                                            tween(
-                                                durationMillis = DropSettleDurationMs,
-                                                easing = FastOutSlowInEasing,
-                                            ),
-                                    )
-                                } finally {
-                                    if (dropSettle?.settleUid == settleSnap.settleUid) {
-                                        dropSettle = null
-                                    }
+                val settleSnap = dropSettle
+                when {
+                    settleSnap != null -> {
+                        val settleYAnim =
+                            remember(settleSnap.settleUid) {
+                                Animatable(settleSnap.startTranslationYPx)
+                            }
+                        LaunchedEffect(settleSnap.settleUid) {
+                            try {
+                                settleYAnim.snapTo(settleSnap.startTranslationYPx)
+                                settleYAnim.animateTo(
+                                    settleSnap.targetTranslationYPx,
+                                    animationSpec =
+                                        tween(
+                                            durationMillis = DropSettleDurationMs,
+                                            easing = FastOutSlowInEasing,
+                                        ),
+                                )
+                            } finally {
+                                if (dropSettle?.settleUid == settleSnap.settleUid) {
+                                    dropSettle = null
                                 }
                             }
-                            TrackDragSettlingOverlay(
-                                modifier = Modifier.zIndex(1f),
-                                track = settleSnap.track,
-                                isSelected = settleSnap.isSelected,
-                                isRecording = settleSnap.isRecording,
-                                gain = settleSnap.gain,
-                                translationXInParentPx = settleSnap.fixedXInParentPx,
-                                translationYInParentPx = settleYAnim.value,
-                                overlayWidthPx = settleSnap.overlayWidthPx,
-                                overlayHeightPx = settleSnap.overlayHeightPx,
-                            )
                         }
+                        TrackDragSettlingOverlay(
+                            modifier = Modifier.zIndex(1f),
+                            track = settleSnap.track,
+                            isSelected = settleSnap.isSelected,
+                            isRecording = settleSnap.isRecording,
+                            gain = settleSnap.gain,
+                            translationXInParentPx = settleSnap.fixedXInParentPx,
+                            translationYInParentPx = settleYAnim.value,
+                            overlayWidthPx = settleSnap.overlayWidthPx,
+                            overlayHeightPx = settleSnap.overlayHeightPx,
+                        )
                     }
 
-                    DragVisualPhase.Dragging -> {
+                    dragController.isDragging -> {
                         val draggedTrack =
                             dragController.draggingKey?.let { id ->
                                 tracksSnap.find { it.id == id }
@@ -902,8 +877,6 @@ fun ProjectTrackList(
                             )
                         }
                     }
-
-                    DragVisualPhase.Idle -> Unit
                 }
             }
         }
