@@ -57,6 +57,33 @@ data class PlaybackSpec(
     val gain: Float
 )
 
+data class TrackPlaybackLane(
+    val trackId: String,
+    val wavFilePath: String,
+    val gain: Float
+) {
+    init {
+        require(wavFilePath.isNotBlank()) { "Playback lane requires a WAV path." }
+        require(gain in 0f..1f) { "Playback lane gain must be normalized to 0..1." }
+    }
+}
+
+data class MultiPlaybackSpec(
+    val sampleRate: Int,
+    val lanes: List<TrackPlaybackLane>
+) {
+    init {
+        require(ProjectSampleRate.values().any { it.hz == sampleRate }) {
+            "Unsupported playback sample rate: $sampleRate."
+        }
+        require(lanes.size in 1..MaxLanes) { "Multi-playback requires 1..$MaxLanes lanes." }
+    }
+
+    companion object {
+        const val MaxLanes = 8
+    }
+}
+
 fun ProjectEntity.toRecordingSpec(track: TrackEntity): RecordingSpec =
     RecordingSpec(
         projectId = id,
@@ -84,3 +111,21 @@ fun ProjectEntity.toPlaybackSpec(track: TrackEntity): PlaybackSpec? =
                 gain = GainRange.toUnit(track.gain)
             )
         }
+
+fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackSpec? {
+    val lanes = tracks
+        .mapNotNull { track ->
+            track.wavFilePath
+                .takeIf { it.isNotBlank() }
+                ?.let { wavFilePath ->
+                    TrackPlaybackLane(
+                        trackId = track.id,
+                        wavFilePath = wavFilePath,
+                        gain = GainRange.toUnit(track.gain)
+                    )
+                }
+        }
+
+    if (lanes.size !in 1..MultiPlaybackSpec.MaxLanes) return null
+    return MultiPlaybackSpec(sampleRate = sampleRate, lanes = lanes)
+}

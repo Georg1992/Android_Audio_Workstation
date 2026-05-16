@@ -40,19 +40,17 @@ class NativeAudioController @Inject constructor(
 
     override fun startPlayback(spec: PlaybackSpec): Boolean {
         val started = nativeEngine.startPlayback(spec)
-        if (started) {
-            _playbackState.value = true
-            monitorJob?.cancel()
-            // The native engine signals completion only via its `isPlaybackActive` flag, so we
-            // poll it on a background dispatcher and flip the StateFlow. This keeps the polling
-            // out of the ViewModel and lets all callers stay reactive.
-            monitorJob = monitorScope.launch {
-                while (nativeEngine.isPlaybackActive()) {
-                    delay(POLL_INTERVAL_MS)
-                }
-                _playbackState.value = false
-            }
-        }
+        if (started) monitorPlaybackCompletion()
+        return started
+    }
+
+    override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
+        val started = nativeEngine.startMultiPlayback(
+            sampleRate = spec.sampleRate,
+            wavPaths = spec.lanes.map { it.wavFilePath }.toTypedArray(),
+            gains = spec.lanes.map { it.gain.coerceIn(0f, 1f) }.toFloatArray()
+        )
+        if (started) monitorPlaybackCompletion()
         return started
     }
 
@@ -77,5 +75,19 @@ class NativeAudioController @Inject constructor(
 
     private companion object {
         const val POLL_INTERVAL_MS = 50L
+    }
+
+    private fun monitorPlaybackCompletion() {
+        _playbackState.value = true
+        monitorJob?.cancel()
+        // The native engine signals completion only via its `isPlaybackActive` flag, so we
+        // poll it on a background dispatcher and flip the StateFlow. This keeps the polling
+        // out of the ViewModel and lets all callers stay reactive.
+        monitorJob = monitorScope.launch {
+            while (nativeEngine.isPlaybackActive()) {
+                delay(POLL_INTERVAL_MS)
+            }
+            _playbackState.value = false
+        }
     }
 }

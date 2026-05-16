@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -178,6 +179,8 @@ class ProjectTransportControllerTest {
             _playbackState.value = true
             return true
         }
+
+        override fun startPlayback(spec: MultiPlaybackSpec): Boolean = true
 
         override fun setPlaybackGain(gain: Float) = Unit
 

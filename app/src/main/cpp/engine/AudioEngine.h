@@ -2,6 +2,7 @@
 
 #include <oboe/Oboe.h>
 #include <atomic>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -16,21 +17,20 @@ namespace dawengine {
 class IAudioSource;
 
 /**
- * Streaming, single-track audio engine.
+ * Streaming playback engine with a fixed-capacity multi-lane playback skeleton.
  *
- * Recording stays the same as before — capture into a pcm buffer, write WAV on
- * stop. Playback now uses a producer/consumer split:
+ * Recording is unchanged — capture path is separate from playback lanes.
  *
- *  - JNI thread calls [setPlaybackSource], which opens an [IAudioSource] and
- *    arms the engine.
- *  - A dedicated I/O worker thread reads from the source in batches and pushes
- *    PCM frames into a lock-free [RingBuffer].
- *  - The Oboe render callback (audio thread) drains the ring buffer in
- *    [render], with no file I/O and no heap allocation on the callback thread.
+ * Playback uses one dedicated I/O thread that prefetches WAV PCM into per-lane
+ * SPSC [RingBuffer]s; the Oboe callback drains them in [render] without locks
+ * or heap allocation on the realtime thread.
  *
- * The engine deliberately keeps state minimal: a single playable source, no
- * mixer, no time stretching. Multi-track mixing is the next layer of the
- * design and will sit on top of the same source/ring abstraction.
+ * Structural playback mutation invariant:
+ *  - caller/JNI must pause the Oboe render consumer with [pauseForSafeEngineMutation]
+ *  - AudioEngine stops/joins the I/O producer before touching lane rings/sources
+ *
+ * Product playback still uses the single-track surface; the multi-lane JNI
+ * entry point is native-only test plumbing for validating lanes 0..7.
  */
 class AudioEngine {
 public:
@@ -46,30 +46,65 @@ public:
     bool stopRecording();
 
     /**
-     * Arms playback for `wavPath`. Reuses the open source if the path matches
-     * the previous one (cheap rewind), otherwise tears down and opens a fresh
-     * [LocalWavSource]. Returns true if playback is now armed.
+     * Arms playback on lane 0 for `wavPath`. Reuses the open source when the path
+     * matches lane 0 (cheap rewind); other lanes remain cleared/deactivated.
      */
     bool setPlaybackSource(const std::string &wavPath, float gain);
+    bool setPlaybackSources(const std::vector<std::string> &wavPaths,
+                            const std::vector<float> &gains);
 
     void setPlaybackGain(float gain);
     bool isPlaybackActive() const { return m_isPlaying.load(std::memory_order_acquire); }
     void stopPlayback();
 
-    /** Returns the source channel count, or 0 if no source is loaded. */
-    int32_t playbackChannelCount() const { return m_sourceChannelCount.load(); }
+    /** Returns lane 0 source channel count, or 0 if no playback source there. */
+    int32_t playbackChannelCount() const {
+        return m_playbackLanes[0].srcChannels.load(std::memory_order_acquire);
+    }
 
     /**
-     * Tears down the I/O thread and closes the source. The output stream is
-     * not owned by the engine; the caller is responsible for releasing it.
-     * Safe to call multiple times.
+     * Tears down the I/O thread and closes playback sources/rings.
+     * The output stream is not owned by the engine.
      */
     void releasePlaybackResources();
 
-    /** Audio-thread callback. Drains the ring into the interleaved output buffer. */
+    /** Oboe realtime callback: sums armed lanes into the interleaved buffer. */
     void render(float *outputInterleaved, int32_t numFrames, int32_t channels, int32_t sampleRate);
 
 private:
+    static constexpr std::size_t kPlaybackLaneCount = 16;
+    static constexpr std::size_t kPlaybackLaneProductCap = 8;
+
+    struct PlaybackLaneSlot {
+        std::shared_ptr<IAudioSource> source;
+        std::unique_ptr<RingBuffer> ring;
+        std::string currentPath;
+
+        std::atomic<bool> sourceExhausted{false};
+        std::atomic<float> gain{1.0f};
+        std::atomic<int32_t> srcChannels{0};
+    };
+
+    static int32_t computeRingFramesForSampleRate(int32_t sampleRateHz);
+    static int32_t computePrerollFramesForSampleRate(int32_t sampleRateHz);
+
+    /** Clears all lanes while holding `m_playbackMutex` after render is paused and I/O has joined. */
+    void clearPlaybackLanesLocked();
+
+    /**
+     * Strips inactive lanes beyond index 0 (clears lane 1..15). Playback gate must already be cleared.
+     * RingBuffer::reset is only applied after render is paused and the I/O producer has joined.
+     */
+    void deactivateAuxiliaryLanesLocked();
+
+    /**
+     * Arm exactly lane 0; clears lanes 1..15. Holds `playbackLock`; caller has already quiesced
+     * render + I/O. Returns false if the WAV arm fails before enabling playback.
+     */
+    bool armSinglePlaybackLaneLocked(const std::string &wavPath, float laneGain);
+    bool armPlaybackLanesLocked(const std::vector<std::string> &wavPaths,
+                                const std::vector<float> &gains);
+
     bool openInputStream(int32_t channelCount);
     void closeInputStream();
     void recordLoop();
@@ -80,6 +115,10 @@ private:
     void ensureIoThreadRunning();
     void stopIoThread();
     void ioLoop();
+
+    void renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
+                                           int32_t outChannels,
+                                           int32_t minimumFramesReturnedFromLanes);
 
     int32_t m_sampleRate = 48'000;
     int32_t m_fileBitDepth = 16;
@@ -92,25 +131,15 @@ private:
     std::thread m_recordThread;
     std::atomic<bool> m_isRecording{false};
 
-    // Playback state. Mutated only from the JNI thread under m_playbackMutex
-    // (or from the I/O thread for [m_sourceExhausted]); read concurrently from
-    // the audio render thread via the atomics below.
     std::mutex m_playbackMutex;
-    std::shared_ptr<IAudioSource> m_source;
-    std::string m_currentSourcePath;
-    std::unique_ptr<RingBuffer> m_ring;
+    std::array<PlaybackLaneSlot, kPlaybackLaneCount> m_playbackLanes{};
+    /** True while the JNI surface expects audible playback prefetch + render mixing. */
+    std::atomic<bool> m_isPlaying{false};
 
     std::thread m_ioThread;
     std::atomic<bool> m_ioRunning{false};
-    std::atomic<bool> m_isPlaying{false};
-    std::atomic<bool> m_sourceExhausted{false};
-    std::atomic<float> m_playbackGain{1.0f};
-    std::atomic<int32_t> m_sourceChannelCount{0};
 
-    /**
-     * Scratch for [render]. Sized on the JNI thread in [setPlaybackSource] to a
-     * fixed maximum so the audio thread never calls [resize].
-     */
+    /** Sized once on JNI; render never resizes — large enough for one lane stereo read burst. */
     std::vector<float> m_renderScratch;
 };
 

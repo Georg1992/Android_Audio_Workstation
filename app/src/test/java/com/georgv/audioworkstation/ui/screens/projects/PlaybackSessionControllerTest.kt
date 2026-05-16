@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -85,6 +86,32 @@ class PlaybackSessionControllerTest {
     }
 
     @Test
+    fun `playback completion restarts the same playing group when any playing track loops`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audio = PlaybackSessionTestAudio()
+            val visible = listOf(
+                track("a", loop = false, wav = "a.wav"),
+                track("b", loop = true, wav = "b.wav"),
+                track("c", loop = true, wav = "c.wav")
+            )
+            val sut = PlaybackSessionController(
+                scope = this,
+                audioController = audio,
+                loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                currentProjectId = { PROJECT_ID },
+                visibleTracks = { visible },
+            )
+
+            sut.markPlayingAndStartCompletionMonitor(setOf("a", "b"))
+            audio.finishPlaybackPulse()
+            advanceUntilIdle()
+
+            assertEquals(setOf("a", "b"), sut.playingTrackIds.value)
+            assertEquals(listOf("a", "b"), audio.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+            sut.cancelCompletionMonitorForTransportStop()
+        }
+
+    @Test
     fun `playback completion clears playing when loop restart is rejected by engine`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio =
@@ -146,6 +173,9 @@ private class PlaybackSessionTestAudio(
     var stopPlaybackCalls = 0
         private set
 
+    var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
+        private set
+
     private var startPlaybackInvocationIndex = 0
 
     private val _playbackState = MutableStateFlow(false)
@@ -161,6 +191,15 @@ private class PlaybackSessionTestAudio(
 
     override fun startPlayback(spec: PlaybackSpec): Boolean {
         startPlaybackCalls += 1
+        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
+        val playing = permitted && startPlaybackResult
+        _playbackState.value = playing
+        return playing
+    }
+
+    override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
+        startPlaybackCalls += 1
+        lastMultiPlaybackSpec = spec
         val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
         val playing = permitted && startPlaybackResult
         _playbackState.value = playing

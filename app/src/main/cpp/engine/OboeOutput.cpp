@@ -1,6 +1,8 @@
 #include "OboeOutput.h"
 #include "AudioEngine.h"
 
+#include <algorithm>
+
 OboeOutput::OboeOutput(dawengine::AudioEngine *engine)
     : m_engine(engine) {}
 
@@ -59,6 +61,22 @@ bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
 void OboeOutput::release() {
     if (m_stream) {
         m_stream->requestStop();
+        constexpr int64_t kStepTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
+        for (int guard = 0; guard < 100; ++guard) {
+            const oboe::StreamState currentState = m_stream->getState();
+            if (currentState != oboe::StreamState::Started &&
+                currentState != oboe::StreamState::Starting &&
+                currentState != oboe::StreamState::Stopping) {
+                break;
+            }
+
+            oboe::StreamState nextState = oboe::StreamState::Unknown;
+            const oboe::Result result =
+                m_stream->waitForStateChange(currentState, &nextState, kStepTimeoutNanos);
+            if (result != oboe::Result::OK && result != oboe::Result::ErrorTimeout) {
+                break;
+            }
+        }
         m_stream->close();
         m_stream.reset();
     }
@@ -66,40 +84,54 @@ void OboeOutput::release() {
     m_openedChannelCount = 0;
 }
 
-void OboeOutput::pauseForSafeEngineMutation() {
-    if (!m_stream) return;
+bool OboeOutput::pauseForSafeEngineMutation() {
+    if (!m_stream) return true;
     oboe::StreamState currentState = m_stream->getState();
     if (currentState != oboe::StreamState::Started &&
-        currentState != oboe::StreamState::Starting) {
-        return;
+        currentState != oboe::StreamState::Starting &&
+        currentState != oboe::StreamState::Pausing) {
+        return true;
     }
 
-    if (m_stream->requestPause() != oboe::Result::OK) return;
+    if (currentState != oboe::StreamState::Pausing &&
+        m_stream->requestPause() != oboe::Result::OK) {
+        return false;
+    }
 
     constexpr int64_t kStepTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
     for (int guard = 0; guard < 100; ++guard) {
         currentState = m_stream->getState();
-        if (currentState == oboe::StreamState::Paused) return;
+        if (currentState == oboe::StreamState::Paused) return true;
         if (currentState != oboe::StreamState::Started &&
             currentState != oboe::StreamState::Starting &&
             currentState != oboe::StreamState::Pausing) {
-            return;
+            return true;
         }
         oboe::StreamState nextState = oboe::StreamState::Unknown;
         const oboe::Result result =
             m_stream->waitForStateChange(currentState, &nextState, kStepTimeoutNanos);
         if (result != oboe::Result::OK && result != oboe::Result::ErrorTimeout) {
-            return;
+            return false;
         }
     }
+    return false;
 }
 
 oboe::DataCallbackResult OboeOutput::onAudioReady(oboe::AudioStream *stream,
                                                   void *audioData,
                                                   int32_t numFrames) {
     auto *out = static_cast<float *>(audioData);
-    if (!m_engine || !out) {
-        return oboe::DataCallbackResult::Stop;
+    if (!out) {
+        return oboe::DataCallbackResult::Continue;
+    }
+
+    if (!stream || !m_engine) {
+        const int32_t channels = stream ? stream->getChannelCount() : m_openedChannelCount;
+        if (numFrames > 0 && channels > 0) {
+            std::fill(out, out + static_cast<std::size_t>(numFrames) *
+                                  static_cast<std::size_t>(channels), 0.0f);
+        }
+        return oboe::DataCallbackResult::Continue;
     }
 
     // Engine emits silence when no source is armed, so it's safe to leave the

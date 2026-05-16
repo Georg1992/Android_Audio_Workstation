@@ -1,7 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
-import com.georgv.audioworkstation.core.audio.toPlaybackSpec
+import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlinx.coroutines.CoroutineScope
@@ -45,10 +45,15 @@ class PlaybackSessionController(
         _playingTrackIds.value = emptySet()
     }
 
-    /** Native engine accepted a start request; expose playing id and observe completion / loop (legacy [ProjectViewModel] path). */
+    /** Native engine accepted a start request; expose playing ids and observe completion / loop. */
+    fun markPlayingAndStartCompletionMonitor(trackIds: Set<String>) {
+        _playingTrackIds.value = trackIds
+        startPlaybackMonitor(trackIds)
+    }
+
+    /** Native engine accepted a start request; expose playing id and observe completion / loop (legacy test helper path). */
     fun markPlayingAndStartCompletionMonitor(trackId: String) {
-        _playingTrackIds.value = setOf(trackId)
-        startPlaybackMonitor(trackId)
+        markPlayingAndStartCompletionMonitor(setOf(trackId))
     }
 
     fun cancelCompletionMonitorForTransportStop() {
@@ -66,15 +71,15 @@ class PlaybackSessionController(
         _playingTrackIds.value = emptySet()
     }
 
-    private fun startPlaybackMonitor(trackId: String) {
+    private fun startPlaybackMonitor(trackIds: Set<String>) {
         playbackMonitorJob?.cancel()
         playbackMonitorJob = scope.launch {
             // The engine reports completion via [AudioController.playbackState]; we wait for it
             // to transition to false and then either restart (loop) or clear the playing set.
             while (true) {
                 audioController.playbackState.filter { !it }.first()
-                if (_playingTrackIds.value != setOf(trackId)) break
-                if (!shouldRestartLoopPlayback(trackId)) {
+                if (_playingTrackIds.value != trackIds) break
+                if (!shouldRestartLoopPlayback(trackIds)) {
                     _playingTrackIds.value = emptySet()
                     break
                 }
@@ -83,12 +88,13 @@ class PlaybackSessionController(
         }
     }
 
-    private suspend fun shouldRestartLoopPlayback(trackId: String): Boolean {
-        val currentTrack = visibleTracks().find { it.id == trackId } ?: return false
-        if (!currentTrack.isLoop) return false
+    private suspend fun shouldRestartLoopPlayback(trackIds: Set<String>): Boolean {
+        val currentTracks = visibleTracks().filter { it.id in trackIds }
+        if (currentTracks.isEmpty()) return false
+        if (currentTracks.none { it.isLoop }) return false
         val pid = currentProjectId() ?: return false
         val currentProject = loadCurrentProject(pid) ?: return false
-        val spec = currentProject.toPlaybackSpec(currentTrack) ?: return false
+        val spec = currentProject.toMultiPlaybackSpec(currentTracks) ?: return false
         return audioController.startPlayback(spec)
     }
 }

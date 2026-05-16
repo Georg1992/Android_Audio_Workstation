@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <limits>
+#include <utility>
 
 #include "AudioSource.h"
 #include "LocalWavSource.h"
@@ -14,34 +17,6 @@ namespace {
 constexpr int64_t kReadTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
 constexpr int32_t kFramesPerRead = 256;
 constexpr uint16_t kWavBitsPerSample = 16;
-
-// Tunables for the streaming playback path.
-//
-// The ring is sized for ~1 second of stereo float audio at the highest sample
-// rate we support. That gives the I/O thread plenty of headroom even under
-// scheduler pressure while staying well under 1 MiB.
-constexpr std::size_t kPlaybackRingFrames = 48'000;
-
-// Larger I/O batches mean fewer system calls per second; smaller batches mean
-// the ring stays nicely filled at startup. 4 KiB worth of frames hits a good
-// middle ground.
-constexpr int32_t kIoBatchFrames = 1'024;
-
-// I/O thread sleep when there is no work (paused / ring full / waiting for
-// next batch). Short enough to keep the prefetch responsive, long enough to
-// cost effectively zero CPU when idle.
-constexpr int kIoIdleSleepMs = 4;
-
-// Pre-roll target before starting playback, so the audio thread never reads
-// from an empty ring on the first callback. ~30 ms at 48 kHz is comfortable
-// against typical Oboe burst sizes (96..480 frames).
-constexpr int32_t kPrerollFrames = 1'440;
-
-// Upper bound for one Oboe output callback (frames). Low-latency streams stay
-// well under this; the cap avoids heap growth on the realtime thread.
-constexpr int32_t kMaxRenderFramesPerCallback = 4'096;
-constexpr std::size_t kRenderScratchFloatCount =
-    static_cast<std::size_t>(kMaxRenderFramesPerCallback) * 2u;
 
 void WriteUint16LE(FILE *file, uint16_t value) {
     const std::array<uint8_t, 2> bytes = {
@@ -70,7 +45,220 @@ int16_t FloatToPcm16(float sample) {
 
 namespace dawengine {
 
+namespace playback {
+constexpr int32_t kRingDurationSeconds = 1;
+// Wall-time preroll: ms × SR / 1000 (computePrerollFramesForSampleRate).
+constexpr int32_t kPrerollWallMs = 30;
+
+// Larger I/O batches — producer chunk size in frames only (not tied to SR).
+constexpr int32_t kIoBatchFrames = 1'024;
+constexpr int kIoIdleSleepMs = 4;
+
+constexpr int32_t kMaxRenderFramesPerCallback = 4'096;
+constexpr std::size_t kRenderScratchFloatCount =
+    static_cast<std::size_t>(kMaxRenderFramesPerCallback) * 2u;
+
+// Transparent master safety stage: exact pass-through below the threshold,
+// then a smooth asymptotic knee that prevents summed playback from hard clipping.
+constexpr float kMasterSafetyThreshold = 0.99f;
+constexpr float kMasterSafetyHeadroom = 1.0f - kMasterSafetyThreshold;
+
+float ApplyMasterSafetySoftClip(float sample) {
+    const float magnitude = sample < 0.0f ? -sample : sample;
+    if (magnitude <= kMasterSafetyThreshold) {
+        return sample;
+    }
+
+    const float over = magnitude - kMasterSafetyThreshold;
+    const float shaped = kMasterSafetyThreshold +
+                         kMasterSafetyHeadroom * (over / (over + kMasterSafetyHeadroom));
+    return sample < 0.0f ? -shaped : shaped;
+}
+
+void ProcessMasterSafetySoftClip(float *interleaved, std::size_t sampleCount) {
+    for (std::size_t i = 0; i < sampleCount; ++i) {
+        interleaved[i] = ApplyMasterSafetySoftClip(interleaved[i]);
+    }
+}
+
+} // namespace playback
+
+struct PendingPlaybackLane {
+    std::shared_ptr<IAudioSource> source;
+    std::unique_ptr<RingBuffer> ring;
+    std::string path;
+    float gain = 1.0f;
+    int32_t channels = 0;
+};
+
 AudioEngine::AudioEngine() = default;
+
+int32_t AudioEngine::computeRingFramesForSampleRate(int32_t sampleRateHz) {
+    return static_cast<int32_t>(static_cast<int64_t>(sampleRateHz) *
+                                static_cast<int64_t>(playback::kRingDurationSeconds));
+}
+
+int32_t AudioEngine::computePrerollFramesForSampleRate(int32_t sampleRateHz) {
+    return static_cast<int32_t>((static_cast<int64_t>(sampleRateHz) *
+                                 static_cast<int64_t>(playback::kPrerollWallMs)) /
+                                1000);
+}
+
+void AudioEngine::clearPlaybackLanesLocked() {
+    for (PlaybackLaneSlot &lane : m_playbackLanes) {
+        lane.ring.reset();
+        lane.source.reset();
+        lane.currentPath.clear();
+        lane.sourceExhausted.store(false, std::memory_order_release);
+        lane.gain.store(1.0f, std::memory_order_release);
+        lane.srcChannels.store(0, std::memory_order_release);
+    }
+}
+
+void AudioEngine::deactivateAuxiliaryLanesLocked() {
+    for (std::size_t i = 1; i < kPlaybackLaneCount; ++i) {
+        PlaybackLaneSlot &lane = m_playbackLanes[i];
+        lane.ring.reset();
+        lane.source.reset();
+        lane.currentPath.clear();
+        lane.sourceExhausted.store(false, std::memory_order_release);
+        lane.gain.store(1.0f, std::memory_order_release);
+        lane.srcChannels.store(0, std::memory_order_release);
+    }
+}
+
+bool AudioEngine::armSinglePlaybackLaneLocked(const std::string &wavPath, float laneGain) {
+    deactivateAuxiliaryLanesLocked();
+
+    PlaybackLaneSlot &lane0 = m_playbackLanes[0];
+    lane0.gain.store(laneGain, std::memory_order_release);
+
+    const bool samePath =
+        !!lane0.source && wavPath == lane0.currentPath;
+    const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
+    const int32_t prerollTargetFrames = computePrerollFramesForSampleRate(m_sampleRate);
+
+    if (samePath) {
+        if (!lane0.source->seekToFrame(0)) return false;
+        if (lane0.ring) lane0.ring->reset();
+    } else {
+        auto source = std::make_shared<LocalWavSource>(wavPath);
+        if (!source->open()) return false;
+        if (source->sampleRate() != m_sampleRate) return false;
+        if (source->channelCount() < 1 || source->channelCount() > 2) return false;
+
+        const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
+                                       static_cast<std::size_t>(source->channelCount());
+        lane0.ring = std::make_unique<RingBuffer>(ringFloats);
+        lane0.srcChannels.store(source->channelCount(), std::memory_order_release);
+        lane0.source = std::move(source);
+        lane0.currentPath = wavPath;
+    }
+
+    lane0.sourceExhausted.store(false, std::memory_order_release);
+
+    // Grow once on the JNI thread while Oboe is paused — [render] never resizes.
+    m_renderScratch.resize(playback::kRenderScratchFloatCount);
+
+    const int32_t channels = lane0.source->channelCount();
+    std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
+                               static_cast<std::size_t>(channels));
+    const int32_t prerollFrames = lane0.source->readFrames(preroll.data(), prerollTargetFrames);
+    if (prerollFrames > 0 && lane0.ring) {
+        lane0.ring->write(
+            preroll.data(),
+            static_cast<std::size_t>(prerollFrames) * static_cast<std::size_t>(channels));
+    }
+
+    return true;
+}
+
+bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPaths,
+                                         const std::vector<float> &gains) {
+    const std::size_t laneCount = wavPaths.size();
+    if (laneCount == 0 ||
+        laneCount > kPlaybackLaneProductCap ||
+        laneCount != gains.size()) {
+        clearPlaybackLanesLocked();
+        return false;
+    }
+
+    if (laneCount == 1) {
+        if (!armSinglePlaybackLaneLocked(wavPaths[0], gains[0])) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
+        return true;
+    }
+
+    std::array<PendingPlaybackLane, kPlaybackLaneProductCap> pending{};
+    const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
+    const int32_t prerollTargetFrames = computePrerollFramesForSampleRate(m_sampleRate);
+
+    for (std::size_t laneIdx = 0; laneIdx < laneCount; ++laneIdx) {
+        const std::string &path = wavPaths[laneIdx];
+        if (path.empty()) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
+
+        auto source = std::make_shared<LocalWavSource>(path);
+        if (!source->open()) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
+        if (source->sampleRate() != m_sampleRate) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
+        if (source->channelCount() < 1 || source->channelCount() > 2) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
+
+        const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
+                                       static_cast<std::size_t>(source->channelCount());
+        auto ring = std::make_unique<RingBuffer>(ringFloats);
+
+        std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
+                                   static_cast<std::size_t>(source->channelCount()));
+        const int32_t prerollFrames = source->readFrames(preroll.data(), prerollTargetFrames);
+        if (prerollFrames < 0) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
+        if (prerollFrames > 0) {
+            ring->write(
+                preroll.data(),
+                static_cast<std::size_t>(prerollFrames) *
+                    static_cast<std::size_t>(source->channelCount()));
+        }
+
+        PendingPlaybackLane &pendingLane = pending[laneIdx];
+        pendingLane.channels = source->channelCount();
+        pendingLane.gain = gains[laneIdx];
+        pendingLane.path = path;
+        pendingLane.ring = std::move(ring);
+        pendingLane.source = std::move(source);
+    }
+
+    clearPlaybackLanesLocked();
+    m_renderScratch.resize(playback::kRenderScratchFloatCount);
+
+    for (std::size_t laneIdx = 0; laneIdx < laneCount; ++laneIdx) {
+        PlaybackLaneSlot &lane = m_playbackLanes[laneIdx];
+        PendingPlaybackLane &pendingLane = pending[laneIdx];
+
+        lane.ring = std::move(pendingLane.ring);
+        lane.source = std::move(pendingLane.source);
+        lane.currentPath = std::move(pendingLane.path);
+        lane.sourceExhausted.store(false, std::memory_order_release);
+        lane.gain.store(pendingLane.gain, std::memory_order_release);
+        lane.srcChannels.store(pendingLane.channels, std::memory_order_release);
+    }
+
+    return true;
+}
 
 AudioEngine::~AudioEngine() {
     releasePlaybackResources();
@@ -231,89 +419,57 @@ bool AudioEngine::stopRecording() {
 // ---------------------------------------------------------------------------
 
 bool AudioEngine::setPlaybackSource(const std::string &wavPath, float gain) {
-    if (wavPath.empty()) return false;
+    return setPlaybackSources(std::vector<std::string>{wavPath}, std::vector<float>{gain});
+}
 
-    setPlaybackGain(gain);
-
-    std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-
-    // Pause the audio output side first so the render thread observes a
-    // consistent snapshot of source + ring while we mutate them. The I/O
-    // thread checks `m_isPlaying` before pulling from the source, so dropping
-    // it here also stops the producer.
+bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
+                                     const std::vector<float> &gains) {
+    // JNI pauses Oboe before this call; stop the I/O producer as well before
+    // resetting/replacing lane rings or sources.
     m_isPlaying.store(false, std::memory_order_release);
+    stopIoThread();
 
-    const bool samePath = (m_source && wavPath == m_currentSourcePath);
-    if (samePath) {
-        // Cheap rewind: keep the open file handle, seek to frame 0, drop any
-        // stale data from the ring so the next render starts at the head.
-        if (!m_source->seekToFrame(0)) return false;
-        if (m_ring) m_ring->reset();
-    } else {
-        // Open a fresh source. We allocate the ring lazily — its size depends
-        // on the source's channel count, which we only know after a successful
-        // open.
-        auto source = std::make_shared<LocalWavSource>(wavPath);
-        if (!source->open()) return false;
-        if (source->sampleRate() != m_sampleRate) return false;
-        if (source->channelCount() < 1 || source->channelCount() > 2) return false;
-
-        const std::size_t ringFloats = static_cast<std::size_t>(kPlaybackRingFrames) *
-                                       static_cast<std::size_t>(source->channelCount());
-        m_ring = std::make_unique<RingBuffer>(ringFloats);
-        m_sourceChannelCount.store(source->channelCount(), std::memory_order_release);
-        m_source = std::move(source);
-        m_currentSourcePath = wavPath;
-    }
-
-    m_sourceExhausted.store(false, std::memory_order_release);
-
-    // Grow once on the JNI thread while Oboe is paused — [render] never resizes.
-    m_renderScratch.resize(kRenderScratchFloatCount);
-
-    // Pre-roll: pull some PCM synchronously so the very first audio callback
-    // already has data. Without this the first ~10 ms of every play would be
-    // silence while the I/O thread spins up.
-    const int32_t channels = m_source->channelCount();
-    std::vector<float> preroll(static_cast<std::size_t>(kPrerollFrames) * channels);
-    const int32_t prerollFrames = m_source->readFrames(preroll.data(), kPrerollFrames);
-    if (prerollFrames > 0) {
-        m_ring->write(preroll.data(),
-                      static_cast<std::size_t>(prerollFrames) * static_cast<std::size_t>(channels));
+    {
+        std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+        if (!armPlaybackLanesLocked(wavPaths, gains)) {
+            return false;
+        }
     }
 
     ensureIoThreadRunning();
-
     m_isPlaying.store(true, std::memory_order_release);
     return true;
 }
 
 void AudioEngine::setPlaybackGain(float gain) {
-    m_playbackGain.store(gain, std::memory_order_release);
+    m_playbackLanes[0].gain.store(gain, std::memory_order_release);
 }
 
 void AudioEngine::stopPlayback() {
+    // JNI pauses Oboe before stop; joining here quiesces the ring producer so
+    // RingBuffer::reset observes its documented producer+consumer stop rule.
+    m_isPlaying.store(false, std::memory_order_release);
+    stopIoThread();
+
     std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
 
-    m_isPlaying.store(false, std::memory_order_release);
-    m_sourceExhausted.store(false, std::memory_order_release);
-    if (m_ring) m_ring->reset();
-
-    // Rewind the open source so a subsequent play (with the same path) is
-    // instant — no header parse, no fresh fopen, no allocation.
-    if (m_source) {
-        m_source->seekToFrame(0);
+    for (PlaybackLaneSlot &lane : m_playbackLanes) {
+        lane.sourceExhausted.store(false, std::memory_order_release);
+        if (lane.ring) {
+            lane.ring->reset();
+        }
+        if (lane.source) {
+            lane.source->seekToFrame(0);
+        }
     }
 }
 
 void AudioEngine::releasePlaybackResources() {
+    m_isPlaying.store(false, std::memory_order_release);
     stopIoThread();
 
     std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-    m_source.reset();
-    m_currentSourcePath.clear();
-    m_ring.reset();
-    m_sourceChannelCount.store(0, std::memory_order_release);
+    clearPlaybackLanesLocked();
 }
 
 void AudioEngine::ensureIoThreadRunning() {
@@ -334,60 +490,98 @@ void AudioEngine::stopIoThread() {
 void AudioEngine::ioLoop() {
     std::vector<float> scratch;
     while (m_ioRunning.load(std::memory_order_acquire)) {
-        if (!m_isPlaying.load(std::memory_order_acquire) ||
-            m_sourceExhausted.load(std::memory_order_acquire)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(kIoIdleSleepMs));
+        if (!m_isPlaying.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(playback::kIoIdleSleepMs));
             continue;
         }
 
-        // Pull a snapshot of the source and ring while holding the lock briefly,
-        // then release it for the actual read so JNI calls aren't blocked by
-        // file I/O. The shared_ptr / raw pointer both stay valid for the
-        // duration of this iteration because [releasePlaybackResources] joins
-        // this thread before resetting them.
-        std::shared_ptr<IAudioSource> source;
-        RingBuffer *ring = nullptr;
-        int32_t channels = 0;
-        {
-            std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-            source = m_source;
-            ring = m_ring.get();
-            channels = m_sourceChannelCount.load(std::memory_order_acquire);
+        bool progressed = false;
+        for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
+            std::shared_ptr<IAudioSource> source;
+            RingBuffer *ring = nullptr;
+            int32_t channels = 0;
+            bool laneExhausted = false;
+
+            {
+                std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+                PlaybackLaneSlot &lane = m_playbackLanes[laneIdx];
+                source = lane.source;
+                ring = lane.ring.get();
+                channels = lane.srcChannels.load(std::memory_order_acquire);
+                laneExhausted = lane.sourceExhausted.load(std::memory_order_acquire);
+            }
+
+            if (!source || !ring || channels <= 0 || laneExhausted) {
+                continue;
+            }
+
+            const std::size_t writableFloats = ring->writable();
+            const std::size_t writableFrames = writableFloats / static_cast<std::size_t>(channels);
+            if (writableFrames < static_cast<std::size_t>(playback::kIoBatchFrames)) {
+                continue;
+            }
+
+            const std::size_t batchFloats =
+                static_cast<std::size_t>(playback::kIoBatchFrames) * static_cast<std::size_t>(channels);
+            if (scratch.size() < batchFloats) {
+                scratch.resize(batchFloats);
+            }
+
+            const int32_t framesRead =
+                source->readFrames(scratch.data(), playback::kIoBatchFrames);
+
+            if (framesRead > 0) {
+                ring->write(
+                    scratch.data(),
+                    static_cast<std::size_t>(framesRead) * static_cast<std::size_t>(channels));
+                progressed = true;
+            } else if (framesRead == 0) {
+                m_playbackLanes[laneIdx].sourceExhausted.store(true, std::memory_order_release);
+                progressed = true;
+            } else {
+                m_playbackLanes[laneIdx].sourceExhausted.store(true, std::memory_order_release);
+                progressed = true;
+            }
         }
-        if (!source || !ring || channels <= 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(kIoIdleSleepMs));
+
+        if (!progressed) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(playback::kIoIdleSleepMs));
+        }
+    }
+}
+
+void AudioEngine::renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
+                                                   int32_t /*outChannels*/,
+                                                   int32_t minimumFramesReturnedFromLanes) {
+    if (minimumFramesReturnedFromLanes >= numFramesOutput) {
+        return;
+    }
+
+    bool allDrained = true;
+    for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
+        const int32_t srcChannels =
+            m_playbackLanes[laneIdx].srcChannels.load(std::memory_order_acquire);
+        if (srcChannels <= 0) {
             continue;
         }
 
-        const std::size_t writableFloats = ring->writable();
-        const std::size_t writableFrames = writableFloats / static_cast<std::size_t>(channels);
-        if (writableFrames < static_cast<std::size_t>(kIoBatchFrames)) {
-            // Ring is comfortably ahead of the consumer; back off briefly.
-            std::this_thread::sleep_for(std::chrono::milliseconds(kIoIdleSleepMs));
-            continue;
+        RingBuffer *ring = m_playbackLanes[laneIdx].ring.get();
+        if (!ring) {
+            allDrained = false;
+            break;
         }
 
-        const std::size_t batchFloats = static_cast<std::size_t>(kIoBatchFrames) *
-                                        static_cast<std::size_t>(channels);
-        if (scratch.size() < batchFloats) {
-            scratch.resize(batchFloats);
+        const bool exhausted =
+            m_playbackLanes[laneIdx].sourceExhausted.load(std::memory_order_acquire);
+
+        if (!exhausted || ring->readable() != 0) {
+            allDrained = false;
+            break;
         }
-        const int32_t framesRead = source->readFrames(scratch.data(), kIoBatchFrames);
-        if (framesRead > 0) {
-            ring->write(scratch.data(),
-                        static_cast<std::size_t>(framesRead) * static_cast<std::size_t>(channels));
-        }
-        if (framesRead == 0) {
-            // EOF — let the render callback drain the ring and flip
-            // [m_isPlaying] back to false from the audio thread.
-            m_sourceExhausted.store(true, std::memory_order_release);
-        } else if (framesRead < 0) {
-            // Hard read error: mark exhausted so the render thread stops
-            // emitting once the ring drains. We deliberately don't paper over
-            // this — the user-visible stop signal makes the failure obvious
-            // instead of looping forever on a broken file.
-            m_sourceExhausted.store(true, std::memory_order_release);
-        }
+    }
+
+    if (allDrained) {
+        m_isPlaying.store(false, std::memory_order_release);
     }
 }
 
@@ -403,47 +597,54 @@ void AudioEngine::render(float *outputInterleaved,
 
     if (!m_isPlaying.load(std::memory_order_acquire)) return;
 
-    // Lock-free reads — the producer (I/O thread) and consumer (this thread)
-    // share the ring through the SPSC contract and the [m_sourceChannelCount]
-    // atomic. The shared_ptr/unique_ptr fields are not touched here.
-    const int32_t srcChannels = m_sourceChannelCount.load(std::memory_order_acquire);
-    if (srcChannels <= 0) return;
+    int32_t minFramesReturned = std::numeric_limits<int32_t>::max();
+    bool readAnyLane = false;
 
-    const std::size_t neededFloats = static_cast<std::size_t>(numFrames) *
-                                     static_cast<std::size_t>(srcChannels);
-    const std::size_t scratchFloats = std::min(neededFloats, m_renderScratch.size());
+    for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
+        const int32_t srcChannels =
+            m_playbackLanes[laneIdx].srcChannels.load(std::memory_order_acquire);
+        if (srcChannels <= 0) {
+            continue;
+        }
 
-    // Snapshot the ring pointer locally. Both this and `m_ring` are only ever
-    // mutated under `m_playbackMutex` from the JNI thread, and the I/O thread
-    // is joined before that mutation, so the pointer is stable for the entire
-    // lifetime of one playback session.
-    RingBuffer *ring = m_ring.get();
-    if (!ring) return;
+        RingBuffer *ring = m_playbackLanes[laneIdx].ring.get();
+        if (!ring) {
+            continue;
+        }
 
-    const std::size_t floatsRead = ring->read(m_renderScratch.data(), scratchFloats);
-    const int32_t framesRead = static_cast<int32_t>(floatsRead / static_cast<std::size_t>(srcChannels));
+        const std::size_t neededFloats = static_cast<std::size_t>(numFrames) *
+                                         static_cast<std::size_t>(srcChannels);
+        const std::size_t scratchFloats = std::min(neededFloats, m_renderScratch.size());
 
-    const float gain = m_playbackGain.load(std::memory_order_acquire);
-    for (int32_t frame = 0; frame < framesRead; ++frame) {
-        const std::size_t srcBase = static_cast<std::size_t>(frame) *
-                                    static_cast<std::size_t>(srcChannels);
-        for (int32_t channel = 0; channel < channels; ++channel) {
-            // Mono → fan out, stereo → straight pass, > stereo never happens
-            // for our sources (validated at open time).
-            const int32_t sourceChannel = std::min(channel, srcChannels - 1);
-            outputInterleaved[static_cast<std::size_t>(frame * channels + channel)] =
-                m_renderScratch[srcBase + static_cast<std::size_t>(sourceChannel)] * gain;
+        const std::size_t floatsRead =
+            ring->read(m_renderScratch.data(), scratchFloats);
+        const int32_t framesReturned =
+            static_cast<int32_t>(floatsRead / static_cast<std::size_t>(srcChannels));
+
+        readAnyLane = true;
+        minFramesReturned = std::min(minFramesReturned, framesReturned);
+
+        const float gain =
+            m_playbackLanes[laneIdx].gain.load(std::memory_order_acquire);
+        for (int32_t frame = 0; frame < framesReturned; ++frame) {
+            const std::size_t srcBase =
+                static_cast<std::size_t>(frame) * static_cast<std::size_t>(srcChannels);
+            for (int32_t outCh = 0; outCh < channels; ++outCh) {
+                const int32_t sourceChannel = std::min(outCh, srcChannels - 1);
+                outputInterleaved[static_cast<std::size_t>(frame * channels + outCh)] +=
+                    m_renderScratch[srcBase + static_cast<std::size_t>(sourceChannel)] * gain;
+            }
         }
     }
 
-    if (framesRead < numFrames &&
-        m_sourceExhausted.load(std::memory_order_acquire) &&
-        ring->readable() == 0) {
-        // Source ran out and the ring is empty — flip the public play flag.
-        // The Kotlin side observes this via [isPlaybackActive] / the StateFlow
-        // wrapper to decide whether to loop or stop the UI clock.
-        m_isPlaying.store(false, std::memory_order_release);
+    if (readAnyLane) {
+        playback::ProcessMasterSafetySoftClip(outputInterleaved, outSampleCount);
+
+        const int32_t reportedMin =
+            (minFramesReturned == std::numeric_limits<int32_t>::max()) ? numFrames : minFramesReturned;
+        renderMaybeCompletePlaybackMaster(numFrames, channels, reportedMin);
     }
 }
+
 
 } // namespace dawengine

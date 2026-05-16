@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.core.audio.AudioImportResult
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.AudioImportTarget
 import com.georgv.audioworkstation.core.audio.AudioImporter
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
@@ -252,6 +253,7 @@ private class NoOpAudioControllerForRobolectric : AudioController {
     override fun startRecording(spec: RecordingSpec): String? = null
     override fun stopRecording(): Boolean = true
     override fun startPlayback(spec: PlaybackSpec): Boolean = false
+    override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
     override fun setPlaybackGain(gain: Float) = Unit
     override fun stopPlayback(): Boolean = true
     override fun release() = Unit

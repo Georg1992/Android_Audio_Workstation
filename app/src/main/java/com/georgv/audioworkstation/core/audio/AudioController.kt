@@ -13,6 +13,7 @@ interface AudioController {
     fun startRecording(spec: RecordingSpec): String?
     fun stopRecording(): Boolean
     fun startPlayback(spec: PlaybackSpec): Boolean
+    fun startPlayback(spec: MultiPlaybackSpec): Boolean
     fun setPlaybackGain(gain: Float)
     fun stopPlayback(): Boolean
 

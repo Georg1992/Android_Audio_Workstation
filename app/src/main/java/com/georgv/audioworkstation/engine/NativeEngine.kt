@@ -25,6 +25,13 @@ class NativeEngine @Inject constructor() {
             gain = spec.gain
         )
 
+    fun startMultiPlayback(sampleRate: Int, wavPaths: Array<String>, gains: FloatArray): Boolean =
+        nativeStartMultiPlayback(
+            sampleRate = sampleRate,
+            wavPaths = wavPaths,
+            gains = gains
+        )
+
     fun setPlaybackGain(gain: Float) {
         nativeSetPlaybackGain(gain)
     }
@@ -56,6 +63,12 @@ class NativeEngine @Inject constructor() {
         sampleRate: Int,
         wavPath: String,
         gain: Float
+    ): Boolean
+
+    private external fun nativeStartMultiPlayback(
+        sampleRate: Int,
+        wavPaths: Array<String>,
+        gains: FloatArray
     ): Boolean
 
     private external fun nativeSetPlaybackGain(gain: Float)

@@ -42,7 +42,7 @@ public:
      * Call from the JNI thread before mutating [AudioEngine] playback state (ring / source)
      * so [onAudioReady] cannot run [AudioEngine::render] concurrently with those changes.
      */
-    void pauseForSafeEngineMutation();
+    bool pauseForSafeEngineMutation();
 
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream,
                                           void *audioData,

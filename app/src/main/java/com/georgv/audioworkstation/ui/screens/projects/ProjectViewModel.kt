@@ -7,7 +7,7 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
-import com.georgv.audioworkstation.core.audio.toPlaybackSpec
+import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.validation.NameValidationResult
@@ -349,7 +349,7 @@ class ProjectViewModel @Inject constructor(
         if (!contains) {
             return
         }
-        if (playbackSession.playingTrackIds.value.contains(trackId)) {
+        if (playbackSession.playingTrackIds.value == setOf(trackId)) {
             audioController.setPlaybackGain(GainRange.toUnit(gain))
         }
     }
@@ -474,22 +474,19 @@ class ProjectViewModel @Inject constructor(
             if (selected.isEmpty()) return@launch
             val currentProjectId = projectId.value ?: return@launch
             val currentProject = loadCurrentProject(currentProjectId) ?: return@launch
-            val selectedTracks = uiState.value.tracks.filter { it.id in selected }
-            if (selectedTracks.size != 1) {
-                emitMessage(R.string.error_single_track_playback_only)
-                return@launch
-            }
-            val selectedTrack = selectedTracks.single()
-            val playbackSpec = currentProject.toPlaybackSpec(selectedTrack)
+            val selectedPlayableTracks = uiState.value.tracks
+                .filter { it.id in selected }
+                .filter { it.wavFilePath.isNotBlank() }
+            val playbackSpec = currentProject.toMultiPlaybackSpec(selectedPlayableTracks)
             if (playbackSpec == null) {
-                emitMessage(R.string.error_no_audio_for_selected_tracks)
+                emitMessage(playbackStartRejectedMessage(selectedPlayableTracks.size))
                 return@launch
             }
             if (!audioController.startPlayback(playbackSpec)) {
                 emitMessage(R.string.error_playback_failed_to_start)
                 return@launch
             }
-            playbackSession.markPlayingAndStartCompletionMonitor(selectedTrack.id)
+            playbackSession.markPlayingAndStartCompletionMonitor(playbackSpec.lanes.mapTo(LinkedHashSet()) { it.trackId })
         }
     }
 
@@ -518,5 +515,13 @@ class ProjectViewModel @Inject constructor(
             }
         }
     }
+
+    @StringRes
+    private fun playbackStartRejectedMessage(playableTrackCount: Int): Int =
+        if (playableTrackCount == 0) {
+            R.string.error_no_audio_for_selected_tracks
+        } else {
+            R.string.error_playback_failed_to_start
+        }
 
 }

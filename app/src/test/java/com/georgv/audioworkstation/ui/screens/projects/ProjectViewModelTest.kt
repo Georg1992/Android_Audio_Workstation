@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.AudioImportTarget
 import com.georgv.audioworkstation.core.audio.AudioImporter
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
@@ -151,12 +152,36 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onPlayPressed rejects multi-track playback requests`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `onPlayPressed with no selection does not start playback`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav"))
+        )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.onPlayPressed()
+        runCurrent()
+
+        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(0, audioController.startPlaybackCalls)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onPlayPressed starts only selected playable project tracks in visible order`() =
+        runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
             tracks = listOf(
                 track(id = "a", position = 0, wavFilePath = "a.wav"),
-                track(id = "b", position = 1, wavFilePath = "b.wav")
+                track(id = "b", position = 1, wavFilePath = "b.wav"),
+                track(id = "c", position = 2, wavFilePath = "c.wav"),
+                track(id = "d", position = 3, wavFilePath = "")
             )
         )
         val audioController = FakeAudioController()
@@ -165,8 +190,63 @@ class ProjectViewModelTest {
 
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
-        vm.toggleSelect("a")
         vm.toggleSelect("b")
+        vm.toggleSelect("a")
+        vm.toggleSelect("d")
+        advanceUntilIdle()
+        vm.onPlayPressed()
+        runCurrent()
+
+        assertEquals(setOf("a", "b"), vm.uiState.value.playingTrackIds)
+        assertEquals(1, audioController.startPlaybackCalls)
+        assertEquals(listOf("a", "b"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+        assertEquals(listOf("a.wav", "b.wav"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.wavFilePath })
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onPlayPressed with selected track without wav does not start playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(
+                    track(id = "a", position = 0, wavFilePath = ""),
+                    track(id = "b", position = 1, wavFilePath = "b.wav")
+                )
+            )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            advanceUntilIdle()
+
+            vm.onPlayPressed()
+            runCurrent()
+
+            assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+            assertEquals(0, audioController.startPlaybackCalls)
+            assertEquals(R.string.error_no_audio_for_selected_tracks, vm.userMessages.first().resId)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `onPlayPressed rejects selection with more than eight playable tracks`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = (1..9).map { index ->
+                track(id = "track-$index", position = index - 1, wavFilePath = "track-$index.wav")
+            }
+        )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        (1..9).forEach { index -> vm.toggleSelect("track-$index") }
         advanceUntilIdle()
 
         vm.onPlayPressed()
@@ -174,7 +254,7 @@ class ProjectViewModelTest {
 
         assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
         assertEquals(0, audioController.startPlaybackCalls)
-        assertEquals(R.string.error_single_track_playback_only, vm.userMessages.first().resId)
+        assertEquals(R.string.error_playback_failed_to_start, vm.userMessages.first().resId)
         collectJob.cancel()
     }
 
@@ -1129,6 +1209,8 @@ internal class FakeAudioController(
         private set
     var lastPlaybackGain: Float? = null
         private set
+    var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
+        private set
 
     /** Test hook invoked at the beginning of native [startRecording] (before JNI work). */
     var onEnterStartRecording: (() -> Unit)? = null
@@ -1159,6 +1241,15 @@ internal class FakeAudioController(
     override fun startPlayback(spec: PlaybackSpec): Boolean {
         startPlaybackCalls += 1
         lastPlaybackGain = spec.gain
+        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
+        val playing = permitted && startPlaybackResult
+        _playbackState.value = playing
+        return playing
+    }
+
+    override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
+        startPlaybackCalls += 1
+        lastMultiPlaybackSpec = spec
         val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
         val playing = permitted && startPlaybackResult
         _playbackState.value = playing

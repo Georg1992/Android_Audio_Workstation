@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "AudioEngine.h"
 #include "OboeOutput.h"
@@ -33,6 +34,39 @@ std::string JStringToString(JNIEnv *env, jstring value) {
         env->ReleaseStringUTFChars(value, chars);
     }
     return result;
+}
+
+bool StartPlaybackSources(dawengine::AudioEngine *engine,
+                          int32_t sampleRate,
+                          const std::vector<std::string> &paths,
+                          const std::vector<float> &gains) {
+    if (!engine) return false;
+
+    engine->configureProject(sampleRate, 16);
+
+    // Pause Oboe first so no [onAudioReady] call can be inside [AudioEngine::render]
+    // while the JNI thread replaces or resets playback lanes/rings/sources.
+    if (g_output) {
+        if (!g_output->pauseForSafeEngineMutation()) {
+            return false;
+        }
+    }
+
+    if (!engine->setPlaybackSources(paths, gains)) {
+        return false;
+    }
+
+    auto *output = EnsureOutput(engine);
+    if (!output) {
+        engine->stopPlayback();
+        return false;
+    }
+
+    if (!output->ensureStarted(sampleRate, 2)) {
+        engine->stopPlayback();
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -68,33 +102,49 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
     auto *engine = EnsureEngine();
     if (!engine) return JNI_FALSE;
 
-    engine->configureProject(sampleRate, 16);
     const std::string path = JStringToString(env, wavPath);
+    const std::vector<std::string> paths{path};
+    const std::vector<float> gains{gain};
 
-    // Pause Oboe first so no [onAudioReady] call can be inside [AudioEngine::render]
-    // while the JNI thread replaces or resets the ring / source.
-    if (g_output) {
-        g_output->pauseForSafeEngineMutation();
-    }
+    return StartPlaybackSources(engine, sampleRate, paths, gains) ? JNI_TRUE : JNI_FALSE;
+}
 
-    // Arm the engine first so the source is ready before we start the audio
-    // device. The engine handles "same path" cheaply (rewind only) so repeat
-    // plays don't reopen the WAV.
-    if (!engine->setPlaybackSource(path, gain)) {
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
+        JNIEnv *env,
+        jobject,
+        jint sampleRate,
+        jobjectArray wavPaths,
+        jfloatArray gainsArray) {
+    auto *engine = EnsureEngine();
+    if (!engine || !env || !wavPaths || !gainsArray) return JNI_FALSE;
+
+    const jsize pathCount = env->GetArrayLength(wavPaths);
+    const jsize gainCount = env->GetArrayLength(gainsArray);
+    if (pathCount <= 0 || pathCount != gainCount) {
+        StartPlaybackSources(engine, sampleRate, {}, {});
         return JNI_FALSE;
     }
 
-    auto *output = EnsureOutput(engine);
-    if (!output) {
-        engine->stopPlayback();
+    std::vector<std::string> paths;
+    paths.reserve(static_cast<std::size_t>(pathCount));
+    for (jsize i = 0; i < pathCount; ++i) {
+        auto pathObject = static_cast<jstring>(env->GetObjectArrayElement(wavPaths, i));
+        if (!pathObject) {
+            StartPlaybackSources(engine, sampleRate, {}, {});
+            return JNI_FALSE;
+        }
+        paths.push_back(JStringToString(env, pathObject));
+        env->DeleteLocalRef(pathObject);
+    }
+
+    std::vector<float> gains(static_cast<std::size_t>(gainCount));
+    env->GetFloatArrayRegion(gainsArray, 0, gainCount, gains.data());
+    if (env->ExceptionCheck()) {
         return JNI_FALSE;
     }
 
-    if (!output->ensureStarted(sampleRate, 2)) {
-        engine->stopPlayback();
-        return JNI_FALSE;
-    }
-    return JNI_TRUE;
+    return StartPlaybackSources(engine, sampleRate, paths, gains) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -115,7 +165,9 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsPlaybackActive(JNIE
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopPlayback(JNIEnv *, jobject) {
     if (g_output) {
-        g_output->pauseForSafeEngineMutation();
+        if (!g_output->pauseForSafeEngineMutation()) {
+            return JNI_FALSE;
+        }
     }
     if (g_engine) {
         // Keep the source open; [ensureStarted] resumes the paused stream on
