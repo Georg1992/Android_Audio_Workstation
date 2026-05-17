@@ -10,6 +10,9 @@ interface AudioController {
      */
     val playbackState: StateFlow<Boolean>
 
+    /** Latest normalized recording input level for lightweight UI metering, in 0f..1f. */
+    val recordingInputLevel: StateFlow<Float>
+
     fun startRecording(spec: RecordingSpec): String?
     fun stopRecording(): Boolean
     fun startPlayback(spec: PlaybackSpec): Boolean

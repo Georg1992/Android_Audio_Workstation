@@ -43,6 +43,7 @@ data class ProjectUiState(
     val selectedTrackIds: Set<String> = emptySet(),
     val playingTrackIds: Set<String> = emptySet(),
     val recordingTrackId: String? = null,
+    val recordingInputLevel: Float = 0f,
     val isRecordingStartup: Boolean = false
 ) {
     val isPlayEnabled: Boolean
@@ -74,6 +75,7 @@ class ProjectViewModel @Inject constructor(
      * same id ordering, after which the DB stream takes over again.
      */
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
+    private val optimisticTrackGains = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val recordingSession =
         RecordingSessionController(
             scope = viewModelScope,
@@ -104,6 +106,7 @@ class ProjectViewModel @Inject constructor(
                 projectTracks.value,
                 optimisticTracks.value,
                 recordingSession.optimisticRecordingTrack.value,
+                    optimisticTrackGains.value,
             )
         },
     )
@@ -138,6 +141,19 @@ class ProjectViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            combine(projectTracks, optimisticTrackGains) { tracks, gains -> tracks to gains }
+                .collect { (tracks, gains) ->
+                    if (gains.isEmpty()) return@collect
+                    val next =
+                        gains.filter { (trackId, gain) ->
+                            tracks.any { it.id == trackId && it.gain != gain }
+                        }
+                    if (next.size != gains.size) {
+                        optimisticTrackGains.value = next
+                    }
+                }
+        }
     }
 
     private fun emitMessage(message: UiMessage) {
@@ -171,13 +187,19 @@ class ProjectViewModel @Inject constructor(
         projectTracksList: List<TrackEntity>,
         optimisticOrder: List<TrackEntity>?,
         optimisticRecording: TrackEntity?,
+        optimisticGains: Map<String, Float> = emptyMap(),
     ): List<TrackEntity> {
         val base = optimisticOrder ?: projectTracksList
-        val pending = optimisticRecording ?: return base
-        return if (base.any { it.id == pending.id }) {
-            base
-        } else {
-            base + pending
+        val withRecording =
+            if (optimisticRecording != null && base.none { it.id == optimisticRecording.id }) {
+                base + optimisticRecording
+            } else {
+                base
+            }
+        if (optimisticGains.isEmpty()) return withRecording
+        return withRecording.map { track ->
+            val gain = optimisticGains[track.id] ?: return@map track
+            track.copy(gain = gain)
         }
     }
 
@@ -199,20 +221,23 @@ class ProjectViewModel @Inject constructor(
     val uiState: StateFlow<ProjectUiState> =
         combine(
             combine(projectId, resolvedProject) { pid, proj -> pid to proj },
-            combine(projectTracks, optimisticTracks, recordingSession.optimisticRecordingTrack) {
+            combine(projectTracks, optimisticTracks, recordingSession.optimisticRecordingTrack, optimisticTrackGains) {
                     projectTracksList,
                     optimisticOrder,
                     optimisticRecording,
+                    optimisticGains,
                 ->
                 visibleTracksWithRecordingOptimistic(
                     projectTracksList,
                     optimisticOrder,
                     optimisticRecording,
+                    optimisticGains,
                 )
             },
             combine(selectedTrackIds, playbackSession.playingTrackIds) { selected, playing -> selected to playing },
-            combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup -> recordingId to startup }
-        ) { pidProject, tracks, selPlay, recStartup ->
+            combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup -> recordingId to startup },
+            audioController.recordingInputLevel
+        ) { pidProject, tracks, selPlay, recStartup, recordingInputLevel ->
             val (pid, proj) = pidProject
             val (selected, playing) = selPlay
             val (recording, startup) = recStartup
@@ -223,6 +248,7 @@ class ProjectViewModel @Inject constructor(
                 selectedTrackIds = selected,
                 playingTrackIds = playing,
                 recordingTrackId = recording,
+                recordingInputLevel = recordingInputLevel.coerceIn(0f, 1f),
                 isRecordingStartup = startup
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
@@ -237,6 +263,7 @@ class ProjectViewModel @Inject constructor(
         if (this.projectId.value != projectId) {
             transportController.resetPlaybackForProjectChange()
             optimisticTracks.value = null
+            optimisticTrackGains.value = emptyMap()
             recordingSession.resetWhenBoundProjectChanges()
             selectedTrackIds.value = emptySet()
         }
@@ -328,6 +355,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun toggleTrackLoop(trackId: String) {
+        if (playbackSession.isMarkedPlaying()) return
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
         val updatedTrack = currentTrack.copy(isLoop = !currentTrack.isLoop)
         viewModelScope.launch {
@@ -349,6 +377,7 @@ class ProjectViewModel @Inject constructor(
         if (!contains) {
             return
         }
+        optimisticTrackGains.value = optimisticTrackGains.value + (trackId to gain.coerceIn(GainRange.Min, GainRange.Max))
         if (playbackSession.playingTrackIds.value == setOf(trackId)) {
             audioController.setPlaybackGain(GainRange.toUnit(gain))
         }
@@ -356,7 +385,7 @@ class ProjectViewModel @Inject constructor(
 
     /** Commit the latest gain value to the DB. Called when the user releases the fader. */
     fun commitTrackGain(trackId: String, gain: Float) {
-        val currentTrack = uiState.value.tracks.find { it.id == trackId }
+        val currentTrack = projectTracks.value.find { it.id == trackId }
         if (currentTrack == null) {
             return
         }

@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -59,6 +60,7 @@ fun TrackCard(
     title: String,
     isSelected: Boolean,
     isRecording: Boolean,
+    recordingInputLevel: Float = 0f,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
@@ -67,6 +69,8 @@ fun TrackCard(
     onRename: ((String) -> Unit)? = null,
     onToggleLoop: (() -> Unit)? = null,
     isLoop: Boolean = false,
+    loopToggleEnabled: Boolean = true,
+    trackActionsEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     /**
      * When set (project track list policy), row height matches a computed viewport slot so a
@@ -110,8 +114,8 @@ fun TrackCard(
         !dragPreview && trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
     val showLoopChrome = dragPreview || onToggleLoop != null
 
-    LaunchedEffect(interactionBlocked, dragPreview) {
-        if (interactionBlocked || dragPreview) {
+    LaunchedEffect(interactionBlocked, dragPreview, trackActionsEnabled) {
+        if (interactionBlocked || dragPreview || !trackActionsEnabled) {
             onMenuDismiss()
             isRenaming = false
             renameFieldWasFocused = false
@@ -238,6 +242,8 @@ fun TrackCard(
                         val loopInteractive =
                             !dragPreview &&
                                 toggleLoop != null &&
+                                loopToggleEnabled &&
+                                trackActionsEnabled &&
                                 !interactionBlocked &&
                                 !isRenaming
                         Box(
@@ -252,6 +258,7 @@ fun TrackCard(
                                     ) else Modifier
                                 )
                                 .clip(buttonShape)
+                                .alpha(if ((loopToggleEnabled && trackActionsEnabled) || dragPreview) 1f else 0.45f)
                                 .background(if (isLoop) AppColors.Accent else AppColors.Bg)
                                 .border(Dimens.Stroke, AppColors.Line, buttonShape)
                                 .then(
@@ -282,7 +289,7 @@ fun TrackCard(
                                     .width(Dimens.MenuButtonSize)
                                     .height(Dimens.MenuButtonSize)
                                     .then(
-                                        if (!dragPreview && isMenuOpen) {
+                                        if (!dragPreview && trackActionsEnabled && isMenuOpen) {
                                             Modifier.glow(
                                                 color = AppColors.Accent,
                                                 blurRadius = Dimens.GlowBlur,
@@ -293,8 +300,9 @@ fun TrackCard(
                                         }
                                     )
                                     .clip(buttonShape)
+                                    .alpha(if (trackActionsEnabled || dragPreview) 1f else 0.45f)
                                     .background(
-                                        if (!dragPreview && isMenuOpen) {
+                                        if (!dragPreview && trackActionsEnabled && isMenuOpen) {
                                             AppColors.Accent
                                         } else {
                                             AppColors.Bg
@@ -304,6 +312,7 @@ fun TrackCard(
                                     .then(
                                         if (dragPreview ||
                                             interactionBlocked ||
+                                            !trackActionsEnabled ||
                                             isRenaming
                                         ) {
                                             Modifier
@@ -323,7 +332,7 @@ fun TrackCard(
                                 imageVector = Icons.Filled.MoreVert,
                                 contentDescription = stringResource(R.string.cd_track_menu),
                                 tint =
-                                    if (!dragPreview && isMenuOpen) {
+                                    if (!dragPreview && trackActionsEnabled && isMenuOpen) {
                                         AppColors.Red
                                     } else {
                                         AppColors.Line
@@ -333,6 +342,7 @@ fun TrackCard(
                         DropdownMenu(
                             expanded =
                                 !dragPreview &&
+                                    trackActionsEnabled &&
                                     !interactionBlocked &&
                                     !isRenaming &&
                                     isMenuOpen,
@@ -369,7 +379,11 @@ fun TrackCard(
                 }
 
                 Spacer(Modifier.height(Dimens.PanelPadding))
-                TrackWaveformPlaceholder()
+                if (isRecording) {
+                    RecordingWaveform(inputLevel = recordingInputLevel)
+                } else {
+                    TrackWaveform()
+                }
             }
 
             Spacer(Modifier.width(Dimens.Gap))

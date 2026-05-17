@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <cmath>
 #include <utility>
 
 #include "AudioSource.h"
@@ -311,9 +312,11 @@ bool AudioEngine::startRecording(int32_t channelCount, const std::string &output
         m_recordingOutputPath = outputPath;
         m_recordingChannelCount = channelCount == 2 ? 2 : 1;
     }
+    m_recordingInputLevel.store(0.0f, std::memory_order_release);
 
     if (!openInputStream(m_recordingChannelCount)) {
         m_isRecording = false;
+        m_recordingInputLevel.store(0.0f, std::memory_order_release);
         return false;
     }
 
@@ -339,6 +342,12 @@ void AudioEngine::recordLoop() {
         if (framesRead <= 0) continue;
 
         const size_t sampleCount = static_cast<size_t>(framesRead * channelCount);
+        float peak = 0.0f;
+        for (size_t i = 0; i < sampleCount; ++i) {
+            peak = std::max(peak, std::fabs(buffer[i]));
+        }
+        m_recordingInputLevel.store(std::min(peak, 1.0f), std::memory_order_release);
+
         std::lock_guard<std::mutex> recordLock(m_recordMutex);
         m_recordedSamples.insert(
             m_recordedSamples.end(),
@@ -398,6 +407,7 @@ bool AudioEngine::stopRecording() {
         m_recordThread.join();
     }
     closeInputStream();
+    m_recordingInputLevel.store(0.0f, std::memory_order_release);
 
     std::vector<float> recordedSamples;
     std::string outputPath;

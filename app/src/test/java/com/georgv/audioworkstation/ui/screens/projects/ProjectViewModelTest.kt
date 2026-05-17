@@ -107,6 +107,26 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `recording input level is exposed in ui state`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        audioController.emitRecordingInputLevel(0.73f)
+        advanceUntilIdle()
+
+        assertNotNull(vm.uiState.value.recordingTrackId)
+        assertEquals(0.73f, vm.uiState.value.recordingInputLevel, 0.0001f)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `toggleSelect adds and removes selected track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0)))
         val vm = createViewModel(dao)
@@ -452,8 +472,62 @@ class ProjectViewModelTest {
         vm.setTrackGain("a", 50f)
         advanceUntilIdle()
 
+        assertEquals(50f, vm.uiState.value.tracks.single().gain)
         // No commit fired yet, DB still holds the original value.
         assertEquals(100f, dao.observeTracks(PROJECT_ID).first().single().gain)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `playback spec uses latest optimistic gain`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f))
+        )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.setTrackGain("a", 25f)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+
+        vm.onPlayPressed()
+        runCurrent()
+
+        assertEquals(0.25f, audioController.lastMultiPlaybackSpec?.lanes?.single()?.gain)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `multi-track playback spec preserves per-track gains`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(
+                track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f),
+                track(id = "b", position = 1, wavFilePath = "b.wav", gain = 50f)
+            )
+        )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.setTrackGain("a", 20f)
+        vm.setTrackGain("b", 75f)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        vm.toggleSelect("b")
+        advanceUntilIdle()
+
+        vm.onPlayPressed()
+        runCurrent()
+
+        assertEquals(listOf(0.2f, 0.75f), audioController.lastMultiPlaybackSpec?.lanes?.map { it.gain })
         collectJob.cancel()
     }
 
@@ -781,6 +855,42 @@ class ProjectViewModelTest {
         assertEquals(false, vm.uiState.value.tracks.single().isLoop)
         assertEquals(false, dao.observeTracks(PROJECT_ID).first().single().isLoop)
         collectJob.cancel()
+    }
+
+    @Test
+    fun `toggleTrackLoop is ignored while playback is active`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav"))
+        )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+        vm.onPlayPressed()
+        runCurrent()
+
+        vm.toggleTrackLoop("a")
+        advanceUntilIdle()
+
+        assertEquals(false, vm.uiState.value.tracks.single().isLoop)
+        assertEquals(false, dao.observeTracks(PROJECT_ID).first().single().isLoop)
+        vm.onStopPressed()
+        runCurrent()
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `track menu actions are disabled while playback is active`() {
+        assertEquals(false, trackActionsEnabled(playbackActive = true))
+    }
+
+    @Test
+    fun `track menu actions are enabled when playback is inactive`() {
+        assertEquals(true, trackActionsEnabled(playbackActive = false))
     }
 
     @Test
@@ -1222,10 +1332,16 @@ internal class FakeAudioController(
     private var startPlaybackInvocationIndex = 0
     private val _playbackState = MutableStateFlow(false)
     override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
+    private val _recordingInputLevel = MutableStateFlow(0f)
+    override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
 
     /** Simulates the engine reporting playback completion. */
     fun completePlayback() {
         _playbackState.value = false
+    }
+
+    fun emitRecordingInputLevel(level: Float) {
+        _recordingInputLevel.value = level
     }
 
     override fun startRecording(spec: RecordingSpec): String? {
@@ -1235,6 +1351,7 @@ internal class FakeAudioController(
 
     override fun stopRecording(): Boolean {
         stopRecordingCalls += 1
+        _recordingInputLevel.value = 0f
         return stopRecordingResult
     }
 
@@ -1272,6 +1389,7 @@ internal class FakeAudioController(
     override fun release() {
         releaseCalls += 1
         _playbackState.value = false
+        _recordingInputLevel.value = 0f
     }
 }
 

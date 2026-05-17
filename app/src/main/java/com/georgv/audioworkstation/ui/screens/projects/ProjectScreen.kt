@@ -245,6 +245,8 @@ fun ProjectScreen(
                 tracks = state.tracks,
                 selectedTrackIds = state.selectedTrackIds,
                 recordingTrackId = state.recordingTrackId,
+                recordingInputLevel = state.recordingInputLevel,
+                playbackActive = state.playingTrackIds.isNotEmpty(),
                 dragController = dragController,
                 onToggleSelect = vm::toggleSelect,
                 onDeleteTrack = vm::deleteTrack,

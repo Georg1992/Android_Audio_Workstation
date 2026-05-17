@@ -180,6 +180,7 @@ private class PlaybackSessionTestAudio(
 
     private val _playbackState = MutableStateFlow(false)
     override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
+    override val recordingInputLevel: StateFlow<Float> = MutableStateFlow(0f)
 
     fun finishPlaybackPulse() {
         _playbackState.value = false

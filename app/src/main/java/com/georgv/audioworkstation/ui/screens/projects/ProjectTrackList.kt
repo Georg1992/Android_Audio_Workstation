@@ -89,6 +89,8 @@ private val TrackRowPlacementSpec =
 private val PageSliceIncomingSlideTween =
     tween<Float>(durationMillis = 210, easing = FastOutSlowInEasing)
 
+internal fun trackActionsEnabled(playbackActive: Boolean): Boolean = !playbackActive
+
 private sealed interface EdgeHoldBanner {
     data object None : EdgeHoldBanner
 
@@ -173,6 +175,8 @@ fun ProjectTrackList(
     tracks: List<TrackEntity>,
     selectedTrackIds: Set<String>,
     recordingTrackId: String?,
+    recordingInputLevel: Float,
+    playbackActive: Boolean,
     dragController: DragController,
     onToggleSelect: (String) -> Unit,
     onDeleteTrack: (String) -> Unit,
@@ -244,9 +248,10 @@ fun ProjectTrackList(
 
     val listInteractionLocked = dragController.isDragging || dropSettle != null
     val reorderActive = dragController.isDragging
+    val trackActionsEnabled = trackActionsEnabled(playbackActive)
 
-    LaunchedEffect(listInteractionLocked) {
-        if (listInteractionLocked) openOverflowMenuTrackId = null
+    LaunchedEffect(listInteractionLocked, trackActionsEnabled) {
+        if (listInteractionLocked || !trackActionsEnabled) openOverflowMenuTrackId = null
     }
 
     Box(modifier = modifier.fillMaxWidth()) {
@@ -672,6 +677,11 @@ fun ProjectTrackList(
                                     title = track.name ?: "Track",
                                     isSelected = selectedTrackIds.contains(track.id),
                                     isRecording = recordingTrackId == track.id,
+                                    recordingInputLevel = if (recordingTrackId == track.id) {
+                                        recordingInputLevel
+                                    } else {
+                                        0f
+                                    },
                                     gain = track.gain,
                                     onGainChange = { gain ->
                                         onGainChange(track.id, gain)
@@ -684,6 +694,8 @@ fun ProjectTrackList(
                                     onRename = { onRenameTrack(track.id, it) },
                                     onToggleLoop = { onToggleLoop(track.id) },
                                     isLoop = track.isLoop,
+                                    loopToggleEnabled = trackActionsEnabled,
+                                    trackActionsEnabled = trackActionsEnabled,
                                     trackId = track.id,
                                     trackSlotHeight = trackLayout.trackSlotHeight,
                                     interactionBlocked = listInteractionLocked,
@@ -718,7 +730,9 @@ fun ProjectTrackList(
                                     onDragHandleEnd = { latestCompleteDrop() },
                                     isMenuOpen = openOverflowMenuTrackId == track.id,
                                     onMenuOpen = {
-                                        openOverflowMenuTrackId = track.id
+                                        if (trackActionsEnabled) {
+                                            openOverflowMenuTrackId = track.id
+                                        }
                                     },
                                     onMenuDismiss = {
                                         if (openOverflowMenuTrackId == track.id) {

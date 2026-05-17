@@ -156,6 +156,7 @@ class ProjectTransportControllerTest {
         private var startPlaybackCalls = 0
         private val _playbackState = MutableStateFlow(false)
         override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
+        override val recordingInputLevel: StateFlow<Float> = MutableStateFlow(0f)
 
         val engineStopJournal: List<String>
             get() =

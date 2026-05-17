@@ -250,6 +250,7 @@ class ProjectViewModelRobolectricTest {
 
 private class NoOpAudioControllerForRobolectric : AudioController {
     override val playbackState = MutableStateFlow(false)
+    override val recordingInputLevel = MutableStateFlow(0f)
     override fun startRecording(spec: RecordingSpec): String? = null
     override fun stopRecording(): Boolean = true
     override fun startPlayback(spec: PlaybackSpec): Boolean = false

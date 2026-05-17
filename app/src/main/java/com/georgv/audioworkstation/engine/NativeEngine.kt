@@ -18,6 +18,8 @@ class NativeEngine @Inject constructor() {
 
     fun stopRecording(): Boolean = nativeStopRecording()
 
+    fun recordingInputLevel(): Float = nativeGetRecordingInputLevel().coerceIn(0f, 1f)
+
     fun startPlayback(spec: PlaybackSpec): Boolean =
         nativeStartPlayback(
             sampleRate = spec.sampleRate,
@@ -58,6 +60,8 @@ class NativeEngine @Inject constructor() {
     ): Boolean
 
     private external fun nativeStopRecording(): Boolean
+
+    private external fun nativeGetRecordingInputLevel(): Float
 
     private external fun nativeStartPlayback(
         sampleRate: Int,

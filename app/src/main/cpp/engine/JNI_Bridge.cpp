@@ -92,6 +92,11 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopRecording(JNIEnv 
     return g_engine && g_engine->stopRecording() ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetRecordingInputLevel(JNIEnv *, jobject) {
+    return g_engine ? g_engine->recordingInputLevel() : 0.0f;
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
         JNIEnv *env,

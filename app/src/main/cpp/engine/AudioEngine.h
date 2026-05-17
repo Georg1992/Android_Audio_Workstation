@@ -44,6 +44,9 @@ public:
 
     bool startRecording(int32_t channelCount, const std::string &outputPath);
     bool stopRecording();
+    float recordingInputLevel() const {
+        return m_recordingInputLevel.load(std::memory_order_acquire);
+    }
 
     /**
      * Arms playback on lane 0 for `wavPath`. Reuses the open source when the path
@@ -130,6 +133,7 @@ private:
     std::shared_ptr<oboe::AudioStream> m_inputStream;
     std::thread m_recordThread;
     std::atomic<bool> m_isRecording{false};
+    std::atomic<float> m_recordingInputLevel{0.0f};
 
     std::mutex m_playbackMutex;
     std::array<PlaybackLaneSlot, kPlaybackLaneCount> m_playbackLanes{};
