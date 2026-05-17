@@ -61,6 +61,7 @@ fun TrackCard(
     isSelected: Boolean,
     isRecording: Boolean,
     recordingInputLevel: Float = 0f,
+    waveformPeaks: WaveformPeaks? = null,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
@@ -382,7 +383,7 @@ fun TrackCard(
                 if (isRecording) {
                     RecordingWaveform(inputLevel = recordingInputLevel)
                 } else {
-                    TrackWaveform()
+                    TrackWaveform(peaks = waveformPeaks ?: WaveformPeaks.Placeholder)
                 }
             }
 

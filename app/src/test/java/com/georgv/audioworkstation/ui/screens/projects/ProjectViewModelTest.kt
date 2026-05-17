@@ -16,8 +16,10 @@ import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.ui.components.tempWav
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -36,6 +40,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectViewModelTest {
@@ -984,6 +989,30 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `importAudio generates waveform peaks for imported wav`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val importer = FakeAudioImporter(
+            result = AudioImportResult.Success(durationMs = 1_000L, channelMode = ChannelMode.MONO),
+            wavSamplesToWrite = shortArrayOf(0, 2_000, 8_000, 16_000, 24_000, 30_000)
+        )
+        val provider = FakeAudioFilePathProvider(tempDir().absolutePath)
+        val vm = createViewModel(dao, audioImporter = importer, audioFilePathProvider = provider)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "Imported")
+        advanceUntilIdle()
+        waitUntil { vm.uiState.value.waveformPeaksByTrackId.isNotEmpty() }
+
+        val imported = vm.uiState.value.tracks.single()
+        val peaks = vm.uiState.value.waveformPeaksByTrackId[imported.id]
+        assertNotNull(peaks)
+        assertEquals(1f, peaks?.amplitudes?.maxOrNull() ?: 0f, 0.0001f)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `importAudio uses default take name when suggested name is blank`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val importer = FakeAudioImporter()
@@ -1185,6 +1214,30 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `recording finalization generates waveform peaks for recorded wav`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val audioController = FakeAudioController(startRecordingPath = "${tempDir().absolutePath}/default.wav")
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        val recordingTrack = vm.uiState.value.tracks.single()
+        tempWav(shortArrayOf(0, 1_000, 12_000, 26_000))
+            .copyTo(File(recordingTrack.wavFilePath), overwrite = true)
+        vm.onStopPressed()
+        runCurrent()
+        waitUntil { vm.uiState.value.waveformPeaksByTrackId.containsKey(recordingTrack.id) }
+
+        assertFalse(vm.uiState.value.tracks.single().isRecording)
+        assertNotNull(vm.uiState.value.waveformPeaksByTrackId[recordingTrack.id])
+        collectJob.cancel()
+    }
+
+    @Test
     fun `transport stop with loop active does not process further completions`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(
             projects = listOf(project()),
@@ -1221,6 +1274,21 @@ class ProjectViewModelTest {
         assertEquals(2, audioController.startPlaybackCalls)
         collectJob.cancel()
     }
+
+    private suspend fun waitUntil(predicate: () -> Boolean) {
+        withTimeout(2_000L) {
+            while (!predicate()) {
+                yield()
+                delay(10L)
+            }
+        }
+    }
+
+    private fun tempDir(): File =
+        File(System.getProperty("java.io.tmpdir"), "aaw-test-${System.nanoTime()}").apply {
+            mkdirs()
+            deleteOnExit()
+        }
 
     private fun createViewModel(
         dao: FakeProjectDao,
@@ -1276,7 +1344,8 @@ private class FakeAudioImporter(
     private val result: AudioImportResult = AudioImportResult.Success(
         durationMs = 1_000L,
         channelMode = ChannelMode.MONO
-    )
+    ),
+    private val wavSamplesToWrite: ShortArray? = null
 ) : AudioImporter {
     var importCalls: Int = 0
         private set
@@ -1293,6 +1362,11 @@ private class FakeAudioImporter(
         importCalls += 1
         lastTarget = target
         lastDestination = destinationPath
+        wavSamplesToWrite?.let { samples ->
+            val destination = File(destinationPath)
+            destination.parentFile?.mkdirs()
+            tempWav(samples).copyTo(destination, overwrite = true)
+        }
         return result
     }
 }

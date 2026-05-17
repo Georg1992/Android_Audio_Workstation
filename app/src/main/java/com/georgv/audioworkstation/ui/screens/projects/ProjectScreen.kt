@@ -246,6 +246,7 @@ fun ProjectScreen(
                 selectedTrackIds = state.selectedTrackIds,
                 recordingTrackId = state.recordingTrackId,
                 recordingInputLevel = state.recordingInputLevel,
+                waveformPeaksByTrackId = state.waveformPeaksByTrackId,
                 playbackActive = state.playingTrackIds.isNotEmpty(),
                 dragController = dragController,
                 onToggleSelect = vm::toggleSelect,
