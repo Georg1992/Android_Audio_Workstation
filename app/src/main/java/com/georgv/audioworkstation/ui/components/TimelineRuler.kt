@@ -26,12 +26,18 @@ private const val TimelineRulerMaxMinorTicks = 60
 private const val TimelineRulerMinorTickHeightFraction = 0.35f
 private const val TimelineRulerMajorTickHeightFraction = 0.62f
 private const val TimelineRulerClipTickHeightFraction = 0.72f
-private const val TimelineRulerLabelMaxWidthDp = 24f
+internal const val TimelineRulerLabelMaxWidthDp = 24f
 
 data class TimelineRulerTick(
     val timeMs: Long,
     val positionFraction: Float,
     val isMajor: Boolean,
+)
+
+data class TimelineRulerBoundaryLabel(
+    val text: String,
+    val fraction: Float,
+    val alignToEnd: Boolean,
 )
 
 data class TimelineRulerIntervals(
@@ -86,6 +92,33 @@ fun timelineRulerIntervals(timelineBaseDurationMs: Long): TimelineRulerIntervals
     return TimelineRulerIntervals(minorIntervalMs = minorMs, majorIntervalMs = majorMs)
 }
 
+/** Major ticks whose time labels fit on the scrubber panel without overlapping. */
+fun scrubberMajorTicksForLabels(
+    ticks: List<TimelineRulerTick>,
+    minLabelSpacingFraction: Float = 0.11f,
+): List<TimelineRulerTick> {
+    val majors = ticks.filter { it.isMajor }
+    if (majors.isEmpty()) return emptyList()
+    if (majors.size == 1) return majors
+
+    val spacing = minLabelSpacingFraction.coerceIn(0.05f, 0.5f)
+    val visible = mutableListOf(majors.first())
+    for (index in 1 until majors.lastIndex) {
+        val tick = majors[index]
+        if (tick.positionFraction - visible.last().positionFraction >= spacing) {
+            visible += tick
+        }
+    }
+    val last = majors.last()
+    if (visible.last() != last) {
+        if (last.positionFraction - visible.last().positionFraction < spacing * 0.65f) {
+            visible.removeAt(visible.lastIndex)
+        }
+        visible += last
+    }
+    return visible
+}
+
 fun buildTimelineRulerTicks(timelineBaseDurationMs: Long): List<TimelineRulerTick> {
     val intervals = timelineRulerIntervals(timelineBaseDurationMs) ?: return emptyList()
     if (timelineBaseDurationMs <= 0L) return emptyList()
@@ -131,8 +164,8 @@ fun TimelineRuler(
     timelineBaseDurationMs: Long,
     clipStartFraction: Float,
     clipEndFraction: Float,
-    clipStartTimeLabel: String,
-    clipEndTimeLabel: String,
+    boundaryLabels: List<TimelineRulerBoundaryLabel>,
+    timelineEndFraction: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
     val ticks = remember(timelineBaseDurationMs) {
@@ -141,7 +174,8 @@ fun TimelineRuler(
     if (ticks.isEmpty()) return
 
     val startFraction = clipStartFraction.coerceIn(0f, 1f)
-    val endFraction = clipEndFraction.coerceIn(startFraction, 1f)
+    val clipEnd = clipEndFraction.coerceIn(startFraction, 1f)
+    val timelineEnd = timelineEndFraction.coerceIn(0f, 1f)
 
     val minorTickColor = AppColors.Line.copy(alpha = 0.28f)
     val majorTickColor = AppColors.Line.copy(alpha = 0.5f)
@@ -179,7 +213,13 @@ fun TimelineRuler(
                 )
             }
 
-            listOf(startFraction, endFraction).forEach { fraction ->
+            val boundaryFractions =
+                if (clipEnd < timelineEnd - 0.001f) {
+                    listOf(startFraction, clipEnd, timelineEnd)
+                } else {
+                    listOf(startFraction, clipEnd)
+                }
+            boundaryFractions.forEach { fraction ->
                 val x = size.width * fraction
                 val tickHeight = size.height * TimelineRulerClipTickHeightFraction
                 drawLine(
@@ -191,37 +231,24 @@ fun TimelineRuler(
             }
         }
 
-        if (endFraction > startFraction) {
-            Text(
-                text = clipStartTimeLabel,
-                style = clipLabelStyle,
-                lineHeight = 6.sp,
-                maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(
-                        x = rulerClipLabelOffsetX(
-                            fraction = startFraction,
-                            rulerWidth = rulerWidth,
-                            alignToEnd = false,
+        if (timelineBaseDurationMs > 0L) {
+            boundaryLabels.forEach { label ->
+                Text(
+                    text = label.text,
+                    style = clipLabelStyle,
+                    lineHeight = 6.sp,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(
+                            x = rulerClipLabelOffsetX(
+                                fraction = label.fraction,
+                                rulerWidth = rulerWidth,
+                                alignToEnd = label.alignToEnd,
+                            ),
                         ),
-                    ),
-            )
-            Text(
-                text = clipEndTimeLabel,
-                style = clipLabelStyle,
-                lineHeight = 6.sp,
-                maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(
-                        x = rulerClipLabelOffsetX(
-                            fraction = endFraction,
-                            rulerWidth = rulerWidth,
-                            alignToEnd = true,
-                        ),
-                    ),
-            )
+                )
+            }
         }
     }
 }

@@ -1309,6 +1309,41 @@ class ProjectViewModelTest {
         )
     }
 
+    @Test
+    fun `setPlayheadFraction maps to clamped timeline position`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "/a.wav").copy(duration = 5_000L),
+                        track(id = "b", position = 1, wavFilePath = "/b.wav").copy(duration = 10_000L),
+                    ),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        val baseDurationMs = vm.uiState.value.timelineBaseDurationMs
+        assertEquals(10_000L, baseDurationMs)
+
+        vm.setPlayheadFraction(0f, baseDurationMs)
+        advanceUntilIdle()
+        assertEquals(0L, vm.uiState.value.playheadPositionMs)
+
+        vm.setPlayheadFraction(1f, baseDurationMs)
+        advanceUntilIdle()
+        assertEquals(10_000L, vm.uiState.value.playheadPositionMs)
+
+        vm.setPlayheadFraction(2f, baseDurationMs)
+        advanceUntilIdle()
+        assertEquals(10_000L, vm.uiState.value.playheadPositionMs)
+
+        collectJob.cancel()
+    }
+
     private fun project(name: String = "Project", id: String = PROJECT_ID) = ProjectEntity(id = id, name = name)
 
     private fun track(

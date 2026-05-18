@@ -167,6 +167,51 @@ class TrackTimelineLaneTest {
     }
 
     @Test
+    fun `base track ruler shows clip start and clip end only`() {
+        val clip = clip(id = "base", durationMs = 30_000L).copy(isTimelineBase = true)
+        val layout = timelineClipLayout(clip, timelineBaseDurationMs = 30_000L)!!
+
+        val labels = timelineRulerBoundaryLabels(clip, layout, timelineBaseDurationMs = 30_000L)
+
+        assertEquals(2, labels.size)
+        assertEquals("0:00", labels[0].text)
+        assertEquals(0f, labels[0].fraction, 0.0001f)
+        assertEquals("0:30", labels[1].text)
+        assertEquals(1f, labels[1].fraction, 0.0001f)
+    }
+
+    @Test
+    fun `shorter track ruler shows clip start clip end and base timeline end`() {
+        val clip = clip(id = "short", durationMs = 15_000L)
+        val layout = timelineClipLayout(clip, timelineBaseDurationMs = 30_000L)!!
+
+        val labels = timelineRulerBoundaryLabels(clip, layout, timelineBaseDurationMs = 30_000L)
+
+        assertEquals(3, labels.size)
+        assertEquals("0:00", labels[0].text)
+        assertEquals(0f, labels[0].fraction, 0.0001f)
+        assertEquals("0:15", labels[1].text)
+        assertEquals(0.5f, labels[1].fraction, 0.0001f)
+        assertEquals("0:30", labels[2].text)
+        assertEquals(1f, labels[2].fraction, 0.0001f)
+    }
+
+    @Test
+    fun `offset clip ruler uses clip start and end times`() {
+        val clip = clip(startOffsetMs = 10_000L, durationMs = 20_000L)
+        val layout = timelineClipLayout(clip, timelineBaseDurationMs = 100_000L)!!
+
+        val labels = timelineRulerBoundaryLabels(clip, layout, timelineBaseDurationMs = 100_000L)
+
+        assertEquals("0:10", labels[0].text)
+        assertEquals(0.1f, labels[0].fraction, 0.0001f)
+        assertEquals("0:30", labels[1].text)
+        assertEquals(0.3f, labels[1].fraction, 0.0001f)
+        assertEquals("1:40", labels[2].text)
+        assertEquals(1f, labels[2].fraction, 0.0001f)
+    }
+
+    @Test
     fun `project timeline clips detect base tracks`() {
         val tracks = listOf(
             TrackEntity(id = "short", projectId = "p", wavFilePath = "short.wav", duration = 1_000L),

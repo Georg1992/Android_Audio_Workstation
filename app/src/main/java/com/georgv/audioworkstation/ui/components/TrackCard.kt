@@ -64,6 +64,7 @@ fun TrackCard(
     recordingInputLevel: Float = 0f,
     timelineClip: TimelineClip? = null,
     timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
+    timelinePlayheadFraction: Float = 0f,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
@@ -411,6 +412,7 @@ fun TrackCard(
                         TrackTimelineLane(
                             clip = timelineClip,
                             timelineBaseDurationMs = timelineBaseDurationMs,
+                            playheadFraction = timelinePlayheadFraction,
                             modifier = waveformModifier,
                         )
                     }

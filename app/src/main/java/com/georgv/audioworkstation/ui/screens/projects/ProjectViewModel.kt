@@ -23,6 +23,9 @@ import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
 import com.georgv.audioworkstation.ui.components.timelineBaseDurationMs
+import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
+import com.georgv.audioworkstation.ui.components.timelinePlayheadFraction
+import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -32,11 +35,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,8 +59,12 @@ data class ProjectUiState(
     val waveformStatesByTrackId: Map<String, WaveformState> = emptyMap(),
     val timelineClipsByTrackId: Map<String, TimelineClip> = emptyMap(),
     val timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
-    val isRecordingStartup: Boolean = false
+    val playheadPositionMs: Long = 0L,
+    val isRecordingStartup: Boolean = false,
 ) {
+    val playheadFraction: Float
+        get() = timelinePlayheadFraction(playheadPositionMs, timelineBaseDurationMs)
+
     val isPlayEnabled: Boolean
         get() = selectedTrackIds.isNotEmpty()
 
@@ -77,6 +87,7 @@ class ProjectViewModel @Inject constructor(
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     private val waveformPeakExtractor = WavWaveformPeakExtractor()
     private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
+    private val playheadPositionMs = MutableStateFlow(0L)
     private val waveformPeakPathsByTrackId = mutableMapOf<String, String>()
     private val waveformExtractionsInFlight = mutableSetOf<String>()
 
@@ -243,7 +254,7 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
-    val uiState: StateFlow<ProjectUiState> =
+    private val projectScreenSnapshot =
         combine(
             combine(projectId, resolvedProject) { pid, proj -> pid to proj },
             combine(projectTracks, optimisticTracks, recordingSession.optimisticRecordingTrack, optimisticTrackGains) {
@@ -260,7 +271,9 @@ class ProjectViewModel @Inject constructor(
                 )
             },
             combine(selectedTrackIds, playbackSession.playingTrackIds) { selected, playing -> selected to playing },
-            combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup -> recordingId to startup },
+            combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup ->
+                recordingId to startup
+            },
             combine(audioController.recordingInputLevel, waveformStatesByTrackId) { level, waveformStates ->
                 level to waveformStates
             },
@@ -270,7 +283,7 @@ class ProjectViewModel @Inject constructor(
             val (recording, startup) = recStartup
             val (recordingInputLevel, waveformStates) = meterWaveform
             val timelineClips = projectTimelineClips(tracks, waveformStates)
-            ProjectUiState(
+            pid to ProjectUiState(
                 projectId = pid,
                 project = proj,
                 tracks = tracks,
@@ -281,9 +294,31 @@ class ProjectViewModel @Inject constructor(
                 waveformStatesByTrackId = waveformStates,
                 timelineClipsByTrackId = timelineClips.associateBy { it.laneId },
                 timelineBaseDurationMs = timelineBaseDurationMs(timelineClips),
-                isRecordingStartup = startup
+                isRecordingStartup = startup,
+            )
+        }
+
+    val uiState: StateFlow<ProjectUiState> =
+        combine(projectScreenSnapshot, playheadPositionMs) { snapshot, playheadMs ->
+            val (_, baseState) = snapshot
+            baseState.copy(
+                playheadPositionMs =
+                    timelinePlayheadClampedPositionMs(playheadMs, baseState.timelineBaseDurationMs),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
+
+    init {
+        viewModelScope.launch {
+            projectScreenSnapshot
+                .map { (_, state) -> state.timelineBaseDurationMs }
+                .distinctUntilChanged()
+                .collect { baseDurationMs ->
+                    playheadPositionMs.update { stored ->
+                        timelinePlayheadClampedPositionMs(stored, baseDurationMs)
+                    }
+                }
+        }
+    }
 
     /**
      * Wires repository/audio observation to [projectId] for this screen instance.
@@ -301,8 +336,20 @@ class ProjectViewModel @Inject constructor(
             waveformExtractionsInFlight.clear()
             recordingSession.resetWhenBoundProjectChanges()
             selectedTrackIds.value = emptySet()
+            playheadPositionMs.value = 0L
         }
         this.projectId.value = projectId
+    }
+
+    fun setPlayheadPositionMs(positionMs: Long, timelineBaseDurationMs: Long) {
+        playheadPositionMs.value = timelinePlayheadClampedPositionMs(positionMs, timelineBaseDurationMs)
+    }
+
+    fun setPlayheadFraction(fraction: Float, timelineBaseDurationMs: Long) {
+        setPlayheadPositionMs(
+            timelinePlayheadPositionMs(fraction, timelineBaseDurationMs),
+            timelineBaseDurationMs,
+        )
     }
 
     private suspend fun ensureProject(projectId: String, name: String): ProjectEntity? =

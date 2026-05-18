@@ -132,10 +132,54 @@ fun formatTimelineDuration(durationMs: Long): String {
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
+fun timelineClipEndTimeMs(
+    clip: TimelineClip,
+    timelineBaseDurationMs: Long,
+): Long {
+    val startMs = clip.startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    return min(startMs + clip.durationMs, timelineBaseDurationMs)
+}
+
+fun timelineRulerBoundaryLabels(
+    clip: TimelineClip,
+    layout: TimelineClipLayout,
+    timelineBaseDurationMs: Long,
+): List<TimelineRulerBoundaryLabel> {
+    val startMs = clip.startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    val clipEndMs = timelineClipEndTimeMs(clip, timelineBaseDurationMs)
+    val clipEndFraction = timelineClipEndFraction(layout)
+
+    val labels =
+        listOf(
+            TimelineRulerBoundaryLabel(
+                text = formatTimelineDuration(startMs),
+                fraction = layout.startFraction,
+                alignToEnd = false,
+            ),
+            TimelineRulerBoundaryLabel(
+                text = formatTimelineDuration(clipEndMs),
+                fraction = clipEndFraction,
+                alignToEnd = true,
+            ),
+        )
+
+    if (clip.isTimelineBase) {
+        return labels
+    }
+
+    return labels +
+        TimelineRulerBoundaryLabel(
+            text = formatTimelineDuration(timelineBaseDurationMs),
+            fraction = 1f,
+            alignToEnd = true,
+        )
+}
+
 @Composable
 fun TrackTimelineLane(
     clip: TimelineClip?,
     timelineBaseDurationMs: Long,
+    playheadFraction: Float,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
@@ -149,54 +193,65 @@ fun TrackTimelineLane(
             .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
         val layout = clip?.let { timelineClipLayout(it, timelineBaseDurationMs) } ?: return@BoxWithConstraints
-        Column(
+        Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .fillMaxWidth(TimelineWaveformWidthFraction)
                 .fillMaxHeight(),
         ) {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .weight(TimelineWaveformHeightFraction)
-                    .fillMaxWidth(),
-            ) {
-                val clipStart = maxWidth * layout.startFraction
-                val clipWidth =
-                    (maxWidth * layout.widthFraction)
-                        .coerceAtLeast(TimelineClipMinimumWidthDp.dp)
-                Box(
+            Column(modifier = Modifier.fillMaxSize()) {
+                BoxWithConstraints(
                     modifier = Modifier
-                        .offset(x = clipStart)
-                        .width(clipWidth)
-                        .fillMaxHeight()
-                        .clip(shape)
-                        .background(AppColors.SurfacePanel)
+                        .weight(TimelineWaveformHeightFraction)
+                        .fillMaxWidth(),
                 ) {
-                    when (val waveform = clip.waveformState) {
-                        WaveformState.Loading ->
-                            WaveformStatusText("Generating...")
-                        WaveformState.Failed ->
-                            WaveformStatusText("No waveform")
-                        WaveformState.NoWaveform ->
-                            WaveformStatusText("No audio")
-                        is WaveformState.Ready ->
-                            TrackWaveform(
-                                peaks = waveform.peaks,
-                                horizontalInsetFraction = 0f,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                    val clipStart = maxWidth * layout.startFraction
+                    val clipWidth =
+                        (maxWidth * layout.widthFraction)
+                            .coerceAtLeast(TimelineClipMinimumWidthDp.dp)
+                    Box(
+                        modifier = Modifier
+                            .offset(x = clipStart)
+                            .width(clipWidth)
+                            .fillMaxHeight()
+                            .clip(shape)
+                            .background(AppColors.SurfacePanel)
+                    ) {
+                        when (val waveform = clip.waveformState) {
+                            WaveformState.Loading ->
+                                WaveformStatusText("Generating...")
+                            WaveformState.Failed ->
+                                WaveformStatusText("No waveform")
+                            WaveformState.NoWaveform ->
+                                WaveformStatusText("No audio")
+                            is WaveformState.Ready ->
+                                TrackWaveform(
+                                    peaks = waveform.peaks,
+                                    horizontalInsetFraction = 0f,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(start = 1.dp),
+                                )
+                        }
                     }
                 }
+                TimelineRuler(
+                    timelineBaseDurationMs = timelineBaseDurationMs,
+                    clipStartFraction = layout.startFraction,
+                    clipEndFraction = timelineClipEndFraction(layout),
+                    boundaryLabels = timelineRulerBoundaryLabels(
+                        clip = clip,
+                        layout = layout,
+                        timelineBaseDurationMs = timelineBaseDurationMs,
+                    ),
+                    modifier = Modifier
+                        .weight(TimelineRulerHeightFraction)
+                        .fillMaxWidth(),
+                )
             }
-            TimelineRuler(
-                timelineBaseDurationMs = timelineBaseDurationMs,
-                clipStartFraction = layout.startFraction,
-                clipEndFraction = timelineClipEndFraction(layout),
-                clipStartTimeLabel = formatTimelineDuration(0L),
-                clipEndTimeLabel = formatTimelineDuration(clip.durationMs),
-                modifier = Modifier
-                    .weight(TimelineRulerHeightFraction)
-                    .fillMaxWidth(),
+            TimelinePlayheadMarker(
+                fraction = playheadFraction,
+                modifier = Modifier.fillMaxSize(),
             )
         }
         ClipMetadataArea(

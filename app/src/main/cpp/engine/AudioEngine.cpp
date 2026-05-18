@@ -165,6 +165,10 @@ bool AudioEngine::armSinglePlaybackLaneLocked(const std::string &wavPath, float 
     std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
                                static_cast<std::size_t>(channels));
     const int32_t prerollFrames = lane0.source->readFrames(preroll.data(), prerollTargetFrames);
+    if (prerollFrames < 0) {
+        clearPlaybackLanesLocked();
+        return false;
+    }
     if (prerollFrames > 0 && lane0.ring) {
         lane0.ring->write(
             preroll.data(),
@@ -599,7 +603,9 @@ void AudioEngine::render(float *outputInterleaved,
                          int32_t numFrames,
                          int32_t channels,
                          int32_t /*sampleRate*/) {
-    if (!outputInterleaved || numFrames <= 0 || channels <= 0) return;
+    if (!outputInterleaved || numFrames <= 0 || channels <= 0) {
+        return;
+    }
 
     const std::size_t outSampleCount = static_cast<std::size_t>(numFrames) *
                                        static_cast<std::size_t>(channels);

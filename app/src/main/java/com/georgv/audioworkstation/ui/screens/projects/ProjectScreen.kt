@@ -46,7 +46,7 @@ import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.rememberTopBarAlertState
-import com.georgv.audioworkstation.ui.components.TopToolbarPanel
+import com.georgv.audioworkstation.ui.components.TimelinePlayheadScrubberPanel
 import com.georgv.audioworkstation.ui.components.TransportPanel
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -84,6 +84,7 @@ fun ProjectScreen(
     var projectNameFieldWasFocused by remember(projectId) { mutableStateOf(false) }
     var projectRenameCommitted by remember(projectId) { mutableStateOf(false) }
     val projectNameFocusRequester = remember(projectId) { FocusRequester() }
+    var scrubbingPlayheadFraction by remember { mutableStateOf<Float?>(null) }
 
     fun commitProjectRename() {
         if (!isRenamingProject || projectRenameCommitted) return
@@ -170,6 +171,9 @@ fun ProjectScreen(
     }
 
     val reorderActive = dragController.isDragging
+    LaunchedEffect(reorderActive) {
+        if (reorderActive) scrubbingPlayheadFraction = null
+    }
 
     ScreenScaffold(
         topBarAlertMessage = topBarAlertState.message,
@@ -239,7 +243,19 @@ fun ProjectScreen(
                 .background(AppColors.Bg)
                 .padding(padding)
         ) {
-            TopToolbarPanel(inputLocked = reorderActive)
+            val playheadFraction = scrubbingPlayheadFraction ?: state.playheadFraction
+            TimelinePlayheadScrubberPanel(
+                playheadFraction = playheadFraction,
+                timelineBaseDurationMs = state.timelineBaseDurationMs,
+                onPlayheadFractionPreview = { fraction ->
+                    scrubbingPlayheadFraction = fraction
+                },
+                onPlayheadFractionCommit = { fraction ->
+                    scrubbingPlayheadFraction = null
+                    vm.setPlayheadFraction(fraction, state.timelineBaseDurationMs)
+                },
+                inputLocked = reorderActive,
+            )
 
             ProjectTrackList(
                 tracks = state.tracks,
@@ -248,6 +264,7 @@ fun ProjectScreen(
                 recordingInputLevel = state.recordingInputLevel,
                 timelineClipsByTrackId = state.timelineClipsByTrackId,
                 timelineBaseDurationMs = state.timelineBaseDurationMs,
+                timelinePlayheadFraction = playheadFraction,
                 playbackActive = state.playingTrackIds.isNotEmpty(),
                 dragController = dragController,
                 onToggleSelect = vm::toggleSelect,

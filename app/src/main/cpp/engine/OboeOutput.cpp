@@ -121,21 +121,26 @@ oboe::DataCallbackResult OboeOutput::onAudioReady(oboe::AudioStream *stream,
                                                   void *audioData,
                                                   int32_t numFrames) {
     auto *out = static_cast<float *>(audioData);
-    if (!out) {
+    if (!out || numFrames <= 0) {
         return oboe::DataCallbackResult::Continue;
     }
 
+    const int32_t channels =
+        stream && stream->getChannelCount() > 0 ? stream->getChannelCount() : m_openedChannelCount;
+    if (channels <= 0) {
+        return oboe::DataCallbackResult::Continue;
+    }
+
+    const std::size_t sampleCount =
+        static_cast<std::size_t>(numFrames) * static_cast<std::size_t>(channels);
+    std::fill(out, out + sampleCount, 0.0f);
+
     if (!stream || !m_engine) {
-        const int32_t channels = stream ? stream->getChannelCount() : m_openedChannelCount;
-        if (numFrames > 0 && channels > 0) {
-            std::fill(out, out + static_cast<std::size_t>(numFrames) *
-                                  static_cast<std::size_t>(channels), 0.0f);
-        }
         return oboe::DataCallbackResult::Continue;
     }
 
     // Engine emits silence when no source is armed, so it's safe to leave the
     // stream running between plays.
-    m_engine->render(out, numFrames, stream->getChannelCount(), stream->getSampleRate());
+    m_engine->render(out, numFrames, channels, stream->getSampleRate());
     return oboe::DataCallbackResult::Continue;
 }

@@ -87,6 +87,27 @@ class TimelineRulerTest {
     }
 
     @Test
+    fun `scrubber labels keep first and last major ticks`() {
+        val ticks = buildTimelineRulerTicks(120_000L)
+        val labeled = scrubberMajorTicksForLabels(ticks, minLabelSpacingFraction = 0.11f)
+
+        assertEquals(0L, labeled.first().timeMs)
+        assertEquals(120_000L, labeled.last().timeMs)
+        assertTrue(labeled.size >= 3)
+        assertTrue(labeled.all { it.isMajor })
+    }
+
+    @Test
+    fun `scrubber labels thin crowded majors on long timelines`() {
+        val ticks = buildTimelineRulerTicks(TimelineMaxDurationMs)
+        val labeled = scrubberMajorTicksForLabels(ticks, minLabelSpacingFraction = 0.11f)
+
+        assertTrue(labeled.size < ticks.count { it.isMajor })
+        assertEquals(0L, labeled.first().timeMs)
+        assertEquals(TimelineMaxDurationMs, labeled.last().timeMs)
+    }
+
+    @Test
     fun `clip end fraction matches clip layout`() {
         val layout = timelineClipLayout(
             clip(startOffsetMs = 10_000L, durationMs = 20_000L),

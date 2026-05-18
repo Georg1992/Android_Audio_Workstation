@@ -179,6 +179,7 @@ fun ProjectTrackList(
     recordingInputLevel: Float,
     timelineClipsByTrackId: Map<String, TimelineClip>,
     timelineBaseDurationMs: Long,
+    timelinePlayheadFraction: Float,
     playbackActive: Boolean,
     dragController: DragController,
     onToggleSelect: (String) -> Unit,
@@ -686,6 +687,7 @@ fun ProjectTrackList(
                                     },
                                     timelineClip = timelineClipsByTrackId[track.id],
                                     timelineBaseDurationMs = timelineBaseDurationMs,
+                                    timelinePlayheadFraction = timelinePlayheadFraction,
                                     gain = track.gain,
                                     onGainChange = { gain ->
                                         onGainChange(track.id, gain)
