@@ -26,8 +26,10 @@ object Dimens {
 
     // track card (layout policy also drives project list row height — see projectTrackLayoutSpec)
     val MenuButtonSize = 40.dp
-    val PlaceholderHeight = 42.dp
-    val FaderWidth = 44.dp
+    /** Loop + overflow menu on track cards (30% smaller than [MenuButtonSize]). */
+    val TrackHeaderButtonSize = 28.dp
+    val PlaceholderHeight = 56.dp
+    val FaderWidth = 40.dp
     val FaderMinHeight = 100.dp
     val MenuRowMinHeight = 32.dp
 
@@ -59,8 +61,8 @@ object Dimens {
     val DragOverlayShadow = 12.dp
 
     // fader internals
-    val FaderTrackWidth = 10.dp
-    val FaderThumbWidth = 22.dp
+    val FaderTrackWidth = 8.dp
+    val FaderThumbWidth = 18.dp
     val FaderThumbHeight = 14.dp
     val FaderTickShortLen = 3.dp
     val FaderTickMidLen = 6.dp

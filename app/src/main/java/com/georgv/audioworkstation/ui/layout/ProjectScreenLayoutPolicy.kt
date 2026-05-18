@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.layout
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.ui.components.timelineLaneTotalHeightDp
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 /**
@@ -34,9 +35,9 @@ private fun slotHeightForSlots(
  */
 private fun minComfortTrackSlotHeightDp(): Dp {
     val verticalPadding = Dimens.TileInnerPadding * 2
-    val titleRow = Dimens.MenuButtonSize
+    val titleRow = Dimens.TrackHeaderButtonSize
     val spacer = Dimens.PanelPadding
-    val waveform = Dimens.PlaceholderHeight
+    val waveform = timelineLaneTotalHeightDp()
     val leftColumn = verticalPadding + titleRow + spacer + waveform
     return maxOf(leftColumn, Dimens.FaderMinHeight + verticalPadding).coerceAtLeast(96.dp)
 }

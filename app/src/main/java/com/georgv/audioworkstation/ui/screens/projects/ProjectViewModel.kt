@@ -17,8 +17,12 @@ import com.georgv.audioworkstation.core.validation.validateName
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.components.WaveformPeaks
+import com.georgv.audioworkstation.ui.components.TimelineClip
+import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.ui.components.projectTimelineClips
+import com.georgv.audioworkstation.ui.components.timelineBaseDurationMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -46,7 +50,9 @@ data class ProjectUiState(
     val playingTrackIds: Set<String> = emptySet(),
     val recordingTrackId: String? = null,
     val recordingInputLevel: Float = 0f,
-    val waveformPeaksByTrackId: Map<String, WaveformPeaks> = emptyMap(),
+    val waveformStatesByTrackId: Map<String, WaveformState> = emptyMap(),
+    val timelineClipsByTrackId: Map<String, TimelineClip> = emptyMap(),
+    val timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
     val isRecordingStartup: Boolean = false
 ) {
     val isPlayEnabled: Boolean
@@ -70,7 +76,7 @@ class ProjectViewModel @Inject constructor(
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     private val waveformPeakExtractor = WavWaveformPeakExtractor()
-    private val waveformPeaksByTrackId = MutableStateFlow<Map<String, WaveformPeaks>>(emptyMap())
+    private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
     private val waveformPeakPathsByTrackId = mutableMapOf<String, String>()
     private val waveformExtractionsInFlight = mutableSetOf<String>()
 
@@ -255,14 +261,15 @@ class ProjectViewModel @Inject constructor(
             },
             combine(selectedTrackIds, playbackSession.playingTrackIds) { selected, playing -> selected to playing },
             combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup -> recordingId to startup },
-            combine(audioController.recordingInputLevel, waveformPeaksByTrackId) { level, waveformPeaks ->
-                level to waveformPeaks
+            combine(audioController.recordingInputLevel, waveformStatesByTrackId) { level, waveformStates ->
+                level to waveformStates
             },
         ) { pidProject, tracks, selPlay, recStartup, meterWaveform ->
             val (pid, proj) = pidProject
             val (selected, playing) = selPlay
             val (recording, startup) = recStartup
-            val (recordingInputLevel, waveformPeaks) = meterWaveform
+            val (recordingInputLevel, waveformStates) = meterWaveform
+            val timelineClips = projectTimelineClips(tracks, waveformStates)
             ProjectUiState(
                 projectId = pid,
                 project = proj,
@@ -271,7 +278,9 @@ class ProjectViewModel @Inject constructor(
                 playingTrackIds = playing,
                 recordingTrackId = recording,
                 recordingInputLevel = recordingInputLevel.coerceIn(0f, 1f),
-                waveformPeaksByTrackId = waveformPeaks,
+                waveformStatesByTrackId = waveformStates,
+                timelineClipsByTrackId = timelineClips.associateBy { it.laneId },
+                timelineBaseDurationMs = timelineBaseDurationMs(timelineClips),
                 isRecordingStartup = startup
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
@@ -287,7 +296,7 @@ class ProjectViewModel @Inject constructor(
             transportController.resetPlaybackForProjectChange()
             optimisticTracks.value = null
             optimisticTrackGains.value = emptyMap()
-            waveformPeaksByTrackId.value = emptyMap()
+            waveformStatesByTrackId.value = emptyMap()
             waveformPeakPathsByTrackId.clear()
             waveformExtractionsInFlight.clear()
             recordingSession.resetWhenBoundProjectChanges()
@@ -574,38 +583,45 @@ class ProjectViewModel @Inject constructor(
     private fun refreshWaveformPeakRequests(tracks: List<TrackEntity>) {
         val playableTracks = tracks.filter { it.wavFilePath.isNotBlank() && !it.isRecording }
         val playableIds = playableTracks.mapTo(mutableSetOf()) { it.id }
-        val currentPeaks = waveformPeaksByTrackId.value.toMutableMap()
+        val currentStates = waveformStatesByTrackId.value.toMutableMap()
 
-        currentPeaks.keys.retainAll(playableIds)
+        currentStates.keys.retainAll(playableIds)
         waveformPeakPathsByTrackId.keys.retainAll(playableIds)
         waveformExtractionsInFlight.retainAll(playableIds)
 
         playableTracks.forEach { track ->
             val cachedPath = waveformPeakPathsByTrackId[track.id]
             if (cachedPath != track.wavFilePath) {
-                currentPeaks.remove(track.id)
+                currentStates.remove(track.id)
                 waveformPeakPathsByTrackId.remove(track.id)
             }
         }
-        if (currentPeaks != waveformPeaksByTrackId.value) {
-            waveformPeaksByTrackId.value = currentPeaks
+        if (currentStates != waveformStatesByTrackId.value) {
+            waveformStatesByTrackId.value = currentStates
         }
 
         playableTracks.forEach { track ->
             if (waveformPeakPathsByTrackId[track.id] == track.wavFilePath) return@forEach
             if (!waveformExtractionsInFlight.add(track.id)) return@forEach
+            waveformPeakPathsByTrackId[track.id] = track.wavFilePath
+            waveformStatesByTrackId.value =
+                waveformStatesByTrackId.value + (track.id to WaveformState.Loading)
             viewModelScope.launch {
                 val peaks = waveformPeakExtractor.extract(track.wavFilePath)
                 waveformExtractionsInFlight.remove(track.id)
-                if (peaks == null) return@launch
                 if (uiState.value.tracks.any {
                         it.id == track.id &&
                             it.wavFilePath == track.wavFilePath &&
                             !it.isRecording
                     }
                 ) {
-                    waveformPeakPathsByTrackId[track.id] = track.wavFilePath
-                    waveformPeaksByTrackId.value = waveformPeaksByTrackId.value + (track.id to peaks)
+                    val state =
+                        if (peaks == null) {
+                            WaveformState.Failed
+                        } else {
+                            WaveformState.Ready(peaks)
+                        }
+                    waveformStatesByTrackId.value = waveformStatesByTrackId.value + (track.id to state)
                 }
             }
         }

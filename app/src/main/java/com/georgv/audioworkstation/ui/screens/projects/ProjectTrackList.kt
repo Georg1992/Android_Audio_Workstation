@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TrackCard
-import com.georgv.audioworkstation.ui.components.WaveformPeaks
+import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.layout.pageCount
 import com.georgv.audioworkstation.ui.layout.pageEndExclusive
@@ -177,7 +177,8 @@ fun ProjectTrackList(
     selectedTrackIds: Set<String>,
     recordingTrackId: String?,
     recordingInputLevel: Float,
-    waveformPeaksByTrackId: Map<String, WaveformPeaks>,
+    timelineClipsByTrackId: Map<String, TimelineClip>,
+    timelineBaseDurationMs: Long,
     playbackActive: Boolean,
     dragController: DragController,
     onToggleSelect: (String) -> Unit,
@@ -251,7 +252,6 @@ fun ProjectTrackList(
     val listInteractionLocked = dragController.isDragging || dropSettle != null
     val reorderActive = dragController.isDragging
     val trackActionsEnabled = trackActionsEnabled(playbackActive)
-
     LaunchedEffect(listInteractionLocked, trackActionsEnabled) {
         if (listInteractionLocked || !trackActionsEnabled) openOverflowMenuTrackId = null
     }
@@ -684,7 +684,8 @@ fun ProjectTrackList(
                                     } else {
                                         0f
                                     },
-                                    waveformPeaks = waveformPeaksByTrackId[track.id],
+                                    timelineClip = timelineClipsByTrackId[track.id],
+                                    timelineBaseDurationMs = timelineBaseDurationMs,
                                     gain = track.gain,
                                     onGainChange = { gain ->
                                         onGainChange(track.id, gain)

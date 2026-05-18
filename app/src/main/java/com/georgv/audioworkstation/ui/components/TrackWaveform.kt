@@ -2,9 +2,9 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,12 +59,14 @@ private const val RecordingWaveformQuietVisiblePeak = 0.16f
 fun TrackWaveform(
     modifier: Modifier = Modifier,
     peaks: WaveformPeaks = WaveformPeaks.Placeholder,
+    horizontalInsetFraction: Float = 0.04f,
 ) {
     WaveformCanvas(
         modifier = modifier,
         peakCount = peaks.amplitudes.size,
         peakAt = { index -> peaks.amplitudes[index] },
         barAlphaAt = { 1f },
+        horizontalInsetFraction = horizontalInsetFraction,
     )
 }
 
@@ -116,15 +118,16 @@ private fun WaveformCanvas(
     peakCount: Int,
     peakAt: (Int) -> Float,
     barAlphaAt: (Int) -> Float,
+    horizontalInsetFraction: Float = 0.04f,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(Dimens.PlaceholderHeight)
+            .fillMaxHeight()
+            .heightIn(min = Dimens.PlaceholderHeight)
             .clip(shape)
             .background(AppColors.Bg)
-            .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
         redrawToken
         val centerY = size.height / 2f
@@ -137,7 +140,7 @@ private fun WaveformCanvas(
 
         if (peakCount <= 0) return@Canvas
 
-        val horizontalInset = size.width * 0.04f
+        val horizontalInset = size.width * horizontalInsetFraction.coerceIn(0f, 0.2f)
         val availableWidth = (size.width - horizontalInset * 2f).coerceAtLeast(0f)
         val barSlotWidth = availableWidth / peakCount
         val barWidth = (barSlotWidth * 0.46f).coerceAtLeast(1f)

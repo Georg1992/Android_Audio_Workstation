@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,7 +62,8 @@ fun TrackCard(
     isSelected: Boolean,
     isRecording: Boolean,
     recordingInputLevel: Float = 0f,
-    waveformPeaks: WaveformPeaks? = null,
+    timelineClip: TimelineClip? = null,
+    timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
@@ -184,7 +186,15 @@ fun TrackCard(
         ) {
             // LEFT
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (trackSlotHeight != null) {
+                            Modifier.fillMaxHeight()
+                        } else {
+                            Modifier
+                        }
+                    )
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -249,8 +259,8 @@ fun TrackCard(
                                 !isRenaming
                         Box(
                             modifier = Modifier
-                                .width(Dimens.MenuButtonSize)
-                                .height(Dimens.MenuButtonSize)
+                                .width(Dimens.TrackHeaderButtonSize)
+                                .height(Dimens.TrackHeaderButtonSize)
                                 .then(
                                     if (isLoop) Modifier.glow(
                                         color = AppColors.Accent,
@@ -287,8 +297,8 @@ fun TrackCard(
                         Box(
                             modifier =
                                 Modifier
-                                    .width(Dimens.MenuButtonSize)
-                                    .height(Dimens.MenuButtonSize)
+                                    .width(Dimens.TrackHeaderButtonSize)
+                                    .height(Dimens.TrackHeaderButtonSize)
                                     .then(
                                         if (!dragPreview && trackActionsEnabled && isMenuOpen) {
                                             Modifier.glow(
@@ -380,21 +390,58 @@ fun TrackCard(
                 }
 
                 Spacer(Modifier.height(Dimens.PanelPadding))
+                val waveformModifier =
+                    if (trackSlotHeight != null) {
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
                 if (isRecording) {
-                    RecordingWaveform(inputLevel = recordingInputLevel)
+                    RecordingWaveform(
+                        inputLevel = recordingInputLevel,
+                        modifier = waveformModifier,
+                    )
                 } else {
-                    TrackWaveform(peaks = waveformPeaks ?: WaveformPeaks.Placeholder)
+                    if (timelineClip == null) {
+                        TrackWaveform(modifier = waveformModifier)
+                    } else {
+                        TrackTimelineLane(
+                            clip = timelineClip,
+                            timelineBaseDurationMs = timelineBaseDurationMs,
+                            modifier = waveformModifier,
+                        )
+                    }
                 }
             }
 
             Spacer(Modifier.width(Dimens.Gap))
 
-            TrackGainSection(
-                gain = gain,
-                onGainChange = if (dragPreview) null else onGainChange,
-                onGainCommit = if (dragPreview) null else onGainCommit,
-                enabled = !dragPreview && !interactionBlocked && onGainChange != null,
-            )
+            if (trackSlotHeight != null) {
+                Box(
+                    modifier = Modifier
+                        .width(Dimens.FaderWidth)
+                        .fillMaxHeight(),
+                ) {
+                    TrackGainSection(
+                        gain = gain,
+                        onGainChange = if (dragPreview) null else onGainChange,
+                        onGainCommit = if (dragPreview) null else onGainCommit,
+                        enabled = !dragPreview && !interactionBlocked && onGainChange != null,
+                        fillTrackHeight = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            } else {
+                TrackGainSection(
+                    gain = gain,
+                    onGainChange = if (dragPreview) null else onGainChange,
+                    onGainCommit = if (dragPreview) null else onGainCommit,
+                    enabled = !dragPreview && !interactionBlocked && onGainChange != null,
+                )
+            }
         }
 
         if (showHandle) {

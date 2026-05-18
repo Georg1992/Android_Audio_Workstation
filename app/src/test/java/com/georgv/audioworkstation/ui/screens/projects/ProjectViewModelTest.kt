@@ -16,6 +16,7 @@ import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.tempWav
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1003,10 +1004,10 @@ class ProjectViewModelTest {
         advanceUntilIdle()
         vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "Imported")
         advanceUntilIdle()
-        waitUntil { vm.uiState.value.waveformPeaksByTrackId.isNotEmpty() }
+        waitUntil { vm.uiState.value.waveformStatesByTrackId[vm.uiState.value.tracks.single().id] is WaveformState.Ready }
 
         val imported = vm.uiState.value.tracks.single()
-        val peaks = vm.uiState.value.waveformPeaksByTrackId[imported.id]
+        val peaks = (vm.uiState.value.waveformStatesByTrackId[imported.id] as? WaveformState.Ready)?.peaks
         assertNotNull(peaks)
         assertEquals(1f, peaks?.amplitudes?.maxOrNull() ?: 0f, 0.0001f)
         collectJob.cancel()
@@ -1230,10 +1231,10 @@ class ProjectViewModelTest {
             .copyTo(File(recordingTrack.wavFilePath), overwrite = true)
         vm.onStopPressed()
         runCurrent()
-        waitUntil { vm.uiState.value.waveformPeaksByTrackId.containsKey(recordingTrack.id) }
+        waitUntil { vm.uiState.value.waveformStatesByTrackId[recordingTrack.id] is WaveformState.Ready }
 
         assertFalse(vm.uiState.value.tracks.single().isRecording)
-        assertNotNull(vm.uiState.value.waveformPeaksByTrackId[recordingTrack.id])
+        assertNotNull(vm.uiState.value.waveformStatesByTrackId[recordingTrack.id])
         collectJob.cancel()
     }
 

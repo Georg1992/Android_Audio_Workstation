@@ -7,11 +7,14 @@ import java.io.RandomAccessFile
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.sqrt
 
 private const val DefaultWaveformPeakCount = 72
 private const val WavAudioFormatPcm = 1
 private const val WavAudioFormatFloat = 3
 private const val WavChunkReadFrames = 4096
+private const val WaveformPeakWeight = 0.35f
+private const val WaveformRmsWeight = 0.65f
 
 class WavWaveformPeakExtractor(
     private val targetPeakCount: Int = DefaultWaveformPeakCount,
@@ -37,7 +40,7 @@ class WavWaveformPeakExtractor(
                 val info = wav.readWavInfo() ?: return null
                 if (!info.isSupported) return null
 
-                val peaks = FloatArray(targetPeakCount)
+                val buckets = Array(targetPeakCount) { WaveformBucketAccumulator() }
                 val framesPerPeak = ceil(info.frameCount.toDouble() / targetPeakCount.toDouble())
                     .toLong()
                     .coerceAtLeast(1L)
@@ -58,18 +61,22 @@ class WavWaveformPeakExtractor(
                             .coerceIn(0L, (targetPeakCount - 1).toLong())
                             .toInt()
                         val frameOffset = frame * bytesPerFrame
-                        val peak = buffer.framePeak(
-                            frameOffset = frameOffset,
-                            channelCount = info.channelCount,
-                            bitsPerSample = info.bitsPerSample,
-                            audioFormat = info.audioFormat,
+                        buckets[peakIndex].addFrame(
+                            buffer.readFrameSamples(
+                                frameOffset = frameOffset,
+                                channelCount = info.channelCount,
+                                bitsPerSample = info.bitsPerSample,
+                                audioFormat = info.audioFormat,
+                            )
                         )
-                        peaks[peakIndex] = max(peaks[peakIndex], peak)
                         framesSeen++
                     }
                     bytesRemaining -= bytesRead.toLong()
                 }
 
+                val peaks = FloatArray(targetPeakCount) { index ->
+                    buckets[index].visualAmplitude()
+                }
                 val maxPeak = peaks.maxOrNull() ?: 0f
                 if (maxPeak > 0f) {
                     for (index in peaks.indices) {
@@ -79,6 +86,27 @@ class WavWaveformPeakExtractor(
                 WaveformPeaks(peaks.toList())
             }
         }.getOrNull()
+    }
+}
+
+private class WaveformBucketAccumulator {
+    private var peak = 0f
+    private var sumSquares = 0.0
+    private var sampleCount = 0
+
+    fun addFrame(samples: FloatArray) {
+        for (sample in samples) {
+            val absSample = abs(sample)
+            peak = max(peak, absSample)
+            sumSquares += (sample * sample).toDouble()
+            sampleCount += 1
+        }
+    }
+
+    fun visualAmplitude(): Float {
+        if (sampleCount == 0) return 0f
+        val rms = sqrt(sumSquares / sampleCount.toDouble()).toFloat().coerceIn(0f, 1f)
+        return (WaveformPeakWeight * peak + WaveformRmsWeight * rms).coerceIn(0f, 1f)
     }
 }
 
@@ -175,25 +203,24 @@ private fun RandomAccessFile.readUInt32Le(): Long {
         (b3.toLong() shl 24)) and 0xFFFF_FFFFL
 }
 
-private fun ByteArray.framePeak(
+private fun ByteArray.readFrameSamples(
     frameOffset: Int,
     channelCount: Int,
     bitsPerSample: Int,
     audioFormat: Int,
-): Float {
-    var peak = 0f
+): FloatArray {
     val bytesPerSample = bitsPerSample / 8
+    val samples = FloatArray(channelCount)
     for (channel in 0 until channelCount) {
         val offset = frameOffset + channel * bytesPerSample
-        val sample =
+        samples[channel] =
             if (audioFormat == WavAudioFormatFloat) {
                 Float.fromBits(readInt32Le(offset)).coerceIn(-1f, 1f)
             } else {
                 readPcmSample(offset, bitsPerSample)
             }
-        peak = max(peak, abs(sample))
     }
-    return peak.coerceIn(0f, 1f)
+    return samples
 }
 
 private fun ByteArray.readPcmSample(offset: Int, bitsPerSample: Int): Float =

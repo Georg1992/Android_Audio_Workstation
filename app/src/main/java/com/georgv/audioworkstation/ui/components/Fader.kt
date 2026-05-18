@@ -68,6 +68,7 @@ fun Fader(
     tickColor: Color = AppColors.FaderTick,
     thumbColor: Color = AppColors.FaderThumb,
     thumbBorder: Color = AppColors.Line,
+    bottomInsetPx: Float = FaderBottomPadPx,
 ) {
     val density = LocalDensity.current
     val trackW = with(density) { trackWidth.toPx() }
@@ -98,7 +99,7 @@ fun Fader(
     fun trackYBounds(canvasHeight: Float): Pair<Float, Float> {
         val h = canvasHeight.coerceAtLeast(0f)
         val topY = topPad.coerceIn(0f, h)
-        val bottomY = (h - FaderBottomPadPx).coerceIn(0f, h)
+        val bottomY = (h - bottomInsetPx).coerceIn(0f, h)
         val low = minOf(topY, bottomY)
         val high = maxOf(topY, bottomY)
         return low to high
