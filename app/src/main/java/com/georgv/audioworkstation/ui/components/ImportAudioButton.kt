@@ -41,13 +41,15 @@ fun ImportAudioButton(
     ) {
         IconButton(
             onClick = onClick,
-            enabled = enabled && !inputLocked
+            enabled = enabled && !inputLocked,
+            modifier = Modifier.size(Dimens.TransportButtonSize),
         ) {
             Box(modifier = Modifier.alpha(if (enabled && !inputLocked) 1f else Alphas.Disabled)) {
                 Icon(
                     imageVector = Icons.Filled.FileUpload,
                     contentDescription = stringResource(R.string.cd_import_audio),
-                    tint = AppColors.Line
+                    tint = AppColors.Line,
+                    modifier = Modifier.size(Dimens.TransportIconSize),
                 )
             }
         }

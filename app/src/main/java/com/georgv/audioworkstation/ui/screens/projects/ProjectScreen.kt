@@ -48,10 +48,13 @@ import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.rememberTopBarAlertState
 import com.georgv.audioworkstation.ui.components.TimelinePlayheadScrubberPanel
 import com.georgv.audioworkstation.ui.components.TransportPanel
+import com.georgv.audioworkstation.ui.components.formatTimelineDuration
+import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
+import com.georgv.audioworkstation.ui.theme.TransportPanelWidthFraction
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.res.stringResource
@@ -244,6 +247,10 @@ fun ProjectScreen(
                 .padding(padding)
         ) {
             val playheadFraction = scrubbingPlayheadFraction ?: state.playheadFraction
+            val playheadPositionMs =
+                scrubbingPlayheadFraction?.let { fraction ->
+                    timelinePlayheadPositionMs(fraction, state.timelineBaseDurationMs)
+                } ?: state.playheadPositionMs
             TimelinePlayheadScrubberPanel(
                 playheadFraction = playheadFraction,
                 timelineBaseDurationMs = state.timelineBaseDurationMs,
@@ -291,14 +298,15 @@ fun ProjectScreen(
                     isPlaying = state.playingTrackIds.isNotEmpty(),
                     isPlayEnabled = state.isPlayEnabled,
                     isStopEnabled = state.isStopEnabled,
+                    playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
                     onPlay = { vm.onPlayPressed() },
                     onStop = { vm.onStopPressed() },
                     onRecord = { startRecordingIfPermitted("New Project") },
                     inputLocked = reorderActive,
-                    modifier = Modifier.weight(0.7f)
+                    modifier = Modifier.fillMaxWidth(TransportPanelWidthFraction),
                 )
 
-                Spacer(Modifier.weight(0.3f))
+                Spacer(Modifier.weight(1f))
 
                 ImportAudioButton(
                     enabled = state.recordingTrackId == null && !state.isRecordingStartup,
