@@ -293,21 +293,6 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetTransportPositionM
     return g_engine ? static_cast<jlong>(g_engine->transportPositionMs()) : 0L;
 }
 
-extern "C" JNIEXPORT jlong JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetMasterPlaybackFrame(JNIEnv *, jobject) {
-    return g_engine ? static_cast<jlong>(g_engine->transportFrame()) : 0L;
-}
-
-extern "C" JNIEXPORT jlong JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetMasterPlaybackStartFrame(JNIEnv *, jobject) {
-    return g_engine ? static_cast<jlong>(g_engine->transportStartFrame()) : 0L;
-}
-
-extern "C" JNIEXPORT jlong JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetMasterPlaybackPositionMs(JNIEnv *, jobject) {
-    return g_engine ? static_cast<jlong>(g_engine->transportPositionMs()) : 0L;
-}
-
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopPlayback(JNIEnv *, jobject) {
     if (g_output) {

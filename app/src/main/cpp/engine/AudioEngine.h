@@ -107,15 +107,6 @@ public:
 
     int64_t transportPositionMs() const;
 
-    /** @deprecated Prefer [transportStartFrame]. */
-    int64_t masterPlaybackStartFrame() const { return transportStartFrame(); }
-
-    /** @deprecated Prefer [transportFrame]. */
-    int64_t masterPlaybackFrame() const { return transportFrame(); }
-
-    /** @deprecated Prefer [transportPositionMs]. */
-    int64_t masterPlaybackPositionMs() const { return transportPositionMs(); }
-
     int32_t playbackChannelCount() const {
         return m_playbackLanes[0].srcChannels.load(std::memory_order_acquire);
     }

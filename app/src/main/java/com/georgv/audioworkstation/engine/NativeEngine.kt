@@ -85,15 +85,6 @@ class NativeEngine @Inject constructor() {
     /** [transportFrame] as milliseconds at project sample rate (same integer math as native). */
     fun transportPositionMs(): Long = nativeGetTransportPositionMs()
 
-    @Deprecated("Use transportFrame", ReplaceWith("transportFrame()"))
-    fun masterPlaybackFrame(): Long = transportFrame()
-
-    @Deprecated("Use transportStartFrame", ReplaceWith("transportStartFrame()"))
-    fun masterPlaybackStartFrame(): Long = transportStartFrame()
-
-    @Deprecated("Use transportPositionMs", ReplaceWith("transportPositionMs()"))
-    fun masterPlaybackPositionMs(): Long = transportPositionMs()
-
     fun stopPlayback(): Boolean = nativeStopPlayback()
 
     /**
