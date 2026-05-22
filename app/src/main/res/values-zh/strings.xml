@@ -57,6 +57,7 @@
     <!-- Content descriptions (accessibility) -->
     <string name="cd_back">返回</string>
     <string name="cd_play">播放</string>
+    <string name="cd_pause">暂停</string>
     <string name="cd_stop">停止</string>
     <string name="cd_record">录音</string>
     <string name="cd_import_audio">导入音频</string>
@@ -87,6 +88,7 @@
     <string name="error_stop_recording_to_import">导入前请先停止录音。</string>
     <string name="error_import_storage_unavailable">无法为导入的音轨准备存储。</string>
     <string name="error_stop_recording_to_record">开始新录音前请先停止当前录音。</string>
+    <string name="error_record_at_timeline_end">请将播放头移到时间轴末端之前再录音。</string>
     <string name="error_recording_failed_to_start">无法开始录音。</string>
     <string name="error_stop_playback_first">重新播放前请先停止播放。</string>
     <string name="error_single_track_playback_only">目前仅支持播放一个选中音轨。</string>

@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.data.db.MIGRATION_4_5
 import com.georgv.audioworkstation.data.db.MIGRATION_5_6
 import com.georgv.audioworkstation.data.db.MIGRATION_6_7
 import com.georgv.audioworkstation.data.db.MIGRATION_7_8
+import com.georgv.audioworkstation.data.db.MIGRATION_8_9
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import dagger.Module
 import dagger.Provides
@@ -35,7 +36,8 @@ object DatabaseModule {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
-                MIGRATION_7_8
+                MIGRATION_7_8,
+                MIGRATION_8_9,
             )
             .build()
 

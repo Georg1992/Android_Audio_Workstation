@@ -19,6 +19,16 @@ class TrackTimelineLaneTest {
     }
 
     @Test
+    fun `base duration uses start offset plus duration`() {
+        val clips = listOf(
+            clip(id = "early", durationMs = 20_000L, startOffsetMs = 0L),
+            clip(id = "late", durationMs = 5_000L, startOffsetMs = 30_000L),
+        )
+
+        assertEquals(35_000L, timelineBaseDurationMs(clips))
+    }
+
+    @Test
     fun `base duration is capped at project maximum`() {
         val clips = listOf(clip(durationMs = TimelineMaxDurationMs))
 
@@ -28,6 +38,32 @@ class TrackTimelineLaneTest {
     @Test
     fun `base duration has a safe minimum for empty content`() {
         assertEquals(TimelineMinimumBaseDurationMs, timelineBaseDurationMs(emptyList()))
+    }
+
+    @Test
+    fun `waveform peaks crop to clip when source file is longer`() {
+        val peaks =
+            WaveformPeaks(
+                amplitudes = List(100) { 0.5f },
+                sourceDurationMs = 10_000L,
+            )
+
+        val cropped = waveformPeaksForTimelineClip(peaks, clipDurationMs = 2_500L)
+
+        assertEquals(25, cropped.amplitudes.size)
+    }
+
+    @Test
+    fun `waveform peaks unchanged when clip spans full source`() {
+        val peaks =
+            WaveformPeaks(
+                amplitudes = listOf(0.2f, 0.8f),
+                sourceDurationMs = 5_000L,
+            )
+
+        val cropped = waveformPeaksForTimelineClip(peaks, clipDurationMs = 5_000L)
+
+        assertEquals(peaks, cropped)
     }
 
     @Test
@@ -222,6 +258,34 @@ class TrackTimelineLaneTest {
 
         assertEquals(false, clips.first { it.clipId == "short" }.isTimelineBase)
         assertEquals(true, clips.first { it.clipId == "base" }.isTimelineBase)
+    }
+
+    @Test
+    fun `project timeline clips use track timelineStartOffsetMs`() {
+        val tracks = listOf(
+            TrackEntity(
+                id = "offset",
+                projectId = "p",
+                wavFilePath = "offset.wav",
+                duration = 5_000L,
+                timelineStartOffsetMs = 30_000L,
+            ),
+        )
+
+        val clip = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap()).single()
+
+        assertEquals(30_000L, clip.startOffsetMs)
+    }
+
+    @Test
+    fun `existing tracks default timelineStartOffsetMs to zero in projection`() {
+        val tracks = listOf(
+            TrackEntity(id = "legacy", projectId = "p", wavFilePath = "legacy.wav", duration = 3_000L),
+        )
+
+        val clip = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap()).single()
+
+        assertEquals(0L, clip.startOffsetMs)
     }
 
     private fun clip(

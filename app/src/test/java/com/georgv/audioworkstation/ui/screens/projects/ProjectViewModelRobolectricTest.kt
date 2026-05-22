@@ -14,11 +14,13 @@ import com.georgv.audioworkstation.core.audio.AudioImporter
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
+import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -232,6 +234,7 @@ class ProjectViewModelRobolectricTest {
             audio,
             ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider),
             ProjectRecordingCoordinator(repo, audio),
+            WavWaveformPeakExtractor(),
         )
     }
 
@@ -251,11 +254,24 @@ class ProjectViewModelRobolectricTest {
 private class NoOpAudioControllerForRobolectric : AudioController {
     override val playbackState = MutableStateFlow(false)
     override val recordingInputLevel = MutableStateFlow(0f)
+    override fun transportPositionMs(): Long = 0L
+    override fun isPlaybackEngineRunning(): Boolean = playbackState.value
     override fun startRecording(spec: RecordingSpec): String? = null
     override fun stopRecording(): Boolean = true
     override fun startPlayback(spec: PlaybackSpec): Boolean = false
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
     override fun setPlaybackGain(gain: Float) = Unit
+    override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
+    override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
+    override fun beginHotJoinLane(
+        wavFilePath: String,
+        gain: Float,
+        timelineClipStartMs: Long,
+        timelineClipDurationMs: Long,
+    ): Int = -1
+    override fun cancelHotJoinLane(laneIndex: Int) = Unit
+    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
+        PlaybackLaneLifecycle.Inactive
     override fun stopPlayback(): Boolean = true
     override fun release() = Unit
 }

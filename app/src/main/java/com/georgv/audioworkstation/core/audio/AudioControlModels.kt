@@ -41,42 +41,78 @@ data class RecordingSpec(
     val trackId: String,
     val sampleRate: Int,
     val fileBitDepth: Int,
-    val channelMode: ChannelMode
-)
+    val channelMode: ChannelMode,
+    /** Playhead/timeline offset (ms) used to seed native [transportFrame] on recording-only start (Clock.3). */
+    val timelineStartOffsetMs: Long = 0L,
+) {
+    init {
+        require(timelineStartOffsetMs >= 0L) { "Recording timeline start must be non-negative." }
+    }
+}
 
 data class RecordingRequest(
     val sampleRate: Int,
     val fileBitDepth: Int,
     val channelMode: ChannelMode,
-    val outputPath: String
+    val outputPath: String,
+    val timelineStartOffsetMs: Long = 0L,
 )
 
 data class PlaybackSpec(
     val sampleRate: Int,
     val wavFilePath: String,
-    val gain: Float
-)
+    val gain: Float,
+    val startPositionMs: Long = 0L,
+    /** Absolute timeline end (ms); 0 = native lane-drain completion (tests only). */
+    val sessionTimelineEndMs: Long = 0L,
+) {
+    init {
+        require(startPositionMs >= 0L) { "Playback start position must be non-negative." }
+        require(sessionTimelineEndMs >= 0L) { "Session timeline end must be non-negative." }
+    }
+}
 
 data class TrackPlaybackLane(
     val trackId: String,
     val wavFilePath: String,
-    val gain: Float
+    val gain: Float,
+    /** Timeline position (ms) where this clip starts on the project timeline. */
+    val timelineClipStartMs: Long = 0L,
+    /** Clip length on the timeline (ms); 0 = no explicit timeline end (native uses WAV drain only). */
+    val timelineClipDurationMs: Long = 0L,
 ) {
     init {
         require(wavFilePath.isNotBlank()) { "Playback lane requires a WAV path." }
         require(gain in 0f..1f) { "Playback lane gain must be normalized to 0..1." }
+        require(timelineClipStartMs >= 0L) { "Timeline clip start must be non-negative." }
+        require(timelineClipDurationMs >= 0L) { "Timeline clip duration must be non-negative." }
     }
+}
+
+/** WAV read offset (ms) for a lane at transport position [playheadMs]. */
+fun laneSourceOffsetMs(playheadMs: Long, clipStartMs: Long): Long =
+    (playheadMs - clipStartMs).coerceAtLeast(0L)
+
+fun isLaneAudibleAtPlayhead(playheadMs: Long, clipStartMs: Long, clipDurationMs: Long): Boolean {
+    if (playheadMs < clipStartMs) return false
+    if (clipDurationMs <= 0L) return true
+    return playheadMs < clipStartMs + clipDurationMs
 }
 
 data class MultiPlaybackSpec(
     val sampleRate: Int,
-    val lanes: List<TrackPlaybackLane>
+    val lanes: List<TrackPlaybackLane>,
+    val startPositionMs: Long = 0L,
+    /** Absolute timeline end (ms); 0 = native lane-drain completion (tests only). */
+    val sessionTimelineEndMs: Long = 0L,
 ) {
     init {
         require(ProjectSampleRate.values().any { it.hz == sampleRate }) {
             "Unsupported playback sample rate: $sampleRate."
         }
         require(lanes.size in 1..MaxLanes) { "Multi-playback requires 1..$MaxLanes lanes." }
+        require(startPositionMs >= 0L) { "Playback start position must be non-negative." }
+        require(sessionTimelineEndMs >= 0L) { "Session timeline end must be non-negative." }
     }
 
     companion object {
@@ -90,7 +126,8 @@ fun ProjectEntity.toRecordingSpec(track: TrackEntity): RecordingSpec =
         trackId = track.id,
         sampleRate = sampleRate,
         fileBitDepth = fileBitDepth,
-        channelMode = track.channelMode
+        channelMode = track.channelMode,
+        timelineStartOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
     )
 
 fun RecordingSpec.toRecordingRequest(outputPath: String): RecordingRequest =
@@ -98,7 +135,8 @@ fun RecordingSpec.toRecordingRequest(outputPath: String): RecordingRequest =
         sampleRate = sampleRate,
         fileBitDepth = fileBitDepth,
         channelMode = channelMode,
-        outputPath = outputPath
+        outputPath = outputPath,
+        timelineStartOffsetMs = timelineStartOffsetMs,
     )
 
 fun ProjectEntity.toPlaybackSpec(track: TrackEntity): PlaybackSpec? =
@@ -121,7 +159,9 @@ fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackS
                     TrackPlaybackLane(
                         trackId = track.id,
                         wavFilePath = wavFilePath,
-                        gain = GainRange.toUnit(track.gain)
+                        gain = GainRange.toUnit(track.gain),
+                        timelineClipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
+                        timelineClipDurationMs = track.duration ?: 0L,
                     )
                 }
         }

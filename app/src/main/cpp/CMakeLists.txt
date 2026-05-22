@@ -39,6 +39,36 @@ if(BUILD_RINGBUFFER_GTESTS)
     target_link_libraries(ringbuffer_tests PRIVATE GTest::gtest_main)
 endif()
 
+option(BUILD_AUDIOENGINE_GTESTS "Build AudioEngine master-playback GoogleTest executable" OFF)
+
+if(BUILD_AUDIOENGINE_GTESTS)
+    if(NOT TARGET GTest::gtest_main)
+        FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.14.0
+        )
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(googletest)
+    endif()
+
+    add_executable(audioengine_master_playback_tests
+        tests/AudioEngine_MasterPlayback_test.cpp
+        tests/AudioEngine_TransportRecording_test.cpp
+        engine/AudioEngine.cpp
+        engine/LocalWavSource.cpp
+    )
+    target_include_directories(audioengine_master_playback_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_features(audioengine_master_playback_tests PRIVATE cxx_std_17)
+    target_link_libraries(audioengine_master_playback_tests PRIVATE
+        GTest::gtest_main
+        oboe
+        ${log-lib}
+    )
+endif()
+
 add_library(audioworkstation SHARED
     engine/AudioEngine.cpp
     engine/JNI_Bridge.cpp

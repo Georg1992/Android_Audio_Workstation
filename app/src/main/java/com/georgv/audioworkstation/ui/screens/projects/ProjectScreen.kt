@@ -49,7 +49,6 @@ import com.georgv.audioworkstation.ui.components.rememberTopBarAlertState
 import com.georgv.audioworkstation.ui.components.TimelinePlayheadScrubberPanel
 import com.georgv.audioworkstation.ui.components.TransportPanel
 import com.georgv.audioworkstation.ui.components.formatTimelineDuration
-import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
@@ -87,7 +86,7 @@ fun ProjectScreen(
     var projectNameFieldWasFocused by remember(projectId) { mutableStateOf(false) }
     var projectRenameCommitted by remember(projectId) { mutableStateOf(false) }
     val projectNameFocusRequester = remember(projectId) { FocusRequester() }
-    var scrubbingPlayheadFraction by remember { mutableStateOf<Float?>(null) }
+    var scrubbingPlayheadPositionMs by remember { mutableStateOf<Long?>(null) }
 
     fun commitProjectRename() {
         if (!isRenamingProject || projectRenameCommitted) return
@@ -175,7 +174,7 @@ fun ProjectScreen(
 
     val reorderActive = dragController.isDragging
     LaunchedEffect(reorderActive) {
-        if (reorderActive) scrubbingPlayheadFraction = null
+        if (reorderActive) scrubbingPlayheadPositionMs = null
     }
 
     ScreenScaffold(
@@ -246,22 +245,27 @@ fun ProjectScreen(
                 .background(AppColors.Bg)
                 .padding(padding)
         ) {
-            val playheadFraction = scrubbingPlayheadFraction ?: state.playheadFraction
-            val playheadPositionMs =
-                scrubbingPlayheadFraction?.let { fraction ->
-                    timelinePlayheadPositionMs(fraction, state.timelineBaseDurationMs)
-                } ?: state.playheadPositionMs
+            val playheadPositionMs = scrubbingPlayheadPositionMs ?: state.playheadPositionMs
             TimelinePlayheadScrubberPanel(
-                playheadFraction = playheadFraction,
-                timelineBaseDurationMs = state.timelineBaseDurationMs,
-                onPlayheadFractionPreview = { fraction ->
-                    scrubbingPlayheadFraction = fraction
+                playheadPositionMs = playheadPositionMs,
+                timelineDurationMs = state.timelineBaseDurationMs,
+                onPlayheadScrubStarted = { vm.onPlayheadScrubStarted() },
+                onPlayheadScrubCancelled = {
+                    scrubbingPlayheadPositionMs = null
+                    vm.onPlayheadScrubCancelled()
                 },
-                onPlayheadFractionCommit = { fraction ->
-                    scrubbingPlayheadFraction = null
-                    vm.setPlayheadFraction(fraction, state.timelineBaseDurationMs)
+                onPlayheadPositionPreview = { positionMs ->
+                    scrubbingPlayheadPositionMs = positionMs
+                    vm.onPlayheadScrubPreviewPosition(positionMs, state.timelineBaseDurationMs)
                 },
-                inputLocked = reorderActive,
+                onPlayheadPositionCommit = { positionMs ->
+                    scrubbingPlayheadPositionMs = null
+                    vm.onPlayheadScrubCommittedPosition(positionMs, state.timelineBaseDurationMs)
+                },
+                inputLocked =
+                    reorderActive ||
+                    state.recordingTrackId != null ||
+                    state.isRecordingStartup,
             )
 
             ProjectTrackList(
@@ -270,9 +274,9 @@ fun ProjectScreen(
                 recordingTrackId = state.recordingTrackId,
                 recordingInputLevel = state.recordingInputLevel,
                 timelineClipsByTrackId = state.timelineClipsByTrackId,
-                timelineBaseDurationMs = state.timelineBaseDurationMs,
-                timelinePlayheadFraction = playheadFraction,
-                playbackActive = state.playingTrackIds.isNotEmpty(),
+                timelineDurationMs = state.timelineBaseDurationMs,
+                timelinePlayheadPositionMs = playheadPositionMs,
+                playbackActive = state.playbackSessionActive,
                 dragController = dragController,
                 onToggleSelect = vm::toggleSelect,
                 onDeleteTrack = vm::deleteTrack,
@@ -295,9 +299,10 @@ fun ProjectScreen(
             ) {
                 TransportPanel(
                     isRecording = state.recordingTrackId != null || state.isRecordingStartup,
-                    isPlaying = state.playingTrackIds.isNotEmpty(),
+                    isPlaying = state.isTransportPlaying,
                     isPlayEnabled = state.isPlayEnabled,
                     isStopEnabled = state.isStopEnabled,
+                    stopButtonShowsPause = state.stopButtonShowsPause,
                     playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
                     onPlay = { vm.onPlayPressed() },
                     onStop = { vm.onStopPressed() },

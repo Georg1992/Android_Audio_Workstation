@@ -34,7 +34,11 @@ private fun densifyPeaks(peaks: List<Float>): List<Float> {
     return dense
 }
 
-data class WaveformPeaks(val amplitudes: List<Float>) {
+data class WaveformPeaks(
+    val amplitudes: List<Float>,
+    /** PCM span in the WAV used for [amplitudes]; 0 when unknown (placeholder). */
+    val sourceDurationMs: Long = 0L,
+) {
     companion object {
         val Placeholder = WaveformPeaks(
             densifyPeaks(

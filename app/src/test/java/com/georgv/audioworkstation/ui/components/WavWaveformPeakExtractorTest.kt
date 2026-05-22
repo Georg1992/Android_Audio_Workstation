@@ -1,5 +1,8 @@
 package com.georgv.audioworkstation.ui.components
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -20,20 +23,21 @@ class WavWaveformPeakExtractorTest {
             )
         )
 
-        val peaks = WavWaveformPeakExtractor(targetPeakCount = 4).extract(wav.absolutePath)
+        val peaks = extract(targetPeakCount = 4, wav.absolutePath)
 
         assertNotNull(peaks)
         val amplitudes = peaks?.amplitudes.orEmpty()
         assertEquals(4, amplitudes.size)
         assertEquals(1f, amplitudes.maxOrNull() ?: 0f, 0.0001f)
         assertTrue(amplitudes.first() < amplitudes.last())
+        assertTrue((peaks?.sourceDurationMs ?: 0L) > 0L)
     }
 
     @Test
     fun `extract keeps peaks in normalized range`() = runTest {
         val wav = tempWav(samples = shortArrayOf(Short.MIN_VALUE, -10_000, 0, 10_000, Short.MAX_VALUE))
 
-        val peaks = WavWaveformPeakExtractor(targetPeakCount = 8).extract(wav.absolutePath)
+        val peaks = extract(targetPeakCount = 8, wav.absolutePath)
 
         assertNotNull(peaks)
         peaks?.amplitudes.orEmpty().forEach { peak ->
@@ -49,14 +53,14 @@ class WavWaveformPeakExtractorTest {
             deleteOnExit()
         }
 
-        assertNull(WavWaveformPeakExtractor().extract(file.absolutePath))
+        assertNull(extract(wavPath = file.absolutePath))
     }
 
     @Test
     fun `extract keeps silence at zero`() = runTest {
         val wav = tempWav(samples = ShortArray(16) { 0 })
 
-        val peaks = WavWaveformPeakExtractor(targetPeakCount = 4).extract(wav.absolutePath)
+        val peaks = extract(targetPeakCount = 4, wav.absolutePath)
 
         assertNotNull(peaks)
         assertEquals(listOf(0f, 0f, 0f, 0f), peaks?.amplitudes)
@@ -66,7 +70,7 @@ class WavWaveformPeakExtractorTest {
     fun `sparse transient does not force bucket to peak-only full height`() = runTest {
         val wav = tempWav(samples = shortArrayOf(Short.MAX_VALUE, 0, 0, 0))
 
-        val peaks = WavWaveformPeakExtractor(targetPeakCount = 1).extract(wav.absolutePath)
+        val peaks = extract(targetPeakCount = 1, wav.absolutePath)
 
         assertNotNull(peaks)
         // Hybrid pre-normalization would be below peak-only because RMS reflects mostly silence.
@@ -83,7 +87,7 @@ class WavWaveformPeakExtractorTest {
             )
         )
 
-        val peaks = WavWaveformPeakExtractor(targetPeakCount = 2).extract(wav.absolutePath)
+        val peaks = extract(targetPeakCount = 2, wav.absolutePath)
 
         assertNotNull(peaks)
         val amplitudes = peaks?.amplitudes.orEmpty()
@@ -102,12 +106,23 @@ class WavWaveformPeakExtractorTest {
             )
         )
 
-        val peaks = WavWaveformPeakExtractor(targetPeakCount = 2).extract(wav.absolutePath)
+        val peaks = extract(targetPeakCount = 2, wav.absolutePath)
 
         assertNotNull(peaks)
         val amplitudes = peaks?.amplitudes.orEmpty()
         assertEquals(1f, amplitudes[0], 0.0001f)
         assertEquals(0f, amplitudes[1], 0.0001f)
+    }
+
+    private suspend fun TestScope.extract(
+        targetPeakCount: Int = 72,
+        wavPath: String,
+    ): WaveformPeaks? {
+        val dispatcher = coroutineContext[CoroutineDispatcher] ?: error("expected test dispatcher")
+        val extractor = WavWaveformPeakExtractor(targetPeakCount = targetPeakCount, ioDispatcher = dispatcher)
+        val peaks = extractor.extract(wavPath)
+        advanceUntilIdle()
+        return peaks
     }
 }
 

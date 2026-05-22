@@ -44,4 +44,16 @@ class ProjectTransportController(
     fun resetPlaybackForProjectChange() {
         playbackSession.resetWhenProjectChanges()
     }
+
+    /** Stops native playback and clears playing markers without touching recording. */
+    fun pausePlayback() {
+        playbackSession.cancelCompletionMonitorForTransportStop()
+        playbackSession.stopEngineIfMarkedPlaying()
+        playbackSession.clearPlayingTransportState()
+    }
+
+    /** Transport Seek.1: pause audio only; session lane maps and selection stay armed. */
+    fun pauseEnginePreservingSession() {
+        playbackSession.pauseEnginePreservingSession()
+    }
 }

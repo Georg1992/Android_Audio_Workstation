@@ -32,6 +32,8 @@ data class TrackEntity(
     val isLoop: Boolean = false,
     val isImported: Boolean = false,
     val position: Int = 0,
+    /** Timeline position where this clip begins on the project base ruler (ms). */
+    val timelineStartOffsetMs: Long = 0L,
 
     // Collaboration plumbing — see [ProjectEntity] for the same set of fields.
     // Tracks additionally carry [contentHash] because audio payload is the

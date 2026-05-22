@@ -8,8 +8,10 @@ import com.georgv.audioworkstation.core.audio.DefaultProjectFileStore
 import com.georgv.audioworkstation.core.audio.NativeAudioController
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
+import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
@@ -41,4 +43,10 @@ abstract class AudioModule {
     abstract fun bindProjectFileStore(
         store: DefaultProjectFileStore
     ): ProjectFileStore
+
+    companion object {
+        @Provides
+        @Singleton
+        fun provideWavWaveformPeakExtractor(): WavWaveformPeakExtractor = WavWaveformPeakExtractor()
+    }
 }

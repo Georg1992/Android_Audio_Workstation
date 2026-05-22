@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
@@ -43,6 +44,7 @@ fun TransportPanel(
     isPlaying: Boolean,
     isPlayEnabled: Boolean,
     isStopEnabled: Boolean,
+    stopButtonShowsPause: Boolean,
     playheadTimeLabel: String,
     onPlay: () -> Unit,
     onStop: () -> Unit,
@@ -86,12 +88,21 @@ fun TransportPanel(
                 onClick = onStop,
                 isActive = false,
             ) {
-                Icon(
-                    Icons.Filled.Stop,
-                    contentDescription = stringResource(R.string.cd_stop),
-                    tint = AppColors.Line,
-                    modifier = Modifier.size(Dimens.TransportIconSize),
-                )
+                if (stopButtonShowsPause) {
+                    Icon(
+                        Icons.Filled.Pause,
+                        contentDescription = stringResource(R.string.cd_pause),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Stop,
+                        contentDescription = stringResource(R.string.cd_stop),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
             }
         }
 

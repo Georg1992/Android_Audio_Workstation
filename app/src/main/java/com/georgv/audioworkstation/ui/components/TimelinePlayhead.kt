@@ -1,8 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,50 +26,82 @@ import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.roundToLong
 
-fun timelinePlayheadFraction(positionMs: Long, baseDurationMs: Long): Float {
-    if (baseDurationMs <= 0L) return 0f
-    return (positionMs.toFloat() / baseDurationMs.toFloat()).coerceIn(0f, 1f)
+/**
+ * Single source of truth for mapping timeline time to the shared waveform-column x axis.
+ * Top ruler and every track lane must use the same [timelineDurationMs], [contentWidthPx], and
+ * [contentStartPx] when drawing or hit-testing the playhead.
+ */
+fun timelineMsToX(
+    timeMs: Long,
+    timelineDurationMs: Long,
+    contentWidthPx: Float,
+    contentStartPx: Float = 0f,
+): Float {
+    if (timelineDurationMs <= 0L || contentWidthPx <= 0f) return contentStartPx
+    val fraction = (timeMs.toFloat() / timelineDurationMs.toFloat()).coerceIn(0f, 1f)
+    return contentStartPx + fraction * contentWidthPx
 }
 
-fun timelinePlayheadPositionMs(fraction: Float, baseDurationMs: Long): Long {
-    if (baseDurationMs <= 0L) return 0L
-    return (fraction.coerceIn(0f, 1f) * baseDurationMs.toFloat()).roundToLong()
+fun timelineXToMs(
+    xPx: Float,
+    timelineDurationMs: Long,
+    contentWidthPx: Float,
+    contentStartPx: Float = 0f,
+): Long {
+    if (timelineDurationMs <= 0L || contentWidthPx <= 0f) return 0L
+    val localX = (xPx - contentStartPx).coerceIn(0f, contentWidthPx)
+    val fraction = localX / contentWidthPx
+    return (fraction * timelineDurationMs.toFloat()).roundToLong()
 }
 
-fun timelinePlayheadClampedPositionMs(positionMs: Long, baseDurationMs: Long): Long =
+fun timelinePlayheadFraction(positionMs: Long, timelineDurationMs: Long): Float {
+    if (timelineDurationMs <= 0L) return 0f
+    return (positionMs.toFloat() / timelineDurationMs.toFloat()).coerceIn(0f, 1f)
+}
+
+fun timelinePlayheadPositionMs(fraction: Float, timelineDurationMs: Long): Long {
+    if (timelineDurationMs <= 0L) return 0L
+    return (fraction.coerceIn(0f, 1f) * timelineDurationMs.toFloat()).roundToLong()
+}
+
+fun timelinePlayheadClampedPositionMs(positionMs: Long, timelineDurationMs: Long): Long =
     timelinePlayheadPositionMs(
-        timelinePlayheadFraction(positionMs, baseDurationMs),
-        baseDurationMs,
+        timelinePlayheadFraction(positionMs, timelineDurationMs),
+        timelineDurationMs,
     )
 
 fun timelinePlayheadFractionFromWaveformX(
     xPx: Float,
     waveformTimelineWidthPx: Float,
+    contentStartPx: Float = 0f,
 ): Float {
     if (waveformTimelineWidthPx <= 0f) return 0f
-    return (xPx / waveformTimelineWidthPx).coerceIn(0f, 1f)
+    val localX = (xPx - contentStartPx).coerceIn(0f, waveformTimelineWidthPx)
+    return (localX / waveformTimelineWidthPx).coerceIn(0f, 1f)
 }
-
-fun timelinePlayheadXInWaveformArea(
-    fraction: Float,
-    waveformTimelineWidthPx: Float,
-): Float = fraction.coerceIn(0f, 1f) * waveformTimelineWidthPx
 
 data class TimelinePlayheadWaveformMetrics(
     val waveformTimelineWidthPx: Float,
+    val timelineDurationMs: Long,
+    val contentStartPx: Float = 0f,
 ) {
-    fun fractionFromLocalXPx(localXPx: Float): Float =
-        timelinePlayheadFractionFromWaveformX(localXPx, waveformTimelineWidthPx)
-
-    fun xPxForFraction(fraction: Float): Float =
-        timelinePlayheadXInWaveformArea(fraction, waveformTimelineWidthPx)
+    fun positionMsFromLocalXPx(localXPx: Float): Long =
+        timelineXToMs(localXPx, timelineDurationMs, waveformTimelineWidthPx, contentStartPx)
 }
 
 @Composable
-fun rememberTimelinePlayheadWaveformMetrics(waveformAreaWidth: Dp): TimelinePlayheadWaveformMetrics {
+fun rememberTimelinePlayheadWaveformMetrics(
+    waveformAreaWidth: Dp,
+    timelineDurationMs: Long,
+    contentStartPx: Float = 0f,
+): TimelinePlayheadWaveformMetrics {
     val widthPx = with(LocalDensity.current) { waveformAreaWidth.toPx() }
-    return remember(widthPx) {
-        TimelinePlayheadWaveformMetrics(waveformTimelineWidthPx = widthPx)
+    return remember(widthPx, timelineDurationMs, contentStartPx) {
+        TimelinePlayheadWaveformMetrics(
+            waveformTimelineWidthPx = widthPx,
+            timelineDurationMs = timelineDurationMs,
+            contentStartPx = contentStartPx,
+        )
     }
 }
 
@@ -81,6 +111,7 @@ fun rememberTimelinePlayheadWaveformMetrics(waveformAreaWidth: Dp): TimelinePlay
  */
 @Composable
 fun TimelinePlayheadTrackRowSlot(
+    timelineDurationMs: Long,
     modifier: Modifier = Modifier,
     waveformContent: @Composable BoxScope.(TimelinePlayheadWaveformMetrics) -> Unit,
 ) {
@@ -91,7 +122,10 @@ fun TimelinePlayheadTrackRowSlot(
                 .fillMaxHeight(),
         ) {
             Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-                BoxWithConstraintsPlayheadWaveformSlot(waveformContent)
+                BoxWithConstraintsPlayheadWaveformSlot(
+                    timelineDurationMs = timelineDurationMs,
+                    waveformContent = waveformContent,
+                )
                 Spacer(
                     modifier = Modifier
                         .weight(TimelineMetadataWidthFraction)
@@ -106,6 +140,7 @@ fun TimelinePlayheadTrackRowSlot(
 
 @Composable
 private fun RowScope.BoxWithConstraintsPlayheadWaveformSlot(
+    timelineDurationMs: Long,
     waveformContent: @Composable BoxScope.(TimelinePlayheadWaveformMetrics) -> Unit,
 ) {
     BoxWithConstraints(
@@ -113,23 +148,31 @@ private fun RowScope.BoxWithConstraintsPlayheadWaveformSlot(
             .weight(TimelineWaveformWidthFraction)
             .fillMaxHeight(),
     ) {
-        val metrics = rememberTimelinePlayheadWaveformMetrics(maxWidth)
+        val metrics =
+            rememberTimelinePlayheadWaveformMetrics(
+                waveformAreaWidth = maxWidth,
+                timelineDurationMs = timelineDurationMs,
+            )
         Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
             waveformContent(metrics)
         }
     }
 }
 
+/**
+ * Shared playhead line for the top scrubber ruler and per-track timeline lanes.
+ */
 @Composable
 fun TimelinePlayheadMarker(
-    fraction: Float,
+    playheadPositionMs: Long,
+    timelineDurationMs: Long,
     modifier: Modifier = Modifier,
+    contentStartPx: Float = 0f,
     showTopHandle: Boolean = false,
     lineWidth: Dp = 1.dp,
     handleWidth: Dp = 10.dp,
     handleHeight: Dp = 8.dp,
 ) {
-    val clampedFraction = fraction.coerceIn(0f, 1f)
     val lineColor = AppColors.Red
     val density = LocalDensity.current
     val lineWidthPx = with(density) { lineWidth.toPx() }
@@ -139,24 +182,37 @@ fun TimelinePlayheadMarker(
     Canvas(modifier = modifier) {
         if (size.width <= 0f || size.height <= 0f) return@Canvas
 
-        val x = size.width * clampedFraction
-        drawLine(
-            color = lineColor,
-            start = Offset(x, 0f),
-            end = Offset(x, size.height),
-            strokeWidth = lineWidthPx,
-        )
+        val x =
+            timelineMsToX(
+                timeMs = playheadPositionMs,
+                timelineDurationMs = timelineDurationMs,
+                contentWidthPx = size.width,
+                contentStartPx = contentStartPx,
+            )
 
         if (showTopHandle) {
+            val handleApexY = handleHeightPx
             val path =
                 Path().apply {
                     moveTo(x - handleWidthPx / 2f, 0f)
                     lineTo(x + handleWidthPx / 2f, 0f)
-                    lineTo(x, handleHeightPx)
+                    lineTo(x, handleApexY)
                     close()
                 }
             drawPath(path, color = lineColor)
+            drawLine(
+                color = lineColor,
+                start = Offset(x, handleApexY),
+                end = Offset(x, size.height),
+                strokeWidth = lineWidthPx,
+            )
+        } else {
+            drawLine(
+                color = lineColor,
+                start = Offset(x, 0f),
+                end = Offset(x, size.height),
+                strokeWidth = lineWidthPx,
+            )
         }
     }
 }
-

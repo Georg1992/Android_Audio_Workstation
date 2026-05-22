@@ -25,22 +25,42 @@ class AudioControlModelsTest {
         assertEquals(48_000, spec.sampleRate)
         assertEquals(24, spec.fileBitDepth)
         assertEquals(ChannelMode.STEREO, spec.channelMode)
+        assertEquals(0L, spec.timelineStartOffsetMs)
+    }
+
+    @Test
+    fun `toRecordingSpec copies track timeline start offset for native transport seed`() {
+        val project = ProjectEntity(id = "project-1", sampleRate = 48_000, fileBitDepth = 24)
+        val track =
+            TrackEntity(
+                id = "track-1",
+                projectId = "project-1",
+                channelMode = ChannelMode.MONO,
+                timelineStartOffsetMs = 30_000L,
+            )
+
+        val spec = project.toRecordingSpec(track)
+
+        assertEquals(30_000L, spec.timelineStartOffsetMs)
     }
 
     @Test
     fun `toRecordingRequest adds output path for native recording`() {
-        val request = RecordingSpec(
-            projectId = "project-1",
-            trackId = "track-1",
-            sampleRate = 48_000,
-            fileBitDepth = 24,
-            channelMode = ChannelMode.STEREO
-        ).toRecordingRequest("/tmp/track-1.wav")
+        val request =
+            RecordingSpec(
+                projectId = "project-1",
+                trackId = "track-1",
+                sampleRate = 48_000,
+                fileBitDepth = 24,
+                channelMode = ChannelMode.STEREO,
+                timelineStartOffsetMs = 12_500L,
+            ).toRecordingRequest("/tmp/track-1.wav")
 
         assertEquals(48_000, request.sampleRate)
         assertEquals(24, request.fileBitDepth)
         assertEquals(ChannelMode.STEREO, request.channelMode)
         assertEquals("/tmp/track-1.wav", request.outputPath)
+        assertEquals(12_500L, request.timelineStartOffsetMs)
     }
 
     @Test
@@ -83,8 +103,14 @@ class AudioControlModelsTest {
 
         assertEquals(44_100, spec?.sampleRate)
         assertEquals(2, spec?.lanes?.size)
-        assertEquals(TrackPlaybackLane("a", "/tmp/a.wav", 0.25f), spec?.lanes?.get(0))
-        assertEquals(TrackPlaybackLane("b", "/tmp/b.wav", 1f), spec?.lanes?.get(1))
+        assertEquals(
+            TrackPlaybackLane("a", "/tmp/a.wav", 0.25f, timelineClipStartMs = 0L, timelineClipDurationMs = 0L),
+            spec?.lanes?.get(0),
+        )
+        assertEquals(
+            TrackPlaybackLane("b", "/tmp/b.wav", 1f, timelineClipStartMs = 0L, timelineClipDurationMs = 0L),
+            spec?.lanes?.get(1),
+        )
     }
 
     @Test

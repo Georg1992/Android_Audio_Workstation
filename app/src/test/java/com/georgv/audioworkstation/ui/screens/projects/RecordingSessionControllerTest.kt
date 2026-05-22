@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.screens.projects
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -37,11 +38,13 @@ class RecordingSessionControllerTest {
             sut.executeRecordPressed(
                 projectId = PID,
                 projectName = "New",
+                timelineStartOffsetMs = 0L,
                 ensureProject = { _, _ -> project() },
                 visibleTrackCount = { 0 },
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                onPendingTrackAllocated = { true },
             )
 
             assertNotNull(sut.recordingTrackId.value)
@@ -62,11 +65,13 @@ class RecordingSessionControllerTest {
             sut.executeRecordPressed(
                 projectId = PID,
                 projectName = "New",
+                timelineStartOffsetMs = 0L,
                 ensureProject = { _, _ -> project() },
                 visibleTrackCount = { 0 },
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { notified = true },
                 notifyPersistFailed = { throw AssertionError("unexpected persist notify") },
+                onPendingTrackAllocated = { true },
             )
 
             assertTrue(notified)
@@ -96,11 +101,13 @@ class RecordingSessionControllerTest {
             sut.executeRecordPressed(
                 projectId = PID,
                 projectName = "New",
+                timelineStartOffsetMs = 0L,
                 ensureProject = { _, _ -> project() },
                 visibleTrackCount = { 0 },
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                onPendingTrackAllocated = { true },
             )
 
             assertTrue(sawOptimisticBeforeEngineReturn)
@@ -120,6 +127,7 @@ class RecordingSessionControllerTest {
             sut.executeRecordPressed(
                 projectId = PID,
                 projectName = "New",
+                timelineStartOffsetMs = 0L,
                 ensureProject = { _, _ -> project() },
                 visibleTrackCount = { 0 },
                 persistRecordingRow = { track ->
@@ -131,10 +139,62 @@ class RecordingSessionControllerTest {
                 },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                onPendingTrackAllocated = { true },
             )
 
             assertTrue(idAtPersistEntry.isNotEmpty())
             advanceUntilIdle()
+        }
+
+    @Test
+    fun `executeRecordPressed persists timelineStartOffsetMs on allocated track`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+            val audio = FakeAudioController()
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val coord = ProjectRecordingCoordinator(repo, audio)
+            val sut = RecordingSessionController(this, audio, coord)
+
+            sut.executeRecordPressed(
+                projectId = PID,
+                projectName = "New",
+                timelineStartOffsetMs = 30_000L,
+                ensureProject = { _, _ -> project() },
+                visibleTrackCount = { 0 },
+                persistRecordingRow = { repo.upsertTracks(listOf(it)) },
+                notifyEngineStartFailed = { throw AssertionError("engine OK") },
+                notifyPersistFailed = { throw AssertionError("persist OK") },
+                onPendingTrackAllocated = { true },
+            )
+            advanceUntilIdle()
+
+            assertEquals(30_000L, dao.observeTracks(PID).first().single().timelineStartOffsetMs)
+        }
+
+    @Test
+    fun `executeRecordPressed rolls back when pending allocation callback rejects`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+            val audio = FakeAudioController()
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val coord = ProjectRecordingCoordinator(repo, audio)
+            val sut = RecordingSessionController(this, audio, coord)
+
+            sut.executeRecordPressed(
+                projectId = PID,
+                projectName = "New",
+                timelineStartOffsetMs = 0L,
+                ensureProject = { _, _ -> project() },
+                visibleTrackCount = { 0 },
+                persistRecordingRow = { repo.upsertTracks(listOf(it)) },
+                notifyEngineStartFailed = { throw AssertionError("unexpected engine notify") },
+                notifyPersistFailed = { throw AssertionError("unexpected persist notify") },
+                onPendingTrackAllocated = { false },
+            )
+            advanceUntilIdle()
+
+            assertNull(sut.recordingTrackId.value)
+            assertEquals(0, audio.stopRecordingCalls)
         }
 
     @Test
@@ -150,11 +210,13 @@ class RecordingSessionControllerTest {
             sut.executeRecordPressed(
                 projectId = PID,
                 projectName = "New",
+                timelineStartOffsetMs = 0L,
                 ensureProject = { _, _ -> project() },
                 visibleTrackCount = { 0 },
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("unexpected engine notify") },
                 notifyPersistFailed = { notified = true },
+                onPendingTrackAllocated = { true },
             )
 
             assertTrue(notified)

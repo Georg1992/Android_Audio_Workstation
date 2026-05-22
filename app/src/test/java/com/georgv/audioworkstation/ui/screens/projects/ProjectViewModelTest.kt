@@ -9,6 +9,7 @@ import com.georgv.audioworkstation.core.audio.AudioImportTarget
 import com.georgv.audioworkstation.core.audio.AudioImporter
 import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
@@ -17,6 +18,9 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.ui.components.WaveformState
+import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
+import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
 import com.georgv.audioworkstation.ui.components.tempWav
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +32,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -48,6 +54,10 @@ class ProjectViewModelTest {
 
     @get:Rule
     val mainDispatcherRule = ProjectViewModelMainDispatcherRule()
+
+    private val defaultWaveformPeakExtractor: NoOpWaveformPeakExtractor by lazy {
+        NoOpWaveformPeakExtractor(mainDispatcherRule.dispatcher)
+    }
 
     @Test
     fun `bind loads tracks ordered by position`() = runTest(mainDispatcherRule.dispatcher) {
@@ -152,30 +162,43 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onPlayPressed starts playback and requires explicit stop before restart`() = runTest(mainDispatcherRule.dispatcher) {
-        val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
-        val audioController = FakeAudioController()
-        val vm = createViewModel(dao, audioController)
-        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+    fun `onPlayPressed starts playback and requires pause before restart while playing`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
-        vm.bind(PROJECT_ID)
-        advanceUntilIdle()
-        vm.toggleSelect("a")
-        advanceUntilIdle()
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+            startPlayback(vm)
+            assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
+            assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
 
-        vm.onPlayPressed()
-        runCurrent()
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
-        assertEquals(0, audioController.stopPlaybackCalls)
-        assertEquals(R.string.error_stop_playback_first, vm.userMessages.first().resId)
-        vm.onStopPressed()
-        runCurrent()
-        collectJob.cancel()
-    }
+            startPlayback(vm)
+            assertEquals(R.string.error_stop_playback_first, vm.userMessages.first().resId)
+            assertEquals(0, audioController.stopPlaybackCalls)
+
+            vm.performStopPressed()
+            advanceUntilIdle()
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+            assertEquals(1, audioController.stopPlaybackCalls)
+
+            startPlayback(vm)
+            assertEquals(2, audioController.startPlaybackCalls)
+            collectJob.cancel()
+        }
 
     @Test
     fun `onPlayPressed with no selection does not start playback`() = runTest(mainDispatcherRule.dispatcher) {
@@ -190,10 +213,9 @@ class ProjectViewModelTest {
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
+        invokePlayPressed(vm)
 
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
         assertEquals(0, audioController.startPlaybackCalls)
         collectJob.cancel()
     }
@@ -220,10 +242,9 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         vm.toggleSelect("d")
         advanceUntilIdle()
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
-        assertEquals(setOf("a", "b"), vm.uiState.value.playingTrackIds)
+        assertEquals(setOf("a", "b"), vm.uiState.value.sessionTrackIds)
         assertEquals(1, audioController.startPlaybackCalls)
         assertEquals(listOf("a", "b"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
         assertEquals(listOf("a.wav", "b.wav"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.wavFilePath })
@@ -249,10 +270,9 @@ class ProjectViewModelTest {
             vm.toggleSelect("a")
             advanceUntilIdle()
 
-            vm.onPlayPressed()
-            runCurrent()
+            invokePlayPressed(vm)
 
-            assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+            assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
             assertEquals(0, audioController.startPlaybackCalls)
             assertEquals(R.string.error_no_audio_for_selected_tracks, vm.userMessages.first().resId)
             collectJob.cancel()
@@ -275,10 +295,10 @@ class ProjectViewModelTest {
         (1..9).forEach { index -> vm.toggleSelect("track-$index") }
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
+        invokePlayPressed(vm)
+        advanceUntilIdle()
 
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
         assertEquals(0, audioController.startPlaybackCalls)
         assertEquals(R.string.error_playback_failed_to_start, vm.userMessages.first().resId)
         collectJob.cancel()
@@ -309,23 +329,29 @@ class ProjectViewModelTest {
 
     @Test
     fun `onStopPressed clears recording and playing state`() = runTest(mainDispatcherRule.dispatcher) {
-        val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")))
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 5_000L)),
+            )
         val vm = createViewModel(dao)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
-        runCurrent()
+        advanceUntilIdle()
         vm.toggleSelect("a")
-        vm.onPlayPressed()
-        runCurrent()
+        advanceUntilIdle()
+        startPlayback(vm)
         vm.onRecordPressed(PROJECT_ID)
-        runCurrent()
+        advanceUntilIdle()
 
         vm.onStopPressed()
-        runCurrent()
+        advanceUntilIdle()
 
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
         assertNull(vm.uiState.value.recordingTrackId)
+        assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(0L, vm.uiState.value.playheadPositionMs)
         collectJob.cancel()
     }
 
@@ -501,8 +527,7 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
         assertEquals(0.25f, audioController.lastMultiPlaybackSpec?.lanes?.single()?.gain)
         collectJob.cancel()
@@ -530,8 +555,7 @@ class ProjectViewModelTest {
         vm.toggleSelect("b")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
         assertEquals(listOf(0.2f, 0.75f), audioController.lastMultiPlaybackSpec?.lanes?.map { it.gain })
         collectJob.cancel()
@@ -551,15 +575,13 @@ class ProjectViewModelTest {
         advanceUntilIdle()
         vm.toggleSelect("a")
         advanceUntilIdle()
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
         vm.setTrackGain("a", 25f)
         runCurrent()
 
         assertEquals(0.25f, audioController.lastPlaybackGain)
-        vm.onStopPressed()
-        runCurrent()
+        stopPlaybackFully(vm)
         collectJob.cancel()
     }
 
@@ -711,17 +733,15 @@ class ProjectViewModelTest {
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
         vm.toggleSelect("a")
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
         vm.deleteTrack("a")
         runCurrent()
 
         assertEquals(listOf("a", "b"), vm.uiState.value.tracks.map { it.id })
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
         assertEquals(R.string.error_stop_playback_to_delete_track, vm.userMessages.first().resId)
-        vm.onStopPressed()
-        runCurrent()
+        stopPlaybackFully(vm)
         collectJob.cancel()
     }
 
@@ -780,6 +800,596 @@ class ProjectViewModelTest {
     }
 
     @Test
+    fun `onRecordPressed stores timelineStartOffsetMs zero when playhead is at start`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertEquals(0L, dao.observeTracks(PROJECT_ID).first().single().timelineStartOffsetMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onRecordPressed stores timelineStartOffsetMs from playhead at thirty seconds`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 60_000L)),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        vm.setPlayheadPositionMs(30_000L, base)
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        val recorded = dao.observeTracks(PROJECT_ID).first().last { it.id != "a" }
+        assertEquals(30_000L, recorded.timelineStartOffsetMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onRecordPressed blocks when playhead is at timeline end`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        vm.setPlayheadPositionMs(playheadMsAtFraction(1f, base), base)
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertEquals(1, dao.observeTracks(PROJECT_ID).first().size)
+        assertEquals(R.string.error_record_at_timeline_end, vm.userMessages.first().resId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `deselect during playback silences armed lane without restarting session`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 30_000L),
+                            track(id = "b", position = 1, wavFilePath = "b.wav").copy(duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            vm.toggleSelect("b")
+            startPlayback(vm)
+            assertEquals(setOf("a", "b"), vm.uiState.value.sessionTrackIds)
+            assertEquals(1, audioController.startPlaybackCalls)
+
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+
+            assertEquals(1, audioController.startPlaybackCalls)
+            assertEquals(setOf("a", "b"), vm.uiState.value.sessionTrackIds)
+            val audibility = audioController.lastArmedLaneAudibility
+            requireNotNull(audibility)
+            org.junit.Assert.assertTrue(audibility[0])
+            org.junit.Assert.assertFalse(audibility[1])
+
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+            val audibilityRestored = audioController.lastArmedLaneAudibility
+            requireNotNull(audibilityRestored)
+            org.junit.Assert.assertTrue(audibilityRestored[0])
+            org.junit.Assert.assertTrue(audibilityRestored[1])
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `selecting non-armed track during playback starts hot join not new playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 30_000L),
+                            track(id = "b", position = 1, wavFilePath = "b.wav").copy(duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+
+            assertEquals(1, audioController.startPlaybackCalls)
+            assertEquals(1, audioController.beginHotJoinCalls)
+            assertEquals("b.wav", audioController.lastHotJoinWavPath)
+            assertEquals(listOf("a"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `hot join during playback loads lane with timeline clip metadata`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav", duration = 30_000L),
+                            track(
+                                id = "b",
+                                position = 1,
+                                wavFilePath = "b.wav",
+                                duration = 5_000L,
+                            ).copy(timelineStartOffsetMs = 10_000L),
+                        ),
+                )
+            val audioController =
+                FakeAudioController().apply {
+                    hotJoinReturnLaneIndex = 1
+                    hotJoinCommitLifecycle = PlaybackLaneLifecycle.Active
+                }
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.setPlayheadPositionMs(12_000L, vm.uiState.value.timelineBaseDurationMs)
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            assertEquals(12_000L, audioController.transportPositionMsValue)
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+
+            assertEquals(1, audioController.beginHotJoinCalls)
+            assertEquals(10_000L, audioController.lastHotJoinClipStartMs)
+            assertEquals(5_000L, audioController.lastHotJoinClipDurationMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `hot join skipped when transport is past clip end`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "a.wav", duration = 30_000L),
+                        track(id = "b", position = 1, wavFilePath = "b.wav", duration = 5_000L)
+                            .copy(timelineStartOffsetMs = 10_000L),
+                    ),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val timelineBaseMs = vm.uiState.value.timelineBaseDurationMs
+        vm.setPlayheadPositionMs(16_000L, timelineBaseMs)
+        vm.toggleSelect("a")
+        startPlayback(vm)
+        assertEquals(16_000L, audioController.transportPositionMsValue)
+        vm.toggleSelect("b")
+        advanceUntilIdle()
+
+        assertEquals(0, audioController.beginHotJoinCalls)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `deselect during play and record does not stop recording or restart playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("backing")
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(1, audioController.startPlaybackCalls)
+            assertEquals(0, audioController.stopPlaybackCalls)
+
+            vm.toggleSelect("backing")
+            advanceUntilIdle()
+
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(1, audioController.startPlaybackCalls)
+            assertEquals(0, audioController.stopPlaybackCalls)
+            val audibility = audioController.lastArmedLaneAudibility
+            requireNotNull(audibility)
+            org.junit.Assert.assertFalse(audibility[0])
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `record with selected tracks starts overdub playback from playhead`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 30_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("backing")
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        vm.setPlayheadPositionMs(5_000L, base)
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        val recordingId = vm.uiState.value.recordingTrackId
+        assertNotNull(recordingId)
+        assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(setOf("backing"), vm.uiState.value.sessionTrackIds)
+        assertEquals(1, audioController.startPlaybackCalls)
+        assertEquals(5_000L, audioController.lastMultiPlaybackSpec?.startPositionMs)
+        assertEquals(listOf("backing"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+        assertFalse(audioController.lastMultiPlaybackSpec?.lanes?.any { it.trackId == recordingId } == true)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `record without selection does not start overdub playback`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNotNull(vm.uiState.value.recordingTrackId)
+        assertEquals(0, audioController.startPlaybackCalls)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `recording transport lock blocks play scrub and playhead before recording phase`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 10_000L)),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("backing")
+            advanceUntilIdle()
+
+            val pendingRow = track(id = "take-1", position = 1, wavFilePath = "")
+            vm.seedRecordingSessionForTests(recordingId = "take-1", optimistic = pendingRow, startup = false)
+            advanceUntilIdle()
+
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+            val base = vm.uiState.value.timelineBaseDurationMs
+            val playheadBefore = vm.uiState.value.playheadPositionMs
+
+            invokePlayPressed(vm)
+            assertEquals(0, audioController.startPlaybackCalls)
+
+            vm.setPlayheadPositionMs(playheadBefore + 4_000L, base)
+            vm.setPlayheadPositionMs(playheadMsAtFraction(0.75f, base), base)
+            assertEquals(playheadBefore, vm.uiState.value.playheadPositionMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `recording transport lock blocks playhead while startup is in flight`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.seedRecordingSessionForTests(recordingId = null, optimistic = null, startup = true)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isRecordingStartup)
+        val base = vm.uiState.value.timelineBaseDurationMs
+        val playheadBefore = vm.uiState.value.playheadPositionMs
+
+        vm.setPlayheadPositionMs(3_000L, base)
+        assertEquals(playheadBefore, vm.uiState.value.playheadPositionMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `overdub session end uses active backing set not full project timeline`() = runTest(mainDispatcherRule.dispatcher) {
+        val longTrack =
+            track(id = "long", position = 0, wavFilePath = "long.wav", duration = 120_000L)
+        val backing =
+            track(id = "backing", position = 1, wavFilePath = "backing.wav", duration = 5_000L)
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(longTrack, backing))
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("backing")
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertEquals(
+            sessionTimelineEndMsForTracks(listOf(backing)),
+            audioController.lastMultiPlaybackSpec?.sessionTimelineEndMs,
+        )
+        assertEquals(5_000L, audioController.lastMultiPlaybackSpec?.sessionTimelineEndMs)
+        assertTrue(vm.uiState.value.timelineBaseDurationMs >= 120_000L)
+        audioController.completePlayback()
+        vm.cancelPlaybackCompletionMonitorForTests()
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `overdub backing playback completes at session end while recording continues`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val longTrack =
+                track(id = "long", position = 0, wavFilePath = "long.wav", duration = 120_000L)
+            val backing =
+                track(id = "backing", position = 1, wavFilePath = "backing.wav", duration = 5_000L)
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(longTrack, backing))
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("backing")
+            advanceUntilIdle()
+
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+
+            assertEquals(5_000L, audioController.lastMultiPlaybackSpec?.sessionTimelineEndMs)
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(setOf("backing"), vm.uiState.value.sessionTrackIds)
+
+            audioController.completePlayback()
+            advanceUntilIdle()
+
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+            audioController.completePlayback()
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `playhead advances during play and record`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 60_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+        vm.setPlayheadNativePollEnabledForTests(false)
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+        val startMs = vm.uiState.value.playheadPositionMs
+
+        vm.advancePlayheadNativeTransportForTests(startMs + 3_000L)
+        advanceUntilIdle()
+
+        assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(startMs + 3_000L, vm.uiState.value.playheadPositionMs)
+        assertTrue(vm.uiState.value.timelineBaseDurationMs >= startMs + 3_000L)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `overdub playback failure aborts combined transport`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController(startPlaybackResult = false)
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(0L, vm.uiState.value.playheadPositionMs)
+        assertEquals(R.string.error_playback_failed_to_start, vm.userMessages.first().resId)
+        assertEquals(0, audioController.stopRecordingCalls)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `recording engine failure stops overdub playback`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController(startRecordingPath = null)
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+        assertEquals(1, audioController.startPlaybackCalls)
+        assertEquals(1, audioController.stopPlaybackCalls)
+        assertEquals(R.string.error_recording_failed_to_start, vm.userMessages.first().resId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `stop during play and record stops playback and recording`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.performStopPressed()
+        advanceUntilIdle()
+
+        assertEquals(1, audioController.stopRecordingCalls)
+        assertEquals(1, audioController.stopPlaybackCalls)
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+        assertEquals(0L, vm.uiState.value.playheadPositionMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `recording expands shared timeline when playhead moves past prior end`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.setPlayheadNativePollEnabledForTests(false)
+        assertEquals(10_000L, vm.uiState.value.timelineBaseDurationMs)
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+        vm.advancePlayheadNativeTransportForTests(15_000L)
+        advanceUntilIdle()
+
+        assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(15_000L, vm.uiState.value.playheadPositionMs)
+        assertEquals(15_000L, vm.uiState.value.timelineBaseDurationMs)
+        val recordingClip = vm.uiState.value.timelineClipsByTrackId[vm.uiState.value.recordingTrackId]
+        assertNotNull(recordingClip)
+        assertTrue(recordingClip!!.isActiveRecording)
+        assertTrue(recordingClip.isTimelineBase)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `stop recording resets playhead and keeps expanded timeline`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.setPlayheadNativePollEnabledForTests(false)
+
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+        vm.advancePlayheadNativeTransportForTests(8_000L)
+        advanceUntilIdle()
+
+        vm.performStopPressed()
+        advanceUntilIdle()
+
+        assertEquals(0L, vm.uiState.value.playheadPositionMs)
+        assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+        assertNull(vm.uiState.value.recordingTrackId)
+        val saved = dao.observeTracks(PROJECT_ID).first().single()
+        assertEquals(0L, saved.timelineStartOffsetMs)
+        assertFalse(saved.isRecording)
+        assertNotNull(saved.duration)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `onRecordPressed creates missing project with provided name and default track settings`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao()
         val vm = createViewModel(dao)
@@ -816,13 +1426,10 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        advanceUntilIdle()
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
-
         vm.onRecordPressed(PROJECT_ID)
         advanceUntilIdle()
         assertNotNull(vm.uiState.value.recordingTrackId)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
 
         val onCleared = vm.javaClass.getDeclaredMethod("onCleared")
         onCleared.isAccessible = true
@@ -830,7 +1437,7 @@ class ProjectViewModelTest {
         advanceUntilIdle()
         assertEquals(1, audioController.stopRecordingCalls)
         assertEquals(1, audioController.stopPlaybackCalls)
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
         assertNull(vm.uiState.value.recordingTrackId)
         assertFalse(vm.uiState.value.isRecordingStartup)
         assertEquals(1, audioController.releaseCalls)
@@ -876,16 +1483,14 @@ class ProjectViewModelTest {
         advanceUntilIdle()
         vm.toggleSelect("a")
         advanceUntilIdle()
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
         vm.toggleTrackLoop("a")
         advanceUntilIdle()
 
         assertEquals(false, vm.uiState.value.tracks.single().isLoop)
         assertEquals(false, dao.observeTracks(PROJECT_ID).first().single().isLoop)
-        vm.onStopPressed()
-        runCurrent()
+        stopPlaybackFully(vm)
         collectJob.cancel()
     }
 
@@ -916,19 +1521,17 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
         assertEquals(1, audioController.startPlaybackCalls)
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
 
         audioController.completePlayback()
-        runCurrent()
+        advanceUntilIdle()
 
         assertEquals(2, audioController.startPlaybackCalls)
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
 
-        vm.onStopPressed()
-        runCurrent()
+        stopPlaybackFully(vm)
         collectJob.cancel()
     }
 
@@ -949,16 +1552,15 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        advanceUntilIdle()
+        startPlayback(vm)
         assertEquals(1, audioController.startPlaybackCalls)
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
 
         audioController.completePlayback()
         advanceUntilIdle()
 
         assertEquals(2, audioController.startPlaybackCalls)
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
 
         collectJob.cancel()
     }
@@ -997,16 +1599,22 @@ class ProjectViewModelTest {
             wavSamplesToWrite = shortArrayOf(0, 2_000, 8_000, 16_000, 24_000, 30_000)
         )
         val provider = FakeAudioFilePathProvider(tempDir().absolutePath)
-        val vm = createViewModel(dao, audioImporter = importer, audioFilePathProvider = provider)
+        val vm =
+            createViewModel(
+                dao,
+                audioImporter = importer,
+                audioFilePathProvider = provider,
+                waveformPeakExtractor = WavWaveformPeakExtractor(ioDispatcher = mainDispatcherRule.dispatcher),
+            )
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
         vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "Imported")
         advanceUntilIdle()
-        waitUntil { vm.uiState.value.waveformStatesByTrackId[vm.uiState.value.tracks.single().id] is WaveformState.Ready }
 
         val imported = vm.uiState.value.tracks.single()
+        assertTrue(vm.uiState.value.waveformStatesByTrackId[imported.id] is WaveformState.Ready)
         val peaks = (vm.uiState.value.waveformStatesByTrackId[imported.id] as? WaveformState.Ready)?.peaks
         assertNotNull(peaks)
         assertEquals(1f, peaks?.amplitudes?.maxOrNull() ?: 0f, 0.0001f)
@@ -1156,14 +1764,13 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+        startPlayback(vm)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
 
         audioController.completePlayback()
-        runCurrent()
+        advanceUntilIdle()
 
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
         collectJob.cancel()
     }
 
@@ -1178,15 +1785,15 @@ class ProjectViewModelTest {
         advanceUntilIdle()
         vm.toggleSelect("a")
         advanceUntilIdle()
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
 
         vm.onStopPressed()
-        runCurrent()
+        advanceUntilIdle()
 
         assertEquals(0, audioController.stopRecordingCalls)
         assertEquals(1, audioController.stopPlaybackCalls)
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+        assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
         assertNull(vm.uiState.value.recordingTrackId)
         collectJob.cancel()
     }
@@ -1210,7 +1817,7 @@ class ProjectViewModelTest {
         assertEquals(1, audioController.stopRecordingCalls)
         assertEquals(0, audioController.stopPlaybackCalls)
         assertNull(vm.uiState.value.recordingTrackId)
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
         collectJob.cancel()
     }
 
@@ -1218,7 +1825,13 @@ class ProjectViewModelTest {
     fun `recording finalization generates waveform peaks for recorded wav`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val audioController = FakeAudioController(startRecordingPath = "${tempDir().absolutePath}/default.wav")
-        val vm = createViewModel(dao, audioController)
+        val vm =
+            createViewModel(
+                dao,
+                audioController,
+                waveformPeakExtractor =
+                    WavWaveformPeakExtractor(ioDispatcher = mainDispatcherRule.dispatcher),
+            )
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
@@ -1255,21 +1868,18 @@ class ProjectViewModelTest {
         vm.toggleSelect("a")
         advanceUntilIdle()
 
-        vm.onPlayPressed()
-        runCurrent()
+        startPlayback(vm)
         assertEquals(1, audioController.startPlaybackCalls)
 
         audioController.completePlayback()
-        runCurrent()
+        advanceUntilIdle()
         assertEquals(2, audioController.startPlaybackCalls)
-        assertEquals(setOf("a"), vm.uiState.value.playingTrackIds)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
 
-        vm.onStopPressed()
-        runCurrent()
-        assertEquals(emptySet<String>(), vm.uiState.value.playingTrackIds)
+        stopPlaybackFully(vm)
+        assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
 
         audioController.completePlayback()
-        runCurrent()
         advanceUntilIdle()
 
         assertEquals(2, audioController.startPlaybackCalls)
@@ -1295,7 +1905,8 @@ class ProjectViewModelTest {
         dao: FakeProjectDao,
         audioController: AudioController = FakeAudioController(),
         audioImporter: AudioImporter = FakeAudioImporter(),
-        audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider()
+        audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider(),
+        waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
     ): ProjectViewModel {
         val repo = ProjectRepository(dao, NoopProjectFileStore)
         val audioImportCoordinator =
@@ -1306,11 +1917,31 @@ class ProjectViewModelTest {
             audioController,
             audioImportCoordinator,
             recordingCoordinator,
-        )
+            waveformPeakExtractor,
+        ).also { it.setPlayheadNativePollEnabledForTests(false) }
+    }
+
+    private suspend fun TestScope.stopPlaybackFully(vm: ProjectViewModel) {
+        vm.performStopPressed()
+        advanceUntilIdle()
+        if (vm.uiState.value.transportPlaybackPhase == TransportPlaybackPhase.Paused) {
+            vm.performStopPressed()
+            advanceUntilIdle()
+        }
+    }
+
+    private suspend fun TestScope.invokePlayPressed(vm: ProjectViewModel) {
+        vm.performPlayPressed()
+    }
+
+    private suspend fun TestScope.startPlayback(vm: ProjectViewModel) {
+        vm.performPlayPressed()
+        waitUntil { vm.sessionTrackIdsForTests().isNotEmpty() }
+        advanceUntilIdle()
     }
 
     @Test
-    fun `setPlayheadFraction maps to clamped timeline position`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `setPlayheadPositionMs clamps to timeline duration`() = runTest(mainDispatcherRule.dispatcher) {
         val dao =
             FakeProjectDao(
                 projects = listOf(project()),
@@ -1329,18 +1960,916 @@ class ProjectViewModelTest {
         val baseDurationMs = vm.uiState.value.timelineBaseDurationMs
         assertEquals(10_000L, baseDurationMs)
 
-        vm.setPlayheadFraction(0f, baseDurationMs)
+        vm.setPlayheadPositionMs(playheadMsAtFraction(0f, baseDurationMs), baseDurationMs)
         advanceUntilIdle()
         assertEquals(0L, vm.uiState.value.playheadPositionMs)
 
-        vm.setPlayheadFraction(1f, baseDurationMs)
+        vm.setPlayheadPositionMs(playheadMsAtFraction(1f, baseDurationMs), baseDurationMs)
         advanceUntilIdle()
         assertEquals(10_000L, vm.uiState.value.playheadPositionMs)
 
-        vm.setPlayheadFraction(2f, baseDurationMs)
+        vm.setPlayheadPositionMs(playheadMsAtFraction(2f, baseDurationMs), baseDurationMs)
         advanceUntilIdle()
         assertEquals(10_000L, vm.uiState.value.playheadPositionMs)
 
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `play starts from current playhead and follows native transport`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "a.wav", duration = 30_000L),
+                    ),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        assertEquals(30_000L, base)
+        vm.setPlayheadPositionMs(playheadMsAtFraction(0.5f, base), base)
+        advanceUntilIdle()
+        val startMs = vm.uiState.value.playheadPositionMs
+        assertEquals(15_000L, startMs)
+
+        startPlayback(vm)
+        assertEquals(startMs, vm.uiState.value.playheadPositionMs)
+        assertEquals(startMs, audioController.lastMultiPlaybackSpec?.startPositionMs)
+        vm.cancelPlaybackCompletionMonitorForTests()
+
+        audioController.transportPositionMsValue = startMs + 200
+        vm.advancePlayheadNativeTransportForTests(startMs + 200)
+        advanceUntilIdle()
+        assertEquals(startMs + 200, vm.uiState.value.playheadPositionMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `play at zero passes zero start position to audio layer`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 5_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        startPlayback(vm)
+
+        assertEquals(0L, audioController.lastMultiPlaybackSpec?.startPositionMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `play at 1000ms passes start position into multi playback spec`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 5_000L),
+                        track(id = "b", position = 1, wavFilePath = "b.wav").copy(duration = 5_000L),
+                    ),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        vm.toggleSelect("b")
+        vm.setPlayheadPositionMs(1_000L, 5_000L)
+        advanceUntilIdle()
+        startPlayback(vm)
+
+        assertEquals(1_000L, audioController.lastMultiPlaybackSpec?.startPositionMs)
+        assertEquals(listOf("a", "b"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `pause preserves playhead and stop while paused resets to zero`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 20_000L)),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            audioController.transportPositionMsValue = 150L
+            vm.advancePlayheadNativeTransportForTests(150L)
+            advanceUntilIdle()
+
+            vm.performStopPressed()
+            advanceUntilIdle()
+            val pausedAt = vm.uiState.value.playheadPositionMs
+            assertTrue(pausedAt > 0L)
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertFalse(vm.uiState.value.stopButtonShowsPause)
+
+            audioController.transportPositionMsValue = 0L
+            advanceUntilIdle()
+            assertEquals(pausedAt, vm.uiState.value.playheadPositionMs)
+
+            vm.performStopPressed()
+            advanceUntilIdle()
+            assertEquals(0L, vm.uiState.value.playheadPositionMs)
+            assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `cannot deselect last selected session lane track during playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L),
+                            track(id = "b", position = 1, wavFilePath = "b.wav", duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            vm.toggleSelect("b")
+            startPlayback(vm)
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+            assertEquals(setOf("a"), vm.uiState.value.selectedTrackIds)
+
+            vm.toggleSelect("a")
+            advanceUntilIdle()
+            assertEquals(setOf("a"), vm.uiState.value.selectedTrackIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `play after natural completion starts from zero without stale transport flash`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 5_000L)),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            audioController.transportPositionMsValue = 5_000L
+            vm.advancePlayheadNativeTransportForTests(5_000L)
+            advanceUntilIdle()
+
+            audioController.completePlayback()
+            advanceUntilIdle()
+            assertEquals(0L, vm.uiState.value.playheadPositionMs)
+
+            audioController.transportPositionMsValue = 5_000L
+            invokePlayPressed(vm)
+            advanceUntilIdle()
+
+            assertEquals(0L, vm.uiState.value.playheadPositionMs)
+            assertEquals(0L, audioController.lastMultiPlaybackSpec?.startPositionMs)
+            assertEquals(5_000L, audioController.lastMultiPlaybackSpec?.sessionTimelineEndMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `natural playback completion resets playhead to zero`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 5_000L)),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            audioController.completePlayback()
+            advanceUntilIdle()
+
+            assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+            assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(0L, vm.uiState.value.playheadPositionMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `play and record backing completion clears playing markers while recording continues`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("backing")
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(setOf("backing"), vm.uiState.value.sessionTrackIds)
+
+            audioController.completePlayback()
+            advanceUntilIdle()
+
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+
+            val audibilityCallsBefore = audioController.armedLaneAudibilityCalls
+            vm.toggleSelect("backing")
+            advanceUntilIdle()
+            assertEquals(audibilityCallsBefore, audioController.armedLaneAudibilityCalls)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `loop restart resets playhead to zero`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "a.wav", isLoop = true, duration = 30_000L),
+                    ),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleSelect("a")
+        startPlayback(vm)
+        audioController.transportPositionMsValue = 120L
+        vm.advancePlayheadNativeTransportForTests(120L)
+        advanceUntilIdle()
+        assertEquals(120L, vm.uiState.value.playheadPositionMs)
+
+        audioController.transportPositionMsValue = 0L
+        audioController.completePlayback()
+        advanceUntilIdle()
+
+        assertEquals(0L, vm.uiState.value.playheadPositionMs)
+        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
+        assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `recording-only playhead follows mocked native transport`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 60_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.setPlayheadNativePollEnabledForTests(false)
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        audioController.transportPositionMsValue = 12_500L
+        vm.advancePlayheadNativeTransportForTests(12_500L)
+        advanceUntilIdle()
+
+        assertEquals(12_500L, vm.uiState.value.playheadPositionMs)
+        assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `play and record handoff keeps playhead on native transport after backing ends`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.setPlayheadNativePollEnabledForTests(false)
+            vm.toggleSelect("backing")
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+
+            audioController.transportPositionMsValue = 4_000L
+            vm.advancePlayheadNativeTransportForTests(4_000L)
+            advanceUntilIdle()
+            assertEquals(4_000L, vm.uiState.value.playheadPositionMs)
+
+            audioController.completePlayback()
+            advanceUntilIdle()
+
+            assertNotNull(vm.uiState.value.recordingTrackId)
+            assertEquals(4_000L, vm.uiState.value.playheadPositionMs)
+
+            audioController.transportPositionMsValue = 7_500L
+            vm.advancePlayheadNativeTransportForTests(7_500L)
+            advanceUntilIdle()
+            assertEquals(7_500L, vm.uiState.value.playheadPositionMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `clock five completion resets playhead to zero via stopAndResetToZero`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 5_000L)),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            audioController.transportPositionMsValue = 2_000L
+            vm.advancePlayheadNativeTransportForTests(2_000L)
+            advanceUntilIdle()
+
+            audioController.completePlayback()
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(0L, vm.uiState.value.playheadPositionMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `native poll does not advance playhead when transport position is static`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 20_000L)),
+                )
+            val audioController = FakeAudioController()
+            val vm =
+                createViewModel(dao, audioController).also {
+                    it.setPlayheadNativePollEnabledForTests(true)
+                }
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+
+            audioController.transportPositionMsValue = 1_000L
+            advanceTimeBy(300)
+            advanceUntilIdle()
+
+            assertEquals(1_000L, vm.uiState.value.playheadPositionMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub during playing pauses engine and resumes on release`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+            audioController.transportPositionMsValue = 400L
+            vm.advancePlayheadNativeTransportForTests(400L)
+            advanceUntilIdle()
+
+            vm.onPlayheadScrubStarted()
+            advanceUntilIdle()
+            assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(1, audioController.stopPlaybackCalls)
+            assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
+            assertFalse(audioController.playbackState.value)
+
+            vm.onPlayheadScrubPreviewPosition(playheadMsAtFraction(0.5f, base), base)
+            advanceUntilIdle()
+            assertEquals(5_000L, vm.uiState.value.playheadPositionMs)
+
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.25f, base), base)
+            advanceUntilIdle()
+            assertEquals(2, audioController.startPlaybackCalls)
+            assertEquals(2_500L, audioController.lastMultiPlaybackSpec?.startPositionMs)
+            assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
+            assertTrue(audioController.playbackState.value)
+            assertEquals(2_500L, vm.uiState.value.playheadPositionMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub ignored during recording`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+        val before = vm.uiState.value.playheadPositionMs
+        val stopCallsBefore = audioController.stopPlaybackCalls
+
+        vm.onPlayheadScrubStarted()
+        vm.onPlayheadScrubPreviewPosition(playheadMsAtFraction(1f, base), base)
+        vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(1f, base), base)
+        advanceUntilIdle()
+
+        assertEquals(before, vm.uiState.value.playheadPositionMs)
+        assertEquals(stopCallsBefore, audioController.stopPlaybackCalls)
+        assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `transport seek scrub ignored during play and record overdub`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("backing")
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+            val before = vm.uiState.value.playheadPositionMs
+            val startCallsBefore = audioController.startPlaybackCalls
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(1f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(before, vm.uiState.value.playheadPositionMs)
+            assertEquals(startCallsBefore, audioController.startPlaybackCalls)
+            assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub when paused does not auto play`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                    ),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        vm.toggleSelect("a")
+        startPlayback(vm)
+        vm.performStopPressed()
+        advanceUntilIdle()
+        assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+
+        vm.onPlayheadScrubStarted()
+        vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(1f, base), base)
+        advanceUntilIdle()
+
+        assertEquals(base, vm.uiState.value.playheadPositionMs)
+        assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(1, audioController.startPlaybackCalls)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `transport seek scrub cancel leaves paused without stuck session`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubPreviewPosition(playheadMsAtFraction(0.6f, vm.uiState.value.timelineBaseDurationMs), vm.uiState.value.timelineBaseDurationMs)
+            vm.onPlayheadScrubCancelled()
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertFalse(vm.uiState.value.playbackSessionActive)
+            assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
+            assertFalse(audioController.playbackState.value)
+            assertEquals(1, audioController.startPlaybackCalls)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub stop during drag leaves paused without resume`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.onPlayheadScrubStarted()
+            vm.performStopPressed()
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertFalse(vm.uiState.value.playbackSessionActive)
+            assertEquals(1, audioController.startPlaybackCalls)
+            assertFalse(audioController.playbackState.value)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub failed restart leaves paused not playing`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController =
+                FakeAudioController(startPlaybackPermitted = { invocation -> invocation == 0 })
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.5f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertFalse(vm.uiState.value.playbackSessionActive)
+            assertFalse(audioController.playbackState.value)
+            assertEquals(2, audioController.startPlaybackCalls)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub commit at timeline end leaves paused`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(1f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertFalse(vm.uiState.value.playbackSessionActive)
+            assertEquals(base, vm.uiState.value.playheadPositionMs)
+            assertEquals(1, audioController.startPlaybackCalls)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub commit at zero restarts playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+            audioController.transportPositionMsValue = 4_000L
+            vm.advancePlayheadNativeTransportForTests(4_000L)
+            advanceUntilIdle()
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
+            assertEquals(2, audioController.startPlaybackCalls)
+            assertEquals(0L, audioController.lastMultiPlaybackSpec?.startPositionMs)
+            assertTrue(audioController.playbackState.value)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub restart arms all selected playable tracks`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                            track(id = "b", position = 1, wavFilePath = "b.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            vm.toggleSelect("b")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.5f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(setOf("a", "b"), vm.uiState.value.selectedTrackIds)
+            assertEquals(setOf("a", "b"), vm.uiState.value.sessionTrackIds)
+            assertEquals(2, audioController.lastMultiPlaybackSpec?.lanes?.size)
+            assertEquals(
+                setOf("a", "b"),
+                audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId }?.toSet(),
+            )
+            assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub after hot join restarts both selected tracks`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                            track(id = "b", position = 1, wavFilePath = "b.wav").copy(duration = 10_000L),
+                        ),
+                )
+            val audioController =
+                FakeAudioController().apply {
+                    hotJoinReturnLaneIndex = 1
+                    hotJoinCommitLifecycle = PlaybackLaneLifecycle.Active
+                }
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+
+            assertEquals(setOf("a", "b"), vm.uiState.value.selectedTrackIds)
+            assertEquals(setOf("a"), vm.sessionTrackIdsForTests())
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.4f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(setOf("a", "b"), vm.uiState.value.sessionTrackIds)
+            assertEquals(2, audioController.lastMultiPlaybackSpec?.lanes?.size)
+            assertEquals(
+                listOf("a", "b"),
+                vm.sessionLaneTrackIdsForTests().filterNotNull(),
+            )
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub restart includes only playable selected tracks`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                            track(id = "b", position = 1, wavFilePath = ""),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            vm.toggleSelect("b")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.3f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(setOf("a", "b"), vm.uiState.value.selectedTrackIds)
+            assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
+            assertEquals(1, audioController.lastMultiPlaybackSpec?.lanes?.size)
+            assertEquals("a", audioController.lastMultiPlaybackSpec?.lanes?.single()?.trackId)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub with no playable selection leaves paused`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                            track(id = "b", position = 1, wavFilePath = ""),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+            vm.setSelectedTrackIdsForTests(setOf("b"))
+
+            vm.onPlayheadScrubStarted()
+            vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.5f, base), base)
+            advanceUntilIdle()
+
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertFalse(vm.uiState.value.playbackSessionActive)
+            assertFalse(audioController.playbackState.value)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `transport seek scrub when idle does not auto play`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 10_000L),
+                    ),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+
+        vm.onPlayheadScrubCommittedPosition(playheadMsAtFraction(0.5f, base), base)
+        advanceUntilIdle()
+
+        assertEquals(5_000L, vm.uiState.value.playheadPositionMs)
+        assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+        assertEquals(0, audioController.startPlaybackCalls)
         collectJob.cancel()
     }
 
@@ -1351,14 +2880,20 @@ class ProjectViewModelTest {
         position: Int,
         name: String = "Track $id",
         wavFilePath: String = "",
-        gain: Float = 100f
+        gain: Float = 100f,
+        isLoop: Boolean = false,
+        duration: Long? = null,
+        timelineStartOffsetMs: Long = 0L,
     ) = TrackEntity(
         id = id,
         projectId = PROJECT_ID,
         name = name,
         position = position,
         wavFilePath = wavFilePath,
-        gain = gain
+        gain = gain,
+        isLoop = isLoop,
+        duration = duration,
+        timelineStartOffsetMs = timelineStartOffsetMs,
     )
 
     private companion object {
@@ -1366,6 +2901,9 @@ class ProjectViewModelTest {
         const val PROJECT_2_ID = "project-2"
     }
 }
+
+private fun playheadMsAtFraction(fraction: Float, timelineDurationMs: Long): Long =
+    timelinePlayheadPositionMs(fraction, timelineDurationMs)
 
 internal object NoopProjectFileStore : ProjectFileStore {
     override suspend fun deleteTrackFile(track: TrackEntity) = Unit
@@ -1431,6 +2969,8 @@ internal class FakeAudioController(
         private set
     var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
         private set
+    var lastPlaybackSpec: PlaybackSpec? = null
+        private set
 
     /** Test hook invoked at the beginning of native [startRecording] (before JNI work). */
     var onEnterStartRecording: (() -> Unit)? = null
@@ -1445,6 +2985,12 @@ internal class FakeAudioController(
     private val _recordingInputLevel = MutableStateFlow(0f)
     override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
 
+    var transportPositionMsValue: Long = 0L
+
+    override fun transportPositionMs(): Long = transportPositionMsValue
+
+    override fun isPlaybackEngineRunning(): Boolean = _playbackState.value
+
     /** Simulates the engine reporting playback completion. */
     fun completePlayback() {
         _playbackState.value = false
@@ -1456,6 +3002,7 @@ internal class FakeAudioController(
 
     override fun startRecording(spec: RecordingSpec): String? {
         onEnterStartRecording?.invoke()
+        transportPositionMsValue = spec.timelineStartOffsetMs
         return startRecordingPath?.replace("default", spec.trackId)
     }
 
@@ -1467,6 +3014,7 @@ internal class FakeAudioController(
 
     override fun startPlayback(spec: PlaybackSpec): Boolean {
         startPlaybackCalls += 1
+        lastPlaybackSpec = spec
         lastPlaybackGain = spec.gain
         val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
         val playing = permitted && startPlaybackResult
@@ -1477,6 +3025,7 @@ internal class FakeAudioController(
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
         startPlaybackCalls += 1
         lastMultiPlaybackSpec = spec
+        transportPositionMsValue = spec.startPositionMs
         val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
         val playing = permitted && startPlaybackResult
         _playbackState.value = playing
@@ -1487,9 +3036,62 @@ internal class FakeAudioController(
         lastPlaybackGain = gain
     }
 
+    var lastArmedLaneAudibility: BooleanArray? = null
+        private set
+    var armedLaneAudibilityCalls = 0
+
+    override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) {
+        armedLaneAudibilityCalls += 1
+        lastArmedLaneAudibility = audibleByLaneIndex.copyOf()
+    }
+
+    val playbackLaneAudibleCalls = mutableListOf<Pair<Int, Boolean>>()
+
+    override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
+        playbackLaneAudibleCalls.add(laneIndex to audible)
+    }
+
+    var beginHotJoinCalls = 0
+        private set
+    var lastHotJoinWavPath: String? = null
+        private set
+    var lastHotJoinGain: Float? = null
+        private set
+    var lastHotJoinClipStartMs: Long? = null
+        private set
+    var lastHotJoinClipDurationMs: Long? = null
+        private set
+    var hotJoinReturnLaneIndex: Int = 1
+    var hotJoinCommitLifecycle: PlaybackLaneLifecycle = PlaybackLaneLifecycle.Active
+    private val laneLifecycleOverrides = mutableMapOf<Int, PlaybackLaneLifecycle>()
+
+    override fun beginHotJoinLane(
+        wavFilePath: String,
+        gain: Float,
+        timelineClipStartMs: Long,
+        timelineClipDurationMs: Long,
+    ): Int {
+        beginHotJoinCalls += 1
+        lastHotJoinWavPath = wavFilePath
+        lastHotJoinGain = gain
+        lastHotJoinClipStartMs = timelineClipStartMs
+        lastHotJoinClipDurationMs = timelineClipDurationMs
+        laneLifecycleOverrides[hotJoinReturnLaneIndex] = PlaybackLaneLifecycle.Preparing
+        laneLifecycleOverrides[hotJoinReturnLaneIndex] = hotJoinCommitLifecycle
+        return hotJoinReturnLaneIndex
+    }
+
+    override fun cancelHotJoinLane(laneIndex: Int) {
+        laneLifecycleOverrides[laneIndex] = PlaybackLaneLifecycle.Cancelled
+    }
+
+    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
+        laneLifecycleOverrides[laneIndex] ?: PlaybackLaneLifecycle.Inactive
+
     override fun stopPlayback(): Boolean {
         stopPlaybackCalls += 1
         _playbackState.value = false
+        transportPositionMsValue = 0L
         return stopPlaybackResult
     }
 

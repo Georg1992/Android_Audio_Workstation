@@ -41,21 +41,27 @@ class RecordingSessionController(
     fun launchRecordPressed(
         projectId: String,
         projectName: String,
+        timelineStartOffsetMs: Long,
         ensureProject: suspend (String, String) -> ProjectEntity?,
         visibleTrackCount: () -> Int,
         persistRecordingRow: suspend (TrackEntity) -> Unit,
         notifyEngineStartFailed: () -> Unit,
         notifyPersistFailed: () -> Unit,
+        onPendingTrackAllocated: suspend (TrackEntity) -> Boolean = { true },
+        onRecordingTransportReady: (Long) -> Unit = {},
     ) {
         scope.launch {
             executeRecordPressed(
                 projectId = projectId,
                 projectName = projectName,
+                timelineStartOffsetMs = timelineStartOffsetMs,
                 ensureProject = ensureProject,
                 visibleTrackCount = visibleTrackCount,
                 persistRecordingRow = persistRecordingRow,
                 notifyEngineStartFailed = notifyEngineStartFailed,
                 notifyPersistFailed = notifyPersistFailed,
+                onPendingTrackAllocated = onPendingTrackAllocated,
+                onRecordingTransportReady = onRecordingTransportReady,
             )
         }
     }
@@ -68,11 +74,14 @@ class RecordingSessionController(
     suspend fun executeRecordPressed(
         projectId: String,
         projectName: String,
+        timelineStartOffsetMs: Long,
         ensureProject: suspend (String, String) -> ProjectEntity?,
         visibleTrackCount: () -> Int,
         persistRecordingRow: suspend (TrackEntity) -> Unit,
         notifyEngineStartFailed: () -> Unit,
         notifyPersistFailed: () -> Unit,
+        onPendingTrackAllocated: suspend (TrackEntity) -> Boolean,
+        onRecordingTransportReady: (Long) -> Unit = {},
     ) {
         try {
             val currentProject = ensureProject(projectId, projectName) ?: run {
@@ -84,11 +93,19 @@ class RecordingSessionController(
                 recordingCoordinator.allocatePendingRecordingTrack(
                     projectId = projectId,
                     visibleTrackCount = visibleTrackCount(),
+                    timelineStartOffsetMs = timelineStartOffsetMs,
                 )
 
             _optimisticRecordingTrack.value = pendingTrack.copy(isRecording = true)
             _recordingTrackId.value = pendingTrack.id
             _recordingStartup.value = false
+
+            if (!onPendingTrackAllocated(pendingTrack)) {
+                _optimisticRecordingTrack.value = null
+                _recordingTrackId.value = null
+                _recordingStartup.value = false
+                return
+            }
 
             val newTrack =
                 when (
@@ -110,6 +127,8 @@ class RecordingSessionController(
 
             _optimisticRecordingTrack.value = newTrack
 
+            onRecordingTransportReady(timelineStartOffsetMs)
+
             try {
                 persistRecordingRow(newTrack)
             } catch (cancel: CancellationException) {
@@ -120,6 +139,7 @@ class RecordingSessionController(
                 _recordingStartup.value = false
                 audioController.stopRecording()
                 notifyPersistFailed()
+                return
             }
         } finally {
             if (_recordingTrackId.value == null && _recordingStartup.value) {

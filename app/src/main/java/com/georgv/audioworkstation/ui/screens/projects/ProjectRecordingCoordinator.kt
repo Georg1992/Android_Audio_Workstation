@@ -5,6 +5,7 @@ import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -29,10 +30,16 @@ class ProjectRecordingCoordinator @Inject constructor(
     /**
      * Reserve the next logical take row without starting the recorder (fast path for optimistic UI).
      */
-    suspend fun allocatePendingRecordingTrack(projectId: String, visibleTrackCount: Int): TrackEntity =
+    suspend fun allocatePendingRecordingTrack(
+        projectId: String,
+        visibleTrackCount: Int,
+        timelineStartOffsetMs: Long = 0L,
+    ): TrackEntity =
         repo.appendTrackToProject(
             projectId = projectId,
             name = "Take ${visibleTrackCount + 1}",
+        ).copy(
+            timelineStartOffsetMs = timelineStartOffsetMs.coerceIn(0L, TimelineMaxDurationMs),
         )
 
     /**
@@ -56,8 +63,14 @@ class ProjectRecordingCoordinator @Inject constructor(
         projectId: String,
         project: ProjectEntity,
         visibleTrackCount: Int,
+        timelineStartOffsetMs: Long = 0L,
     ): RecordingStartOutcome {
-        val pendingTrack = allocatePendingRecordingTrack(projectId, visibleTrackCount)
+        val pendingTrack =
+            allocatePendingRecordingTrack(
+                projectId = projectId,
+                visibleTrackCount = visibleTrackCount,
+                timelineStartOffsetMs = timelineStartOffsetMs,
+            )
         return startEngineForAllocatedTrack(project, pendingTrack)
     }
 

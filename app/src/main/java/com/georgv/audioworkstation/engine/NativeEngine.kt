@@ -1,5 +1,7 @@
 package com.georgv.audioworkstation.engine
 
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingRequest
 import javax.inject.Inject
@@ -13,7 +15,8 @@ class NativeEngine @Inject constructor() {
             sampleRate = request.sampleRate,
             fileBitDepth = request.fileBitDepth,
             channelMode = request.channelMode.ordinal,
-            outputPath = request.outputPath
+            outputPath = request.outputPath,
+            startPositionMs = request.timelineStartOffsetMs,
         )
 
     fun stopRecording(): Boolean = nativeStopRecording()
@@ -24,21 +27,72 @@ class NativeEngine @Inject constructor() {
         nativeStartPlayback(
             sampleRate = spec.sampleRate,
             wavPath = spec.wavFilePath,
-            gain = spec.gain
+            gain = spec.gain,
+            startPositionMs = spec.startPositionMs,
+            sessionTimelineEndMs = spec.sessionTimelineEndMs,
         )
 
-    fun startMultiPlayback(sampleRate: Int, wavPaths: Array<String>, gains: FloatArray): Boolean =
+    fun startMultiPlayback(spec: MultiPlaybackSpec): Boolean =
         nativeStartMultiPlayback(
-            sampleRate = sampleRate,
-            wavPaths = wavPaths,
-            gains = gains
+            sampleRate = spec.sampleRate,
+            wavPaths = spec.lanes.map { it.wavFilePath }.toTypedArray(),
+            gains = spec.lanes.map { it.gain }.toFloatArray(),
+            startPositionMs = spec.startPositionMs,
+            sessionTimelineEndMs = spec.sessionTimelineEndMs,
+            laneClipStartMs = spec.lanes.map { it.timelineClipStartMs }.toLongArray(),
+            laneClipDurationMs = spec.lanes.map { it.timelineClipDurationMs }.toLongArray(),
         )
 
     fun setPlaybackGain(gain: Float) {
         nativeSetPlaybackGain(gain)
     }
 
+    fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
+        nativeSetPlaybackLaneAudible(laneIndex, audible)
+    }
+
+    fun beginHotJoinLane(
+        wavFilePath: String,
+        gain: Float,
+        timelineClipStartMs: Long = 0L,
+        timelineClipDurationMs: Long = 0L,
+    ): Int =
+        nativeBeginHotJoinLane(
+            wavFilePath,
+            gain,
+            timelineClipStartMs,
+            timelineClipDurationMs,
+        )
+
+    fun cancelHotJoinLane(laneIndex: Int) {
+        nativeCancelHotJoinLane(laneIndex)
+    }
+
+    fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
+        PlaybackLaneLifecycle.entries[nativeGetPlaybackLaneLifecycle(laneIndex).toInt()]
+
     fun isPlaybackActive(): Boolean = nativeIsPlaybackActive()
+
+    /**
+     * Sample-domain transport timeline frame (Clock.2).
+     * Advanced by playback render while active; does not drive UI playhead until Clock.4.
+     */
+    fun transportFrame(): Long = nativeGetTransportFrame()
+
+    /** Transport origin frame from last playback arm. */
+    fun transportStartFrame(): Long = nativeGetTransportStartFrame()
+
+    /** [transportFrame] as milliseconds at project sample rate (same integer math as native). */
+    fun transportPositionMs(): Long = nativeGetTransportPositionMs()
+
+    @Deprecated("Use transportFrame", ReplaceWith("transportFrame()"))
+    fun masterPlaybackFrame(): Long = transportFrame()
+
+    @Deprecated("Use transportStartFrame", ReplaceWith("transportStartFrame()"))
+    fun masterPlaybackStartFrame(): Long = transportStartFrame()
+
+    @Deprecated("Use transportPositionMs", ReplaceWith("transportPositionMs()"))
+    fun masterPlaybackPositionMs(): Long = transportPositionMs()
 
     fun stopPlayback(): Boolean = nativeStopPlayback()
 
@@ -56,7 +110,8 @@ class NativeEngine @Inject constructor() {
         sampleRate: Int,
         fileBitDepth: Int,
         channelMode: Int,
-        outputPath: String
+        outputPath: String,
+        startPositionMs: Long,
     ): Boolean
 
     private external fun nativeStopRecording(): Boolean
@@ -66,18 +121,43 @@ class NativeEngine @Inject constructor() {
     private external fun nativeStartPlayback(
         sampleRate: Int,
         wavPath: String,
-        gain: Float
+        gain: Float,
+        startPositionMs: Long,
+        sessionTimelineEndMs: Long,
     ): Boolean
 
     private external fun nativeStartMultiPlayback(
         sampleRate: Int,
         wavPaths: Array<String>,
-        gains: FloatArray
+        gains: FloatArray,
+        startPositionMs: Long,
+        sessionTimelineEndMs: Long,
+        laneClipStartMs: LongArray,
+        laneClipDurationMs: LongArray,
     ): Boolean
 
     private external fun nativeSetPlaybackGain(gain: Float)
 
+    private external fun nativeSetPlaybackLaneAudible(laneIndex: Int, audible: Boolean)
+
+    private external fun nativeBeginHotJoinLane(
+        wavFilePath: String,
+        gain: Float,
+        timelineClipStartMs: Long,
+        timelineClipDurationMs: Long,
+    ): Int
+
+    private external fun nativeCancelHotJoinLane(laneIndex: Int)
+
+    private external fun nativeGetPlaybackLaneLifecycle(laneIndex: Int): Int
+
     private external fun nativeIsPlaybackActive(): Boolean
+
+    private external fun nativeGetTransportFrame(): Long
+
+    private external fun nativeGetTransportStartFrame(): Long
+
+    private external fun nativeGetTransportPositionMs(): Long
 
     private external fun nativeStopPlayback(): Boolean
 

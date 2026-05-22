@@ -34,6 +34,10 @@ class NativeAudioController @Inject constructor(
     private val _recordingInputLevel = MutableStateFlow(0f)
     override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
 
+    override fun transportPositionMs(): Long = nativeEngine.transportPositionMs()
+
+    override fun isPlaybackEngineRunning(): Boolean = nativeEngine.isPlaybackActive()
+
     override fun startRecording(spec: RecordingSpec): String? {
         val outputPath = audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId) ?: return null
         val request = spec.toRecordingRequest(outputPath)
@@ -59,11 +63,7 @@ class NativeAudioController @Inject constructor(
     }
 
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
-        val started = nativeEngine.startMultiPlayback(
-            sampleRate = spec.sampleRate,
-            wavPaths = spec.lanes.map { it.wavFilePath }.toTypedArray(),
-            gains = spec.lanes.map { it.gain.coerceIn(0f, 1f) }.toFloatArray()
-        )
+        val started = nativeEngine.startMultiPlayback(spec)
         if (started) monitorPlaybackCompletion()
         return started
     }
@@ -71,6 +71,36 @@ class NativeAudioController @Inject constructor(
     override fun setPlaybackGain(gain: Float) {
         nativeEngine.setPlaybackGain(gain)
     }
+
+    override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) {
+        audibleByLaneIndex.forEachIndexed { laneIndex, audible ->
+            nativeEngine.setPlaybackLaneAudible(laneIndex, audible)
+        }
+    }
+
+    override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
+        nativeEngine.setPlaybackLaneAudible(laneIndex, audible)
+    }
+
+    override fun beginHotJoinLane(
+        wavFilePath: String,
+        gain: Float,
+        timelineClipStartMs: Long,
+        timelineClipDurationMs: Long,
+    ): Int =
+        nativeEngine.beginHotJoinLane(
+            wavFilePath,
+            gain,
+            timelineClipStartMs,
+            timelineClipDurationMs,
+        )
+
+    override fun cancelHotJoinLane(laneIndex: Int) {
+        nativeEngine.cancelHotJoinLane(laneIndex)
+    }
+
+    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
+        nativeEngine.playbackLaneLifecycle(laneIndex)
 
     override fun stopPlayback(): Boolean {
         monitorJob?.cancel()

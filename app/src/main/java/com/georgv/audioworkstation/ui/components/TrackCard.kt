@@ -63,8 +63,8 @@ fun TrackCard(
     isRecording: Boolean,
     recordingInputLevel: Float = 0f,
     timelineClip: TimelineClip? = null,
-    timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
-    timelinePlayheadFraction: Float = 0f,
+    timelineDurationMs: Long = TimelineMinimumBaseDurationMs,
+    timelinePlayheadPositionMs: Long = 0L,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
@@ -400,22 +400,23 @@ fun TrackCard(
                     } else {
                         Modifier.fillMaxWidth()
                     }
-                if (isRecording) {
-                    RecordingWaveform(
-                        inputLevel = recordingInputLevel,
-                        modifier = waveformModifier,
-                    )
-                } else {
-                    if (timelineClip == null) {
-                        TrackWaveform(modifier = waveformModifier)
-                    } else {
-                        TrackTimelineLane(
-                            clip = timelineClip,
-                            timelineBaseDurationMs = timelineBaseDurationMs,
-                            playheadFraction = timelinePlayheadFraction,
+                if (timelineClip == null) {
+                    if (isRecording) {
+                        RecordingWaveform(
+                            inputLevel = recordingInputLevel,
                             modifier = waveformModifier,
                         )
+                    } else {
+                        TrackWaveform(modifier = waveformModifier)
                     }
+                } else {
+                    TrackTimelineLane(
+                        clip = timelineClip,
+                        timelineDurationMs = timelineDurationMs,
+                        playheadPositionMs = timelinePlayheadPositionMs,
+                        recordingInputLevel = recordingInputLevel.takeIf { isRecording },
+                        modifier = waveformModifier,
+                    )
                 }
             }
 

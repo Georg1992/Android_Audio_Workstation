@@ -42,6 +42,42 @@ int16_t FloatToPcm16(float sample) {
     return static_cast<int16_t>(clamped * 32767.0f);
 }
 
+int64_t playbackStartFrameFromMs(int64_t startPositionMs, int32_t sampleRateHz) {
+    if (startPositionMs <= 0 || sampleRateHz <= 0) return 0;
+    return (static_cast<int64_t>(sampleRateHz) * startPositionMs) / 1000;
+}
+
+bool seekSourceToStartFrame(dawengine::IAudioSource &source, int64_t startFrame) {
+    const int64_t total = source.totalFrames();
+    int64_t frame = startFrame < 0 ? 0 : startFrame;
+    if (frame > total) frame = total;
+    return source.seekToFrame(frame);
+}
+
+bool isSourceExhaustedAtStart(const dawengine::IAudioSource &source, int64_t startFrame) {
+    return startFrame >= source.totalFrames();
+}
+
+int64_t clipTimelineEndFrameForLane(int64_t clipStartFrame,
+                                    int64_t clipDurationMs,
+                                    int32_t sampleRateHz) {
+    if (clipDurationMs <= 0 || sampleRateHz <= 0) return 0;
+    return clipStartFrame + playbackStartFrameFromMs(clipDurationMs, sampleRateHz);
+}
+
+bool laneActiveOnTimeline(int64_t transportFrame,
+                          int64_t clipStartFrame,
+                          int64_t clipEndFrame) {
+    if (transportFrame < clipStartFrame) return false;
+    if (clipEndFrame > 0 && transportFrame >= clipEndFrame) return false;
+    return true;
+}
+
+int64_t laneSourceSeekFrame(int64_t transportStartFrame, int64_t clipStartFrame) {
+    if (transportStartFrame <= clipStartFrame) return 0;
+    return transportStartFrame - clipStartFrame;
+}
+
 } // namespace
 
 namespace dawengine {
@@ -84,14 +120,6 @@ void ProcessMasterSafetySoftClip(float *interleaved, std::size_t sampleCount) {
 
 } // namespace playback
 
-struct PendingPlaybackLane {
-    std::shared_ptr<IAudioSource> source;
-    std::unique_ptr<RingBuffer> ring;
-    std::string path;
-    float gain = 1.0f;
-    int32_t channels = 0;
-};
-
 AudioEngine::AudioEngine() = default;
 
 int32_t AudioEngine::computeRingFramesForSampleRate(int32_t sampleRateHz) {
@@ -105,43 +133,86 @@ int32_t AudioEngine::computePrerollFramesForSampleRate(int32_t sampleRateHz) {
                                 1000);
 }
 
+PlaybackLaneLifecycle AudioEngine::loadLaneLifecycle(const std::size_t laneIndex) const {
+    if (laneIndex >= kPlaybackLaneCount) {
+        return PlaybackLaneLifecycle::Inactive;
+    }
+    return m_playbackLanes[laneIndex].lifecycle.load(std::memory_order_acquire);
+}
+
+void AudioEngine::setLaneInactiveLocked(PlaybackLaneSlot &lane) {
+    lane.ring.reset();
+    lane.source.reset();
+    lane.currentPath.clear();
+    lane.sourceExhausted.store(false, std::memory_order_release);
+    lane.audibleEnabled.store(true, std::memory_order_release);
+    lane.hotJoinPublishAudible.store(true, std::memory_order_release);
+    lane.gain.store(1.0f, std::memory_order_release);
+    lane.srcChannels.store(0, std::memory_order_release);
+    lane.clipTimelineStartFrame.store(0, std::memory_order_release);
+    lane.clipTimelineEndFrame.store(0, std::memory_order_release);
+    lane.lifecycle.store(PlaybackLaneLifecycle::Inactive, std::memory_order_release);
+}
+
 void AudioEngine::clearPlaybackLanesLocked() {
     for (PlaybackLaneSlot &lane : m_playbackLanes) {
-        lane.ring.reset();
-        lane.source.reset();
-        lane.currentPath.clear();
-        lane.sourceExhausted.store(false, std::memory_order_release);
-        lane.gain.store(1.0f, std::memory_order_release);
-        lane.srcChannels.store(0, std::memory_order_release);
+        setLaneInactiveLocked(lane);
+    }
+    for (std::size_t i = 0; i < kPlaybackLaneProductCap; ++i) {
+        clearHotJoinStagingLocked(i);
     }
 }
 
 void AudioEngine::deactivateAuxiliaryLanesLocked() {
     for (std::size_t i = 1; i < kPlaybackLaneCount; ++i) {
-        PlaybackLaneSlot &lane = m_playbackLanes[i];
-        lane.ring.reset();
-        lane.source.reset();
-        lane.currentPath.clear();
-        lane.sourceExhausted.store(false, std::memory_order_release);
-        lane.gain.store(1.0f, std::memory_order_release);
-        lane.srcChannels.store(0, std::memory_order_release);
+        setLaneInactiveLocked(m_playbackLanes[i]);
     }
 }
 
-bool AudioEngine::armSinglePlaybackLaneLocked(const std::string &wavPath, float laneGain) {
-    deactivateAuxiliaryLanesLocked();
+bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
+                                           const std::string &wavPath,
+                                           const float laneGain,
+                                           const int64_t transportStartFrame,
+                                           const int64_t clipStartMs,
+                                           const int64_t clipDurationMs,
+                                           const bool reuseExistingSourceOnSamePath) {
+    if (laneIndex >= kPlaybackLaneProductCap || wavPath.empty()) {
+        return false;
+    }
 
-    PlaybackLaneSlot &lane0 = m_playbackLanes[0];
-    lane0.gain.store(laneGain, std::memory_order_release);
+    const int64_t clipStartFrame = playbackStartFrameFromMs(clipStartMs, m_sampleRate);
+    const int64_t clipEndFrame =
+        clipTimelineEndFrameForLane(clipStartFrame, clipDurationMs, m_sampleRate);
+    const int64_t sourceSeekFrame =
+        laneSourceSeekFrame(transportStartFrame, clipStartFrame);
+    const bool activeOnTimeline =
+        laneActiveOnTimeline(transportStartFrame, clipStartFrame, clipEndFrame);
+    const bool beforeClipStart = transportStartFrame < clipStartFrame;
+    const bool pastClipEnd =
+        clipEndFrame > 0 && transportStartFrame >= clipEndFrame;
+
+    PlaybackLaneSlot &lane = m_playbackLanes[laneIndex];
+    lane.gain.store(laneGain, std::memory_order_release);
+    lane.audibleEnabled.store(true, std::memory_order_release);
+    lane.clipTimelineStartFrame.store(clipStartFrame, std::memory_order_release);
+    lane.clipTimelineEndFrame.store(clipEndFrame, std::memory_order_release);
 
     const bool samePath =
-        !!lane0.source && wavPath == lane0.currentPath;
+        reuseExistingSourceOnSamePath && !!lane.source && wavPath == lane.currentPath;
     const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
     const int32_t prerollTargetFrames = computePrerollFramesForSampleRate(m_sampleRate);
+    bool exhaustedAtStart = false;
 
     if (samePath) {
-        if (!lane0.source->seekToFrame(0)) return false;
-        if (lane0.ring) lane0.ring->reset();
+        if (!seekSourceToStartFrame(*lane.source, sourceSeekFrame)) return false;
+        if (pastClipEnd) {
+            exhaustedAtStart = true;
+        } else if (beforeClipStart) {
+            exhaustedAtStart = false;
+        } else {
+            exhaustedAtStart = isSourceExhaustedAtStart(*lane.source, sourceSeekFrame);
+        }
+        if (lane.ring) lane.ring->reset();
     } else {
         auto source = std::make_shared<LocalWavSource>(wavPath);
         if (!source->open()) return false;
@@ -150,36 +221,48 @@ bool AudioEngine::armSinglePlaybackLaneLocked(const std::string &wavPath, float 
 
         const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
                                        static_cast<std::size_t>(source->channelCount());
-        lane0.ring = std::make_unique<RingBuffer>(ringFloats);
-        lane0.srcChannels.store(source->channelCount(), std::memory_order_release);
-        lane0.source = std::move(source);
-        lane0.currentPath = wavPath;
+        lane.ring = std::make_unique<RingBuffer>(ringFloats);
+        lane.srcChannels.store(source->channelCount(), std::memory_order_release);
+        lane.source = std::move(source);
+        lane.currentPath = wavPath;
+        if (!seekSourceToStartFrame(*lane.source, sourceSeekFrame)) {
+            return false;
+        }
+        if (pastClipEnd) {
+            exhaustedAtStart = true;
+        } else if (beforeClipStart) {
+            exhaustedAtStart = false;
+        } else {
+            exhaustedAtStart = isSourceExhaustedAtStart(*lane.source, sourceSeekFrame);
+        }
     }
 
-    lane0.sourceExhausted.store(false, std::memory_order_release);
+    lane.sourceExhausted.store(exhaustedAtStart, std::memory_order_release);
+    lane.lifecycle.store(PlaybackLaneLifecycle::Active, std::memory_order_release);
 
-    // Grow once on the JNI thread while Oboe is paused — [render] never resizes.
-    m_renderScratch.resize(playback::kRenderScratchFloatCount);
-
-    const int32_t channels = lane0.source->channelCount();
-    std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
-                               static_cast<std::size_t>(channels));
-    const int32_t prerollFrames = lane0.source->readFrames(preroll.data(), prerollTargetFrames);
-    if (prerollFrames < 0) {
-        clearPlaybackLanesLocked();
-        return false;
-    }
-    if (prerollFrames > 0 && lane0.ring) {
-        lane0.ring->write(
-            preroll.data(),
-            static_cast<std::size_t>(prerollFrames) * static_cast<std::size_t>(channels));
+    if (!exhaustedAtStart && activeOnTimeline) {
+        const int32_t channels = lane.source->channelCount();
+        std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
+                                   static_cast<std::size_t>(channels));
+        const int32_t prerollFrames = lane.source->readFrames(preroll.data(), prerollTargetFrames);
+        if (prerollFrames < 0) {
+            return false;
+        }
+        if (prerollFrames > 0 && lane.ring) {
+            lane.ring->write(
+                preroll.data(),
+                static_cast<std::size_t>(prerollFrames) * static_cast<std::size_t>(channels));
+        }
     }
 
     return true;
 }
 
 bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPaths,
-                                         const std::vector<float> &gains) {
+                                         const std::vector<float> &gains,
+                                         const int64_t transportStartFrame,
+                                         const std::vector<int64_t> &laneClipStartMs,
+                                         const std::vector<int64_t> &laneClipDurationMs) {
     const std::size_t laneCount = wavPaths.size();
     if (laneCount == 0 ||
         laneCount > kPlaybackLaneProductCap ||
@@ -189,77 +272,45 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
     }
 
     if (laneCount == 1) {
-        if (!armSinglePlaybackLaneLocked(wavPaths[0], gains[0])) {
+        deactivateAuxiliaryLanesLocked();
+        const int64_t clipStartMs =
+            laneClipStartMs.empty() ? 0 : laneClipStartMs[0];
+        const int64_t clipDurationMs =
+            laneClipDurationMs.empty() ? 0 : laneClipDurationMs[0];
+        if (!armOnePlaybackLaneLocked(
+                0,
+                wavPaths[0],
+                gains[0],
+                transportStartFrame,
+                clipStartMs,
+                clipDurationMs,
+                true)) {
             clearPlaybackLanesLocked();
             return false;
         }
+        m_renderScratch.resize(playback::kRenderScratchFloatCount);
         return true;
-    }
-
-    std::array<PendingPlaybackLane, kPlaybackLaneProductCap> pending{};
-    const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
-    const int32_t prerollTargetFrames = computePrerollFramesForSampleRate(m_sampleRate);
-
-    for (std::size_t laneIdx = 0; laneIdx < laneCount; ++laneIdx) {
-        const std::string &path = wavPaths[laneIdx];
-        if (path.empty()) {
-            clearPlaybackLanesLocked();
-            return false;
-        }
-
-        auto source = std::make_shared<LocalWavSource>(path);
-        if (!source->open()) {
-            clearPlaybackLanesLocked();
-            return false;
-        }
-        if (source->sampleRate() != m_sampleRate) {
-            clearPlaybackLanesLocked();
-            return false;
-        }
-        if (source->channelCount() < 1 || source->channelCount() > 2) {
-            clearPlaybackLanesLocked();
-            return false;
-        }
-
-        const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
-                                       static_cast<std::size_t>(source->channelCount());
-        auto ring = std::make_unique<RingBuffer>(ringFloats);
-
-        std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
-                                   static_cast<std::size_t>(source->channelCount()));
-        const int32_t prerollFrames = source->readFrames(preroll.data(), prerollTargetFrames);
-        if (prerollFrames < 0) {
-            clearPlaybackLanesLocked();
-            return false;
-        }
-        if (prerollFrames > 0) {
-            ring->write(
-                preroll.data(),
-                static_cast<std::size_t>(prerollFrames) *
-                    static_cast<std::size_t>(source->channelCount()));
-        }
-
-        PendingPlaybackLane &pendingLane = pending[laneIdx];
-        pendingLane.channels = source->channelCount();
-        pendingLane.gain = gains[laneIdx];
-        pendingLane.path = path;
-        pendingLane.ring = std::move(ring);
-        pendingLane.source = std::move(source);
     }
 
     clearPlaybackLanesLocked();
     m_renderScratch.resize(playback::kRenderScratchFloatCount);
 
     for (std::size_t laneIdx = 0; laneIdx < laneCount; ++laneIdx) {
-        PlaybackLaneSlot &lane = m_playbackLanes[laneIdx];
-        PendingPlaybackLane &pendingLane = pending[laneIdx];
-
-        lane.ring = std::move(pendingLane.ring);
-        lane.source = std::move(pendingLane.source);
-        lane.currentPath = std::move(pendingLane.path);
-        lane.sourceExhausted.store(false, std::memory_order_release);
-        lane.gain.store(pendingLane.gain, std::memory_order_release);
-        lane.srcChannels.store(pendingLane.channels, std::memory_order_release);
+        const int64_t clipStartMs =
+            laneIdx < laneClipStartMs.size() ? laneClipStartMs[laneIdx] : 0;
+        const int64_t clipDurationMs =
+            laneIdx < laneClipDurationMs.size() ? laneClipDurationMs[laneIdx] : 0;
+        if (!armOnePlaybackLaneLocked(
+                laneIdx,
+                wavPaths[laneIdx],
+                gains[laneIdx],
+                transportStartFrame,
+                clipStartMs,
+                clipDurationMs,
+                false)) {
+            clearPlaybackLanesLocked();
+            return false;
+        }
     }
 
     return true;
@@ -305,7 +356,9 @@ void AudioEngine::closeInputStream() {
     m_inputStream.reset();
 }
 
-bool AudioEngine::startRecording(int32_t channelCount, const std::string &outputPath) {
+bool AudioEngine::startRecording(int32_t channelCount,
+                                 const std::string &outputPath,
+                                 const int64_t startPositionMs) {
     if (outputPath.empty() || m_isRecording.exchange(true)) {
         return false;
     }
@@ -322,6 +375,13 @@ bool AudioEngine::startRecording(int32_t channelCount, const std::string &output
         m_isRecording = false;
         m_recordingInputLevel.store(0.0f, std::memory_order_release);
         return false;
+    }
+
+    // Clock.3: seed transport from timeline when recording-only; play+record keeps playback timeline.
+    const bool playbackAlreadyActive = m_isPlaying.load(std::memory_order_acquire);
+    if (!playbackAlreadyActive) {
+        const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, m_sampleRate);
+        initializeMasterPlaybackTimeline(startFrame);
     }
 
     m_recordThread = std::thread(&AudioEngine::recordLoop, this);
@@ -344,6 +404,12 @@ void AudioEngine::recordLoop() {
 
         const int32_t framesRead = result.value();
         if (framesRead <= 0) continue;
+
+        // Clock.3: single writer — record loop advances transport only when playback is inactive.
+        if (!m_isPlaying.load(std::memory_order_acquire)) {
+            m_masterPlaybackFrame.fetch_add(static_cast<int64_t>(framesRead),
+                                            std::memory_order_release);
+        }
 
         const size_t sampleCount = static_cast<size_t>(framesRead * channelCount);
         float peak = 0.0f;
@@ -425,6 +491,10 @@ bool AudioEngine::stopRecording() {
         m_recordingOutputPath.clear();
     }
 
+    if (!m_isPlaying.load(std::memory_order_acquire)) {
+        resetMasterPlaybackTimeline();
+    }
+
     return writeRecordingToWav(recordedSamples, channelCount, outputPath);
 }
 
@@ -432,25 +502,71 @@ bool AudioEngine::stopRecording() {
 // Playback (streaming)
 // ---------------------------------------------------------------------------
 
-bool AudioEngine::setPlaybackSource(const std::string &wavPath, float gain) {
-    return setPlaybackSources(std::vector<std::string>{wavPath}, std::vector<float>{gain});
+bool AudioEngine::setPlaybackSource(const std::string &wavPath,
+                                    float gain,
+                                    int64_t startPositionMs,
+                                    int64_t sessionTimelineEndMs) {
+    return setPlaybackSources(
+        std::vector<std::string>{wavPath},
+        std::vector<float>{gain},
+        startPositionMs,
+        sessionTimelineEndMs);
+}
+
+int64_t AudioEngine::transportPositionMs() const {
+    const int64_t frame = m_masterPlaybackFrame.load(std::memory_order_acquire);
+    const int32_t rate = m_sampleRate;
+    if (rate <= 0) return 0L;
+    return (frame * 1000L) / static_cast<int64_t>(rate);
+}
+
+void AudioEngine::initializeMasterPlaybackTimeline(const int64_t startFrame) {
+    const int64_t frame = startFrame < 0 ? 0 : startFrame;
+    m_masterPlaybackStartFrame.store(frame, std::memory_order_release);
+    m_masterPlaybackFrame.store(frame, std::memory_order_release);
+}
+
+void AudioEngine::resetMasterPlaybackTimeline() {
+    m_masterPlaybackStartFrame.store(0, std::memory_order_release);
+    m_masterPlaybackFrame.store(0, std::memory_order_release);
+    m_playbackSessionEndFrame.store(0, std::memory_order_release);
 }
 
 bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
-                                     const std::vector<float> &gains) {
-    // JNI pauses Oboe before this call; stop the I/O producer as well before
-    // resetting/replacing lane rings or sources.
+                                     const std::vector<float> &gains,
+                                     int64_t startPositionMs,
+                                     int64_t sessionTimelineEndMs,
+                                     const std::vector<int64_t> &laneClipStartMs,
+                                     const std::vector<int64_t> &laneClipDurationMs) {
+    const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, m_sampleRate);
+    int64_t endFrame = playbackStartFrameFromMs(sessionTimelineEndMs, m_sampleRate);
+    if (endFrame > 0 && endFrame < startFrame) {
+        endFrame = startFrame;
+    }
+    m_playbackSessionEndFrame.store(endFrame, std::memory_order_release);
     m_isPlaying.store(false, std::memory_order_release);
     stopIoThread();
 
     {
         std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-        if (!armPlaybackLanesLocked(wavPaths, gains)) {
+        for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneProductCap; ++laneIdx) {
+            const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+            if (state == PlaybackLaneLifecycle::Preparing ||
+                state == PlaybackLaneLifecycle::ReadyToCommit) {
+                clearHotJoinStagingLocked(laneIdx);
+                setLaneInactiveLocked(m_playbackLanes[laneIdx]);
+            }
+        }
+        if (!armPlaybackLanesLocked(
+                wavPaths, gains, startFrame, laneClipStartMs, laneClipDurationMs)) {
+            resetMasterPlaybackTimeline();
             return false;
         }
     }
 
+    initializeMasterPlaybackTimeline(startFrame);
     ensureIoThreadRunning();
+    ensureHotJoinThreadRunning();
     m_isPlaying.store(true, std::memory_order_release);
     return true;
 }
@@ -459,13 +575,36 @@ void AudioEngine::setPlaybackGain(float gain) {
     m_playbackLanes[0].gain.store(gain, std::memory_order_release);
 }
 
+void AudioEngine::setPlaybackLaneAudible(const std::size_t laneIndex, const bool audible) {
+    if (laneIndex >= kPlaybackLaneProductCap) {
+        return;
+    }
+    if (loadLaneLifecycle(laneIndex) != PlaybackLaneLifecycle::Active) {
+        return;
+    }
+    if (m_playbackLanes[laneIndex].srcChannels.load(std::memory_order_acquire) <= 0) {
+        return;
+    }
+    m_playbackLanes[laneIndex].audibleEnabled.store(audible, std::memory_order_release);
+}
+
 void AudioEngine::stopPlayback() {
-    // JNI pauses Oboe before stop; joining here quiesces the ring producer so
-    // RingBuffer::reset observes its documented producer+consumer stop rule.
     m_isPlaying.store(false, std::memory_order_release);
     stopIoThread();
+    // Clock.3: overdub backing end — recording continues; preserve transport for recordLoop.
+    if (!m_isRecording.load(std::memory_order_acquire)) {
+        resetMasterPlaybackTimeline();
+    }
 
     std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+
+    for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneProductCap; ++laneIdx) {
+        const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+        if (state == PlaybackLaneLifecycle::Preparing ||
+            state == PlaybackLaneLifecycle::ReadyToCommit) {
+            clearHotJoinStagingLocked(laneIdx);
+        }
+    }
 
     for (PlaybackLaneSlot &lane : m_playbackLanes) {
         lane.sourceExhausted.store(false, std::memory_order_release);
@@ -475,12 +614,15 @@ void AudioEngine::stopPlayback() {
         if (lane.source) {
             lane.source->seekToFrame(0);
         }
+        lane.lifecycle.store(PlaybackLaneLifecycle::Inactive, std::memory_order_release);
     }
 }
 
 void AudioEngine::releasePlaybackResources() {
     m_isPlaying.store(false, std::memory_order_release);
     stopIoThread();
+    stopHotJoinThread();
+    resetMasterPlaybackTimeline();
 
     std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
     clearPlaybackLanesLocked();
@@ -510,15 +652,35 @@ void AudioEngine::ioLoop() {
         }
 
         bool progressed = false;
+        const int64_t transportFrame =
+            m_masterPlaybackFrame.load(std::memory_order_acquire);
         for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
             std::shared_ptr<IAudioSource> source;
             RingBuffer *ring = nullptr;
             int32_t channels = 0;
             bool laneExhausted = false;
+            int64_t clipStartFrame = 0;
+            int64_t clipEndFrame = 0;
 
             {
                 std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
                 PlaybackLaneSlot &lane = m_playbackLanes[laneIdx];
+                const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+                if (!laneLifecycleParticipatesInMix(state)) {
+                    continue;
+                }
+                clipStartFrame =
+                    lane.clipTimelineStartFrame.load(std::memory_order_acquire);
+                clipEndFrame =
+                    lane.clipTimelineEndFrame.load(std::memory_order_acquire);
+                if (!laneActiveOnTimeline(transportFrame, clipStartFrame, clipEndFrame)) {
+                    if (clipEndFrame > 0 && transportFrame >= clipEndFrame) {
+                        lane.sourceExhausted.store(true, std::memory_order_release);
+                        lane.lifecycle.store(PlaybackLaneLifecycle::Exhausted,
+                                             std::memory_order_release);
+                    }
+                    continue;
+                }
                 source = lane.source;
                 ring = lane.ring.get();
                 channels = lane.srcChannels.load(std::memory_order_acquire);
@@ -551,9 +713,13 @@ void AudioEngine::ioLoop() {
                 progressed = true;
             } else if (framesRead == 0) {
                 m_playbackLanes[laneIdx].sourceExhausted.store(true, std::memory_order_release);
+                m_playbackLanes[laneIdx].lifecycle.store(PlaybackLaneLifecycle::Exhausted,
+                                                          std::memory_order_release);
                 progressed = true;
             } else {
                 m_playbackLanes[laneIdx].sourceExhausted.store(true, std::memory_order_release);
+                m_playbackLanes[laneIdx].lifecycle.store(PlaybackLaneLifecycle::Exhausted,
+                                                          std::memory_order_release);
                 progressed = true;
             }
         }
@@ -567,15 +733,47 @@ void AudioEngine::ioLoop() {
 void AudioEngine::renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
                                                    int32_t /*outChannels*/,
                                                    int32_t minimumFramesReturnedFromLanes) {
+    const int64_t sessionEndFrame =
+        m_playbackSessionEndFrame.load(std::memory_order_acquire);
+    if (sessionEndFrame > 0) {
+        const int64_t transportFrame =
+            m_masterPlaybackFrame.load(std::memory_order_acquire);
+        if (transportFrame >= sessionEndFrame) {
+            m_isPlaying.store(false, std::memory_order_release);
+        }
+        return;
+    }
+
     if (minimumFramesReturnedFromLanes >= numFramesOutput) {
         return;
     }
 
+    const int64_t transportFrame =
+        m_masterPlaybackFrame.load(std::memory_order_acquire);
+
     bool allDrained = true;
     for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
+        const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+        if (!laneLifecycleParticipatesInCompletion(state)) {
+            continue;
+        }
+
         const int32_t srcChannels =
             m_playbackLanes[laneIdx].srcChannels.load(std::memory_order_acquire);
         if (srcChannels <= 0) {
+            continue;
+        }
+
+        const int64_t clipStartFrame =
+            m_playbackLanes[laneIdx].clipTimelineStartFrame.load(std::memory_order_acquire);
+        const int64_t clipEndFrame =
+            m_playbackLanes[laneIdx].clipTimelineEndFrame.load(std::memory_order_acquire);
+
+        if (transportFrame < clipStartFrame) {
+            allDrained = false;
+            break;
+        }
+        if (clipEndFrame > 0 && transportFrame >= clipEndFrame) {
             continue;
         }
 
@@ -613,13 +811,29 @@ void AudioEngine::render(float *outputInterleaved,
 
     if (!m_isPlaying.load(std::memory_order_acquire)) return;
 
+    const int64_t transportFrameAtBlock =
+        m_masterPlaybackFrame.load(std::memory_order_acquire);
+
     int32_t minFramesReturned = std::numeric_limits<int32_t>::max();
     bool readAnyLane = false;
 
     for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
+        const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+        if (!laneLifecycleParticipatesInMix(state)) {
+            continue;
+        }
+
         const int32_t srcChannels =
             m_playbackLanes[laneIdx].srcChannels.load(std::memory_order_acquire);
         if (srcChannels <= 0) {
+            continue;
+        }
+
+        const int64_t clipStartFrame =
+            m_playbackLanes[laneIdx].clipTimelineStartFrame.load(std::memory_order_acquire);
+        const int64_t clipEndFrame =
+            m_playbackLanes[laneIdx].clipTimelineEndFrame.load(std::memory_order_acquire);
+        if (!laneActiveOnTimeline(transportFrameAtBlock, clipStartFrame, clipEndFrame)) {
             continue;
         }
 
@@ -640,17 +854,27 @@ void AudioEngine::render(float *outputInterleaved,
         readAnyLane = true;
         minFramesReturned = std::min(minFramesReturned, framesReturned);
 
-        const float gain =
-            m_playbackLanes[laneIdx].gain.load(std::memory_order_acquire);
-        for (int32_t frame = 0; frame < framesReturned; ++frame) {
-            const std::size_t srcBase =
-                static_cast<std::size_t>(frame) * static_cast<std::size_t>(srcChannels);
-            for (int32_t outCh = 0; outCh < channels; ++outCh) {
-                const int32_t sourceChannel = std::min(outCh, srcChannels - 1);
-                outputInterleaved[static_cast<std::size_t>(frame * channels + outCh)] +=
-                    m_renderScratch[srcBase + static_cast<std::size_t>(sourceChannel)] * gain;
+        const bool audible =
+            m_playbackLanes[laneIdx].audibleEnabled.load(std::memory_order_acquire);
+        if (audible) {
+            const float gain =
+                m_playbackLanes[laneIdx].gain.load(std::memory_order_acquire);
+            for (int32_t frame = 0; frame < framesReturned; ++frame) {
+                const std::size_t srcBase =
+                    static_cast<std::size_t>(frame) * static_cast<std::size_t>(srcChannels);
+                for (int32_t outCh = 0; outCh < channels; ++outCh) {
+                    const int32_t sourceChannel = std::min(outCh, srcChannels - 1);
+                    outputInterleaved[static_cast<std::size_t>(frame * channels + outCh)] +=
+                        m_renderScratch[srcBase + static_cast<std::size_t>(sourceChannel)] * gain;
+                }
             }
         }
+    }
+
+    // Clock.3: playback-active writer for transport (recordLoop writes when !m_isPlaying).
+    if (m_isPlaying.load(std::memory_order_acquire)) {
+        m_masterPlaybackFrame.fetch_add(static_cast<int64_t>(numFrames),
+                                        std::memory_order_release);
     }
 
     if (readAnyLane) {
@@ -660,6 +884,317 @@ void AudioEngine::render(float *outputInterleaved,
             (minFramesReturned == std::numeric_limits<int32_t>::max()) ? numFrames : minFramesReturned;
         renderMaybeCompletePlaybackMaster(numFrames, channels, reportedMin);
     }
+}
+
+// ---------------------------------------------------------------------------
+// HJ.2 hot-join (async prepare + commit at transportFrame)
+// ---------------------------------------------------------------------------
+
+void AudioEngine::clearHotJoinStagingLocked(const std::size_t laneIndex) {
+    if (laneIndex >= kPlaybackLaneProductCap) {
+        return;
+    }
+    HotJoinStagingSlot &staging = m_hotJoinStaging[laneIndex];
+    staging.ring.reset();
+    staging.source.reset();
+    staging.path.clear();
+    staging.gain = 1.0f;
+    staging.channels = 0;
+    staging.clipStartMs = 0;
+    staging.clipDurationMs = 0;
+}
+
+void AudioEngine::ensureHotJoinThreadRunning() {
+    if (m_hotJoinRunning.load(std::memory_order_acquire)) {
+        return;
+    }
+    m_hotJoinRunning.store(true, std::memory_order_release);
+    m_hotJoinThread = std::thread(&AudioEngine::hotJoinThreadLoop, this);
+}
+
+void AudioEngine::stopHotJoinThread() {
+    if (!m_hotJoinRunning.exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_hotJoinMutex);
+        m_hotJoinQueue.clear();
+    }
+    m_hotJoinCv.notify_all();
+    if (m_hotJoinThread.joinable()) {
+        m_hotJoinThread.join();
+    }
+}
+
+void AudioEngine::enqueueHotJoinWork(HotJoinWorkItem item) {
+    {
+        std::lock_guard<std::mutex> lock(m_hotJoinMutex);
+        m_hotJoinQueue.push_back(std::move(item));
+    }
+    m_hotJoinCv.notify_one();
+}
+
+bool AudioEngine::prepareHotJoinStagingLocked(const std::size_t laneIndex,
+                                              const HotJoinWorkItem &item) {
+    if (laneIndex >= kPlaybackLaneProductCap) {
+        return false;
+    }
+    if (loadLaneLifecycle(laneIndex) != PlaybackLaneLifecycle::Preparing) {
+        return false;
+    }
+
+    auto source = std::make_shared<LocalWavSource>(item.wavPath);
+    if (!source->open()) {
+        return false;
+    }
+    if (source->sampleRate() != m_sampleRate) {
+        return false;
+    }
+    if (source->channelCount() < 1 || source->channelCount() > 2) {
+        return false;
+    }
+
+    const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
+    const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
+                                   static_cast<std::size_t>(source->channelCount());
+    auto ring = std::make_unique<RingBuffer>(ringFloats);
+
+    HotJoinStagingSlot &staging = m_hotJoinStaging[laneIndex];
+    staging.source = std::move(source);
+    staging.ring = std::move(ring);
+    staging.path = item.wavPath;
+    staging.gain = item.gain;
+    staging.channels = staging.source->channelCount();
+    staging.clipStartMs = item.clipStartMs;
+    staging.clipDurationMs = item.clipDurationMs;
+
+    if (loadLaneLifecycle(laneIndex) != PlaybackLaneLifecycle::Preparing) {
+        clearHotJoinStagingLocked(laneIndex);
+        return false;
+    }
+
+    m_playbackLanes[laneIndex].lifecycle.store(PlaybackLaneLifecycle::ReadyToCommit,
+                                               std::memory_order_release);
+    return true;
+}
+
+bool AudioEngine::commitHotJoinLaneLocked(const std::size_t laneIndex) {
+    if (laneIndex >= kPlaybackLaneProductCap) {
+        return false;
+    }
+    if (!m_isPlaying.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if (loadLaneLifecycle(laneIndex) != PlaybackLaneLifecycle::ReadyToCommit) {
+        return false;
+    }
+    if (!m_playbackLanes[laneIndex].hotJoinPublishAudible.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    HotJoinStagingSlot &staging = m_hotJoinStaging[laneIndex];
+    if (!staging.source || !staging.ring) {
+        return false;
+    }
+
+    const int64_t clipStartFrame =
+        playbackStartFrameFromMs(staging.clipStartMs, m_sampleRate);
+    const int64_t clipEndFrame =
+        clipTimelineEndFrameForLane(clipStartFrame, staging.clipDurationMs, m_sampleRate);
+    const int64_t commitFrame = transportFrame();
+
+    if (clipEndFrame > 0 && commitFrame >= clipEndFrame) {
+        clearHotJoinStagingLocked(laneIndex);
+        setLaneInactiveLocked(m_playbackLanes[laneIndex]);
+        return false;
+    }
+
+    const int64_t sourceSeekFrame = laneSourceSeekFrame(commitFrame, clipStartFrame);
+    if (!seekSourceToStartFrame(*staging.source, sourceSeekFrame)) {
+        return false;
+    }
+
+    const bool beforeClipStart = commitFrame < clipStartFrame;
+    const bool pastClipEnd = clipEndFrame > 0 && commitFrame >= clipEndFrame;
+    bool exhaustedAtStart = false;
+    if (pastClipEnd) {
+        exhaustedAtStart = true;
+    } else if (beforeClipStart) {
+        exhaustedAtStart = false;
+    } else {
+        exhaustedAtStart = isSourceExhaustedAtStart(*staging.source, sourceSeekFrame);
+    }
+    staging.ring->reset();
+
+    const bool activeOnTimeline =
+        laneActiveOnTimeline(commitFrame, clipStartFrame, clipEndFrame);
+    if (!exhaustedAtStart && activeOnTimeline) {
+        const int32_t prerollTargetFrames = computePrerollFramesForSampleRate(m_sampleRate);
+        std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
+                                   static_cast<std::size_t>(staging.channels));
+        const int32_t prerollFrames =
+            staging.source->readFrames(preroll.data(), prerollTargetFrames);
+        if (prerollFrames < 0) {
+            return false;
+        }
+        if (prerollFrames > 0) {
+            staging.ring->write(
+                preroll.data(),
+                static_cast<std::size_t>(prerollFrames) *
+                    static_cast<std::size_t>(staging.channels));
+        }
+    }
+
+    if (!m_isPlaying.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if (loadLaneLifecycle(laneIndex) != PlaybackLaneLifecycle::ReadyToCommit) {
+        return false;
+    }
+    if (!m_playbackLanes[laneIndex].hotJoinPublishAudible.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    PlaybackLaneSlot &lane = m_playbackLanes[laneIndex];
+    lane.source = staging.source;
+    lane.ring = std::move(staging.ring);
+    lane.currentPath = staging.path;
+    lane.gain.store(staging.gain, std::memory_order_release);
+    const bool publishAudible =
+        m_playbackLanes[laneIndex].hotJoinPublishAudible.load(std::memory_order_acquire);
+    lane.audibleEnabled.store(publishAudible, std::memory_order_release);
+    lane.sourceExhausted.store(exhaustedAtStart, std::memory_order_release);
+    lane.srcChannels.store(staging.channels, std::memory_order_release);
+    lane.clipTimelineStartFrame.store(clipStartFrame, std::memory_order_release);
+    lane.clipTimelineEndFrame.store(clipEndFrame, std::memory_order_release);
+    lane.lifecycle.store(
+        exhaustedAtStart ? PlaybackLaneLifecycle::Exhausted : PlaybackLaneLifecycle::Active,
+        std::memory_order_release);
+
+    staging.source.reset();
+    staging.path.clear();
+    staging.gain = 1.0f;
+    staging.channels = 0;
+    return true;
+}
+
+void AudioEngine::hotJoinThreadLoop() {
+    while (m_hotJoinRunning.load(std::memory_order_acquire)) {
+        HotJoinWorkItem item;
+        {
+            std::unique_lock<std::mutex> lock(m_hotJoinMutex);
+            m_hotJoinCv.wait(lock, [this] {
+                return !m_hotJoinRunning.load(std::memory_order_acquire) ||
+                       !m_hotJoinQueue.empty();
+            });
+            if (!m_hotJoinRunning.load(std::memory_order_acquire) && m_hotJoinQueue.empty()) {
+                break;
+            }
+            if (m_hotJoinQueue.empty()) {
+                continue;
+            }
+            item = std::move(m_hotJoinQueue.front());
+            m_hotJoinQueue.pop_front();
+        }
+
+        bool prepared = false;
+        {
+            std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+            prepared = prepareHotJoinStagingLocked(item.laneIndex, item);
+            if (!prepared) {
+                clearHotJoinStagingLocked(item.laneIndex);
+                if (loadLaneLifecycle(item.laneIndex) == PlaybackLaneLifecycle::Preparing) {
+                    setLaneInactiveLocked(m_playbackLanes[item.laneIndex]);
+                }
+            }
+        }
+
+        if (!prepared) {
+            continue;
+        }
+
+        bool committed = false;
+        {
+            std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+            committed = commitHotJoinLaneLocked(item.laneIndex);
+            if (!committed) {
+                clearHotJoinStagingLocked(item.laneIndex);
+                setLaneInactiveLocked(m_playbackLanes[item.laneIndex]);
+            }
+        }
+    }
+}
+
+int32_t AudioEngine::beginHotJoinLane(const std::string &wavPath,
+                                      const float gain,
+                                      const int64_t clipStartMs,
+                                      const int64_t clipDurationMs) {
+    if (wavPath.empty() || !m_isPlaying.load(std::memory_order_acquire)) {
+        return -1;
+    }
+
+    HotJoinWorkItem item;
+    {
+        std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+        if (!m_isPlaying.load(std::memory_order_acquire)) {
+            return -1;
+        }
+
+        std::size_t reservedLane = kPlaybackLaneProductCap;
+        for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneProductCap; ++laneIdx) {
+            const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+            const bool slotAvailable =
+                (state == PlaybackLaneLifecycle::Inactive ||
+                 state == PlaybackLaneLifecycle::Cancelled) &&
+                m_playbackLanes[laneIdx].srcChannels.load(std::memory_order_acquire) == 0;
+            if (slotAvailable) {
+                reservedLane = laneIdx;
+                break;
+            }
+        }
+        if (reservedLane >= kPlaybackLaneProductCap) {
+            return -1;
+        }
+
+        item.laneIndex = reservedLane;
+        item.wavPath = wavPath;
+        item.gain = gain;
+        item.clipStartMs = std::max<int64_t>(0, clipStartMs);
+        item.clipDurationMs = std::max<int64_t>(0, clipDurationMs);
+        m_playbackLanes[reservedLane].gain.store(gain, std::memory_order_release);
+        m_playbackLanes[reservedLane].hotJoinPublishAudible.store(true,
+                                                                  std::memory_order_release);
+        m_playbackLanes[reservedLane].lifecycle.store(PlaybackLaneLifecycle::Preparing,
+                                                      std::memory_order_release);
+    }
+
+    ensureHotJoinThreadRunning();
+    enqueueHotJoinWork(std::move(item));
+    return static_cast<int32_t>(item.laneIndex);
+}
+
+void AudioEngine::cancelHotJoinLane(const std::size_t laneIndex) {
+    if (laneIndex >= kPlaybackLaneProductCap) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+    PlaybackLaneSlot &lane = m_playbackLanes[laneIndex];
+    lane.hotJoinPublishAudible.store(false, std::memory_order_release);
+
+    const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIndex);
+    if (state == PlaybackLaneLifecycle::Preparing ||
+        state == PlaybackLaneLifecycle::ReadyToCommit ||
+        state == PlaybackLaneLifecycle::Cancelled) {
+        clearHotJoinStagingLocked(laneIndex);
+        setLaneInactiveLocked(lane);
+    } else if (state == PlaybackLaneLifecycle::Active) {
+        lane.audibleEnabled.store(false, std::memory_order_release);
+    }
+}
+
+PlaybackLaneLifecycle AudioEngine::laneLifecycle(const std::size_t laneIndex) const {
+    return loadLaneLifecycle(laneIndex);
 }
 
 

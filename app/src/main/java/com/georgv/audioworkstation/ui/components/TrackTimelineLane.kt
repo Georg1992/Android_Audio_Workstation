@@ -57,6 +57,7 @@ data class TimelineClip(
     val waveformState: WaveformState,
     val isTimelineBase: Boolean,
     val formattedDuration: String,
+    val isActiveRecording: Boolean = false,
 )
 
 data class TimelineClipLayout(
@@ -70,6 +71,12 @@ data class TimelineLaneLayout(
     val metadataWidthDp: Float,
 )
 
+fun timelineClipEndMs(startOffsetMs: Long, durationMs: Long): Long {
+    val start = startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    val duration = durationMs.coerceIn(0L, TimelineMaxDurationMs)
+    return (start + duration).coerceAtMost(TimelineMaxDurationMs)
+}
+
 fun projectTimelineClips(
     tracks: List<TrackEntity>,
     waveformStatesByTrackId: Map<String, WaveformState>,
@@ -77,26 +84,56 @@ fun projectTimelineClips(
     val playableTracks = tracks.mapNotNull { track ->
         val durationMs = track.duration?.takeIf { it > 0L } ?: return@mapNotNull null
         if (track.wavFilePath.isBlank() || track.isRecording) return@mapNotNull null
-        track to durationMs.coerceAtMost(TimelineMaxDurationMs)
+        val startOffsetMs = track.timelineStartOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+        track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = durationMs.coerceAtMost(TimelineMaxDurationMs))
     }
-    val baseDurationMs = playableTracks.maxOfOrNull { (_, durationMs) -> durationMs } ?: return emptyList()
-    return playableTracks.map { (track, durationMs) ->
+    if (playableTracks.isEmpty()) return emptyList()
+    val baseEndMs =
+        playableTracks.maxOf { (_, span) -> timelineClipEndMs(span.startOffsetMs, span.durationMs) }
+    return playableTracks.map { (track, span) ->
+        val clipEndMs = timelineClipEndMs(span.startOffsetMs, span.durationMs)
         TimelineClip(
             clipId = track.id,
             laneId = track.id,
-            startOffsetMs = 0L,
-            durationMs = durationMs,
+            startOffsetMs = span.startOffsetMs,
+            durationMs = span.durationMs,
             waveformState = waveformStatesByTrackId[track.id] ?: WaveformState.Loading,
-            isTimelineBase = durationMs == baseDurationMs,
-            formattedDuration = formatTimelineDuration(durationMs),
+            isTimelineBase = clipEndMs == baseEndMs,
+            formattedDuration = formatTimelineDuration(span.durationMs),
         )
     }
 }
 
+private data class TimelineClipSpan(
+    val startOffsetMs: Long,
+    val durationMs: Long,
+)
+
 fun timelineBaseDurationMs(clips: List<TimelineClip>): Long =
-    clips.maxOfOrNull { it.durationMs.coerceIn(0L, TimelineMaxDurationMs) }
+    clips.maxOfOrNull { timelineClipEndMs(it.startOffsetMs, it.durationMs) }
         ?.coerceAtLeast(TimelineMinimumBaseDurationMs)
         ?: TimelineMinimumBaseDurationMs
+
+/**
+ * Maps full-file [WaveformPeaks] to the timeline clip width when the on-disk WAV is longer than
+ * [clipDurationMs], so the visible waveform matches the audio segment the engine plays from offset 0.
+ */
+fun waveformPeaksForTimelineClip(
+    peaks: WaveformPeaks,
+    clipDurationMs: Long,
+): WaveformPeaks {
+    if (clipDurationMs <= 0L) return peaks
+    val sourceDurationMs = peaks.sourceDurationMs
+    if (sourceDurationMs <= 0L || clipDurationMs >= sourceDurationMs) return peaks
+    val totalBars = peaks.amplitudes.size
+    if (totalBars == 0) return peaks
+    val visibleBars =
+        ((totalBars.toLong() * clipDurationMs) / sourceDurationMs)
+            .toInt()
+            .coerceIn(1, totalBars)
+    if (visibleBars >= totalBars) return peaks
+    return peaks.copy(amplitudes = peaks.amplitudes.take(visibleBars))
+}
 
 fun timelineClipLayout(
     clip: TimelineClip,
@@ -178,8 +215,9 @@ fun timelineRulerBoundaryLabels(
 @Composable
 fun TrackTimelineLane(
     clip: TimelineClip?,
-    timelineBaseDurationMs: Long,
-    playheadFraction: Float,
+    timelineDurationMs: Long,
+    playheadPositionMs: Long,
+    recordingInputLevel: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
@@ -192,7 +230,7 @@ fun TrackTimelineLane(
             .background(AppColors.Bg)
             .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
-        val layout = clip?.let { timelineClipLayout(it, timelineBaseDurationMs) } ?: return@BoxWithConstraints
+        val layout = clip?.let { timelineClipLayout(it, timelineDurationMs) } ?: return@BoxWithConstraints
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -217,32 +255,45 @@ fun TrackTimelineLane(
                             .clip(shape)
                             .background(AppColors.SurfacePanel)
                     ) {
-                        when (val waveform = clip.waveformState) {
-                            WaveformState.Loading ->
-                                WaveformStatusText("Generating...")
-                            WaveformState.Failed ->
-                                WaveformStatusText("No waveform")
-                            WaveformState.NoWaveform ->
-                                WaveformStatusText("No audio")
-                            is WaveformState.Ready ->
-                                TrackWaveform(
-                                    peaks = waveform.peaks,
-                                    horizontalInsetFraction = 0f,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(start = 1.dp),
-                                )
+                        if (clip.isActiveRecording && recordingInputLevel != null) {
+                            RecordingWaveform(
+                                inputLevel = recordingInputLevel,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(start = 1.dp),
+                            )
+                        } else {
+                            when (val waveform = clip.waveformState) {
+                                WaveformState.Loading ->
+                                    WaveformStatusText("Generating...")
+                                WaveformState.Failed ->
+                                    WaveformStatusText("No waveform")
+                                WaveformState.NoWaveform ->
+                                    WaveformStatusText("No audio")
+                                is WaveformState.Ready ->
+                                    TrackWaveform(
+                                        peaks =
+                                            waveformPeaksForTimelineClip(
+                                                peaks = waveform.peaks,
+                                                clipDurationMs = clip.durationMs,
+                                            ),
+                                        horizontalInsetFraction = 0f,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(start = 1.dp),
+                                    )
+                            }
                         }
                     }
                 }
                 TimelineRuler(
-                    timelineBaseDurationMs = timelineBaseDurationMs,
+                    timelineBaseDurationMs = timelineDurationMs,
                     clipStartFraction = layout.startFraction,
                     clipEndFraction = timelineClipEndFraction(layout),
                     boundaryLabels = timelineRulerBoundaryLabels(
                         clip = clip,
                         layout = layout,
-                        timelineBaseDurationMs = timelineBaseDurationMs,
+                        timelineBaseDurationMs = timelineDurationMs,
                     ),
                     modifier = Modifier
                         .weight(TimelineRulerHeightFraction)
@@ -250,7 +301,8 @@ fun TrackTimelineLane(
                 )
             }
             TimelinePlayheadMarker(
-                fraction = playheadFraction,
+                playheadPositionMs = playheadPositionMs,
+                timelineDurationMs = timelineDurationMs,
                 modifier = Modifier.fillMaxSize(),
             )
         }

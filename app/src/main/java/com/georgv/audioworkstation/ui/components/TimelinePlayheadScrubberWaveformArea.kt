@@ -11,10 +11,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 
 @Composable
 fun TimelinePlayheadScrubberWaveformArea(
-    playheadFraction: Float,
     metrics: TimelinePlayheadWaveformMetrics,
-    onPlayheadFractionPreview: (Float) -> Unit,
-    onPlayheadFractionCommit: (Float) -> Unit,
+    onPlayheadScrubStarted: () -> Unit = {},
+    onPlayheadScrubCancelled: () -> Unit = {},
+    onPlayheadPositionPreview: (Long) -> Unit,
+    onPlayheadPositionCommit: (Long) -> Unit,
     inputLocked: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -23,27 +24,33 @@ fun TimelinePlayheadScrubberWaveformArea(
             if (inputLocked) {
                 Modifier
             } else {
-                Modifier.pointerInput(metrics.waveformTimelineWidthPx) {
+                Modifier.pointerInput(
+                    metrics.waveformTimelineWidthPx,
+                    metrics.timelineDurationMs,
+                ) {
                     awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        var fraction = metrics.fractionFromLocalXPx(down.position.x)
-                        onPlayheadFractionPreview(fraction)
-                        drag(down.id) { change ->
-                            change.consume()
-                            fraction = metrics.fractionFromLocalXPx(change.position.x)
-                            onPlayheadFractionPreview(fraction)
+                        var committed = false
+                        try {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            onPlayheadScrubStarted()
+                            var positionMs = metrics.positionMsFromLocalXPx(down.position.x)
+                            onPlayheadPositionPreview(positionMs)
+                            drag(down.id) { change ->
+                                change.consume()
+                                positionMs = metrics.positionMsFromLocalXPx(change.position.x)
+                                onPlayheadPositionPreview(positionMs)
+                            }
+                            onPlayheadPositionCommit(positionMs)
+                            committed = true
+                        } finally {
+                            if (!committed) {
+                                onPlayheadScrubCancelled()
+                            }
                         }
-                        onPlayheadFractionCommit(fraction)
                     }
                 }
             }
         ),
-    ) {
-        TimelinePlayheadMarker(
-            fraction = playheadFraction,
-            showTopHandle = true,
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
+    )
 }

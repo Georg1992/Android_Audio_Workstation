@@ -1,25 +1,44 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.GainRange
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
+import com.georgv.audioworkstation.core.audio.audibleTrackIds
+import com.georgv.audioworkstation.core.audio.isTrackLoadedInSessionLane
+import com.georgv.audioworkstation.core.audio.laneAudibilityFromSelection
 import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Owns playback transport state for a single project screen: which track is marked playing and the
- * coroutine observing [AudioController.playbackState] for completion, loop restart, and teardown.
+ * Owns Kotlin playback-session state for a single project screen.
  *
- * Phase 1: extracted from [ProjectViewModel]; stop ordering remains orchestrated by the ViewModel via
- * [cancelCompletionMonitorForTransportStop], [stopEngineIfMarkedPlaying], and [clearPlayingTransportState].
+ * **State ownership (Clock.1):**
+ * - [selectedTrackIds] (ViewModel): UI audible intent; not lane ownership.
+ * - [sessionTrackIds]: tracks in the current transport [MultiPlaybackSpec] (play, Seek.1 restart, loop).
+ *   Excludes hot-joined-only tracks.
+ * - [sessionLaneTrackIds]: native lane index → track for every loaded session lane (arm + hot-join).
+ * - [preparingTrackIds]: hot-join prepare/commit in flight.
+ * - [playbackSessionActive]: Kotlin session lifecycle (maps/monitors valid).
+ * - [audibleTrackIds] (derived): `selectedTrackIds ∩ sessionLaneTrackIds.values` — see
+ *   [currentAudibleTrackIds].
+ * - [audioController.playbackState]: native engine actively playing (polled).
+ *
+ * Live selection runs only when [playbackSessionActive] and [audioController.playbackState] are true.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackSessionController(
@@ -28,32 +47,112 @@ class PlaybackSessionController(
     private val loadCurrentProject: suspend (String) -> ProjectEntity?,
     private val currentProjectId: () -> String?,
     private val visibleTracks: () -> List<TrackEntity>,
+    private val onPlaybackCompleted: () -> Unit = {},
+    private val onLoopRestart: () -> Unit = {},
+    private val suppressTransportOnPlaybackCompletion: () -> Boolean = { false },
+    private val onHotJoinFailed: () -> Unit = {},
 ) {
-    private val _playingTrackIds = MutableStateFlow<Set<String>>(emptySet())
-    val playingTrackIds: StateFlow<Set<String>> = _playingTrackIds.asStateFlow()
+    private val _sessionTrackIds = MutableStateFlow<Set<String>>(emptySet())
+    val sessionTrackIds: StateFlow<Set<String>> = _sessionTrackIds.asStateFlow()
+
+    private val _preparingTrackIds = MutableStateFlow<Set<String>>(emptySet())
+    val preparingTrackIds: StateFlow<Set<String>> = _preparingTrackIds.asStateFlow()
+
+    private val sessionLaneTrackIds: Array<String?> = arrayOfNulls(MultiPlaybackSpec.MaxLanes)
+    private val preparingLaneIndexByTrackId = mutableMapOf<String, Int>()
+    private val hotJoinMonitorJobs = mutableMapOf<String, Job>()
 
     private var playbackMonitorJob: Job? = null
 
-    fun isMarkedPlaying(): Boolean = _playingTrackIds.value.isNotEmpty()
+    private val _playbackSessionActive = MutableStateFlow(false)
+    val playbackSessionActive: StateFlow<Boolean> = _playbackSessionActive.asStateFlow()
+
+    /** Bumped on session start, teardown, and loop remap — hot-join monitors must match to write lanes. */
+    private var playbackSessionEpoch = 0L
+
+    /** True when [sessionTrackIds] is non-empty (transport spec armed). */
+    fun isSessionSpecArmed(): Boolean = _sessionTrackIds.value.isNotEmpty()
+
+    fun hasActivePlaybackSession(): Boolean = _playbackSessionActive.value
 
     /**
-     * When the bound project changes, cancel monitoring and drop playing markers (matches legacy [ProjectViewModel.bind]).
+     * Tracks the user would hear: selected intent intersected with loaded session lanes.
+     * Not stored — recompute when needed.
      */
+    fun currentAudibleTrackIds(selectedTrackIds: Set<String>): Set<String> =
+        audibleTrackIds(selectedTrackIds, sessionLaneTrackIds)
+
+    fun isTrackLoadedInSession(trackId: String): Boolean =
+        _playbackSessionActive.value && isTrackLoadedInSessionLane(trackId, sessionLaneTrackIds)
+
+    fun sessionLaneTrackIdSet(): Set<String> = sessionLaneTrackIds.filterNotNull().toSet()
+
+    /**
+     * True when removing [trackId] from [selectedTrackIds] would leave no selected tracks on loaded
+     * session lanes while [hasActivePlaybackSession].
+     */
+    fun wouldLeaveNoSessionLaneSelected(selectedTrackIds: Set<String>, trackId: String): Boolean {
+        if (!hasActivePlaybackSession() || trackId !in selectedTrackIds) return false
+        val laneTracks = sessionLaneTrackIdSet()
+        if (laneTracks.isEmpty()) return false
+        return (selectedTrackIds - trackId).intersect(laneTracks).isEmpty()
+    }
+
     fun resetWhenProjectChanges() {
-        playbackMonitorJob?.cancel()
-        playbackMonitorJob = null
-        _playingTrackIds.value = emptySet()
+        cancelCompletionMonitorForTransportStop()
+        tearDownPlaybackSessionState(endTransport = false)
     }
 
-    /** Native engine accepted a start request; expose playing ids and observe completion / loop. */
-    fun markPlayingAndStartCompletionMonitor(trackIds: Set<String>) {
-        _playingTrackIds.value = trackIds
-        startPlaybackMonitor(trackIds)
+    fun markPlayingAndStartCompletionMonitor(trackIdsInLaneOrder: List<String>) {
+        startPlaybackSession(trackIdsInLaneOrder)
+        startPlaybackMonitor(trackIdsInLaneOrder.toSet())
     }
 
-    /** Native engine accepted a start request; expose playing id and observe completion / loop (legacy test helper path). */
     fun markPlayingAndStartCompletionMonitor(trackId: String) {
-        markPlayingAndStartCompletionMonitor(setOf(trackId))
+        markPlayingAndStartCompletionMonitor(listOf(trackId))
+    }
+
+    /**
+     * HJ.1 + HJ.2: live audibility, hot-join, and cancel-prepare while a playback session is active
+     * and the native engine is still playing.
+     */
+    fun onSelectionChangedDuringPlayback(
+        selectedTrackIds: Set<String>,
+        playableTracks: List<TrackEntity>,
+    ) {
+        if (!_playbackSessionActive.value || !audioController.isPlaybackEngineRunning()) {
+            return
+        }
+
+        val preparingSnapshot = _preparingTrackIds.value
+        for (trackId in preparingSnapshot) {
+            if (trackId !in selectedTrackIds) {
+                cancelHotJoinForTrack(trackId)
+            }
+        }
+
+        syncLaneAudibilityFromSelection(selectedTrackIds)
+
+        for (track in playableTracks) {
+            if (track.id !in selectedTrackIds) continue
+            if (trackLaneIndex(track.id) != null) continue
+            if (track.id in _preparingTrackIds.value) continue
+            startHotJoinForTrack(track, selectedTrackIds)
+        }
+    }
+
+    /** @deprecated Use [onSelectionChangedDuringPlayback]; kept for direct HJ.1-only callers in tests. */
+    fun syncLiveAudibilityFromSelection(selectedTrackIds: Set<String>) {
+        if (!_playbackSessionActive.value || !audioController.isPlaybackEngineRunning()) return
+        syncLaneAudibilityFromSelection(selectedTrackIds)
+    }
+
+    fun sessionLaneTrackIdsForTests(): Array<String?> = sessionLaneTrackIds.copyOf()
+
+    fun hotJoinMonitorCountForTests(): Int = hotJoinMonitorJobs.size
+
+    fun advancePlaybackSessionEpochForTests() {
+        playbackSessionEpoch++
     }
 
     fun cancelCompletionMonitorForTransportStop() {
@@ -62,39 +161,263 @@ class PlaybackSessionController(
     }
 
     fun stopEngineIfMarkedPlaying() {
-        if (_playingTrackIds.value.isNotEmpty()) {
+        if (_sessionTrackIds.value.isNotEmpty()) {
             audioController.stopPlayback()
         }
     }
 
+    /**
+     * Transport Seek.1: stop native playback and completion monitor without clearing session lane maps.
+     */
+    fun pauseEnginePreservingSession() {
+        cancelCompletionMonitorForTransportStop()
+        stopEngineIfMarkedPlaying()
+    }
+
+    /**
+     * Seek.1: restart native playback at [spec.startPositionMs] and rebuild session maps from
+     * [trackIdsInLaneOrder] (current selected playable set), not stale hot-join-only lane state.
+     */
+    fun restartEngineFromPlayhead(
+        spec: MultiPlaybackSpec,
+        trackIdsInLaneOrder: List<String>,
+        selectedTrackIds: Set<String>,
+    ): Boolean {
+        if (!_playbackSessionActive.value || trackIdsInLaneOrder.isEmpty()) return false
+        cancelCompletionMonitorForTransportStop()
+        clearNativeLaneSessionState()
+        stopEngineIfMarkedPlaying()
+        playbackSessionEpoch++
+        clearHotJoinState()
+        refreshSessionLaneMappings(trackIdsInLaneOrder)
+        _sessionTrackIds.value = trackIdsInLaneOrder.toSet()
+        if (!audioController.startPlayback(spec)) return false
+        syncLaneAudibilityFromSelection(selectedTrackIds)
+        startPlaybackMonitor(trackIdsInLaneOrder.toSet())
+        return true
+    }
+
     fun clearPlayingTransportState() {
-        _playingTrackIds.value = emptySet()
+        cancelCompletionMonitorForTransportStop()
+        tearDownPlaybackSessionState(endTransport = false)
+    }
+
+    private fun startPlaybackSession(trackIdsInLaneOrder: List<String>) {
+        playbackSessionEpoch++
+        _playbackSessionActive.value = true
+        clearHotJoinState()
+        refreshSessionLaneMappings(trackIdsInLaneOrder)
+        _sessionTrackIds.value = trackIdsInLaneOrder.toSet()
+    }
+
+    /** Clears [sessionLaneTrackIds] only (native lanes cleared via [clearNativeLaneSessionState]). */
+    private fun clearSessionLaneMappings() {
+        refreshSessionLaneMappings(emptyList())
+    }
+
+    private fun clearPlaybackSessionMappings() {
+        clearSessionLaneMappings()
+    }
+
+    /** Cancels hot-join monitor jobs and preparing bookkeeping. */
+    private fun clearHotJoinState() {
+        cancelAllHotJoinMonitors()
+        _preparingTrackIds.value = emptySet()
+        preparingLaneIndexByTrackId.clear()
+    }
+
+    /** Mutes and cancels native lanes that still map to this session (safe before [clearSessionLaneMappings]). */
+    private fun clearNativeLaneSessionState() {
+        for (laneIndex in sessionLaneTrackIds.indices) {
+            if (sessionLaneTrackIds[laneIndex] == null) continue
+            audioController.setPlaybackLaneAudible(laneIndex, false)
+            audioController.cancelHotJoinLane(laneIndex)
+        }
+        for (laneIndex in preparingLaneIndexByTrackId.values) {
+            audioController.setPlaybackLaneAudible(laneIndex, false)
+            audioController.cancelHotJoinLane(laneIndex)
+        }
+    }
+
+    /**
+     * Clears session maps/monitors without cancelling the completion monitor job (safe from inside the monitor).
+     * When [endTransport] is true, invokes [onPlaybackCompleted] (Stop-equivalent playhead reset in VM).
+     */
+    private fun tearDownPlaybackSessionState(endTransport: Boolean) {
+        playbackSessionEpoch++
+        _playbackSessionActive.value = false
+        clearNativeLaneSessionState()
+        clearHotJoinState()
+        clearPlaybackSessionMappings()
+        _sessionTrackIds.value = emptySet()
+        if (endTransport) {
+            onPlaybackCompleted()
+        }
+    }
+
+    private fun refreshSessionLaneMappings(trackIdsInLaneOrder: List<String>) {
+        for (index in sessionLaneTrackIds.indices) {
+            sessionLaneTrackIds[index] = null
+        }
+        preparingLaneIndexByTrackId.clear()
+        trackIdsInLaneOrder.forEachIndexed { index, trackId ->
+            if (index < sessionLaneTrackIds.size) {
+                sessionLaneTrackIds[index] = trackId
+            }
+        }
+    }
+
+    private fun cancelAllHotJoinMonitors() {
+        for (trackId in hotJoinMonitorJobs.keys.toList()) {
+            cancelHotJoinForTrack(trackId)
+        }
+    }
+
+    private fun trackLaneIndex(trackId: String): Int? =
+        sessionLaneTrackIds.indexOfFirst { it == trackId }.takeIf { it >= 0 }
+
+    private fun syncLaneAudibilityFromSelection(selectedTrackIds: Set<String>) {
+        audioController.setArmedPlaybackLaneAudibility(
+            laneAudibilityFromSelection(sessionLaneTrackIds, selectedTrackIds),
+        )
+    }
+
+    private fun startHotJoinForTrack(track: TrackEntity, selectedTrackIds: Set<String>) {
+        val wavPath = track.wavFilePath
+        if (wavPath.isBlank()) return
+
+        val clipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
+        val clipDurationMs = track.duration ?: 0L
+        val transportMs = audioController.transportPositionMs()
+        if (clipDurationMs > 0L && transportMs >= clipStartMs + clipDurationMs) {
+            return
+        }
+
+        val laneIndex =
+            audioController.beginHotJoinLane(
+                wavFilePath = wavPath,
+                gain = GainRange.toUnit(track.gain),
+                timelineClipStartMs = clipStartMs,
+                timelineClipDurationMs = clipDurationMs,
+            )
+        if (laneIndex < 0) {
+            onHotJoinFailed()
+            return
+        }
+
+        val sessionEpochAtJoin = playbackSessionEpoch
+        preparingLaneIndexByTrackId[track.id] = laneIndex
+        _preparingTrackIds.value = _preparingTrackIds.value + track.id
+
+        hotJoinMonitorJobs[track.id]?.cancel()
+        hotJoinMonitorJobs[track.id] =
+            scope.launch {
+                try {
+                    while (isActive) {
+                        if (sessionEpochAtJoin != playbackSessionEpoch) {
+                            clearPreparingForTrack(track.id)
+                            hotJoinMonitorJobs.remove(track.id)
+                            return@launch
+                        }
+                        when (audioController.playbackLaneLifecycle(laneIndex)) {
+                            PlaybackLaneLifecycle.Active,
+                            PlaybackLaneLifecycle.Exhausted,
+                            -> {
+                                if (sessionEpochAtJoin != playbackSessionEpoch) {
+                                    clearPreparingForTrack(track.id)
+                                    hotJoinMonitorJobs.remove(track.id)
+                                    return@launch
+                                }
+                                sessionLaneTrackIds[laneIndex] = track.id
+                                syncLaneAudibilityFromSelection(selectedTrackIds)
+                                clearPreparingForTrack(track.id)
+                                hotJoinMonitorJobs.remove(track.id)
+                                return@launch
+                            }
+                            PlaybackLaneLifecycle.Inactive,
+                            PlaybackLaneLifecycle.Cancelled,
+                            -> {
+                                clearPreparingForTrack(track.id)
+                                hotJoinMonitorJobs.remove(track.id)
+                                return@launch
+                            }
+                            PlaybackLaneLifecycle.Preparing,
+                            PlaybackLaneLifecycle.ReadyToCommit,
+                            -> delay(HOT_JOIN_POLL_MS)
+                        }
+                    }
+                } catch (_: CancellationException) {
+                    clearPreparingForTrack(track.id)
+                    hotJoinMonitorJobs.remove(track.id)
+                }
+            }
+    }
+
+    private fun clearPreparingForTrack(trackId: String) {
+        preparingLaneIndexByTrackId.remove(trackId)
+        _preparingTrackIds.value = _preparingTrackIds.value - trackId
+    }
+
+    private fun cancelHotJoinForTrack(trackId: String) {
+        hotJoinMonitorJobs.remove(trackId)?.cancel()
+        val laneIndex = preparingLaneIndexByTrackId.remove(trackId) ?: trackLaneIndex(trackId)
+        if (laneIndex != null) {
+            audioController.setPlaybackLaneAudible(laneIndex, false)
+            audioController.cancelHotJoinLane(laneIndex)
+        }
+        _preparingTrackIds.value = _preparingTrackIds.value - trackId
     }
 
     private fun startPlaybackMonitor(trackIds: Set<String>) {
         playbackMonitorJob?.cancel()
         playbackMonitorJob = scope.launch {
-            // The engine reports completion via [AudioController.playbackState]; we wait for it
-            // to transition to false and then either restart (loop) or clear the playing set.
-            while (true) {
+            val monitorEpoch = playbackSessionEpoch
+            while (_playbackSessionActive.value && monitorEpoch == playbackSessionEpoch) {
+                audioController.playbackState.filter { it }.first()
+                if (!_playbackSessionActive.value || monitorEpoch != playbackSessionEpoch) break
                 audioController.playbackState.filter { !it }.first()
-                if (_playingTrackIds.value != trackIds) break
-                if (!shouldRestartLoopPlayback(trackIds)) {
-                    _playingTrackIds.value = emptySet()
+                if (!_playbackSessionActive.value || monitorEpoch != playbackSessionEpoch) break
+                if (_sessionTrackIds.value != trackIds) break
+                if (suppressTransportOnPlaybackCompletion()) {
+                    tearDownPlaybackSessionState(endTransport = false)
                     break
                 }
+                if (!shouldRestartLoopPlayback(trackIds)) {
+                    tearDownPlaybackSessionState(endTransport = true)
+                    break
+                }
+                onLoopRestart()
             }
             playbackMonitorJob = null
         }
     }
 
+    /**
+     * Loop restart policy: native playback restarts from the original monitor [trackIds] group
+     * (visible tracks with loop flag). Hot-joined lanes from the previous iteration are **not**
+     * carried over — [sessionLaneTrackIds] refresh from the restarted [MultiPlaybackSpec] only.
+     */
     private suspend fun shouldRestartLoopPlayback(trackIds: Set<String>): Boolean {
         val currentTracks = visibleTracks().filter { it.id in trackIds }
         if (currentTracks.isEmpty()) return false
         if (currentTracks.none { it.isLoop }) return false
         val pid = currentProjectId() ?: return false
         val currentProject = loadCurrentProject(pid) ?: return false
-        val spec = currentProject.toMultiPlaybackSpec(currentTracks) ?: return false
-        return audioController.startPlayback(spec)
+        val spec =
+            currentProject.toMultiPlaybackSpec(currentTracks)?.copy(
+                sessionTimelineEndMs = sessionTimelineEndMsForTracks(currentTracks),
+            ) ?: return false
+        if (!audioController.startPlayback(spec)) {
+            return false
+        }
+        playbackSessionEpoch++
+        clearHotJoinState()
+        refreshSessionLaneMappings(spec.lanes.map { it.trackId })
+        _sessionTrackIds.value = spec.lanes.map { it.trackId }.toSet()
+        return true
+    }
+
+    private companion object {
+        const val HOT_JOIN_POLL_MS = 5L
     }
 }

@@ -85,7 +85,7 @@ class ProjectTransportControllerTest {
             assertEquals(false, recordingSession.recordingStartup.value)
             assertNull(recordingSession.recordingTrackId.value)
             assertNull(recordingSession.optimisticRecordingTrack.value)
-            assertEquals(emptySet<String>(), playback.playingTrackIds.value)
+            assertEquals(emptySet<String>(), playback.sessionTrackIds.value)
             assertEquals(listOf("a"), finalizedIds)
             assertEquals(listOf("stopRecording", "stopPlayback"), audio.engineStopJournal)
         }
@@ -147,7 +147,7 @@ class ProjectTransportControllerTest {
             sut.resetPlaybackForProjectChange()
             advanceUntilIdle()
 
-            assertEquals(emptySet<String>(), playback.playingTrackIds.value)
+            assertEquals(emptySet<String>(), playback.sessionTrackIds.value)
         }
 
     /** Records [stopRecording]/[stopPlayback] relative order only; stubs other [AudioController] surface used in tests. */
@@ -157,6 +157,10 @@ class ProjectTransportControllerTest {
         private val _playbackState = MutableStateFlow(false)
         override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
         override val recordingInputLevel: StateFlow<Float> = MutableStateFlow(0f)
+
+        override fun transportPositionMs(): Long = 0L
+
+        override fun isPlaybackEngineRunning(): Boolean = _playbackState.value
 
         val engineStopJournal: List<String>
             get() =
@@ -184,6 +188,22 @@ class ProjectTransportControllerTest {
         override fun startPlayback(spec: MultiPlaybackSpec): Boolean = true
 
         override fun setPlaybackGain(gain: Float) = Unit
+
+        override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
+
+        override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
+
+        override fun beginHotJoinLane(
+            wavFilePath: String,
+            gain: Float,
+            timelineClipStartMs: Long,
+            timelineClipDurationMs: Long,
+        ): Int = -1
+
+        override fun cancelHotJoinLane(laneIndex: Int) = Unit
+
+        override fun playbackLaneLifecycle(laneIndex: Int) =
+            com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle.Inactive
 
         override fun stopPlayback(): Boolean {
             journal += "stopPlayback"

@@ -179,3 +179,12 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("ALTER TABLE tracks ADD COLUMN editLamport INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/** Timeline clip placement on the project ruler; existing rows default to 0 (start of base timeline). */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN timelineStartOffsetMs INTEGER NOT NULL DEFAULT 0",
+        )
+    }
+}

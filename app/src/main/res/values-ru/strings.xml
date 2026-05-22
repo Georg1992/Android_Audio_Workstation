@@ -53,6 +53,7 @@
     <!-- Content descriptions (accessibility) -->
     <string name="cd_back">Назад</string>
     <string name="cd_play">Воспроизвести</string>
+    <string name="cd_pause">Пауза</string>
     <string name="cd_stop">Остановить</string>
     <string name="cd_record">Записать</string>
     <string name="cd_import_audio">Импорт аудио</string>
@@ -83,6 +84,7 @@
     <string name="error_stop_recording_to_import">Остановите запись перед импортом.</string>
     <string name="error_import_storage_unavailable">Не удалось подготовить хранилище для импорта.</string>
     <string name="error_stop_recording_to_record">Остановите запись перед началом новой.</string>
+    <string name="error_record_at_timeline_end">Переместите указатель воспроизведения перед концом шкалы, чтобы начать запись.</string>
     <string name="error_recording_failed_to_start">Не удалось начать запись.</string>
     <string name="error_stop_playback_first">Остановите воспроизведение перед повторным запуском.</string>
     <string name="error_single_track_playback_only">Сейчас поддерживается воспроизведение только одной дорожки.</string>

@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,13 +17,14 @@ private const val WavChunkReadFrames = 4096
 private const val WaveformPeakWeight = 0.35f
 private const val WaveformRmsWeight = 0.65f
 
-class WavWaveformPeakExtractor(
+open class WavWaveformPeakExtractor(
     private val targetPeakCount: Int = DefaultWaveformPeakCount,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val cache = mutableMapOf<String, WaveformPeaks>()
 
-    suspend fun extract(wavPath: String): WaveformPeaks? =
-        withContext(Dispatchers.IO) {
+    open suspend fun extract(wavPath: String): WaveformPeaks? =
+        withContext(ioDispatcher) {
             val path = wavPath.trim()
             if (path.isEmpty()) return@withContext null
             cache[path]?.let { return@withContext it }
@@ -83,7 +85,10 @@ class WavWaveformPeakExtractor(
                         peaks[index] = (peaks[index] / maxPeak).coerceIn(0f, 1f)
                     }
                 }
-                WaveformPeaks(peaks.toList())
+                WaveformPeaks(
+                    amplitudes = peaks.toList(),
+                    sourceDurationMs = info.sourceDurationMs,
+                )
             }
         }.getOrNull()
     }
@@ -113,12 +118,20 @@ private class WaveformBucketAccumulator {
 private data class WavInfo(
     val audioFormat: Int,
     val channelCount: Int,
+    val sampleRateHz: Int,
     val bitsPerSample: Int,
     val blockAlign: Int,
     val dataOffset: Long,
     val dataSize: Long,
 ) {
     val frameCount: Long = if (blockAlign > 0) dataSize / blockAlign else 0L
+    val sourceDurationMs: Long
+        get() =
+            if (sampleRateHz > 0 && frameCount > 0L) {
+                (frameCount * 1000L + sampleRateHz.toLong() - 1L) / sampleRateHz.toLong()
+            } else {
+                0L
+            }
     val isSupported: Boolean =
         channelCount in 1..2 &&
             blockAlign > 0 &&
@@ -139,6 +152,7 @@ private fun RandomAccessFile.readWavInfo(): WavInfo? {
 
     var audioFormat = 0
     var channelCount = 0
+    var sampleRateHz = 0
     var bitsPerSample = 0
     var blockAlign = 0
     var dataOffset = -1L
@@ -153,7 +167,7 @@ private fun RandomAccessFile.readWavInfo(): WavInfo? {
                 if (chunkSize < 16L) return null
                 audioFormat = readUInt16Le()
                 channelCount = readUInt16Le()
-                skipBytes(4)
+                sampleRateHz = readUInt32Le().toInt()
                 skipBytes(4)
                 blockAlign = readUInt16Le()
                 bitsPerSample = readUInt16Le()
@@ -168,6 +182,7 @@ private fun RandomAccessFile.readWavInfo(): WavInfo? {
             return WavInfo(
                 audioFormat = audioFormat,
                 channelCount = channelCount,
+                sampleRateHz = sampleRateHz,
                 bitsPerSample = bitsPerSample,
                 blockAlign = blockAlign,
                 dataOffset = dataOffset,

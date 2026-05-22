@@ -1,0 +1,215 @@
+package com.georgv.audioworkstation.ui.screens.projects
+
+import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
+import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+enum class TransportPlaybackPhase {
+    Idle,
+    Playing,
+    Paused,
+    Recording,
+}
+
+/**
+ * UI playhead transport (Clock.5).
+ *
+ * Active engine phases ([TransportPlaybackPhase.Playing], [TransportPlaybackPhase.Recording]) advance
+ * the playhead only from [nativeTransportPositionMs] via polling — no Kotlin wall-clock or elapsed-time
+ * ticker. Idle/scrub and [TransportPlaybackPhase.Paused] positions are owned by Kotlin.
+ */
+class PlayheadTransportController(
+    private val scope: CoroutineScope,
+    private val playheadPositionMs: MutableStateFlow<Long>,
+    private val nativeTransportPositionMs: () -> Long,
+    private val pollIntervalMs: Long = NATIVE_TRANSPORT_POLL_INTERVAL_MS,
+) {
+    private val _phase = MutableStateFlow(TransportPlaybackPhase.Idle)
+    val phase: StateFlow<TransportPlaybackPhase> = _phase.asStateFlow()
+
+    private var timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs
+    private var pollJob: Job? = null
+    private var testNativePositionOverrideMs: Long? = null
+    private var playbackSeekDragActive: Boolean = false
+    private var resumePlaybackAfterSeekDrag: Boolean = false
+
+    var nativePollEnabled: Boolean = true
+
+    fun isPlaybackSeekDragActive(): Boolean = playbackSeekDragActive
+
+    fun setTimelineBaseDurationMs(durationMs: Long) {
+        timelineBaseDurationMs = durationMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+        when (_phase.value) {
+            TransportPlaybackPhase.Recording ->
+                playheadPositionMs.update { stored ->
+                    stored.coerceAtMost(TimelineMaxDurationMs)
+                }
+            TransportPlaybackPhase.Playing -> Unit
+            else ->
+                playheadPositionMs.update { stored ->
+                    timelinePlayheadClampedPositionMs(stored, timelineBaseDurationMs)
+                }
+        }
+    }
+
+    fun onPlaybackStarted(fromPositionMs: Long = 0L) {
+        val startMs = timelinePlayheadClampedPositionMs(fromPositionMs, timelineBaseDurationMs)
+        playheadPositionMs.value = startMs
+        _phase.value = TransportPlaybackPhase.Playing
+        startNativePoll()
+    }
+
+    fun onRecordingStarted(fromPositionMs: Long, nativeTransportMsAtStart: Long = 0L) {
+        stopNativePoll()
+        val startMs = fromPositionMs.coerceIn(0L, TimelineMaxDurationMs)
+        playheadPositionMs.value = startMs
+        _phase.value = TransportPlaybackPhase.Recording
+        startNativePoll()
+    }
+
+    fun abortRecordingStart() {
+        stopNativePoll()
+        clearPlaybackSeekDragState()
+        _phase.value = TransportPlaybackPhase.Idle
+        playheadPositionMs.value = 0L
+        clearTestNativeOverride()
+    }
+
+    fun enterPaused() {
+        stopNativePoll()
+        clearPlaybackSeekDragState()
+        // Freeze last UI position; pause stops native playback and resets transport (Clock.3).
+        _phase.value = TransportPlaybackPhase.Paused
+    }
+
+    fun stopAndResetToZero() {
+        stopNativePoll()
+        clearPlaybackSeekDragState()
+        _phase.value = TransportPlaybackPhase.Idle
+        playheadPositionMs.value = 0L
+        clearTestNativeOverride()
+    }
+
+    fun resetWhenProjectChanges() {
+        stopNativePoll()
+        clearPlaybackSeekDragState()
+        _phase.value = TransportPlaybackPhase.Idle
+        playheadPositionMs.value = 0L
+        clearTestNativeOverride()
+    }
+
+    fun onLoopRestart() {
+        playheadPositionMs.value = 0L
+        if (_phase.value != TransportPlaybackPhase.Playing) {
+            _phase.value = TransportPlaybackPhase.Playing
+        }
+        if (pollJob?.isActive != true) {
+            startNativePoll()
+        }
+    }
+
+    fun abortPlaybackStart() {
+        stopNativePoll()
+        clearPlaybackSeekDragState()
+        _phase.value = TransportPlaybackPhase.Idle
+        clearTestNativeOverride()
+    }
+
+    /** Idle, Paused, and Playing (pause-on-drag seek). Recording is blocked. */
+    fun canScrubPlayhead(): Boolean = _phase.value != TransportPlaybackPhase.Recording
+
+    /** Transport Seek.1: pause engine, stop native poll, keep [TransportPlaybackPhase.Playing]. */
+    fun beginPlaybackSeekDrag() {
+        if (_phase.value != TransportPlaybackPhase.Playing || playbackSeekDragActive) return
+        stopNativePoll()
+        playbackSeekDragActive = true
+        resumePlaybackAfterSeekDrag = true
+    }
+
+    fun setPlayheadDuringSeekDrag(positionMs: Long, timelineBaseDurationMs: Long) {
+        val next =
+            when (_phase.value) {
+                TransportPlaybackPhase.Recording -> positionMs.coerceAtMost(TimelineMaxDurationMs)
+                TransportPlaybackPhase.Playing ->
+                    timelinePlayheadClampedPositionMs(positionMs, timelineBaseDurationMs)
+                else -> timelinePlayheadClampedPositionMs(positionMs, timelineBaseDurationMs)
+            }
+        playheadPositionMs.value = next
+    }
+
+    /** @return true when release should restart playback from the scrubbed playhead. */
+    fun endPlaybackSeekDragAndConsumeResume(): Boolean {
+        playbackSeekDragActive = false
+        val resume = resumePlaybackAfterSeekDrag
+        resumePlaybackAfterSeekDrag = false
+        return resume
+    }
+
+    /** Test-only: drive playhead from a mocked native transport position when [nativePollEnabled] is false. */
+    internal fun setNativeTransportPositionForTests(positionMs: Long) {
+        testNativePositionOverrideMs = positionMs.coerceAtLeast(0L)
+        syncPlayheadFromNative()
+    }
+
+    internal fun clearTestNativeOverride() {
+        testNativePositionOverrideMs = null
+    }
+
+    private fun readNativeTransportMs(): Long =
+        (testNativePositionOverrideMs ?: nativeTransportPositionMs()).coerceAtLeast(0L)
+
+    private fun syncPlayheadFromNative() {
+        val raw = readNativeTransportMs()
+        val next =
+            when (_phase.value) {
+                TransportPlaybackPhase.Recording -> raw.coerceAtMost(TimelineMaxDurationMs)
+                TransportPlaybackPhase.Playing -> raw.coerceIn(0L, TimelineMaxDurationMs)
+                TransportPlaybackPhase.Paused ->
+                    timelinePlayheadClampedPositionMs(raw, timelineBaseDurationMs)
+                else -> return
+            }
+        if (playheadPositionMs.value != next) {
+            playheadPositionMs.value = next
+        }
+    }
+
+    private fun startNativePoll() {
+        stopNativePoll()
+        if (!nativePollEnabled) return
+        pollJob =
+            scope.launch {
+                while (isActive) {
+                    when (_phase.value) {
+                        TransportPlaybackPhase.Playing,
+                        TransportPlaybackPhase.Recording,
+                        -> syncPlayheadFromNative()
+                        else -> break
+                    }
+                    delay(pollIntervalMs)
+                }
+            }
+    }
+
+    private fun stopNativePoll() {
+        pollJob?.cancel()
+        pollJob = null
+    }
+
+    private fun clearPlaybackSeekDragState() {
+        playbackSeekDragActive = false
+        resumePlaybackAfterSeekDrag = false
+    }
+
+    companion object {
+        const val NATIVE_TRANSPORT_POLL_INTERVAL_MS = 16L
+    }
+}
