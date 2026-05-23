@@ -9,6 +9,20 @@ import org.junit.Test
 class ProjectTimelineProjectionTest {
 
     @Test
+    fun `empty project timeline duration is zero regardless of playhead`() {
+        val projection =
+            buildProjectTimelineProjection(
+                tracks = emptyList(),
+                waveformStatesByTrackId = emptyMap(),
+                activeRecording = null,
+                playheadPositionMs = 45_000L,
+            )
+
+        assertEquals(0L, projection.timelineDurationMs)
+        assertTrue(projection.clips.isEmpty())
+    }
+
+    @Test
     fun `timeline duration includes playhead beyond clip ends`() {
         val tracks =
             listOf(

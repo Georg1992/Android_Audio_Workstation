@@ -38,7 +38,7 @@ enum class ProjectSampleRate(val hz: Int) {
     RATE_48_000(48_000);
 
     companion object {
-        val Default = RATE_48_000
+        val Default = RATE_44_100
     }
 }
 

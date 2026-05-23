@@ -59,11 +59,13 @@ fun buildProjectTimelineProjection(
 fun timelineDurationMs(
     furthestClipEndMs: Long,
     playheadPositionMs: Long,
-): Long =
-    max(
+): Long {
+    if (furthestClipEndMs <= 0L) return 0L
+    return max(
         furthestClipEndMs,
         playheadPositionMs.coerceIn(0L, TimelineMaxDurationMs),
     ).coerceIn(TimelineMinimumBaseDurationMs, TimelineMaxDurationMs)
+}
 
 /** Absolute session timeline end from persisted clips (no active recording row). */
 fun sessionTimelineEndMsForTracks(tracks: List<TrackEntity>): Long {

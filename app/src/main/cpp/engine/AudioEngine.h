@@ -202,7 +202,7 @@ private:
 
     PlaybackLaneLifecycle loadLaneLifecycle(std::size_t laneIndex) const;
 
-    int32_t m_sampleRate = 48'000;
+    int32_t m_sampleRate = 44'100;
     int32_t m_fileBitDepth = 16;
 
     std::mutex m_recordMutex;

@@ -810,7 +810,7 @@ fun ProjectTrackList(
                             Modifier
                                 .align(Alignment.BottomCenter)
                                 .zIndex(2f)
-                                .padding(horizontal = Dimens.TileInnerPadding)
+                                .padding(horizontal = Dimens.TrackCardOuterPaddingHorizontal)
                                 .padding(bottom = Dimens.TileInnerPadding)
                                 .fillMaxWidth(0.5f)
                                 .height(4.dp)
@@ -835,7 +835,7 @@ fun ProjectTrackList(
                             Modifier
                                 .align(Alignment.TopCenter)
                                 .zIndex(2f)
-                                .padding(horizontal = Dimens.TileInnerPadding)
+                                .padding(horizontal = Dimens.TrackCardOuterPaddingHorizontal)
                                 .padding(top = Dimens.TileInnerPadding)
                                 .fillMaxWidth(0.5f)
                                 .height(4.dp)

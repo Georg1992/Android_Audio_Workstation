@@ -47,7 +47,7 @@ class PlayheadTransportController(
     fun isPlaybackSeekDragActive(): Boolean = playbackSeekDragActive
 
     fun setTimelineBaseDurationMs(durationMs: Long) {
-        timelineBaseDurationMs = durationMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+        timelineBaseDurationMs = durationMs.coerceIn(0L, TimelineMaxDurationMs)
         when (_phase.value) {
             TransportPlaybackPhase.Recording ->
                 playheadPositionMs.update { stored ->

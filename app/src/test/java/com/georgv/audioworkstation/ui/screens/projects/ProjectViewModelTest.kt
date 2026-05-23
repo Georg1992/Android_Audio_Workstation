@@ -1407,7 +1407,7 @@ class ProjectViewModelTest {
         val track = vm.uiState.value.tracks.single()
 
         assertEquals("QuickRec_2026-03-27_10-00", project?.name)
-        assertEquals(48_000, project?.sampleRate)
+        assertEquals(44_100, project?.sampleRate)
         assertEquals(16, project?.fileBitDepth)
         assertEquals(track.id, vm.uiState.value.recordingTrackId)
         assertEquals(ChannelMode.MONO, track.channelMode)
@@ -1431,7 +1431,7 @@ class ProjectViewModelTest {
         vm.onRecordPressed(PROJECT_ID)
         advanceUntilIdle()
         assertNotNull(vm.uiState.value.recordingTrackId)
-        assertEquals(setOf("a"), vm.uiState.value.sessionTrackIds)
+        assertEquals(setOf("a"), vm.sessionTrackIdsForTests())
 
         val onCleared = vm.javaClass.getDeclaredMethod("onCleared")
         onCleared.isAccessible = true

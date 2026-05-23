@@ -8,7 +8,7 @@ data class ProjectEntity(
     @PrimaryKey val id: String,
     val name: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val sampleRate: Int = 48_000,
+    val sampleRate: Int = 44_100,
     val fileBitDepth: Int = 16,
 
     // Collaboration plumbing — wired into schema now so the upcoming online

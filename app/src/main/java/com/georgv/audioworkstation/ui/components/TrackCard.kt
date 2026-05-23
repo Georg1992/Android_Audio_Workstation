@@ -144,6 +144,7 @@ fun TrackCard(
         modifier =
             modifier
                 .fillMaxWidth()
+                .padding(horizontal = Dimens.TrackCardOuterPaddingHorizontal)
                 .then(
                     if (trackSlotHeight != null) {
                         Modifier.height(trackSlotHeight)
@@ -182,7 +183,12 @@ fun TrackCard(
                         Modifier.height(IntrinsicSize.Min)
                     }
                 )
-                .padding(Dimens.TileInnerPadding),
+                .padding(
+                    horizontal =
+                        (Dimens.TileInnerPadding - Dimens.TrackCardOuterPaddingHorizontal)
+                            .coerceAtLeast(0.dp),
+                    vertical = Dimens.TileInnerPadding,
+                ),
             verticalAlignment = Alignment.Top
         ) {
             // LEFT

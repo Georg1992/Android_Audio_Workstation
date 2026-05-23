@@ -19,6 +19,8 @@ object Dimens {
 
     val AccentBarHeight = 8.dp
     val PanelPadding = 8.dp
+    /** Horizontal inset of track cards from the project list; inner row padding compensates so timeline stays aligned with the scrubber. */
+    val TrackCardOuterPaddingHorizontal = PanelPadding
 
     // top bar
     val TopBarHeight = 30.dp

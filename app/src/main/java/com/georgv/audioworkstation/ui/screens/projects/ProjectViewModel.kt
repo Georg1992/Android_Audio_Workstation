@@ -519,7 +519,7 @@ class ProjectViewModel @Inject constructor(
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId.value)
         val startPositionMs =
             timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (startPositionMs >= timeline.timelineDurationMs) return false
+        if (timeline.timelineDurationMs > 0L && startPositionMs >= timeline.timelineDurationMs) return false
         val playbackSpec =
             currentProject.toMultiPlaybackSpec(tracks)?.copy(
                 startPositionMs = startPositionMs,
@@ -809,7 +809,7 @@ class ProjectViewModel @Inject constructor(
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId.value)
         val timelineStartOffsetMs =
             timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (timelineStartOffsetMs >= timeline.timelineDurationMs) {
+        if (timeline.timelineDurationMs > 0L && timelineStartOffsetMs >= timeline.timelineDurationMs) {
             emitMessage(R.string.error_record_at_timeline_end)
             return
         }
@@ -925,7 +925,7 @@ class ProjectViewModel @Inject constructor(
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId.value)
         val startPositionMs =
             timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (startPositionMs >= timeline.timelineDurationMs) return
+        if (timeline.timelineDurationMs > 0L && startPositionMs >= timeline.timelineDurationMs) return
 
         val playbackSpec =
             currentProject.toMultiPlaybackSpec(selectedPlayableTracks)?.copy(

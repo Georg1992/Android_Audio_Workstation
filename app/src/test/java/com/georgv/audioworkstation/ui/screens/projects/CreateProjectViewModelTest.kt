@@ -57,7 +57,7 @@ class CreateProjectViewModelTest {
 
         assertEquals(createdProjectId, createdProject.id)
         assertEquals("Demo Project", createdProject.name)
-        assertEquals(48_000, createdProject.sampleRate)
+        assertEquals(44_100, createdProject.sampleRate)
         assertEquals(16, createdProject.fileBitDepth)
         assertFalse(vm.uiState.value.isSaving)
     }
@@ -69,11 +69,11 @@ class CreateProjectViewModelTest {
 
         assertEquals(ProjectSampleRate.Default, vm.uiState.value.sampleRate)
 
-        vm.onSampleRateChange(ProjectSampleRate.RATE_44_100)
-        assertEquals(ProjectSampleRate.RATE_44_100, vm.uiState.value.sampleRate)
-
         vm.onSampleRateChange(ProjectSampleRate.RATE_48_000)
         assertEquals(ProjectSampleRate.RATE_48_000, vm.uiState.value.sampleRate)
+
+        vm.onSampleRateChange(ProjectSampleRate.RATE_44_100)
+        assertEquals(ProjectSampleRate.RATE_44_100, vm.uiState.value.sampleRate)
     }
 
     @Test
