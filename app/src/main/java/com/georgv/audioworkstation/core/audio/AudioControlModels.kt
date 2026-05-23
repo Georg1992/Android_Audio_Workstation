@@ -5,7 +5,13 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
 enum class ChannelMode {
     MONO,
-    STEREO
+    STEREO;
+
+    fun channelCount(): Int =
+        when (this) {
+            MONO -> 1
+            STEREO -> 2
+        }
 }
 
 /**

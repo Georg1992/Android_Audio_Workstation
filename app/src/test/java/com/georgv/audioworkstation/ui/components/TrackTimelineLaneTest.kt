@@ -54,6 +54,22 @@ class TrackTimelineLaneTest {
     }
 
     @Test
+    fun `waveform peaks crop stereo channels together`() {
+        val peaks =
+            WaveformPeaks(
+                amplitudes = emptyList(),
+                leftAmplitudes = List(100) { 0.5f },
+                rightAmplitudes = List(100) { 0.8f },
+                sourceDurationMs = 10_000L,
+            )
+
+        val cropped = waveformPeaksForTimelineClip(peaks, clipDurationMs = 2_500L)
+
+        assertEquals(25, cropped.leftAmplitudes?.size)
+        assertEquals(25, cropped.rightAmplitudes?.size)
+    }
+
+    @Test
     fun `waveform peaks unchanged when clip spans full source`() {
         val peaks =
             WaveformPeaks(

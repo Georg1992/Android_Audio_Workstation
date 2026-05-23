@@ -1571,7 +1571,11 @@ class ProjectViewModelTest {
     fun `importAudio persists imported track with suggested name and flag`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val importer = FakeAudioImporter(
-            result = AudioImportResult.Success(durationMs = 2_500L, channelMode = ChannelMode.STEREO)
+            result = AudioImportResult.Success(
+                durationMs = 2_500L,
+                channelMode = ChannelMode.STEREO,
+                channelCount = 2,
+            )
         )
         val vm = createViewModel(dao, audioImporter = importer)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
@@ -1589,6 +1593,7 @@ class ProjectViewModelTest {
         assertEquals(true, imported.isImported)
         assertEquals(2_500L, imported.duration)
         assertEquals(ChannelMode.STEREO, imported.channelMode)
+        assertEquals(2, imported.channelCount)
         assertNotNull(imported.wavFilePath)
         collectJob.cancel()
     }
@@ -1597,7 +1602,11 @@ class ProjectViewModelTest {
     fun `importAudio generates waveform peaks for imported wav`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val importer = FakeAudioImporter(
-            result = AudioImportResult.Success(durationMs = 1_000L, channelMode = ChannelMode.MONO),
+            result = AudioImportResult.Success(
+                durationMs = 1_000L,
+                channelMode = ChannelMode.MONO,
+                channelCount = 1,
+            ),
             wavSamplesToWrite = shortArrayOf(0, 2_000, 8_000, 16_000, 24_000, 30_000)
         )
         val provider = FakeAudioFilePathProvider(tempDir().absolutePath)
@@ -1716,6 +1725,7 @@ class ProjectViewModelTest {
                     AudioImportResult.Success(
                         durationMs = 100L,
                         channelMode = ChannelMode.MONO,
+                        channelCount = 1,
                     )
             )
         val coordinator =
@@ -1733,6 +1743,7 @@ class ProjectViewModelTest {
         assertEquals("Take 3 (imported)", track.name)
         assertEquals(true, track.isImported)
         assertEquals(100L, track.duration)
+        assertEquals(1, track.channelCount)
     }
 
     @Test
@@ -2927,7 +2938,8 @@ private object NullTrackOutputPathProvider : AudioFilePathProvider {
 private class FakeAudioImporter(
     private val result: AudioImportResult = AudioImportResult.Success(
         durationMs = 1_000L,
-        channelMode = ChannelMode.MONO
+        channelMode = ChannelMode.MONO,
+        channelCount = 1,
     ),
     private val wavSamplesToWrite: ShortArray? = null
 ) : AudioImporter {

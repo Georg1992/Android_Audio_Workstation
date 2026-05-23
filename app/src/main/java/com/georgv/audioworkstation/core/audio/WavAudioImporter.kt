@@ -83,7 +83,8 @@ class WavAudioImporter @Inject constructor() : AudioImporter {
 
             AudioImportResult.Success(
                 durationMs = durationMs,
-                channelMode = if (header.numChannels == 1) ChannelMode.MONO else ChannelMode.STEREO
+                channelMode = if (header.numChannels == 1) ChannelMode.MONO else ChannelMode.STEREO,
+                channelCount = header.numChannels,
             )
         }
     }

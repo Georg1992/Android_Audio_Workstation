@@ -153,7 +153,12 @@ private fun RowScope.BoxWithConstraintsPlayheadWaveformSlot(
                 waveformAreaWidth = maxWidth,
                 timelineDurationMs = timelineDurationMs,
             )
-        Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .reportScrubberWaveformBounds(),
+        ) {
             waveformContent(metrics)
         }
     }

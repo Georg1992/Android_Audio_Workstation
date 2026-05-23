@@ -23,6 +23,8 @@ data class TrackEntity(
     val projectId: String,
     val name: String? = null,
     val channelMode: ChannelMode = ChannelMode.MONO,
+    /** PCM channel count in [wavFilePath] (1 = mono, 2 = stereo). */
+    val channelCount: Int = 1,
     val gain: Float = 100f,
     val wavFilePath: String = "",
     val timeStampStart: Long = 0L,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,11 +20,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -57,6 +61,7 @@ data class TimelineClip(
     val waveformState: WaveformState,
     val isTimelineBase: Boolean,
     val formattedDuration: String,
+    val channelCount: Int = 1,
     val isActiveRecording: Boolean = false,
 )
 
@@ -100,6 +105,7 @@ fun projectTimelineClips(
             waveformState = waveformStatesByTrackId[track.id] ?: WaveformState.Loading,
             isTimelineBase = clipEndMs == baseEndMs,
             formattedDuration = formatTimelineDuration(span.durationMs),
+            channelCount = track.channelCount.coerceIn(1, 2),
         )
     }
 }
@@ -125,12 +131,30 @@ fun waveformPeaksForTimelineClip(
     if (clipDurationMs <= 0L) return peaks
     val sourceDurationMs = peaks.sourceDurationMs
     if (sourceDurationMs <= 0L || clipDurationMs >= sourceDurationMs) return peaks
-    val totalBars = peaks.amplitudes.size
-    if (totalBars == 0) return peaks
-    val visibleBars =
-        ((totalBars.toLong() * clipDurationMs) / sourceDurationMs)
+
+    fun visibleBarCount(totalBars: Int): Int {
+        if (totalBars == 0) return 0
+        return ((totalBars.toLong() * clipDurationMs) / sourceDurationMs)
             .toInt()
             .coerceIn(1, totalBars)
+    }
+
+    if (peaks.isStereo) {
+        val left = peaks.leftAmplitudes.orEmpty()
+        val right = peaks.rightAmplitudes.orEmpty()
+        val totalBars = minOf(left.size, right.size)
+        if (totalBars == 0) return peaks
+        val visibleBars = visibleBarCount(totalBars)
+        if (visibleBars >= totalBars) return peaks
+        return peaks.copy(
+            leftAmplitudes = left.take(visibleBars),
+            rightAmplitudes = right.take(visibleBars),
+        )
+    }
+
+    val totalBars = peaks.amplitudes.size
+    if (totalBars == 0) return peaks
+    val visibleBars = visibleBarCount(totalBars)
     if (visibleBars >= totalBars) return peaks
     return peaks.copy(amplitudes = peaks.amplitudes.take(visibleBars))
 }
@@ -235,7 +259,8 @@ fun TrackTimelineLane(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .fillMaxWidth(TimelineWaveformWidthFraction)
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                .reportLaneWaveformBounds(),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 BoxWithConstraints(
@@ -254,13 +279,12 @@ fun TrackTimelineLane(
                             .fillMaxHeight()
                             .clip(shape)
                             .background(AppColors.SurfacePanel)
+                            .padding(top = Dimens.TightGap, start = 1.dp),
                     ) {
                         if (clip.isActiveRecording && recordingInputLevel != null) {
                             RecordingWaveform(
                                 inputLevel = recordingInputLevel,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(start = 1.dp),
+                                modifier = Modifier.fillMaxSize(),
                             )
                         } else {
                             when (val waveform = clip.waveformState) {
@@ -278,9 +302,7 @@ fun TrackTimelineLane(
                                                 clipDurationMs = clip.durationMs,
                                             ),
                                         horizontalInsetFraction = 0f,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(start = 1.dp),
+                                        modifier = Modifier.fillMaxSize(),
                                     )
                             }
                         }
@@ -321,18 +343,36 @@ private fun ClipMetadataArea(
     clip: TimelineClip,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    val labelStyle =
+        TextStyle(
+            color = Color.White,
+            fontSize = 7.sp,
+            fontFamily = FontFamily.Monospace,
+        )
+    val channelLabel =
+        if (clip.channelCount >= 2) {
+            stringResource(R.string.track_channel_stereo)
+        } else {
+            stringResource(R.string.track_channel_mono)
+        }
+
+    Column(
         modifier = modifier
             .background(AppColors.Line)
-            .padding(horizontal = 2.dp, vertical = 2.dp),
+            .padding(horizontal = 2.dp, vertical = 2.dp)
+            .fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = channelLabel,
+            style = labelStyle,
+        )
+        Spacer(modifier = Modifier.weight(1f))
         if (clip.isTimelineBase) {
             Text(
                 text = "BASE",
-                color = Color.White,
-                fontSize = 7.sp,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.align(Alignment.Center),
+                style = labelStyle,
             )
         }
     }

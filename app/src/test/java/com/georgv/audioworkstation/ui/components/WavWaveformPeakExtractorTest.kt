@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -96,11 +97,11 @@ class WavWaveformPeakExtractorTest {
     }
 
     @Test
-    fun `stereo samples contribute to RMS and peak`() = runTest {
+    fun `stereo extract produces separate left and right peaks`() = runTest {
         val wav = tempStereoWav(
             interleavedSamples = shortArrayOf(
-                0, Short.MAX_VALUE,
-                0, Short.MAX_VALUE,
+                Short.MAX_VALUE, 0,
+                Short.MAX_VALUE, 0,
                 0, 0,
                 0, 0,
             )
@@ -109,9 +110,62 @@ class WavWaveformPeakExtractorTest {
         val peaks = extract(targetPeakCount = 2, wav.absolutePath)
 
         assertNotNull(peaks)
-        val amplitudes = peaks?.amplitudes.orEmpty()
-        assertEquals(1f, amplitudes[0], 0.0001f)
-        assertEquals(0f, amplitudes[1], 0.0001f)
+        assertTrue(peaks!!.isStereo)
+        assertEquals(1f, peaks.leftAmplitudes?.get(0) ?: 0f, 0.0001f)
+        assertEquals(0f, peaks.leftAmplitudes?.get(1) ?: -1f, 0.0001f)
+        assertEquals(0f, peaks.rightAmplitudes?.get(0) ?: -1f, 0.0001f)
+        assertEquals(0f, peaks.rightAmplitudes?.get(1) ?: -1f, 0.0001f)
+    }
+
+    @Test
+    fun `stereo identical channels produce matching peak shapes`() = runTest {
+        val wav =
+            tempStereoWav(
+                interleavedSamples =
+                    shortArrayOf(
+                        0, 0,
+                        8_000, 8_000,
+                        16_000, 16_000,
+                        24_000, 24_000,
+                    ),
+            )
+
+        val peaks = extract(targetPeakCount = 4, wav.absolutePath)
+
+        assertNotNull(peaks)
+        assertEquals(peaks!!.leftAmplitudes, peaks.rightAmplitudes)
+    }
+
+    @Test
+    fun `stereo louder channel is not scaled down by the other channel peak`() = runTest {
+        val wav =
+            tempStereoWav(
+                interleavedSamples =
+                    shortArrayOf(
+                        Short.MAX_VALUE, 1_000,
+                        Short.MAX_VALUE, 1_000,
+                        0, 0,
+                        0, 0,
+                    ),
+            )
+
+        val peaks = extract(targetPeakCount = 2, wav.absolutePath)
+
+        assertNotNull(peaks)
+        assertEquals(1f, peaks!!.rightAmplitudes?.get(0) ?: 0f, 0.0001f)
+    }
+
+    @Test
+    fun `mono extract does not populate stereo peak lists`() = runTest {
+        val wav = tempWav(samples = shortArrayOf(0, 8_000, 16_000, 24_000))
+
+        val peaks = extract(targetPeakCount = 4, wav.absolutePath)
+
+        assertNotNull(peaks)
+        assertFalse(peaks!!.isStereo)
+        assertNull(peaks.leftAmplitudes)
+        assertNull(peaks.rightAmplitudes)
+        assertEquals(4, peaks.amplitudes.size)
     }
 
     private suspend fun TestScope.extract(

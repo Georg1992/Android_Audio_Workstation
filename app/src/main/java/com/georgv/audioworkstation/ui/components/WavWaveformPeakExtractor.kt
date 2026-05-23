@@ -42,56 +42,124 @@ open class WavWaveformPeakExtractor(
                 val info = wav.readWavInfo() ?: return null
                 if (!info.isSupported) return null
 
-                val buckets = Array(targetPeakCount) { WaveformBucketAccumulator() }
-                val framesPerPeak = ceil(info.frameCount.toDouble() / targetPeakCount.toDouble())
-                    .toLong()
-                    .coerceAtLeast(1L)
-                val bytesPerFrame = info.blockAlign
-                val buffer = ByteArray(WavChunkReadFrames * bytesPerFrame)
-
-                wav.seek(info.dataOffset)
-                var framesSeen = 0L
-                var bytesRemaining = info.dataSize
-                while (bytesRemaining > 0L && framesSeen < info.frameCount) {
-                    val bytesToRead = minOf(buffer.size.toLong(), bytesRemaining).toInt()
-                    val bytesRead = wav.read(buffer, 0, bytesToRead)
-                    if (bytesRead <= 0) break
-
-                    val framesRead = bytesRead / bytesPerFrame
-                    for (frame in 0 until framesRead) {
-                        val peakIndex = (framesSeen / framesPerPeak)
-                            .coerceIn(0L, (targetPeakCount - 1).toLong())
-                            .toInt()
-                        val frameOffset = frame * bytesPerFrame
-                        buckets[peakIndex].addFrame(
-                            buffer.readFrameSamples(
-                                frameOffset = frameOffset,
-                                channelCount = info.channelCount,
-                                bitsPerSample = info.bitsPerSample,
-                                audioFormat = info.audioFormat,
-                            )
-                        )
-                        framesSeen++
-                    }
-                    bytesRemaining -= bytesRead.toLong()
+                return if (info.channelCount == 1) {
+                    wav.readMonoPeaks(info)
+                } else {
+                    wav.readStereoPeaks(info)
                 }
-
-                val peaks = FloatArray(targetPeakCount) { index ->
-                    buckets[index].visualAmplitude()
-                }
-                val maxPeak = peaks.maxOrNull() ?: 0f
-                if (maxPeak > 0f) {
-                    for (index in peaks.indices) {
-                        peaks[index] = (peaks[index] / maxPeak).coerceIn(0f, 1f)
-                    }
-                }
-                WaveformPeaks(
-                    amplitudes = peaks.toList(),
-                    sourceDurationMs = info.sourceDurationMs,
-                )
             }
         }.getOrNull()
     }
+
+    private fun RandomAccessFile.readMonoPeaks(info: WavInfo): WaveformPeaks? {
+        val buckets = Array(targetPeakCount) { WaveformBucketAccumulator() }
+        val framesPerPeak = framesPerPeakBucket(info.frameCount)
+        val bytesPerFrame = info.blockAlign
+        val buffer = ByteArray(WavChunkReadFrames * bytesPerFrame)
+
+        seek(info.dataOffset)
+        var framesSeen = 0L
+        var bytesRemaining = info.dataSize
+        while (bytesRemaining > 0L && framesSeen < info.frameCount) {
+            val bytesToRead = minOf(buffer.size.toLong(), bytesRemaining).toInt()
+            val bytesRead = read(buffer, 0, bytesToRead)
+            if (bytesRead <= 0) break
+
+            val framesRead = bytesRead / bytesPerFrame
+            for (frame in 0 until framesRead) {
+                val peakIndex = peakBucketIndex(framesSeen, framesPerPeak)
+                val frameOffset = frame * bytesPerFrame
+                val sample =
+                    buffer.readFrameSamples(
+                        frameOffset = frameOffset,
+                        channelCount = 1,
+                        bitsPerSample = info.bitsPerSample,
+                        audioFormat = info.audioFormat,
+                    )[0]
+                buckets[peakIndex].addSample(sample)
+                framesSeen++
+            }
+            bytesRemaining -= bytesRead.toLong()
+        }
+
+        val peaks = normalizePeaks(buckets.map { it.visualAmplitude() })
+        return WaveformPeaks(
+            amplitudes = peaks,
+            sourceDurationMs = info.sourceDurationMs,
+        )
+    }
+
+    private fun RandomAccessFile.readStereoPeaks(info: WavInfo): WaveformPeaks? {
+        val leftBuckets = Array(targetPeakCount) { WaveformBucketAccumulator() }
+        val rightBuckets = Array(targetPeakCount) { WaveformBucketAccumulator() }
+        val framesPerPeak = framesPerPeakBucket(info.frameCount)
+        val bytesPerFrame = info.blockAlign
+        val buffer = ByteArray(WavChunkReadFrames * bytesPerFrame)
+
+        seek(info.dataOffset)
+        var framesSeen = 0L
+        var bytesRemaining = info.dataSize
+        while (bytesRemaining > 0L && framesSeen < info.frameCount) {
+            val bytesToRead = minOf(buffer.size.toLong(), bytesRemaining).toInt()
+            val bytesRead = read(buffer, 0, bytesToRead)
+            if (bytesRead <= 0) break
+
+            val framesRead = bytesRead / bytesPerFrame
+            for (frame in 0 until framesRead) {
+                val peakIndex = peakBucketIndex(framesSeen, framesPerPeak)
+                val frameOffset = frame * bytesPerFrame
+                val samples =
+                    buffer.readFrameSamples(
+                        frameOffset = frameOffset,
+                        channelCount = 2,
+                        bitsPerSample = info.bitsPerSample,
+                        audioFormat = info.audioFormat,
+                    )
+                leftBuckets[peakIndex].addSample(samples[0])
+                rightBuckets[peakIndex].addSample(samples[1])
+                framesSeen++
+            }
+            bytesRemaining -= bytesRead.toLong()
+        }
+
+        val leftPeaks = leftBuckets.map { it.visualAmplitude() }
+        val rightPeaks = rightBuckets.map { it.visualAmplitude() }
+        val normalized = normalizeStereoPeaks(leftPeaks, rightPeaks)
+        return WaveformPeaks(
+            amplitudes = emptyList(),
+            leftAmplitudes = normalized.first,
+            rightAmplitudes = normalized.second,
+            sourceDurationMs = info.sourceDurationMs,
+        )
+    }
+
+    private fun framesPerPeakBucket(frameCount: Long): Long =
+        ceil(frameCount.toDouble() / targetPeakCount.toDouble())
+            .toLong()
+            .coerceAtLeast(1L)
+
+    private fun peakBucketIndex(framesSeen: Long, framesPerPeak: Long): Int =
+        (framesSeen / framesPerPeak)
+            .coerceIn(0L, (targetPeakCount - 1).toLong())
+            .toInt()
+
+    private fun normalizePeaks(raw: List<Float>): List<Float> {
+        val peaks = raw.toMutableList()
+        val maxPeak = peaks.maxOrNull() ?: 0f
+        if (maxPeak > 0f) {
+            for (index in peaks.indices) {
+                peaks[index] = (peaks[index] / maxPeak).coerceIn(0f, 1f)
+            }
+        }
+        return peaks
+    }
+
+    /** Each channel is normalized to its own peak so balanced stereo displays with equal scale. */
+    private fun normalizeStereoPeaks(
+        left: List<Float>,
+        right: List<Float>,
+    ): Pair<List<Float>, List<Float>> =
+        normalizePeaks(left) to normalizePeaks(right)
 }
 
 private class WaveformBucketAccumulator {
@@ -99,13 +167,11 @@ private class WaveformBucketAccumulator {
     private var sumSquares = 0.0
     private var sampleCount = 0
 
-    fun addFrame(samples: FloatArray) {
-        for (sample in samples) {
-            val absSample = abs(sample)
-            peak = max(peak, absSample)
-            sumSquares += (sample * sample).toDouble()
-            sampleCount += 1
-        }
+    fun addSample(sample: Float) {
+        val absSample = abs(sample)
+        peak = max(peak, absSample)
+        sumSquares += (sample * sample).toDouble()
+        sampleCount += 1
     }
 
     fun visualAmplitude(): Float {

@@ -659,7 +659,6 @@ fun ProjectTrackList(
                         modifier =
                             Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = Dimens.TileInnerPadding)
                                 .then(
                                     if (page == pagerState.currentPage) {
                                         Modifier.onGloballyPositioned { coords ->

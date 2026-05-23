@@ -188,3 +188,18 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         )
     }
 }
+
+/** Per-track PCM channel count; backfill from legacy [channelMode] when possible. */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN channelCount INTEGER NOT NULL DEFAULT 1",
+        )
+        db.execSQL(
+            """
+            UPDATE tracks
+            SET channelCount = CASE WHEN channelMode = 'STEREO' THEN 2 ELSE 1 END
+            """.trimIndent(),
+        )
+    }
+}

@@ -2,7 +2,9 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -36,9 +40,15 @@ private fun densifyPeaks(peaks: List<Float>): List<Float> {
 
 data class WaveformPeaks(
     val amplitudes: List<Float>,
-    /** PCM span in the WAV used for [amplitudes]; 0 when unknown (placeholder). */
+    val leftAmplitudes: List<Float>? = null,
+    val rightAmplitudes: List<Float>? = null,
+    /** PCM span in the WAV used for peaks; 0 when unknown (placeholder). */
     val sourceDurationMs: Long = 0L,
 ) {
+    val isStereo: Boolean =
+        leftAmplitudes != null && rightAmplitudes != null &&
+            leftAmplitudes.isNotEmpty() && rightAmplitudes.isNotEmpty()
+
     companion object {
         val Placeholder = WaveformPeaks(
             densifyPeaks(
@@ -65,13 +75,42 @@ fun TrackWaveform(
     peaks: WaveformPeaks = WaveformPeaks.Placeholder,
     horizontalInsetFraction: Float = 0.04f,
 ) {
-    WaveformCanvas(
-        modifier = modifier,
-        peakCount = peaks.amplitudes.size,
-        peakAt = { index -> peaks.amplitudes[index] },
-        barAlphaAt = { 1f },
-        horizontalInsetFraction = horizontalInsetFraction,
-    )
+    if (peaks.isStereo) {
+        val left = peaks.leftAmplitudes.orEmpty()
+        val right = peaks.rightAmplitudes.orEmpty()
+        Column(modifier = modifier.fillMaxSize()) {
+            WaveformCanvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                peakCount = left.size,
+                peakAt = { index -> left[index] },
+                barAlphaAt = { 1f },
+                horizontalInsetFraction = horizontalInsetFraction,
+                minCanvasHeight = 0.dp,
+            )
+            WaveformCanvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                peakCount = right.size,
+                peakAt = { index -> right[index] },
+                barAlphaAt = { 1f },
+                horizontalInsetFraction = horizontalInsetFraction,
+                minCanvasHeight = 0.dp,
+            )
+        }
+    } else {
+        WaveformCanvas(
+            modifier = modifier,
+            peakCount = peaks.amplitudes.size,
+            peakAt = { index -> peaks.amplitudes[index] },
+            barAlphaAt = { 1f },
+            horizontalInsetFraction = horizontalInsetFraction,
+        )
+    }
 }
 
 @Composable
@@ -123,15 +162,24 @@ private fun WaveformCanvas(
     peakAt: (Int) -> Float,
     barAlphaAt: (Int) -> Float,
     horizontalInsetFraction: Float = 0.04f,
+    minCanvasHeight: Dp = Dimens.PlaceholderHeight,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
-    Canvas(
-        modifier = modifier
+    val sizedModifier =
+        modifier
             .fillMaxWidth()
             .fillMaxHeight()
-            .heightIn(min = Dimens.PlaceholderHeight)
+            .then(
+                if (minCanvasHeight > 0.dp) {
+                    Modifier.heightIn(min = minCanvasHeight)
+                } else {
+                    Modifier
+                },
+            )
+    Canvas(
+        modifier = sizedModifier
             .clip(shape)
-            .background(AppColors.Bg)
+            .background(AppColors.Bg),
     ) {
         redrawToken
         val centerY = size.height / 2f

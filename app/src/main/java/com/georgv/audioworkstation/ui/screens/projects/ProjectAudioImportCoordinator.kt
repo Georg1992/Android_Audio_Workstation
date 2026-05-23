@@ -68,6 +68,7 @@ class ProjectAudioImportCoordinator @Inject constructor(
                         wavFilePath = destinationPath,
                         duration = result.durationMs,
                         channelMode = result.channelMode,
+                        channelCount = result.channelCount,
                         isImported = true,
                     )
                 ProjectAudioImportOutcome.ReadyToPersist(importedTrack)

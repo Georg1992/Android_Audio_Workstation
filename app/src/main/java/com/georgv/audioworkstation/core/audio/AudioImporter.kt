@@ -46,8 +46,16 @@ sealed class AudioImportResult {
      */
     data class Success(
         val durationMs: Long,
-        val channelMode: ChannelMode
-    ) : AudioImportResult()
+        val channelMode: ChannelMode,
+        val channelCount: Int,
+    ) : AudioImportResult() {
+        init {
+            require(channelCount in 1..2) { "Imported channel count must be mono or stereo." }
+            require(channelMode.channelCount() == channelCount) {
+                "channelMode must match channelCount."
+            }
+        }
+    }
 
     /**
      * Typed import errors. They carry only structured data; the UI layer maps them to a localized

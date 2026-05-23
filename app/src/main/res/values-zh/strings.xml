@@ -76,6 +76,8 @@
     <string name="import_failure_invalid_wav">文件不是有效的 WAV。</string>
     <string name="import_failure_unsupported_encoding">目前仅支持 PCM WAV。</string>
     <string name="import_failure_unsupported_channels">仅支持单声道或立体声。</string>
+    <string name="track_channel_mono">MONO</string>
+    <string name="track_channel_stereo">STEREO</string>
     <string name="import_failure_sample_rate_mismatch">采样率 %1$d Hz 与项目 %2$d Hz 不匹配。</string>
     <string name="import_failure_bit_depth_mismatch">位深 %1$d 位与项目 %2$d 位不匹配。</string>
     <string name="import_failure_write_failed">导入音频失败：%1$s</string>
