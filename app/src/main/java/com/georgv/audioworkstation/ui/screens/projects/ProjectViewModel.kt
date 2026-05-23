@@ -907,7 +907,12 @@ class ProjectViewModel @Inject constructor(
         }
 
         val selectedPlayableTracks = selectedPlayableTracks()
-        if (selectedPlayableTracks.isEmpty()) return
+        if (selectedPlayableTracks.isEmpty()) {
+            if (selectedTrackIds.value.isNotEmpty()) {
+                emitMessage(R.string.error_no_audio_for_selected_tracks)
+            }
+            return
+        }
         val currentProjectId = projectId.value ?: return
         val currentProject = loadCurrentProject(currentProjectId) ?: return
         val tracks =

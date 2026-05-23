@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -384,7 +386,9 @@ class PlaybackSessionControllerTest {
                 selectedTrackIds = setOf("a", "b"),
                 playableTracks = listOf(track("a", loop = false), trackB),
             )
+            runCurrent()
             sut.advancePlaybackSessionEpochForTests()
+            advanceTimeBy(HOT_JOIN_POLL_MS)
             advanceUntilIdle()
 
             assertNull(sut.sessionLaneTrackIdsForTests()[1])
@@ -689,6 +693,7 @@ class PlaybackSessionControllerTest {
 
     private companion object {
         const val PROJECT_ID = "playback-session-project"
+        private const val HOT_JOIN_POLL_MS = 5L
     }
 }
 

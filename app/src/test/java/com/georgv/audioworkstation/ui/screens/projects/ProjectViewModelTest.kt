@@ -24,7 +24,6 @@ import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
 import com.georgv.audioworkstation.ui.components.tempWav
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,8 +36,6 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -271,6 +268,7 @@ class ProjectViewModelTest {
             advanceUntilIdle()
 
             invokePlayPressed(vm)
+            advanceUntilIdle()
 
             assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
             assertEquals(0, audioController.startPlaybackCalls)
@@ -1017,6 +1015,7 @@ class ProjectViewModelTest {
                     tracks =
                         listOf(
                             track(id = "backing", position = 0, wavFilePath = "backing.wav", duration = 30_000L),
+                            track(id = "extra", position = 1, wavFilePath = "extra.wav", duration = 30_000L),
                         ),
                 )
             val audioController = FakeAudioController()
@@ -1026,6 +1025,7 @@ class ProjectViewModelTest {
             vm.bind(PROJECT_ID)
             advanceUntilIdle()
             vm.toggleSelect("backing")
+            vm.toggleSelect("extra")
             vm.onRecordPressed(PROJECT_ID)
             advanceUntilIdle()
 
@@ -1034,6 +1034,7 @@ class ProjectViewModelTest {
             assertEquals(0, audioController.stopPlaybackCalls)
 
             vm.toggleSelect("backing")
+            runCurrent()
             advanceUntilIdle()
 
             assertNotNull(vm.uiState.value.recordingTrackId)
@@ -1041,6 +1042,7 @@ class ProjectViewModelTest {
             assertEquals(0, audioController.stopPlaybackCalls)
             val audibility = audioController.lastArmedLaneAudibility
             requireNotNull(audibility)
+            require(audibility.isNotEmpty())
             org.junit.Assert.assertFalse(audibility[0])
             collectJob.cancel()
         }
@@ -1843,8 +1845,8 @@ class ProjectViewModelTest {
         tempWav(shortArrayOf(0, 1_000, 12_000, 26_000))
             .copyTo(File(recordingTrack.wavFilePath), overwrite = true)
         vm.onStopPressed()
-        runCurrent()
         waitUntil { vm.uiState.value.waveformStatesByTrackId[recordingTrack.id] is WaveformState.Ready }
+        advanceUntilIdle()
 
         assertFalse(vm.uiState.value.tracks.single().isRecording)
         assertNotNull(vm.uiState.value.waveformStatesByTrackId[recordingTrack.id])
@@ -1886,13 +1888,12 @@ class ProjectViewModelTest {
         collectJob.cancel()
     }
 
-    private suspend fun waitUntil(predicate: () -> Boolean) {
-        withTimeout(2_000L) {
-            while (!predicate()) {
-                yield()
-                delay(10L)
-            }
+    private suspend fun TestScope.waitUntil(predicate: () -> Boolean) {
+        repeat(500) {
+            if (predicate()) return
+            runCurrent()
         }
+        error("waitUntil timed out after 500 iterations")
     }
 
     private fun tempDir(): File =
@@ -1936,8 +1937,11 @@ class ProjectViewModelTest {
 
     private suspend fun TestScope.startPlayback(vm: ProjectViewModel) {
         vm.performPlayPressed()
-        waitUntil { vm.sessionTrackIdsForTests().isNotEmpty() }
-        advanceUntilIdle()
+        // runCurrent only: advanceUntilIdle never completes while native poll delay(16) is active.
+        runCurrent()
+        check(vm.sessionTrackIdsForTests().isNotEmpty()) {
+            "expected playback session after performPlayPressed"
+        }
     }
 
     @Test
@@ -2376,9 +2380,15 @@ class ProjectViewModelTest {
 
             audioController.transportPositionMsValue = 1_000L
             advanceTimeBy(300)
-            advanceUntilIdle()
 
             assertEquals(1_000L, vm.uiState.value.playheadPositionMs)
+
+            // Stop poll before advanceUntilIdle: delay(16) loop while Playing never goes idle.
+            vm.setPlayheadNativePollEnabledForTests(false)
+            vm.performStopPressed()
+            runCurrent()
+            vm.performStopPressed()
+            runCurrent()
             collectJob.cancel()
         }
 
