@@ -47,12 +47,9 @@ class PlayheadTransportController(
     fun isPlaybackSeekDragActive(): Boolean = playbackSeekDragActive
 
     fun setTimelineBaseDurationMs(durationMs: Long) {
-        timelineBaseDurationMs = durationMs.coerceIn(0L, TimelineMaxDurationMs)
+        timelineBaseDurationMs = durationMs.coerceAtLeast(0L)
         when (_phase.value) {
-            TransportPlaybackPhase.Recording ->
-                playheadPositionMs.update { stored ->
-                    stored.coerceAtMost(TimelineMaxDurationMs)
-                }
+            TransportPlaybackPhase.Recording -> Unit
             TransportPlaybackPhase.Playing -> Unit
             else ->
                 playheadPositionMs.update { stored ->
@@ -70,7 +67,7 @@ class PlayheadTransportController(
 
     fun onRecordingStarted(fromPositionMs: Long) {
         stopNativePoll()
-        val startMs = fromPositionMs.coerceIn(0L, TimelineMaxDurationMs)
+        val startMs = fromPositionMs.coerceAtLeast(0L)
         playheadPositionMs.value = startMs
         _phase.value = TransportPlaybackPhase.Recording
         startNativePoll()
@@ -138,7 +135,7 @@ class PlayheadTransportController(
     fun setPlayheadDuringSeekDrag(positionMs: Long, timelineBaseDurationMs: Long) {
         val next =
             when (_phase.value) {
-                TransportPlaybackPhase.Recording -> positionMs.coerceAtMost(TimelineMaxDurationMs)
+                TransportPlaybackPhase.Recording -> positionMs.coerceAtLeast(0L)
                 TransportPlaybackPhase.Playing ->
                     timelinePlayheadClampedPositionMs(positionMs, timelineBaseDurationMs)
                 else -> timelinePlayheadClampedPositionMs(positionMs, timelineBaseDurationMs)
@@ -171,7 +168,7 @@ class PlayheadTransportController(
         val raw = readNativeTransportMs()
         val next =
             when (_phase.value) {
-                TransportPlaybackPhase.Recording -> raw.coerceAtMost(TimelineMaxDurationMs)
+                TransportPlaybackPhase.Recording -> raw.coerceAtLeast(0L)
                 TransportPlaybackPhase.Playing -> raw.coerceIn(0L, TimelineMaxDurationMs)
                 TransportPlaybackPhase.Paused ->
                     timelinePlayheadClampedPositionMs(raw, timelineBaseDurationMs)

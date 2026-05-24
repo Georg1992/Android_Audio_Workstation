@@ -26,6 +26,10 @@ class RecordingSessionControllerTest {
 
     private fun project() = ProjectEntity(id = PID, name = "P")
 
+    private fun permissiveStoragePrecheck(): suspend (ProjectEntity) -> Boolean = { _ -> true }
+
+    private fun blockedStoragePrecheck(): suspend (ProjectEntity) -> Boolean = { _ -> false }
+
     @Test
     fun `executeRecordPressed sets recording id and clears startup after successful persist`() =
         runTest(mainDispatcherRule.dispatcher) {
@@ -44,6 +48,8 @@ class RecordingSessionControllerTest {
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { true },
             )
 
@@ -71,6 +77,8 @@ class RecordingSessionControllerTest {
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { notified = true },
                 notifyPersistFailed = { throw AssertionError("unexpected persist notify") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { true },
             )
 
@@ -107,6 +115,8 @@ class RecordingSessionControllerTest {
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { true },
             )
 
@@ -139,6 +149,8 @@ class RecordingSessionControllerTest {
                 },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { true },
             )
 
@@ -164,6 +176,8 @@ class RecordingSessionControllerTest {
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("engine OK") },
                 notifyPersistFailed = { throw AssertionError("persist OK") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { true },
             )
             advanceUntilIdle()
@@ -189,6 +203,8 @@ class RecordingSessionControllerTest {
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("unexpected engine notify") },
                 notifyPersistFailed = { throw AssertionError("unexpected persist notify") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { false },
             )
             advanceUntilIdle()
@@ -216,6 +232,8 @@ class RecordingSessionControllerTest {
                 persistRecordingRow = { repo.upsertTracks(listOf(it)) },
                 notifyEngineStartFailed = { throw AssertionError("unexpected engine notify") },
                 notifyPersistFailed = { notified = true },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
                 onPendingTrackAllocated = { true },
             )
 
@@ -224,6 +242,36 @@ class RecordingSessionControllerTest {
             assertNull(sut.optimisticRecordingTrack.value)
             assertFalse(sut.recordingStartup.value)
             assertEquals(1, audio.stopRecordingCalls)
+            advanceUntilIdle()
+        }
+
+    @Test
+    fun `executeRecordPressed blocks before allocation when storage precheck fails`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+            val audio = FakeAudioController()
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val coord = ProjectRecordingCoordinator(repo, audio)
+            val sut = RecordingSessionController(this, audio, coord)
+            var notified = false
+
+            sut.executeRecordPressed(
+                projectId = PID,
+                projectName = "New",
+                timelineStartOffsetMs = 0L,
+                ensureProject = { _, _ -> project() },
+                visibleTrackCount = { 0 },
+                persistRecordingRow = { repo.upsertTracks(listOf(it)) },
+                notifyEngineStartFailed = { throw AssertionError("unexpected engine notify") },
+                notifyPersistFailed = { throw AssertionError("unexpected persist notify") },
+                storagePrecheck = blockedStoragePrecheck(),
+                notifyStorageStartBlocked = { notified = true },
+                onPendingTrackAllocated = { true },
+            )
+
+            assertTrue(notified)
+            assertNull(sut.recordingTrackId.value)
+            assertEquals(0, audio.stopRecordingCalls)
             advanceUntilIdle()
         }
 }

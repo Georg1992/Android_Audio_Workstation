@@ -29,10 +29,11 @@ class TrackTimelineLaneTest {
     }
 
     @Test
-    fun `base duration is capped at project maximum`() {
-        val clips = listOf(clip(durationMs = TimelineMaxDurationMs))
+    fun `base duration is not capped at viewport maximum`() {
+        val beyondViewport = TimelineMaxDurationMs + 60_000L
+        val clips = listOf(clip(durationMs = beyondViewport))
 
-        assertEquals(TimelineMaxDurationMs, timelineBaseDurationMs(clips))
+        assertEquals(beyondViewport, timelineBaseDurationMs(clips))
     }
 
     @Test

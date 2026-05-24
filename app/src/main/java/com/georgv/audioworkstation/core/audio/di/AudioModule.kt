@@ -7,6 +7,8 @@ import com.georgv.audioworkstation.core.audio.DefaultAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.DefaultProjectFileStore
 import com.georgv.audioworkstation.core.audio.NativeAudioController
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
+import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
+import com.georgv.audioworkstation.core.audio.StatFsRecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import dagger.Binds
@@ -43,6 +45,12 @@ abstract class AudioModule {
     abstract fun bindProjectFileStore(
         store: DefaultProjectFileStore
     ): ProjectFileStore
+
+    @Binds
+    @Singleton
+    abstract fun bindRecordingStorageFsQuery(
+        query: StatFsRecordingStorageFsQuery
+    ): RecordingStorageFsQuery
 
     companion object {
         @Provides

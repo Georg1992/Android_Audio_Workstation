@@ -47,6 +47,8 @@ class RecordingSessionController(
         persistRecordingRow: suspend (TrackEntity) -> Unit,
         notifyEngineStartFailed: () -> Unit,
         notifyPersistFailed: () -> Unit,
+        storagePrecheck: suspend (ProjectEntity) -> Boolean,
+        notifyStorageStartBlocked: () -> Unit,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean = { true },
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
@@ -60,6 +62,8 @@ class RecordingSessionController(
                 persistRecordingRow = persistRecordingRow,
                 notifyEngineStartFailed = notifyEngineStartFailed,
                 notifyPersistFailed = notifyPersistFailed,
+                storagePrecheck = storagePrecheck,
+                notifyStorageStartBlocked = notifyStorageStartBlocked,
                 onPendingTrackAllocated = onPendingTrackAllocated,
                 onRecordingTransportReady = onRecordingTransportReady,
             )
@@ -80,12 +84,20 @@ class RecordingSessionController(
         persistRecordingRow: suspend (TrackEntity) -> Unit,
         notifyEngineStartFailed: () -> Unit,
         notifyPersistFailed: () -> Unit,
+        storagePrecheck: suspend (ProjectEntity) -> Boolean,
+        notifyStorageStartBlocked: () -> Unit,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean,
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
         try {
             val currentProject = ensureProject(projectId, projectName) ?: run {
                 _recordingStartup.value = false
+                return
+            }
+
+            if (!storagePrecheck(currentProject)) {
+                _recordingStartup.value = false
+                notifyStorageStartBlocked()
                 return
             }
 

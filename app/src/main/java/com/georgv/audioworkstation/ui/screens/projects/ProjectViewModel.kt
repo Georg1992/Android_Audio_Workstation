@@ -6,8 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
+import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.validation.NameValidationResult
@@ -100,6 +102,8 @@ class ProjectViewModel @Inject constructor(
     private val audioImportCoordinator: ProjectAudioImportCoordinator,
     private val recordingCoordinator: ProjectRecordingCoordinator,
     private val waveformPeakExtractor: WavWaveformPeakExtractor,
+    private val audioFilePathProvider: AudioFilePathProvider,
+    private val recordingStorageGuard: RecordingStorageGuard,
 ) : ViewModel() {
 
     private val projectId = MutableStateFlow<String?>(null)
@@ -139,6 +143,12 @@ class ProjectViewModel @Inject constructor(
             audioController = audioController,
             recordingCoordinator = recordingCoordinator,
         )
+    private val recordingStorageMonitor =
+        RecordingStorageMonitor(
+            scope = viewModelScope,
+            guard = recordingStorageGuard,
+        )
+    private var recordingStorageMonitorEnabledForTests = true
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
 
@@ -229,6 +239,25 @@ class ProjectViewModel @Inject constructor(
             ensureProject = { pid, name -> ensureProject(pid, name) },
             persistRecordingRow = { track -> repo.upsertTracks(listOf(track)) },
             emitMessage = { resId -> emitMessage(resId) },
+            storagePrecheck = { project ->
+                val directoryPath = audioFilePathProvider.projectRecordingDirectory(project.id)
+                directoryPath != null && recordingStorageGuard.canStartRecording(directoryPath)
+            },
+            onRecordingStorageMonitorStart = { activeProjectId ->
+                if (!recordingStorageMonitorEnabledForTests) return@ProjectTransportCommands
+                val directoryPath = audioFilePathProvider.projectRecordingDirectory(activeProjectId)
+                if (directoryPath != null) {
+                    recordingStorageMonitor.start(
+                        projectDirectoryPath = directoryPath,
+                        isRecordingActive = { recordingSession.hasActiveRecordingTake() },
+                    ) {
+                        performStopRecordingForStorageExhaustion()
+                    }
+                }
+            },
+            onRecordingStorageMonitorStop = {
+                recordingStorageMonitor.stop()
+            },
         )
 
     val userMessages = messages.receiveAsFlow()
@@ -435,6 +464,7 @@ class ProjectViewModel @Inject constructor(
             optimisticTrackGains.value = emptyMap()
             waveformPeaks.resetWhenProjectChanges()
             recordingSession.resetWhenBoundProjectChanges()
+            recordingStorageMonitor.stop()
             selectedTrackIds.value = emptySet()
         }
         this.projectId.value = projectId
@@ -469,6 +499,10 @@ class ProjectViewModel @Inject constructor(
 
     internal fun setPlayheadNativePollEnabledForTests(enabled: Boolean) {
         playheadTransport.nativePollEnabled = enabled
+    }
+
+    internal fun setRecordingStorageMonitorEnabledForTests(enabled: Boolean) {
+        recordingStorageMonitorEnabledForTests = enabled
     }
 
     internal fun advancePlayheadNativeTransportForTests(positionMs: Long) {
@@ -726,7 +760,16 @@ class ProjectViewModel @Inject constructor(
         transportCommands.performStopPressed()
     }
 
+    internal suspend fun performStopRecordingForStorageExhaustion() {
+        if (!recordingSession.hasActiveRecordingTake()) return
+        recordingStorageMonitor.stop()
+        transportController.stopAll()
+        playheadTransport.stopAndResetToZero()
+        emitMessage(R.string.error_recording_stopped_storage)
+    }
+
     override fun onCleared() {
+        recordingStorageMonitor.stop()
         transportController.stopAll()
         playheadTransport.stopAndResetToZero()
         // Release the persistent Oboe stream and streaming I/O thread once the

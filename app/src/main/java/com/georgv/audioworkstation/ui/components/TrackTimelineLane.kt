@@ -34,6 +34,7 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.max
 import kotlin.math.min
 
+/** Viewport/ruler sanity cap for playback scrub and layout — not a recording duration limit. */
 const val TimelineMaxDurationMs = 10 * 60 * 1000L
 const val TimelineMinimumBaseDurationMs = 1L
 const val TimelineClipMinimumWidthDp = 3f
@@ -77,9 +78,9 @@ data class TimelineLaneLayout(
 )
 
 fun timelineClipEndMs(startOffsetMs: Long, durationMs: Long): Long {
-    val start = startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
-    val duration = durationMs.coerceIn(0L, TimelineMaxDurationMs)
-    return (start + duration).coerceAtMost(TimelineMaxDurationMs)
+    val start = startOffsetMs.coerceAtLeast(0L)
+    val duration = durationMs.coerceAtLeast(0L)
+    return start + duration
 }
 
 fun projectTimelineClips(
@@ -89,8 +90,8 @@ fun projectTimelineClips(
     val playableTracks = tracks.mapNotNull { track ->
         val durationMs = track.duration?.takeIf { it > 0L } ?: return@mapNotNull null
         if (track.wavFilePath.isBlank() || track.isRecording) return@mapNotNull null
-        val startOffsetMs = track.timelineStartOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
-        track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = durationMs.coerceAtMost(TimelineMaxDurationMs))
+        val startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
+        track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = durationMs.coerceAtLeast(0L))
     }
     if (playableTracks.isEmpty()) return emptyList()
     val baseEndMs =
@@ -164,7 +165,7 @@ fun timelineClipLayout(
     timelineBaseDurationMs: Long,
 ): TimelineClipLayout? {
     if (clip.durationMs <= 0L || timelineBaseDurationMs <= 0L) return null
-    val start = clip.startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    val start = clip.startOffsetMs.coerceAtLeast(0L)
     if (start >= timelineBaseDurationMs) return null
     val end = min(start + clip.durationMs, timelineBaseDurationMs)
     val visibleDuration = max(0L, end - start)
@@ -197,7 +198,7 @@ fun timelineClipEndTimeMs(
     clip: TimelineClip,
     timelineBaseDurationMs: Long,
 ): Long {
-    val startMs = clip.startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    val startMs = clip.startOffsetMs.coerceAtLeast(0L)
     return min(startMs + clip.durationMs, timelineBaseDurationMs)
 }
 
@@ -206,7 +207,7 @@ fun timelineRulerBoundaryLabels(
     layout: TimelineClipLayout,
     timelineBaseDurationMs: Long,
 ): List<TimelineRulerBoundaryLabel> {
-    val startMs = clip.startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    val startMs = clip.startOffsetMs.coerceAtLeast(0L)
     val clipEndMs = timelineClipEndTimeMs(clip, timelineBaseDurationMs)
     val clipEndFraction = timelineClipEndFraction(layout)
 

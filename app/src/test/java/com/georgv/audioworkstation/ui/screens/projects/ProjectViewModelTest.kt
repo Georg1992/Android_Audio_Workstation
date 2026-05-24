@@ -13,6 +13,8 @@ import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
+import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
+import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -116,6 +118,34 @@ class ProjectViewModelTest {
         assertFalse(vm.uiState.value.isRecordingStartup)
         assertEquals(1, audioController.stopRecordingCalls)
         assertEquals(R.string.error_create_recording_track_failed, vm.userMessages.first().resId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onRecordPressed shows storage message when precheck fails`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val audioController = FakeAudioController()
+        val storageQuery =
+            object : RecordingStorageFsQuery {
+                override fun availableBytes(path: String): Long? = 0L
+            }
+        val vm =
+            createViewModel(
+                dao,
+                audioController,
+                recordingStorageGuard = RecordingStorageGuard(storageQuery),
+            )
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertFalse(vm.uiState.value.isRecordingStartup)
+        assertEquals(0, audioController.stopRecordingCalls)
+        assertEquals(R.string.error_recording_storage_insufficient_start, vm.userMessages.first().resId)
         collectJob.cancel()
     }
 
@@ -1918,6 +1948,7 @@ class ProjectViewModelTest {
         audioController: AudioController = FakeAudioController(),
         audioImporter: AudioImporter = FakeAudioImporter(),
         audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider(),
+        recordingStorageGuard: RecordingStorageGuard = permissiveRecordingStorageGuard(),
         waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
     ): ProjectViewModel {
         val repo = ProjectRepository(dao, NoopProjectFileStore)
@@ -1930,8 +1961,20 @@ class ProjectViewModelTest {
             audioImportCoordinator,
             recordingCoordinator,
             waveformPeakExtractor,
-        ).also { it.setPlayheadNativePollEnabledForTests(false) }
+            audioFilePathProvider,
+            recordingStorageGuard,
+        ).also {
+            it.setPlayheadNativePollEnabledForTests(false)
+            it.setRecordingStorageMonitorEnabledForTests(false)
+        }
     }
+
+    private fun permissiveRecordingStorageGuard(): RecordingStorageGuard =
+        RecordingStorageGuard(
+            object : RecordingStorageFsQuery {
+                override fun availableBytes(path: String): Long? = Long.MAX_VALUE
+            },
+        )
 
     private suspend fun TestScope.stopPlaybackFully(vm: ProjectViewModel) {
         vm.performStopPressed()
@@ -2932,6 +2975,8 @@ internal object NoopProjectFileStore : ProjectFileStore {
 }
 
 private object NullTrackOutputPathProvider : AudioFilePathProvider {
+    override fun projectRecordingDirectory(projectId: String): String? = null
+
     override fun trackOutputPath(projectId: String, trackId: String): String? = null
 }
 
@@ -2970,6 +3015,8 @@ private class FakeAudioImporter(
 private class FakeAudioFilePathProvider(
     private val basePath: String = "imports"
 ) : AudioFilePathProvider {
+    override fun projectRecordingDirectory(projectId: String): String = "$basePath/$projectId"
+
     override fun trackOutputPath(projectId: String, trackId: String): String =
         "$basePath/$projectId/$trackId.wav"
 }

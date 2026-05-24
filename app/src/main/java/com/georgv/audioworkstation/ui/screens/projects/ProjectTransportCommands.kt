@@ -35,6 +35,9 @@ internal class ProjectTransportCommands(
     private val ensureProject: suspend (String, String) -> ProjectEntity?,
     private val persistRecordingRow: suspend (TrackEntity) -> Unit,
     private val emitMessage: (Int) -> Unit,
+    private val storagePrecheck: suspend (ProjectEntity) -> Boolean,
+    private val onRecordingStorageMonitorStart: (String) -> Unit,
+    private val onRecordingStorageMonitorStop: () -> Unit,
 ) {
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
         if (recordingSession.hasActiveRecordingTake()) {
@@ -76,20 +79,28 @@ internal class ProjectTransportCommands(
                     )
                 if (!overdubStarted) {
                     abortCombinedRecordTransport()
+                    onRecordingStorageMonitorStop()
                     emitMessage(R.string.error_playback_failed_to_start)
                 }
                 overdubStarted
             },
             notifyEngineStartFailed = {
                 abortCombinedRecordTransport()
+                onRecordingStorageMonitorStop()
                 emitMessage(R.string.error_recording_failed_to_start)
             },
             notifyPersistFailed = {
                 abortCombinedRecordTransport()
+                onRecordingStorageMonitorStop()
                 emitMessage(R.string.error_create_recording_track_failed)
+            },
+            storagePrecheck = storagePrecheck,
+            notifyStorageStartBlocked = {
+                emitMessage(R.string.error_recording_storage_insufficient_start)
             },
             onRecordingTransportReady = { offsetMs ->
                 playheadTransport.onRecordingStarted(fromPositionMs = offsetMs)
+                onRecordingStorageMonitorStart(projectId)
             },
         )
     }
@@ -146,6 +157,7 @@ internal class ProjectTransportCommands(
             recordingSession.hasActiveRecordingTake() ||
             recordingSession.isStartupInFlight()
         ) {
+            onRecordingStorageMonitorStop()
             transportController.stopAll()
             playheadTransport.stopAndResetToZero()
             return

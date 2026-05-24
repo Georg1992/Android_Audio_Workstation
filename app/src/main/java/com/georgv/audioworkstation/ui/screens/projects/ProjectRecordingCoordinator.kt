@@ -5,7 +5,6 @@ import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -39,7 +38,7 @@ class ProjectRecordingCoordinator @Inject constructor(
             projectId = projectId,
             name = "Take ${visibleTrackCount + 1}",
         ).copy(
-            timelineStartOffsetMs = timelineStartOffsetMs.coerceIn(0L, TimelineMaxDurationMs),
+            timelineStartOffsetMs = timelineStartOffsetMs.coerceAtLeast(0L),
         )
 
     /**

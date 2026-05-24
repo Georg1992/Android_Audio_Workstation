@@ -92,6 +92,8 @@
     <string name="error_stop_recording_to_record">开始新录音前请先停止当前录音。</string>
     <string name="error_record_at_timeline_end">请将播放头移到时间轴末端之前再录音。</string>
     <string name="error_recording_failed_to_start">无法开始录音。</string>
+    <string name="error_recording_storage_insufficient_start">无法开始录音：存储空间不足。</string>
+    <string name="error_recording_stopped_storage">录音已停止：存储空间不足。</string>
     <string name="error_stop_playback_first">重新播放前请先停止播放。</string>
     <string name="error_single_track_playback_only">目前仅支持播放一个选中音轨。</string>
     <string name="error_no_audio_for_selected_tracks">所选音轨尚无音频。</string>

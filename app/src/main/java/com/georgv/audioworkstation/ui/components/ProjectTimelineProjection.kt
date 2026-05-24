@@ -63,8 +63,8 @@ fun timelineDurationMs(
     if (furthestClipEndMs <= 0L) return 0L
     return max(
         furthestClipEndMs,
-        playheadPositionMs.coerceIn(0L, TimelineMaxDurationMs),
-    ).coerceIn(TimelineMinimumBaseDurationMs, TimelineMaxDurationMs)
+        playheadPositionMs.coerceAtLeast(0L),
+    ).coerceAtLeast(TimelineMinimumBaseDurationMs)
 }
 
 /** Absolute session timeline end from persisted clips (no active recording row). */
@@ -74,14 +74,14 @@ fun sessionTimelineEndMsForTracks(tracks: List<TrackEntity>): Long {
             val durationMs = track.duration ?: 0L
             timelineClipEndMs(track.timelineStartOffsetMs.coerceAtLeast(0L), durationMs)
         } ?: 0L
-    return furthestClipEndMs.coerceIn(TimelineMinimumBaseDurationMs, TimelineMaxDurationMs)
+    return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
 }
 
 private fun activeRecordingTimelineClip(
     recording: ActiveRecordingTimelineClip,
     furthestEndMs: Long?,
 ): TimelineClip {
-    val startOffsetMs = recording.startOffsetMs.coerceIn(0L, TimelineMaxDurationMs)
+    val startOffsetMs = recording.startOffsetMs.coerceAtLeast(0L)
     val durationMs = layoutDurationMsForActiveRecording(recording.elapsedMs)
     val endMs = timelineClipEndMs(startOffsetMs, durationMs)
     val baseEnd = max(furthestEndMs ?: 0L, endMs)
@@ -99,6 +99,6 @@ private fun activeRecordingTimelineClip(
 
 /** Minimum visible clip width on the timeline while elapsed is still 0. */
 fun layoutDurationMsForActiveRecording(elapsedMs: Long): Long =
-    elapsedMs.coerceAtLeast(0L).coerceAtMost(TimelineMaxDurationMs).let { elapsed ->
+    elapsedMs.coerceAtLeast(0L).let { elapsed ->
         if (elapsed > 0L) elapsed else 1L
     }

@@ -88,6 +88,8 @@
     <string name="error_stop_recording_to_record">Stop recording before starting a new take.</string>
     <string name="error_record_at_timeline_end">Move the playhead before the end of the timeline to record.</string>
     <string name="error_recording_failed_to_start">Failed to start recording.</string>
+    <string name="error_recording_storage_insufficient_start">Recording cannot start: not enough storage space.</string>
+    <string name="error_recording_stopped_storage">Recording stopped: not enough storage space.</string>
     <string name="error_stop_playback_first">Stop playback before starting playback again.</string>
     <string name="error_single_track_playback_only">Playback currently supports one selected track at a time.</string>
     <string name="error_no_audio_for_selected_tracks">Selected tracks have no audio yet.</string>

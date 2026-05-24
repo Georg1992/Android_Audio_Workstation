@@ -16,6 +16,8 @@ import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingSpec
+import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
+import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -235,6 +237,12 @@ class ProjectViewModelRobolectricTest {
             ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider),
             ProjectRecordingCoordinator(repo, audio),
             WavWaveformPeakExtractor(),
+            audioFilePathProvider,
+            RecordingStorageGuard(
+                object : RecordingStorageFsQuery {
+                    override fun availableBytes(path: String): Long? = Long.MAX_VALUE
+                },
+            ),
         )
     }
 
@@ -287,6 +295,8 @@ private class ThrowingAudioImporterForRobolectric : AudioImporter {
 private class NullablePathAudioFileProvider(
     private val path: String?,
 ) : AudioFilePathProvider {
+    override fun projectRecordingDirectory(projectId: String): String? = path
+
     override fun trackOutputPath(projectId: String, trackId: String): String? = path
 }
 
