@@ -32,7 +32,7 @@ OboeOutput *EnsureOutput(dawengine::AudioEngine *engine) {
 std::string JStringToString(JNIEnv *env, jstring value) {
     if (!env || !value) return "";
     const char *chars = env->GetStringUTFChars(value, nullptr);
-    const std::string result = chars ? chars : "";
+    std::string result = chars ? chars : "";
     if (chars) {
         env->ReleaseStringUTFChars(value, chars);
     }

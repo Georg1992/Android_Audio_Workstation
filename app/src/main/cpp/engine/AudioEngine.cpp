@@ -1,5 +1,7 @@
 #include "AudioEngine.h"
 
+#include <cassert>
+#include <memory>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -82,6 +84,18 @@ int64_t laneSourceSeekFrame(int64_t transportStartFrame, int64_t clipStartFrame)
 
 namespace dawengine {
 
+namespace {
+
+void storeLaneRing(std::shared_ptr<RingBuffer> &slot, std::shared_ptr<RingBuffer> value) {
+    std::atomic_store_explicit(&slot, std::move(value), std::memory_order_release);
+}
+
+std::shared_ptr<RingBuffer> loadLaneRing(const std::shared_ptr<RingBuffer> &slot) {
+    return std::atomic_load_explicit(&slot, std::memory_order_acquire);
+}
+
+} // namespace
+
 namespace playback {
 constexpr int32_t kRingDurationSeconds = 1;
 // Wall-time preroll: ms × SR / 1000 (computePrerollFramesForSampleRate).
@@ -140,8 +154,22 @@ PlaybackLaneLifecycle AudioEngine::loadLaneLifecycle(const std::size_t laneIndex
     return m_playbackLanes[laneIndex].lifecycle.load(std::memory_order_acquire);
 }
 
+void AudioEngine::markPlaybackLaneExhaustedLocked(const std::size_t laneIndex) {
+    if (laneIndex >= kPlaybackLaneCount) {
+        return;
+    }
+    std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
+    const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIndex);
+    if (!laneLifecycleParticipatesInMix(state)) {
+        return;
+    }
+    PlaybackLaneSlot &lane = m_playbackLanes[laneIndex];
+    lane.sourceExhausted.store(true, std::memory_order_release);
+    lane.lifecycle.store(PlaybackLaneLifecycle::Exhausted, std::memory_order_release);
+}
+
 void AudioEngine::setLaneInactiveLocked(PlaybackLaneSlot &lane) {
-    lane.ring.reset();
+    storeLaneRing(lane.ring, {});
     lane.source.reset();
     lane.currentPath.clear();
     lane.sourceExhausted.store(false, std::memory_order_release);
@@ -212,7 +240,9 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
         } else {
             exhaustedAtStart = isSourceExhaustedAtStart(*lane.source, sourceSeekFrame);
         }
-        if (lane.ring) lane.ring->reset();
+        if (std::shared_ptr<RingBuffer> ring = loadLaneRing(lane.ring)) {
+            ring->reset();
+        }
     } else {
         auto source = std::make_shared<LocalWavSource>(wavPath);
         if (!source->open()) return false;
@@ -221,7 +251,7 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
 
         const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
                                        static_cast<std::size_t>(source->channelCount());
-        lane.ring = std::make_unique<RingBuffer>(ringFloats);
+        storeLaneRing(lane.ring, std::make_shared<RingBuffer>(ringFloats));
         lane.srcChannels.store(source->channelCount(), std::memory_order_release);
         lane.source = std::move(source);
         lane.currentPath = wavPath;
@@ -248,10 +278,12 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
         if (prerollFrames < 0) {
             return false;
         }
-        if (prerollFrames > 0 && lane.ring) {
-            lane.ring->write(
+        if (prerollFrames > 0) {
+            if (std::shared_ptr<RingBuffer> ring = loadLaneRing(lane.ring)) {
+                ring->write(
                 preroll.data(),
                 static_cast<std::size_t>(prerollFrames) * static_cast<std::size_t>(channels));
+            }
         }
     }
 
@@ -316,9 +348,13 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
     return true;
 }
 
-AudioEngine::~AudioEngine() {
-    releasePlaybackResources();
-    stopRecording();
+AudioEngine::~AudioEngine() noexcept {
+    try {
+        releasePlaybackResources();
+        stopRecording();
+    } catch (...) {
+        // join()/teardown must not escape the destructor.
+    }
 }
 
 void AudioEngine::configureProject(int32_t sampleRate, int32_t fileBitDepth) {
@@ -411,7 +447,8 @@ void AudioEngine::recordLoop() {
                                             std::memory_order_release);
         }
 
-        const size_t sampleCount = static_cast<size_t>(framesRead * channelCount);
+        const size_t sampleCount =
+            static_cast<size_t>(framesRead) * static_cast<size_t>(channelCount);
         float peak = 0.0f;
         for (size_t i = 0; i < sampleCount; ++i) {
             peak = std::max(peak, std::fabs(buffer[i]));
@@ -608,8 +645,8 @@ void AudioEngine::stopPlayback() {
 
     for (PlaybackLaneSlot &lane : m_playbackLanes) {
         lane.sourceExhausted.store(false, std::memory_order_release);
-        if (lane.ring) {
-            lane.ring->reset();
+        if (std::shared_ptr<RingBuffer> ring = loadLaneRing(lane.ring)) {
+            ring->reset();
         }
         if (lane.source) {
             lane.source->seekToFrame(0);
@@ -656,7 +693,7 @@ void AudioEngine::ioLoop() {
             m_masterPlaybackFrame.load(std::memory_order_acquire);
         for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
             std::shared_ptr<IAudioSource> source;
-            RingBuffer *ring = nullptr;
+            std::shared_ptr<RingBuffer> ring;
             int32_t channels = 0;
             bool laneExhausted = false;
             int64_t clipStartFrame = 0;
@@ -682,7 +719,7 @@ void AudioEngine::ioLoop() {
                     continue;
                 }
                 source = lane.source;
-                ring = lane.ring.get();
+                ring = loadLaneRing(lane.ring);
                 channels = lane.srcChannels.load(std::memory_order_acquire);
                 laneExhausted = lane.sourceExhausted.load(std::memory_order_acquire);
             }
@@ -711,15 +748,8 @@ void AudioEngine::ioLoop() {
                     scratch.data(),
                     static_cast<std::size_t>(framesRead) * static_cast<std::size_t>(channels));
                 progressed = true;
-            } else if (framesRead == 0) {
-                m_playbackLanes[laneIdx].sourceExhausted.store(true, std::memory_order_release);
-                m_playbackLanes[laneIdx].lifecycle.store(PlaybackLaneLifecycle::Exhausted,
-                                                          std::memory_order_release);
-                progressed = true;
             } else {
-                m_playbackLanes[laneIdx].sourceExhausted.store(true, std::memory_order_release);
-                m_playbackLanes[laneIdx].lifecycle.store(PlaybackLaneLifecycle::Exhausted,
-                                                          std::memory_order_release);
+                markPlaybackLaneExhaustedLocked(laneIdx);
                 progressed = true;
             }
         }
@@ -777,7 +807,7 @@ void AudioEngine::renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
             continue;
         }
 
-        RingBuffer *ring = m_playbackLanes[laneIdx].ring.get();
+        const std::shared_ptr<RingBuffer> ring = loadLaneRing(m_playbackLanes[laneIdx].ring);
         if (!ring) {
             allDrained = false;
             break;
@@ -837,7 +867,8 @@ void AudioEngine::render(float *outputInterleaved,
             continue;
         }
 
-        RingBuffer *ring = m_playbackLanes[laneIdx].ring.get();
+        const std::shared_ptr<RingBuffer> ring =
+            loadLaneRing(m_playbackLanes[laneIdx].ring);
         if (!ring) {
             continue;
         }
@@ -957,11 +988,9 @@ bool AudioEngine::prepareHotJoinStagingLocked(const std::size_t laneIndex,
     const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
     const std::size_t ringFloats = static_cast<std::size_t>(ringFrameCapacity) *
                                    static_cast<std::size_t>(source->channelCount());
-    auto ring = std::make_unique<RingBuffer>(ringFloats);
-
     HotJoinStagingSlot &staging = m_hotJoinStaging[laneIndex];
     staging.source = std::move(source);
-    staging.ring = std::move(ring);
+    staging.ring = std::make_shared<RingBuffer>(ringFloats);
     staging.path = item.wavPath;
     staging.gain = item.gain;
     staging.channels = staging.source->channelCount();
@@ -1056,8 +1085,9 @@ bool AudioEngine::commitHotJoinLaneLocked(const std::size_t laneIndex) {
     }
 
     PlaybackLaneSlot &lane = m_playbackLanes[laneIndex];
+    assert(!loadLaneRing(lane.ring) && "hot-join commit expects an empty lane ring slot");
     lane.source = staging.source;
-    lane.ring = std::move(staging.ring);
+    storeLaneRing(lane.ring, std::move(staging.ring));
     lane.currentPath = staging.path;
     lane.gain.store(staging.gain, std::memory_order_release);
     const bool publishAudible =
@@ -1169,8 +1199,9 @@ int32_t AudioEngine::beginHotJoinLane(const std::string &wavPath,
     }
 
     ensureHotJoinThreadRunning();
+    const int32_t reservedLaneIndex = static_cast<int32_t>(item.laneIndex);
     enqueueHotJoinWork(std::move(item));
-    return static_cast<int32_t>(item.laneIndex);
+    return reservedLaneIndex;
 }
 
 void AudioEngine::cancelHotJoinLane(const std::size_t laneIndex) {

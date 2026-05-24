@@ -1,0 +1,52 @@
+# Stricter complexity thresholds for manual audits (not used in CI).
+# Run: ./gradlew :app:detektComplexityAudit
+complexity:
+  CognitiveComplexMethod:
+    active: true
+    allowedComplexity: 12
+  CyclomaticComplexMethod:
+    active: true
+    allowedComplexity: 10
+    ignoreAnnotated:
+      - 'Composable'
+  ComplexCondition:
+    active: true
+    allowedConditions: 3
+  LargeClass:
+    active: true
+    allowedLines: 400
+    excludes: ['**/test/**', '**/androidTest/**', '**/commonTest/**', '**/jvmTest/**', '**/androidUnitTest/**', '**/androidInstrumentedTest/**', '**/jsTest/**', '**/iosTest/**']
+  LongMethod:
+    active: true
+    allowedLines: 50
+    ignoreAnnotated:
+      - 'Composable'
+  LongParameterList:
+    active: true
+    allowedFunctionParameters: 5
+    allowedConstructorParameters: 6
+  NestedBlockDepth:
+    active: true
+    allowedDepth: 3
+  TooManyFunctions:
+    active: true
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/commonTest/**'
+      - '**/jvmTest/**'
+      - '**/androidUnitTest/**'
+      - '**/androidInstrumentedTest/**'
+      - '**/jsTest/**'
+      - '**/iosTest/**'
+    allowedFunctionsPerFile: 12
+    allowedFunctionsPerClass: 25
+    allowedFunctionsPerInterface: 12
+style:
+  LoopWithTooManyJumpStatements:
+    active: true
+    maxJumpCount: 4
+  ReturnCount:
+    active: true
+    max: 5
+    excludeGuardClauses: true

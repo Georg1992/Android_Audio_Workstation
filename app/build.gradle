@@ -10,12 +10,22 @@ plugins {
 
 def detektVersion = '2.0.0-alpha.2'
 
+def detektComplexityAudit = project.hasProperty('complexityAudit')
+
 detekt {
     toolVersion = detektVersion
     buildUponDefaultConfig = true
     allRules = false
-    config.setFrom("$rootDir/config/detekt.yml")
-    baseline = file("$rootDir/config/detekt-baseline.xml")
+    if (detektComplexityAudit) {
+        config.setFrom(
+            files("$rootDir/config/detekt.yml", "$rootDir/config/detekt-complexity-audit.yml"),
+        )
+    } else {
+        config.setFrom("$rootDir/config/detekt.yml")
+    }
+    if (!detektComplexityAudit) {
+        baseline = file("$rootDir/config/detekt-baseline.xml")
+    }
     basePath = rootDir
     parallel = true
 }
@@ -32,6 +42,27 @@ tasks.withType(dev.detekt.gradle.Detekt).configureEach {
 
 tasks.withType(dev.detekt.gradle.DetektCreateBaselineTask).configureEach {
     jvmTarget = '17'
+}
+
+// Native static analysis (audit only; never fails the build; not in CI yet).
+tasks.register('clangTidyAudit', Exec) {
+    group = 'verification'
+    description = 'Run clang-tidy on app/src/main/cpp/engine (requires assembleDebug compile_commands).'
+    dependsOn 'assembleDebug'
+    ignoreExitValue = true
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+    if (isWindows) {
+        commandLine(
+            'powershell',
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            file('src/main/cpp/run-clang-tidy-audit.ps1').absolutePath,
+        )
+    } else {
+        commandLine('bash', file('src/main/cpp/run-clang-tidy-audit.sh').absolutePath)
+    }
 }
 
 android {

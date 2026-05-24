@@ -25,8 +25,10 @@ class IAudioSource;
  * Recording is unchanged — capture path is separate from playback lanes.
  *
  * Playback uses one dedicated I/O thread that prefetches WAV PCM into per-lane
- * SPSC [RingBuffer]s; the Oboe callback drains them in [render] without locks
- * or heap allocation on the realtime thread.
+ * SPSC [RingBuffer]s; the Oboe callback drains them in [render] without
+ * [m_playbackMutex]. Lane rings use [std::atomic_load] / [std::atomic_store] on the
+ * [std::shared_ptr] handle so snapshots are race-free (C++17); the local copy pins
+ * [RingBuffer] lifetime for the duration of each read/write.
  *
  * Structural playback mutation invariant:
  *  - caller/JNI must pause the Oboe render consumer with [pauseForSafeEngineMutation]
@@ -34,12 +36,12 @@ class IAudioSource;
  *    on full session rebuild (setPlaybackSources / stop / release)
  *
  * HJ.2 hot-join mutates only inactive slots via staging + atomic lifecycle publish;
- * render never takes m_playbackMutex.
+ * [render] never takes [m_playbackMutex] (refcount snapshot only on the audio thread).
  */
 class AudioEngine {
 public:
     AudioEngine();
-    ~AudioEngine();
+    ~AudioEngine() noexcept;
 
     AudioEngine(const AudioEngine &) = delete;
     AudioEngine &operator=(const AudioEngine &) = delete;
@@ -121,7 +123,7 @@ private:
 
     struct PlaybackLaneSlot {
         std::shared_ptr<IAudioSource> source;
-        std::unique_ptr<RingBuffer> ring;
+        std::shared_ptr<RingBuffer> ring;
         std::string currentPath;
 
         std::atomic<PlaybackLaneLifecycle> lifecycle{PlaybackLaneLifecycle::Inactive};
@@ -138,7 +140,7 @@ private:
 
     struct HotJoinStagingSlot {
         std::shared_ptr<IAudioSource> source;
-        std::unique_ptr<RingBuffer> ring;
+        std::shared_ptr<RingBuffer> ring;
         std::string path;
         float gain = 1.0f;
         int32_t channels = 0;
@@ -201,6 +203,8 @@ private:
     void resetMasterPlaybackTimeline();
 
     PlaybackLaneLifecycle loadLaneLifecycle(std::size_t laneIndex) const;
+
+    void markPlaybackLaneExhaustedLocked(std::size_t laneIndex);
 
     int32_t m_sampleRate = 44'100;
     int32_t m_fileBitDepth = 16;

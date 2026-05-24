@@ -8,7 +8,6 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.validation.NameValidationResult
@@ -24,7 +23,6 @@ import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
 import com.georgv.audioworkstation.ui.components.timelineBaseDurationMs
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
@@ -209,6 +207,30 @@ class ProjectViewModel @Inject constructor(
             waveformStatesByTrackId = { waveformStatesByTrackId.value },
         )
 
+    private val transportCommands =
+        ProjectTransportCommands(
+            audioController = audioController,
+            playheadPositionMs = playheadPositionMs,
+            playheadTransport = playheadTransport,
+            playbackSession = playbackSession,
+            recordingSession = recordingSession,
+            transportController = transportController,
+            playheadSeek = playheadSeek,
+            playAndRecordTransport = playAndRecordTransport,
+            projectId = { projectId.value },
+            selectedTrackIds = { selectedTrackIds.value },
+            visibleTracks = { currentVisibleTracks() },
+            visibleTrackCount = { uiState.value.tracks.size },
+            waveformStatesByTrackId = { waveformStatesByTrackId.value },
+            timelineProjectionForTracks = { tracks, waveformStates ->
+                timelineProjectionForTracks(tracks, waveformStates)
+            },
+            loadCurrentProject = { pid -> loadCurrentProject(pid) },
+            ensureProject = { pid, name -> ensureProject(pid, name) },
+            persistRecordingRow = { track -> repo.upsertTracks(listOf(track)) },
+            emitMessage = { resId -> emitMessage(resId) },
+        )
+
     val userMessages = messages.receiveAsFlow()
 
     init {
@@ -383,15 +405,18 @@ class ProjectViewModel @Inject constructor(
             playheadPositionMs = playheadMs,
         )
 
-    private fun selectedPlayableTracks(): List<TrackEntity> {
-        val selected = selectedTrackIds.value
-        if (selected.isEmpty()) return emptyList()
-        return visibleTracksWithRecordingOptimistic(
+    private fun currentVisibleTracks(): List<TrackEntity> =
+        visibleTracksWithRecordingOptimistic(
             projectTracks.value,
             optimisticTracks.value,
             recordingSession.optimisticRecordingTrack.value,
             optimisticTrackGains.value,
         )
+
+    private fun selectedPlayableTracks(): List<TrackEntity> {
+        val selected = selectedTrackIds.value
+        if (selected.isEmpty()) return emptyList()
+        return currentVisibleTracks()
             .filter { it.id in selected }
             .filter { it.wavFilePath.isNotBlank() }
     }
@@ -644,13 +669,7 @@ class ProjectViewModel @Inject constructor(
         selectedTrackIds.value = next
         playbackSession.onSelectionChangedDuringPlayback(
             selectedTrackIds = next,
-            playableTracks =
-                visibleTracksWithRecordingOptimistic(
-                    projectTracks.value,
-                    optimisticTracks.value,
-                    recordingSession.optimisticRecordingTrack.value,
-                    optimisticTrackGains.value,
-                ).filter { it.wavFilePath.isNotBlank() },
+            playableTracks = currentVisibleTracks().filter { it.wavFilePath.isNotBlank() },
         )
     }
 
@@ -687,100 +706,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
-        if (recordingSession.hasActiveRecordingTake()) {
-            emitMessage(R.string.error_stop_recording_to_record)
-            return
-        }
-        if (recordingSession.isStartupInFlight()) {
-            return
-        }
-
-        val tracks =
-            visibleTracksWithRecordingOptimistic(
-                projectTracks.value,
-                optimisticTracks.value,
-                recordingSession.optimisticRecordingTrack.value,
-                optimisticTrackGains.value,
-            )
-        val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId.value)
-        val timelineStartOffsetMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (timeline.timelineDurationMs > 0L && timelineStartOffsetMs >= timeline.timelineDurationMs) {
-            emitMessage(R.string.error_record_at_timeline_end)
-            return
-        }
-
-        val overdubPlaybackTracks = selectedPlayableTracksForOverdub(tracks)
-
-        recordingSession.armRecordingStartup()
-
-        recordingSession.launchRecordPressed(
-            projectId = projectId,
-            projectName = projectName,
-            timelineStartOffsetMs = timelineStartOffsetMs,
-            ensureProject = { pid, name -> ensureProject(pid, name) },
-            visibleTrackCount = { uiState.value.tracks.size },
-            persistRecordingRow = { repo.upsertTracks(listOf(it)) },
-            onPendingTrackAllocated = { pendingTrack ->
-                val overdubStarted =
-                    startOverdubPlaybackForPendingTake(
-                        projectId = projectId,
-                        pendingTrack = pendingTrack,
-                        timelineStartOffsetMs = timelineStartOffsetMs,
-                        sessionTimelineEndMs = sessionTimelineEndMsForTracks(overdubPlaybackTracks),
-                        selectedPlayableTracks = overdubPlaybackTracks,
-                    )
-                if (!overdubStarted) {
-                    abortCombinedRecordTransport()
-                    emitMessage(R.string.error_playback_failed_to_start)
-                }
-                overdubStarted
-            },
-            notifyEngineStartFailed = {
-                abortCombinedRecordTransport()
-                emitMessage(R.string.error_recording_failed_to_start)
-            },
-            notifyPersistFailed = {
-                abortCombinedRecordTransport()
-                emitMessage(R.string.error_create_recording_track_failed)
-            },
-            onRecordingTransportReady = { offsetMs ->
-                playheadTransport.onRecordingStarted(fromPositionMs = offsetMs)
-            },
-        )
-    }
-
-    private fun selectedPlayableTracksForOverdub(tracks: List<TrackEntity>): List<TrackEntity> {
-        val selected = selectedTrackIds.value
-        if (selected.isEmpty()) return emptyList()
-        return tracks
-            .filter { it.id in selected }
-            .filter { it.wavFilePath.isNotBlank() }
-    }
-
-    private suspend fun startOverdubPlaybackForPendingTake(
-        projectId: String,
-        pendingTrack: TrackEntity,
-        timelineStartOffsetMs: Long,
-        sessionTimelineEndMs: Long,
-        selectedPlayableTracks: List<TrackEntity>,
-    ): Boolean {
-        if (selectedPlayableTracks.isEmpty()) {
-            return true
-        }
-        val project = loadCurrentProject(projectId) ?: return false
-        return playAndRecordTransport.startFromPlayhead(
-            project = project,
-            selectedPlayableTracks = selectedPlayableTracks,
-            recordingTrackId = pendingTrack.id,
-            startPositionMs = timelineStartOffsetMs,
-            sessionTimelineEndMs = sessionTimelineEndMs,
-        )
-    }
-
-    private fun abortCombinedRecordTransport() {
-        playAndRecordTransport.stop()
-        playheadTransport.abortRecordingStart()
+        transportCommands.onRecordPressed(projectId, projectName)
     }
 
     fun onPlayPressed() {
@@ -788,56 +714,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     internal suspend fun performPlayPressed() {
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) {
-            return
-        }
-        if (playheadTransport.phase.value == TransportPlaybackPhase.Recording) {
-            return
-        }
-        if (playheadTransport.phase.value == TransportPlaybackPhase.Playing) {
-            emitMessage(R.string.error_stop_playback_first)
-            return
-        }
-
-        val selectedPlayableTracks = selectedPlayableTracks()
-        if (selectedPlayableTracks.isEmpty()) {
-            if (selectedTrackIds.value.isNotEmpty()) {
-                emitMessage(R.string.error_no_audio_for_selected_tracks)
-            }
-            return
-        }
-        val currentProjectId = projectId.value ?: return
-        val currentProject = loadCurrentProject(currentProjectId) ?: return
-        val tracks =
-            visibleTracksWithRecordingOptimistic(
-                projectTracks.value,
-                optimisticTracks.value,
-                recordingSession.optimisticRecordingTrack.value,
-                optimisticTrackGains.value,
-            )
-        val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId.value)
-        val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (timeline.timelineDurationMs > 0L && startPositionMs >= timeline.timelineDurationMs) return
-
-        val playbackSpec =
-            currentProject.toMultiPlaybackSpec(selectedPlayableTracks)?.copy(
-                startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForTracks(selectedPlayableTracks),
-            )
-        if (playbackSpec == null) {
-            emitMessage(playbackStartRejectedMessage(selectedPlayableTracks.size))
-            return
-        }
-
-        if (!audioController.startPlayback(playbackSpec)) {
-            emitMessage(R.string.error_playback_failed_to_start)
-            return
-        }
-        playheadTransport.onPlaybackStarted(fromPositionMs = startPositionMs)
-        playbackSession.markPlayingAndStartCompletionMonitor(
-            playbackSpec.lanes.map { it.trackId },
-        )
+        transportCommands.performPlayPressed()
     }
 
     /** Pause during playback; stop while paused resets playhead; recording still uses full [ProjectTransportController.stopAll]. */
@@ -846,26 +723,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     internal suspend fun performStopPressed() {
-        if (
-            recordingSession.hasActiveRecordingTake() ||
-            recordingSession.isStartupInFlight()
-        ) {
-            transportController.stopAll()
-            playheadTransport.stopAndResetToZero()
-            return
-        }
-
-        when (playheadTransport.phase.value) {
-            TransportPlaybackPhase.Playing -> {
-                playheadSeek.abortPlaybackSeekDragToPaused()
-            }
-            TransportPlaybackPhase.Paused -> {
-                transportController.pausePlayback()
-                playheadTransport.stopAndResetToZero()
-            }
-            TransportPlaybackPhase.Idle -> Unit
-            TransportPlaybackPhase.Recording -> Unit
-        }
+        transportCommands.performStopPressed()
     }
 
     override fun onCleared() {
@@ -889,14 +747,6 @@ class ProjectViewModel @Inject constructor(
             }
         }
     }
-
-    @StringRes
-    private fun playbackStartRejectedMessage(playableTrackCount: Int): Int =
-        if (playableTrackCount == 0) {
-            R.string.error_no_audio_for_selected_tracks
-        } else {
-            R.string.error_playback_failed_to_start
-        }
 
     private companion object {
         const val TAG = "ProjectViewModel"
