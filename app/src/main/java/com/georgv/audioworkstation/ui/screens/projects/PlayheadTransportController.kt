@@ -68,7 +68,7 @@ class PlayheadTransportController(
         startNativePoll()
     }
 
-    fun onRecordingStarted(fromPositionMs: Long, nativeTransportMsAtStart: Long = 0L) {
+    fun onRecordingStarted(fromPositionMs: Long) {
         stopNativePoll()
         val startMs = fromPositionMs.coerceIn(0L, TimelineMaxDurationMs)
         playheadPositionMs.value = startMs

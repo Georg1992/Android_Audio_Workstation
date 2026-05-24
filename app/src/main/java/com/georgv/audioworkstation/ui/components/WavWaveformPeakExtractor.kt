@@ -277,11 +277,11 @@ private fun RandomAccessFile.readUInt32Le(): Long {
     val b1 = read()
     val b2 = read()
     val b3 = read()
-    if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return 0L
+    if (readBytesAllEof(b0, b1, b2, b3)) return 0L
     return (b0.toLong() or
         (b1.toLong() shl 8) or
         (b2.toLong() shl 16) or
-        (b3.toLong() shl 24)) and 0xFFFF_FFFFL
+        (b3.toLong() shl UInt32LeByte3Shift)) and UInt32LeMask
 }
 
 private fun ByteArray.readFrameSamples(
@@ -306,28 +306,43 @@ private fun ByteArray.readFrameSamples(
 
 private fun ByteArray.readPcmSample(offset: Int, bitsPerSample: Int): Float =
     when (bitsPerSample) {
-        8 -> (((this[offset].toInt() and 0xFF) - 128) / 128f).coerceIn(-1f, 1f)
-        16 -> (readInt16Le(offset) / 32768f).coerceIn(-1f, 1f)
-        24 -> (readInt24Le(offset) / 8_388_608f).coerceIn(-1f, 1f)
-        32 -> (readInt32Le(offset) / 2_147_483_648f).coerceIn(-1f, 1f)
+        8 -> (((this[offset].toInt() and 0xFF) - Pcm8BitCenter) / Pcm8BitScale).coerceIn(-1f, 1f)
+        16 -> (readInt16Le(offset) / Pcm16BitScale).coerceIn(-1f, 1f)
+        24 -> (readInt24Le(offset) / Pcm24BitScale).coerceIn(-1f, 1f)
+        32 -> (readInt32Le(offset) / Pcm32BitScale).coerceIn(-1f, 1f)
         else -> 0f
     }
 
 private fun ByteArray.readInt16Le(offset: Int): Int {
     val value = (this[offset].toInt() and 0xFF) or
         ((this[offset + 1].toInt() and 0xFF) shl 8)
-    return if ((value and 0x8000) != 0) value or -0x10000 else value
+    return if ((value and Int16SignBit) != 0) value or Int16SignExtend else value
 }
 
 private fun ByteArray.readInt24Le(offset: Int): Int {
     val value = (this[offset].toInt() and 0xFF) or
         ((this[offset + 1].toInt() and 0xFF) shl 8) or
         ((this[offset + 2].toInt() and 0xFF) shl 16)
-    return if ((value and 0x800000) != 0) value or -0x1000000 else value
+    return if ((value and Int24SignBit) != 0) value or Int24SignExtend else value
 }
 
 private fun ByteArray.readInt32Le(offset: Int): Int =
     (this[offset].toInt() and 0xFF) or
         ((this[offset + 1].toInt() and 0xFF) shl 8) or
         ((this[offset + 2].toInt() and 0xFF) shl 16) or
-        ((this[offset + 3].toInt() and 0xFF) shl 24)
+        ((this[offset + 3].toInt() and 0xFF) shl UInt32LeByte3Shift)
+
+private fun readBytesAllEof(b0: Int, b1: Int, b2: Int, b3: Int): Boolean =
+    b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0
+
+private const val UInt32LeByte3Shift = 24
+private const val UInt32LeMask = 0xFFFF_FFFFL
+private const val Pcm8BitCenter = 128
+private const val Pcm8BitScale = 128f
+private const val Pcm16BitScale = 32768f
+private const val Pcm24BitScale = 8_388_608f
+private const val Pcm32BitScale = 2_147_483_648f
+private const val Int16SignBit = 0x8000
+private const val Int16SignExtend = -0x10000
+private const val Int24SignBit = 0x800000
+private const val Int24SignExtend = -0x1000000

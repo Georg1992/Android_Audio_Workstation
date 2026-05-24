@@ -1,0 +1,44 @@
+package com.georgv.audioworkstation.ui.screens.projects
+
+import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.components.ActiveRecordingTimelineClip
+import com.georgv.audioworkstation.ui.components.WaveformState
+
+/** Base list for UI: reorder override, then Room; append optimistic recording only if that id is absent. */
+internal fun visibleTracksWithRecordingOptimistic(
+    projectTracksList: List<TrackEntity>,
+    optimisticOrder: List<TrackEntity>?,
+    optimisticRecording: TrackEntity?,
+    optimisticGains: Map<String, Float> = emptyMap(),
+): List<TrackEntity> {
+    val base = optimisticOrder ?: projectTracksList
+    val withRecording =
+        if (optimisticRecording != null && base.none { it.id == optimisticRecording.id }) {
+            base + optimisticRecording
+        } else {
+            base
+        }
+    if (optimisticGains.isEmpty()) return withRecording
+    return withRecording.map { track ->
+        val gain = optimisticGains[track.id] ?: return@map track
+        track.copy(gain = gain)
+    }
+}
+
+internal fun activeRecordingTimelineClip(
+    tracks: List<TrackEntity>,
+    recordingTrackId: String?,
+    playheadMs: Long,
+    transportPhase: TransportPlaybackPhase,
+): ActiveRecordingTimelineClip? {
+    val recordingId = recordingTrackId ?: return null
+    if (transportPhase != TransportPlaybackPhase.Recording) return null
+    val recordingTrack = tracks.find { it.id == recordingId } ?: return null
+    val startOffsetMs = recordingTrack.timelineStartOffsetMs.coerceAtLeast(0L)
+    val elapsedMs = (playheadMs - startOffsetMs).coerceAtLeast(0L)
+    return ActiveRecordingTimelineClip(
+        trackId = recordingId,
+        startOffsetMs = startOffsetMs,
+        elapsedMs = elapsedMs,
+    )
+}

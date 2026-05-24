@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import androidx.annotation.StringRes
+import com.georgv.audioworkstation.core.util.logWarning
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
@@ -21,7 +22,6 @@ import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
-import com.georgv.audioworkstation.ui.components.ActiveRecordingTimelineClip
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
@@ -116,8 +116,15 @@ class ProjectViewModel @Inject constructor(
             playheadPositionMs = playheadPositionMs,
             nativeTransportPositionMs = { audioController.transportPositionMs() },
         )
-    private val waveformPeakPathsByTrackId = mutableMapOf<String, String>()
-    private val waveformExtractionsInFlight = mutableSetOf<String>()
+    private val dbActions =
+        ProjectDbActionRunner(logTag = TAG) { message -> emitMessage(message) }
+    private val waveformPeaks =
+        ProjectWaveformPeakCoordinator(
+            scope = viewModelScope,
+            waveformPeakExtractor = waveformPeakExtractor,
+            waveformStatesByTrackId = waveformStatesByTrackId,
+            tracksSnapshot = { uiState.value.tracks },
+        )
 
     /**
      * Optimistic override for the on-screen track list.
@@ -184,6 +191,24 @@ class ProjectViewModel @Inject constructor(
         finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId -> finalizeRecordingTrack(trackId) },
     )
 
+    private val playheadSeek =
+        ProjectPlayheadSeekCoordinator(
+            scope = viewModelScope,
+            playheadPositionMs = playheadPositionMs,
+            playheadTransport = playheadTransport,
+            playbackSession = playbackSession,
+            transportController = transportController,
+            recordingSession = recordingSession,
+            projectId = { projectId.value },
+            selectedTrackIds = { selectedTrackIds.value },
+            loadCurrentProject = { pid -> loadCurrentProject(pid) },
+            selectedPlayableTracks = { selectedPlayableTracks() },
+            timelineProjection = { tracks, waveformStates ->
+                timelineProjectionForTracks(tracks, waveformStates)
+            },
+            waveformStatesByTrackId = { waveformStatesByTrackId.value },
+        )
+
     val userMessages = messages.receiveAsFlow()
 
     init {
@@ -229,7 +254,7 @@ class ProjectViewModel @Inject constructor(
                     optimisticTrackGains.value,
                 )
             }.collect { tracks ->
-                refreshWaveformPeakRequests(tracks)
+                waveformPeaks.refreshPeakRequests(tracks)
             }
         }
     }
@@ -240,60 +265,6 @@ class ProjectViewModel @Inject constructor(
 
     private fun emitMessage(@StringRes resId: Int) {
         emitMessage(UiMessage(resId))
-    }
-
-    private suspend inline fun runDbAction(
-        @StringRes errorResId: Int,
-        crossinline action: suspend () -> Unit
-    ): Boolean {
-        return try {
-            action()
-            true
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (error: Exception) {
-            // Room/SQLite surfaces its failures as RuntimeException subclasses (e.g.
-            // SQLiteConstraintException), so a single `Exception` net catches both the IO and
-            // database failures these helpers wrap.
-            emitMessage(errorResId)
-            false
-        }
-    }
-
-    /** Base list for UI: reorder override, then Room; append optimistic recording only if that id is absent. */
-    private fun visibleTracksWithRecordingOptimistic(
-        projectTracksList: List<TrackEntity>,
-        optimisticOrder: List<TrackEntity>?,
-        optimisticRecording: TrackEntity?,
-        optimisticGains: Map<String, Float> = emptyMap(),
-    ): List<TrackEntity> {
-        val base = optimisticOrder ?: projectTracksList
-        val withRecording =
-            if (optimisticRecording != null && base.none { it.id == optimisticRecording.id }) {
-                base + optimisticRecording
-            } else {
-                base
-            }
-        if (optimisticGains.isEmpty()) return withRecording
-        return withRecording.map { track ->
-            val gain = optimisticGains[track.id] ?: return@map track
-            track.copy(gain = gain)
-        }
-    }
-
-    private suspend inline fun runDbActionWithRollback(
-        @StringRes errorResId: Int,
-        rollback: () -> Unit,
-        crossinline action: suspend () -> Unit
-    ) {
-        try {
-            action()
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (error: Exception) {
-            rollback()
-            emitMessage(errorResId)
-        }
     }
 
     private val projectScreenSnapshot =
@@ -351,7 +322,13 @@ class ProjectViewModel @Inject constructor(
             playheadTransport.phase,
         ) { snapshot, playheadMs, transportPhase ->
             val (_, screen) = snapshot
-            val activeRecording = activeRecordingTimelineClip(screen, playheadMs, transportPhase)
+            val activeRecording =
+                activeRecordingTimelineClip(
+                    tracks = screen.tracks,
+                    recordingTrackId = screen.recordingTrackId,
+                    playheadMs = playheadMs,
+                    transportPhase = transportPhase,
+                )
             val timeline =
                 buildProjectTimelineProjection(
                     tracks = screen.tracks,
@@ -394,24 +371,6 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
-    private fun activeRecordingTimelineClip(
-        screen: ProjectScreenSnapshot,
-        playheadMs: Long,
-        transportPhase: TransportPlaybackPhase,
-    ): ActiveRecordingTimelineClip? {
-        val recordingId = screen.recordingTrackId ?: return null
-        if (transportPhase != TransportPlaybackPhase.Recording) return null
-        val recordingTrack =
-            screen.tracks.find { it.id == recordingId } ?: return null
-        val startOffsetMs = recordingTrack.timelineStartOffsetMs.coerceAtLeast(0L)
-        val elapsedMs = (playheadMs - startOffsetMs).coerceAtLeast(0L)
-        return ActiveRecordingTimelineClip(
-            trackId = recordingId,
-            startOffsetMs = startOffsetMs,
-            elapsedMs = elapsedMs,
-        )
-    }
-
     private fun timelineProjectionForTracks(
         tracks: List<TrackEntity>,
         waveformStates: Map<String, WaveformState>,
@@ -446,12 +405,10 @@ class ProjectViewModel @Inject constructor(
     suspend fun bind(projectId: String) {
         if (this.projectId.value != projectId) {
             transportController.resetPlaybackForProjectChange()
-            playheadTransport.resetWhenProjectChanges()
+            playheadSeek.resetWhenProjectChanges()
             optimisticTracks.value = null
             optimisticTrackGains.value = emptyMap()
-            waveformStatesByTrackId.value = emptyMap()
-            waveformPeakPathsByTrackId.clear()
-            waveformExtractionsInFlight.clear()
+            waveformPeaks.resetWhenProjectChanges()
             recordingSession.resetWhenBoundProjectChanges()
             selectedTrackIds.value = emptySet()
         }
@@ -459,93 +416,31 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun setPlayheadPositionMs(positionMs: Long, timelineBaseDurationMs: Long) {
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        if (!playheadTransport.canScrubPlayhead()) return
-        playheadPositionMs.value = timelinePlayheadClampedPositionMs(positionMs, timelineBaseDurationMs)
+        playheadSeek.setPlayheadPositionMs(positionMs, timelineBaseDurationMs)
     }
 
-    /** Transport Seek.1: first touch on the scrubber waveform area. */
     fun onPlayheadScrubStarted() {
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        if (playheadTransport.phase.value != TransportPlaybackPhase.Playing) return
-        playheadTransport.beginPlaybackSeekDrag()
-        transportController.pauseEnginePreservingSession()
+        playheadSeek.onPlayheadScrubStarted()
     }
 
     fun onPlayheadScrubPreviewPosition(positionMs: Long, timelineDurationMs: Long) {
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        val clamped = timelinePlayheadClampedPositionMs(positionMs, timelineDurationMs)
-        if (playheadTransport.isPlaybackSeekDragActive()) {
-            playheadTransport.setPlayheadDuringSeekDrag(clamped, timelineDurationMs)
-            return
-        }
-        if (!playheadTransport.canScrubPlayhead()) return
-        playheadPositionMs.value = clamped
+        playheadSeek.onPlayheadScrubPreviewPosition(positionMs, timelineDurationMs)
     }
 
     fun onPlayheadScrubCommittedPosition(positionMs: Long, timelineDurationMs: Long) {
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        val clamped = timelinePlayheadClampedPositionMs(positionMs, timelineDurationMs)
-        if (playheadTransport.isPlaybackSeekDragActive()) {
-            playheadTransport.setPlayheadDuringSeekDrag(clamped, timelineDurationMs)
-            viewModelScope.launch { completePlaybackSeekDragScrub() }
-            return
-        }
-        if (!playheadTransport.canScrubPlayhead()) return
-        playheadPositionMs.value = clamped
+        playheadSeek.onPlayheadScrubCommittedPosition(positionMs, timelineDurationMs)
     }
 
-    /** Gesture ended without commit (pointer cancel / scope cancellation). */
     fun onPlayheadScrubCancelled() {
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        abortPlaybackSeekDragToPaused()
+        playheadSeek.onPlayheadScrubCancelled()
     }
 
     internal suspend fun completePlaybackSeekDragScrub() {
-        if (!playheadTransport.endPlaybackSeekDragAndConsumeResume()) return
-        if (!restartPlaybackFromPlayheadAfterSeekDrag()) {
-            abortPlaybackSeekDragToPaused()
-        }
+        playheadSeek.completePlaybackSeekDragScrub()
     }
 
-    internal suspend fun restartPlaybackFromPlayheadAfterSeekDrag(): Boolean {
-        if (!playbackSession.hasActivePlaybackSession()) return false
-        val selected = selectedTrackIds.value
-        if (selected.isEmpty()) return false
-        val currentProjectId = projectId.value ?: return false
-        val currentProject = loadCurrentProject(currentProjectId) ?: return false
-        val tracks = selectedPlayableTracks()
-        if (tracks.isEmpty()) return false
-        val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId.value)
-        val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (timeline.timelineDurationMs > 0L && startPositionMs >= timeline.timelineDurationMs) return false
-        val playbackSpec =
-            currentProject.toMultiPlaybackSpec(tracks)?.copy(
-                startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForTracks(tracks),
-            ) ?: return false
-        if (
-            !playbackSession.restartEngineFromPlayhead(
-                playbackSpec,
-                tracks.map { it.id },
-                selected,
-            )
-        ) {
-            return false
-        }
-        playheadTransport.onPlaybackStarted(fromPositionMs = startPositionMs)
-        return true
-    }
-
-    private fun abortPlaybackSeekDragToPaused() {
-        if (playheadTransport.isPlaybackSeekDragActive()) {
-            playheadTransport.endPlaybackSeekDragAndConsumeResume()
-        }
-        if (playheadTransport.phase.value != TransportPlaybackPhase.Playing) return
-        playheadTransport.enterPaused()
-        transportController.pausePlayback()
-    }
+    internal suspend fun restartPlaybackFromPlayheadAfterSeekDrag(): Boolean =
+        playheadSeek.restartPlaybackFromPlayheadAfterSeekDrag()
 
     internal fun setPlayheadNativePollEnabledForTests(enabled: Boolean) {
         playheadTransport.nativePollEnabled = enabled
@@ -583,6 +478,7 @@ class ProjectViewModel @Inject constructor(
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
+            logWarning(TAG, "createProject failed", error)
             emitMessage(R.string.error_create_project_failed)
             null
         }
@@ -608,7 +504,7 @@ class ProjectViewModel @Inject constructor(
 
         val updatedProject = currentProject.copy(name = normalizedName)
         viewModelScope.launch {
-            runDbAction(R.string.error_rename_project_failed) {
+            dbActions.run(R.string.error_rename_project_failed) {
                 repo.upsertProject(updatedProject)
             }
         }
@@ -632,7 +528,7 @@ class ProjectViewModel @Inject constructor(
             .filter { it.id != trackId }
             .mapIndexed { i, t -> t.copy(position = i) }
         viewModelScope.launch {
-            runDbActionWithRollback(
+            dbActions.runWithRollback(
                 errorResId = R.string.error_delete_track_failed,
                 rollback = { selectedTrackIds.value = previousSelected }
             ) {
@@ -654,7 +550,7 @@ class ProjectViewModel @Inject constructor(
 
         val updatedTrack = currentTrack.copy(name = normalizedName)
         viewModelScope.launch {
-            runDbAction(R.string.error_rename_track_failed) {
+            dbActions.run(R.string.error_rename_track_failed) {
                 repo.upsertTrack(updatedTrack)
             }
         }
@@ -665,7 +561,7 @@ class ProjectViewModel @Inject constructor(
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
         val updatedTrack = currentTrack.copy(isLoop = !currentTrack.isLoop)
         viewModelScope.launch {
-            runDbAction(R.string.error_loop_update_failed) {
+            dbActions.run(R.string.error_loop_update_failed) {
                 repo.upsertTrack(updatedTrack)
             }
         }
@@ -702,7 +598,7 @@ class ProjectViewModel @Inject constructor(
 
         val updatedTrack = currentTrack.copy(gain = gain)
         viewModelScope.launch {
-            runDbAction(R.string.error_gain_update_failed) {
+            dbActions.run(R.string.error_gain_update_failed) {
                 repo.upsertTrack(updatedTrack)
             }
         }
@@ -729,7 +625,7 @@ class ProjectViewModel @Inject constructor(
                 val list =
                     uiState.value.tracks.mapIndexed { index, track -> track.copy(position = index) }
                 if (list.isEmpty()) return@withLock
-                runDbActionWithRollback(
+                dbActions.runWithRollback(
                     errorResId = R.string.error_save_track_order_failed,
                     rollback = { optimisticTracks.value = null }
                 ) {
@@ -783,7 +679,7 @@ class ProjectViewModel @Inject constructor(
                 is ProjectAudioImportOutcome.ImportRejected ->
                     emitMessage(outcome.failure.toUiMessage())
                 is ProjectAudioImportOutcome.ReadyToPersist ->
-                    runDbAction(R.string.error_save_imported_track_failed) {
+                    dbActions.run(R.string.error_save_imported_track_failed) {
                         repo.upsertTracks(listOf(outcome.importedTrack))
                     }
             }
@@ -849,10 +745,7 @@ class ProjectViewModel @Inject constructor(
                 emitMessage(R.string.error_create_recording_track_failed)
             },
             onRecordingTransportReady = { offsetMs ->
-                playheadTransport.onRecordingStarted(
-                    fromPositionMs = offsetMs,
-                    nativeTransportMsAtStart = audioController.transportPositionMs(),
-                )
+                playheadTransport.onRecordingStarted(fromPositionMs = offsetMs)
             },
         )
     }
@@ -964,7 +857,7 @@ class ProjectViewModel @Inject constructor(
 
         when (playheadTransport.phase.value) {
             TransportPlaybackPhase.Playing -> {
-                abortPlaybackSeekDragToPaused()
+                playheadSeek.abortPlaybackSeekDragToPaused()
             }
             TransportPlaybackPhase.Paused -> {
                 transportController.pausePlayback()
@@ -991,55 +884,8 @@ class ProjectViewModel @Inject constructor(
         val finalizedTrack = recordingCoordinator.finalizedTrackAfterStop(currentTrack)
 
         viewModelScope.launch {
-            runDbAction(R.string.error_recording_metadata_failed) {
+            dbActions.run(R.string.error_recording_metadata_failed) {
                 repo.upsertTrack(finalizedTrack)
-            }
-        }
-    }
-
-    private fun refreshWaveformPeakRequests(tracks: List<TrackEntity>) {
-        val playableTracks = tracks.filter { it.wavFilePath.isNotBlank() && !it.isRecording }
-        val playableIds = playableTracks.mapTo(mutableSetOf()) { it.id }
-        val currentStates = waveformStatesByTrackId.value.toMutableMap()
-
-        currentStates.keys.retainAll(playableIds)
-        waveformPeakPathsByTrackId.keys.retainAll(playableIds)
-        waveformExtractionsInFlight.retainAll(playableIds)
-
-        playableTracks.forEach { track ->
-            val cachedPath = waveformPeakPathsByTrackId[track.id]
-            if (cachedPath != track.wavFilePath) {
-                currentStates.remove(track.id)
-                waveformPeakPathsByTrackId.remove(track.id)
-            }
-        }
-        if (currentStates != waveformStatesByTrackId.value) {
-            waveformStatesByTrackId.value = currentStates
-        }
-
-        playableTracks.forEach { track ->
-            if (waveformPeakPathsByTrackId[track.id] == track.wavFilePath) return@forEach
-            if (!waveformExtractionsInFlight.add(track.id)) return@forEach
-            waveformPeakPathsByTrackId[track.id] = track.wavFilePath
-            waveformStatesByTrackId.value =
-                waveformStatesByTrackId.value + (track.id to WaveformState.Loading)
-            viewModelScope.launch {
-                val peaks = waveformPeakExtractor.extract(track.wavFilePath)
-                waveformExtractionsInFlight.remove(track.id)
-                if (uiState.value.tracks.any {
-                        it.id == track.id &&
-                            it.wavFilePath == track.wavFilePath &&
-                            !it.isRecording
-                    }
-                ) {
-                    val state =
-                        if (peaks == null) {
-                            WaveformState.Failed
-                        } else {
-                            WaveformState.Ready(peaks)
-                        }
-                    waveformStatesByTrackId.value = waveformStatesByTrackId.value + (track.id to state)
-                }
             }
         }
     }
@@ -1052,4 +898,7 @@ class ProjectViewModel @Inject constructor(
             R.string.error_playback_failed_to_start
         }
 
+    private companion object {
+        const val TAG = "ProjectViewModel"
+    }
 }

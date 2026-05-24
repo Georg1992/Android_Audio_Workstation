@@ -22,6 +22,13 @@ import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
+private val DragHandleDotCenters =
+    listOf(
+        0.72f to 0.92f,
+        0.84f to 0.84f,
+        0.92f to 0.72f,
+    )
+
 /** Radius (as fraction of the smaller drag-handle dimension) for each indicator dot. */
 private const val DragDotRadiusFraction = 0.07f
 
@@ -69,7 +76,7 @@ fun TrackReorderHandle(
         Canvas(Modifier.fillMaxSize()) {
             val color = AppColors.Line.copy(alpha = Alphas.HandleActive)
             val dotR = minOf(size.width, size.height) * DragDotRadiusFraction
-            listOf(0.72f to 0.92f, 0.84f to 0.84f, 0.92f to 0.72f).forEach { (tx, ty) ->
+            DragHandleDotCenters.forEach { (tx, ty) ->
                 drawCircle(
                     color = color,
                     radius = dotR,

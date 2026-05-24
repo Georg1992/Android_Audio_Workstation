@@ -43,6 +43,9 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Run Detekt
+        run: ./gradlew --no-daemon :app:detekt
+
       - name: Build (assembleDebug)
         run: ./gradlew --no-daemon assembleDebug
 

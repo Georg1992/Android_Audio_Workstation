@@ -5,6 +5,33 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
     id 'com.google.devtools.ksp'
     id 'com.google.dagger.hilt.android'
+    id 'dev.detekt'
+}
+
+def detektVersion = '2.0.0-alpha.2'
+
+detekt {
+    toolVersion = detektVersion
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom("$rootDir/config/detekt.yml")
+    baseline = file("$rootDir/config/detekt-baseline.xml")
+    basePath = rootDir
+    parallel = true
+}
+
+tasks.withType(dev.detekt.gradle.Detekt).configureEach {
+    jvmTarget = '17'
+    reports {
+        html.required.set(true)
+        checkstyle.required.set(true)
+        markdown.required.set(true)
+        sarif.required.set(false)
+    }
+}
+
+tasks.withType(dev.detekt.gradle.DetektCreateBaselineTask).configureEach {
+    jvmTarget = '17'
 }
 
 android {

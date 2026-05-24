@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import androidx.lifecycle.ViewModel
+import com.georgv.audioworkstation.core.util.logWarning
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ProjectSampleRate
@@ -76,11 +77,15 @@ class CreateProjectViewModel @Inject constructor(
                 createdProjectIds.send(projectId)
             } catch (cancel: CancellationException) {
                 throw cancel
-            } catch (db: RuntimeException) {
-                // Room/SQLite raises RuntimeException subclasses for constraint and disk failures.
+            } catch (db: Exception) {
+                logWarning(TAG, "createProject failed", db)
                 messages.send(UiMessage(R.string.error_create_project_failed))
             }
             _uiState.value = _uiState.value.copy(isSaving = false)
         }
+    }
+
+    private companion object {
+        const val TAG = "CreateProjectViewModel"
     }
 }

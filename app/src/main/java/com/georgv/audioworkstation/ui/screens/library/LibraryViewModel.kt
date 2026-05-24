@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.library
 
 import androidx.lifecycle.ViewModel
+import com.georgv.audioworkstation.core.util.logWarning
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.UiMessage
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.IOException
 import javax.inject.Inject
 
 data class LibraryUiState(
@@ -40,13 +40,14 @@ class LibraryViewModel @Inject constructor(
                 repo.deleteProject(projectId)
             } catch (cancel: CancellationException) {
                 throw cancel
-            } catch (io: IOException) {
-                // File-system removal failed (locked file, missing storage permission, etc.).
-                messages.send(UiMessage(R.string.error_delete_project_failed))
-            } catch (db: RuntimeException) {
-                // Room/SQLite raises RuntimeException subclasses for constraint and disk failures.
+            } catch (error: Exception) {
+                logWarning(TAG, "deleteProject failed: $projectId", error)
                 messages.send(UiMessage(R.string.error_delete_project_failed))
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "LibraryViewModel"
     }
 }

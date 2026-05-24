@@ -20,11 +20,9 @@ sealed class NameValidationError {
  */
 fun validateName(raw: String, maxLength: Int = DefaultNameMaxLength): NameValidationResult {
     val normalized = raw.replace(MultiWhitespace, " ").trim()
-    if (normalized.isEmpty()) {
-        return NameValidationResult.Invalid(NameValidationError.Blank)
+    return when {
+        normalized.isEmpty() -> NameValidationResult.Invalid(NameValidationError.Blank)
+        normalized.length > maxLength -> NameValidationResult.Invalid(NameValidationError.TooLong(maxLength))
+        else -> NameValidationResult.Valid(normalized)
     }
-    if (normalized.length > maxLength) {
-        return NameValidationResult.Invalid(NameValidationError.TooLong(maxLength))
-    }
-    return NameValidationResult.Valid(normalized)
 }

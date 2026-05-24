@@ -328,10 +328,12 @@ fun TrackCard(
                                     )
                                     .border(Dimens.Stroke, AppColors.Line, buttonShape)
                                     .then(
-                                        if (dragPreview ||
-                                            interactionBlocked ||
-                                            !trackActionsEnabled ||
-                                            isRenaming
+                                        if (trackMenuClickDisabled(
+                                                dragPreview,
+                                                interactionBlocked,
+                                                trackActionsEnabled,
+                                                isRenaming,
+                                            )
                                         ) {
                                             Modifier
                                         } else {
@@ -466,3 +468,10 @@ fun TrackCard(
         }
     }
 }
+
+private fun trackMenuClickDisabled(
+    dragPreview: Boolean,
+    interactionBlocked: Boolean,
+    trackActionsEnabled: Boolean,
+    isRenaming: Boolean,
+): Boolean = dragPreview || interactionBlocked || !trackActionsEnabled || isRenaming

@@ -21,8 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.coroutines.coroutineContext
 
 /**
  * Owns Kotlin playback-session state for a single project screen.
@@ -313,45 +313,73 @@ class PlaybackSessionController(
         hotJoinMonitorJobs[track.id] =
             scope.launch {
                 try {
-                    while (isActive) {
-                        if (sessionEpochAtJoin != playbackSessionEpoch) {
-                            clearPreparingForTrack(track.id)
-                            hotJoinMonitorJobs.remove(track.id)
-                            return@launch
-                        }
-                        when (audioController.playbackLaneLifecycle(laneIndex)) {
-                            PlaybackLaneLifecycle.Active,
-                            PlaybackLaneLifecycle.Exhausted,
-                            -> {
-                                if (sessionEpochAtJoin != playbackSessionEpoch) {
-                                    clearPreparingForTrack(track.id)
-                                    hotJoinMonitorJobs.remove(track.id)
-                                    return@launch
-                                }
-                                sessionLaneTrackIds[laneIndex] = track.id
-                                syncLaneAudibilityFromSelection(selectedTrackIds)
-                                clearPreparingForTrack(track.id)
-                                hotJoinMonitorJobs.remove(track.id)
-                                return@launch
-                            }
-                            PlaybackLaneLifecycle.Inactive,
-                            PlaybackLaneLifecycle.Cancelled,
-                            -> {
-                                clearPreparingForTrack(track.id)
-                                hotJoinMonitorJobs.remove(track.id)
-                                return@launch
-                            }
-                            PlaybackLaneLifecycle.Preparing,
-                            PlaybackLaneLifecycle.ReadyToCommit,
-                            -> delay(HOT_JOIN_POLL_MS)
-                        }
-                    }
+                    monitorHotJoinLaneUntilSettled(
+                        trackId = track.id,
+                        laneIndex = laneIndex,
+                        sessionEpochAtJoin = sessionEpochAtJoin,
+                        selectedTrackIds = selectedTrackIds,
+                    )
                 } catch (_: CancellationException) {
                     clearPreparingForTrack(track.id)
                     hotJoinMonitorJobs.remove(track.id)
                 }
             }
     }
+
+    private suspend fun monitorHotJoinLaneUntilSettled(
+        trackId: String,
+        laneIndex: Int,
+        sessionEpochAtJoin: Long,
+        selectedTrackIds: Set<String>,
+    ) {
+        while (coroutineContext.isActive) {
+            if (sessionEpochAtJoin != playbackSessionEpoch) {
+                finishHotJoinMonitor(trackId)
+                return
+            }
+            when (hotJoinStepForLifecycle(audioController.playbackLaneLifecycle(laneIndex))) {
+                HotJoinMonitorStep.Poll -> delay(HOT_JOIN_POLL_MS)
+                HotJoinMonitorStep.Abort -> {
+                    finishHotJoinMonitor(trackId)
+                    return
+                }
+                HotJoinMonitorStep.Commit -> {
+                    if (sessionEpochAtJoin != playbackSessionEpoch) {
+                        finishHotJoinMonitor(trackId)
+                        return
+                    }
+                    sessionLaneTrackIds[laneIndex] = trackId
+                    syncLaneAudibilityFromSelection(selectedTrackIds)
+                    finishHotJoinMonitor(trackId)
+                    return
+                }
+            }
+        }
+    }
+
+    private fun finishHotJoinMonitor(trackId: String) {
+        clearPreparingForTrack(trackId)
+        hotJoinMonitorJobs.remove(trackId)
+    }
+
+    private enum class HotJoinMonitorStep {
+        Poll,
+        Commit,
+        Abort,
+    }
+
+    private fun hotJoinStepForLifecycle(lifecycle: PlaybackLaneLifecycle): HotJoinMonitorStep =
+        when (lifecycle) {
+            PlaybackLaneLifecycle.Active,
+            PlaybackLaneLifecycle.Exhausted,
+            -> HotJoinMonitorStep.Commit
+            PlaybackLaneLifecycle.Inactive,
+            PlaybackLaneLifecycle.Cancelled,
+            -> HotJoinMonitorStep.Abort
+            PlaybackLaneLifecycle.Preparing,
+            PlaybackLaneLifecycle.ReadyToCommit,
+            -> HotJoinMonitorStep.Poll
+        }
 
     private fun clearPreparingForTrack(trackId: String) {
         preparingLaneIndexByTrackId.remove(trackId)
