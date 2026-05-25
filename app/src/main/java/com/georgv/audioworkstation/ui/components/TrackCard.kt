@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -74,6 +75,9 @@ fun TrackCard(
     onToggleLoop: (() -> Unit)? = null,
     isLoop: Boolean = false,
     loopToggleEnabled: Boolean = true,
+    onToggleRecordTarget: (() -> Unit)? = null,
+    isRecordTarget: Boolean = false,
+    recordTargetToggleEnabled: Boolean = true,
     trackActionsEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     /**
@@ -117,6 +121,7 @@ fun TrackCard(
     val showHandle =
         !dragPreview && trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
     val showLoopChrome = dragPreview || onToggleLoop != null
+    val showRecordTargetChrome = dragPreview || onToggleRecordTarget != null
 
     LaunchedEffect(interactionBlocked, dragPreview, trackActionsEnabled) {
         if (interactionBlocked || dragPreview || !trackActionsEnabled) {
@@ -253,6 +258,50 @@ fun TrackCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
+                    }
+
+                    if (showRecordTargetChrome) {
+                        val toggleRecordTarget = onToggleRecordTarget
+                        val recordTargetInteractive =
+                            !dragPreview &&
+                                toggleRecordTarget != null &&
+                                recordTargetToggleEnabled &&
+                                trackActionsEnabled &&
+                                !interactionBlocked &&
+                                !isRenaming
+                        Box(
+                            modifier = Modifier
+                                .width(Dimens.TrackHeaderButtonSize)
+                                .height(Dimens.TrackHeaderButtonSize)
+                                .then(
+                                    if (isRecordTarget) Modifier.glow(
+                                        color = AppColors.Red,
+                                        blurRadius = Dimens.GlowBlur,
+                                        cornerRadius = Dimens.MediumRadius
+                                    ) else Modifier
+                                )
+                                .clip(buttonShape)
+                                .alpha(if ((recordTargetToggleEnabled && trackActionsEnabled) || dragPreview) 1f else 0.45f)
+                                .background(if (isRecordTarget) AppColors.Red else AppColors.Bg)
+                                .border(Dimens.Stroke, AppColors.Line, buttonShape)
+                                .then(
+                                    if (recordTargetInteractive) {
+                                        Modifier.clickable { toggleRecordTarget.invoke() }
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.FiberManualRecord,
+                                contentDescription = stringResource(
+                                    if (isRecordTarget) R.string.cd_record_target_on else R.string.cd_record_target_off
+                                ),
+                                tint = if (isRecordTarget) AppColors.Line else AppColors.Line
+                            )
+                        }
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
                     }
 
                     if (showLoopChrome) {

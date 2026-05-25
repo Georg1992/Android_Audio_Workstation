@@ -42,6 +42,9 @@ public:
 
     const std::string &path() const { return m_path; }
 
+    /** True when the on-disk file size or mtime no longer matches the opened snapshot. */
+    bool hasDiskContentChanged() const override;
+
 private:
     std::string m_path;
     std::FILE *m_file = nullptr;
@@ -50,6 +53,8 @@ private:
     int32_t m_sampleRate = 0;
     int32_t m_channelCount = 0;
     int64_t m_currentFrame = 0;
+    int64_t m_openFileSize = 0;
+    int64_t m_openLastModifiedSec = 0;
 };
 
 } // namespace dawengine

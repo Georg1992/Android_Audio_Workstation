@@ -13,10 +13,13 @@ internal fun visibleTracksWithRecordingOptimistic(
 ): List<TrackEntity> {
     val base = optimisticOrder ?: projectTracksList
     val withRecording =
-        if (optimisticRecording != null && base.none { it.id == optimisticRecording.id }) {
-            base + optimisticRecording
-        } else {
-            base
+        when {
+            optimisticRecording == null -> base
+            base.any { it.id == optimisticRecording.id } ->
+                base.map { track ->
+                    if (track.id == optimisticRecording.id) optimisticRecording else track
+                }
+            else -> base + optimisticRecording
         }
     if (optimisticGains.isEmpty()) return withRecording
     return withRecording.map { track ->

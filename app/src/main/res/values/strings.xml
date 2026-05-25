@@ -59,6 +59,8 @@
     <string name="cd_import_audio">Import audio</string>
     <string name="cd_loop_on">Loop on</string>
     <string name="cd_loop_off">Loop off</string>
+    <string name="cd_record_target_on">Record target on</string>
+    <string name="cd_record_target_off">Record target off</string>
     <string name="cd_track_menu">Track menu</string>
 
     <!-- Validation errors -->
@@ -86,7 +88,6 @@
     <string name="error_stop_recording_to_import">Stop recording before importing.</string>
     <string name="error_import_storage_unavailable">Could not prepare storage for the imported track.</string>
     <string name="error_stop_recording_to_record">Stop recording before starting a new take.</string>
-    <string name="error_record_at_timeline_end">Move the playhead before the end of the timeline to record.</string>
     <string name="error_recording_failed_to_start">Failed to start recording.</string>
     <string name="error_recording_storage_insufficient_start">Recording cannot start: not enough storage space.</string>
     <string name="error_recording_stopped_storage">Recording stopped: not enough storage space.</string>

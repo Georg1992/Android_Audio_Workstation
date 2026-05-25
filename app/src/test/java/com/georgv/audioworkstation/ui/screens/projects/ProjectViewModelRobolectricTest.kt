@@ -18,6 +18,7 @@ import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -235,7 +236,7 @@ class ProjectViewModelRobolectricTest {
             repo,
             audio,
             ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider),
-            ProjectRecordingCoordinator(repo, audio),
+            ProjectRecordingCoordinator(repo, audio, audioFilePathProvider, WavPunchSplicer()),
             WavWaveformPeakExtractor(),
             audioFilePathProvider,
             RecordingStorageGuard(
@@ -264,7 +265,7 @@ private class NoOpAudioControllerForRobolectric : AudioController {
     override val recordingInputLevel = MutableStateFlow(0f)
     override fun transportPositionMs(): Long = 0L
     override fun isPlaybackEngineRunning(): Boolean = playbackState.value
-    override fun startRecording(spec: RecordingSpec): String? = null
+    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
     override fun stopRecording(): Boolean = true
     override fun startPlayback(spec: PlaybackSpec): Boolean = false
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
@@ -298,6 +299,8 @@ private class NullablePathAudioFileProvider(
     override fun projectRecordingDirectory(projectId: String): String? = path
 
     override fun trackOutputPath(projectId: String, trackId: String): String? = path
+
+    override fun trackRecordingTempPath(projectId: String, trackId: String): String? = path
 }
 
 private class NoOpProjectFileStoreForRobolectric : ProjectFileStore {

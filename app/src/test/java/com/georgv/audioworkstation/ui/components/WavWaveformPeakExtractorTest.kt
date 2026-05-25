@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -32,6 +33,33 @@ class WavWaveformPeakExtractorTest {
         assertEquals(1f, amplitudes.maxOrNull() ?: 0f, 0.0001f)
         assertTrue(amplitudes.first() < amplitudes.last())
         assertTrue((peaks?.sourceDurationMs ?: 0L) > 0L)
+    }
+
+    @Test
+    fun `extract re-reads peaks when same path content changes`() = runTest {
+        val file = File.createTempFile("waveform-replace", ".wav").apply { deleteOnExit() }
+        writeMonoPcm16Wav(
+            file = file,
+            samples = shortArrayOf(0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000),
+            sampleRateHz = 8_000,
+        )
+
+        val extractor = WavWaveformPeakExtractor(targetPeakCount = 4, ioDispatcher = coroutineContext[CoroutineDispatcher]!!)
+        val firstPeaks = extractor.extract(file.absolutePath)
+        advanceUntilIdle()
+        assertNotNull(firstPeaks)
+
+        writeMonoPcm16Wav(
+            file = file,
+            samples = ShortArray(16) { Short.MAX_VALUE },
+            sampleRateHz = 8_000,
+        )
+
+        val secondPeaks = extractor.extract(file.absolutePath)
+        advanceUntilIdle()
+        assertNotNull(secondPeaks)
+        assertNotEquals(firstPeaks!!.sourceDurationMs, secondPeaks!!.sourceDurationMs)
+        assertNotEquals(firstPeaks.amplitudes, secondPeaks.amplitudes)
     }
 
     @Test
@@ -189,25 +217,34 @@ private fun tempStereoWav(interleavedSamples: ShortArray): File =
 private fun tempPcm16Wav(samples: ShortArray, channelCount: Int): File =
     File.createTempFile("waveform", ".wav").apply {
         deleteOnExit()
-        parentFile?.mkdirs()
-        FileOutputStream(this).use { out ->
-            val dataSize = samples.size * 2
-            out.writeAscii("RIFF")
-            out.writeUInt32Le(36 + dataSize)
-            out.writeAscii("WAVE")
-            out.writeAscii("fmt ")
-            out.writeUInt32Le(16)
-            out.writeUInt16Le(1)
-            out.writeUInt16Le(channelCount)
-            out.writeUInt32Le(48_000)
-            out.writeUInt32Le(48_000 * channelCount * 2)
-            out.writeUInt16Le(channelCount * 2)
-            out.writeUInt16Le(16)
-            out.writeAscii("data")
-            out.writeUInt32Le(dataSize)
-            samples.forEach { out.writeUInt16Le(it.toInt() and 0xFFFF) }
-        }
+        writeMonoPcm16Wav(this, samples, channelCount, 48_000)
     }
+
+internal fun writeMonoPcm16Wav(
+    file: File,
+    samples: ShortArray,
+    channelCount: Int = 1,
+    sampleRateHz: Int = 48_000,
+) {
+    file.parentFile?.mkdirs()
+    FileOutputStream(file).use { out ->
+        val dataSize = samples.size * 2
+        out.writeAscii("RIFF")
+        out.writeUInt32Le(36 + dataSize)
+        out.writeAscii("WAVE")
+        out.writeAscii("fmt ")
+        out.writeUInt32Le(16)
+        out.writeUInt16Le(1)
+        out.writeUInt16Le(channelCount)
+        out.writeUInt32Le(sampleRateHz)
+        out.writeUInt32Le(sampleRateHz * channelCount * 2)
+        out.writeUInt16Le(channelCount * 2)
+        out.writeUInt16Le(16)
+        out.writeAscii("data")
+        out.writeUInt32Le(dataSize)
+        samples.forEach { out.writeUInt16Le(it.toInt() and 0xFFFF) }
+    }
+}
 
 private fun FileOutputStream.writeAscii(value: String) {
     write(value.toByteArray(Charsets.US_ASCII))

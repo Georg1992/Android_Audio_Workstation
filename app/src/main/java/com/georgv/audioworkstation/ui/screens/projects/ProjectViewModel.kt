@@ -77,6 +77,7 @@ data class ProjectUiState(
     val playheadPositionMs: Long = 0L,
     val transportPlaybackPhase: TransportPlaybackPhase = TransportPlaybackPhase.Idle,
     val isRecordingStartup: Boolean = false,
+    val recordTargetTrackId: String? = null,
 ) {
     val isPlayEnabled: Boolean
         get() = selectedTrackIds.isNotEmpty()
@@ -109,6 +110,7 @@ class ProjectViewModel @Inject constructor(
     private val projectId = MutableStateFlow<String?>(null)
 
     private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
+    private val recordTargetTrackId = MutableStateFlow<String?>(null)
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
     private val playheadPositionMs = MutableStateFlow(0L)
@@ -231,6 +233,7 @@ class ProjectViewModel @Inject constructor(
             selectedTrackIds = { selectedTrackIds.value },
             visibleTracks = { currentVisibleTracks() },
             visibleTrackCount = { uiState.value.tracks.size },
+            recordTargetTrackId = { recordTargetTrackId.value },
             waveformStatesByTrackId = { waveformStatesByTrackId.value },
             timelineProjectionForTracks = { tracks, waveformStates ->
                 timelineProjectionForTracks(tracks, waveformStates)
@@ -371,7 +374,8 @@ class ProjectViewModel @Inject constructor(
             projectScreenSnapshot,
             playheadPositionMs,
             playheadTransport.phase,
-        ) { snapshot, playheadMs, transportPhase ->
+            recordTargetTrackId,
+        ) { snapshot, playheadMs, transportPhase, recordTargetId ->
             val (_, screen) = snapshot
             val activeRecording =
                 activeRecordingTimelineClip(
@@ -408,6 +412,7 @@ class ProjectViewModel @Inject constructor(
                 playheadPositionMs = displayPlayheadMs,
                 transportPlaybackPhase = transportPhase,
                 isRecordingStartup = screen.isRecordingStartup,
+                recordTargetTrackId = recordTargetId,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
 
@@ -466,6 +471,7 @@ class ProjectViewModel @Inject constructor(
             recordingSession.resetWhenBoundProjectChanges()
             recordingStorageMonitor.stop()
             selectedTrackIds.value = emptySet()
+            recordTargetTrackId.value = null
         }
         this.projectId.value = projectId
     }
@@ -583,6 +589,9 @@ class ProjectViewModel @Inject constructor(
 
         val previousSelected = selectedTrackIds.value
         selectedTrackIds.value = selectedTrackIds.value - trackId
+        if (recordTargetTrackId.value == trackId) {
+            recordTargetTrackId.value = null
+        }
         val remainingTracks = uiState.value.tracks
             .filter { it.id != trackId }
             .mapIndexed { i, t -> t.copy(position = i) }
@@ -624,6 +633,13 @@ class ProjectViewModel @Inject constructor(
                 repo.upsertTrack(updatedTrack)
             }
         }
+    }
+
+    fun toggleRecordTarget(trackId: String) {
+        if (playbackSession.hasActivePlaybackSession()) return
+        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
+        if (uiState.value.tracks.none { it.id == trackId }) return
+        recordTargetTrackId.value = if (recordTargetTrackId.value == trackId) null else trackId
     }
 
     /**
@@ -782,11 +798,26 @@ class ProjectViewModel @Inject constructor(
 
     private fun finalizeRecordingTrack(trackId: String) {
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-        val finalizedTrack = recordingCoordinator.finalizedTrackAfterStop(currentTrack)
 
         viewModelScope.launch {
             dbActions.run(R.string.error_recording_metadata_failed) {
-                repo.upsertTrack(finalizedTrack)
+                val punchContext = recordingSession.punchRecordingContext()
+                try {
+                    val finalizedTrack =
+                        recordingCoordinator.finalizeTrackAfterStop(
+                            currentTrack = currentTrack,
+                            punchContext = punchContext,
+                        )
+                    repo.upsertTrack(finalizedTrack)
+                } catch (cancel: CancellationException) {
+                    recordingCoordinator.discardPunchRecordingTempFile(punchContext)
+                    throw cancel
+                } catch (error: Exception) {
+                    recordingCoordinator.discardPunchRecordingTempFile(punchContext)
+                    throw error
+                } finally {
+                    recordingSession.clearPunchRecordingContext()
+                }
             }
         }
     }

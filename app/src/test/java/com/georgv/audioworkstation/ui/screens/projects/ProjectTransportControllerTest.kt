@@ -5,6 +5,7 @@ import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingSpec
+import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -48,7 +49,7 @@ class ProjectTransportControllerTest {
         audio: AudioController,
     ): RecordingSessionController {
         val repo = ProjectRepository(FakeProjectDao(projects = listOf(project()), tracks = emptyList()), NoopProjectFileStore)
-        val coordinator = ProjectRecordingCoordinator(repo, audio)
+        val coordinator = testProjectRecordingCoordinator(repo, audio)
         return RecordingSessionController(scope, audio, coordinator)
     }
 
@@ -171,7 +172,7 @@ class ProjectTransportControllerTest {
                     }
                 }
 
-        override fun startRecording(spec: RecordingSpec): String? = null
+        override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
 
         override fun stopRecording(): Boolean {
             journal += "stopRecording"

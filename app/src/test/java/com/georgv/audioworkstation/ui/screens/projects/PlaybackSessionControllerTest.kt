@@ -729,7 +729,7 @@ private class PlaybackSessionTestAudio(
         _playbackState.value = false
     }
 
-    override fun startRecording(spec: RecordingSpec): String? = null
+    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
 
     override fun stopRecording(): Boolean = true
 

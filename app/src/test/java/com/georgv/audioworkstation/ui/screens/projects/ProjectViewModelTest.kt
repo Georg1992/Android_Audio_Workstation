@@ -15,6 +15,10 @@ import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
+import com.georgv.audioworkstation.core.audio.WavPunchSplicer
+import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -867,7 +871,7 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `onRecordPressed blocks when playhead is at timeline end`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `onRecordPressed allows recording when playhead is at timeline end`() = runTest(mainDispatcherRule.dispatcher) {
         val dao =
             FakeProjectDao(
                 projects = listOf(project()),
@@ -886,9 +890,36 @@ class ProjectViewModelTest {
         vm.onRecordPressed(PROJECT_ID)
         advanceUntilIdle()
 
-        assertNull(vm.uiState.value.recordingTrackId)
+        assertNotNull(vm.uiState.value.recordingTrackId)
+        assertEquals(2, dao.observeTracks(PROJECT_ID).first().size)
+        val appended = dao.observeTracks(PROJECT_ID).first().last { it.id != "a" }
+        assertEquals(10_000L, appended.timelineStartOffsetMs)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `record into existing track at timeline end starts punch recording`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", duration = 10_000L)),
+            )
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        val base = vm.uiState.value.timelineBaseDurationMs
+        vm.setPlayheadPositionMs(playheadMsAtFraction(1f, base), base)
+        advanceUntilIdle()
+        vm.toggleRecordTarget("a")
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertEquals("a", vm.uiState.value.recordingTrackId)
         assertEquals(1, dao.observeTracks(PROJECT_ID).first().size)
-        assertEquals(R.string.error_record_at_timeline_end, vm.userMessages.first().resId)
+        assertEquals(10_000L, vm.uiState.value.playheadPositionMs)
         collectJob.cancel()
     }
 
@@ -1785,7 +1816,7 @@ class ProjectViewModelTest {
                 FakeAudioController(
                     startRecordingPath = null,
                 )
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val outcome =
                 coord.beginRecording(
                     projectId = PROJECT_ID,
@@ -1929,6 +1960,190 @@ class ProjectViewModelTest {
         collectJob.cancel()
     }
 
+    @Test
+    fun `toggleRecordTarget enforces single selection`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks =
+                    listOf(
+                        track(id = "a", position = 0),
+                        track(id = "b", position = 1),
+                    ),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.toggleRecordTarget("a")
+        advanceUntilIdle()
+        assertEquals("a", vm.uiState.value.recordTargetTrackId)
+
+        vm.toggleRecordTarget("b")
+        advanceUntilIdle()
+        assertEquals("b", vm.uiState.value.recordTargetTrackId)
+
+        vm.toggleRecordTarget("b")
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.recordTargetTrackId)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `recording with record target reuses existing track`() = runTest(mainDispatcherRule.dispatcher) {
+        val existing =
+            track(
+                id = "a",
+                position = 0,
+                wavFilePath = "${tempDir().absolutePath}/old.wav",
+                duration = 5_000L,
+            )
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(existing))
+        val audioController = FakeAudioController(startRecordingPath = "${tempDir().absolutePath}/rec.wav")
+        val vm = createViewModel(dao, audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.toggleRecordTarget("a")
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertEquals(1, vm.uiState.value.tracks.size)
+        assertEquals("a", vm.uiState.value.recordingTrackId)
+        assertEquals("a", vm.uiState.value.tracks.single().id)
+        assertTrue(vm.uiState.value.tracks.single().isRecording)
+
+        vm.onStopPressed()
+        advanceUntilIdle()
+
+        assertEquals(1, vm.uiState.value.tracks.size)
+        assertEquals("a", vm.uiState.value.tracks.single().id)
+        assertEquals(1, dao.observeTracks(PROJECT_ID).first().size)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `record into existing track keeps visual playhead at current timeline position`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val existing =
+                track(
+                    id = "a",
+                    position = 0,
+                    wavFilePath = "${tempDir().absolutePath}/old.wav",
+                    duration = 60_000L,
+                )
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(existing))
+            val audioController = FakeAudioController(startRecordingPath = "${tempDir().absolutePath}/rec.wav")
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.setPlayheadPositionMs(5_000L, base)
+            advanceUntilIdle()
+            vm.toggleRecordTarget("a")
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+
+            assertEquals(5_000L, vm.uiState.value.playheadPositionMs)
+            assertEquals(5_000L, audioController.lastRecordingSpec?.timelineStartOffsetMs)
+            assertEquals(0L, vm.uiState.value.tracks.single().timelineStartOffsetMs)
+            assertEquals(TransportPlaybackPhase.Recording, vm.uiState.value.transportPlaybackPhase)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `playback spec after punch finalize uses same wav path and updated duration`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dir = tempDir()
+            val paths = TempDirAudioFilePathProvider(dir)
+            val wavPath = paths.trackOutputPath(PROJECT_ID, "a")
+            writeConstantPcm16Wav(
+                file = File(wavPath),
+                sampleValue = 1_000,
+                frameCount = 44_100 * 20,
+                sampleRateHz = 44_100,
+            )
+            val existing =
+                track(
+                    id = "a",
+                    position = 0,
+                    wavFilePath = wavPath,
+                    duration = 20_000L,
+                )
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks = listOf(existing),
+                )
+            val audioController =
+                FakeAudioController(
+                    startRecordingPath = paths.trackRecordingTempPath(PROJECT_ID, "a"),
+                ).apply {
+                    onEnterStartRecording = {
+                        writeConstantPcm16Wav(
+                            file = File(paths.trackRecordingTempPath(PROJECT_ID, "a")),
+                            sampleValue = 2_000,
+                            frameCount = 44_100 * 5,
+                            sampleRateHz = 44_100,
+                        )
+                    }
+                }
+            val vm = createViewModel(dao, audioController, audioFilePathProvider = paths)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val base = vm.uiState.value.timelineBaseDurationMs
+            vm.setPlayheadPositionMs(18_000L, base)
+            advanceUntilIdle()
+            vm.toggleRecordTarget("a")
+            vm.onRecordPressed(PROJECT_ID)
+            advanceUntilIdle()
+            vm.onStopPressed()
+            for (attempt in 0 until 100) {
+                advanceUntilIdle()
+                if (dao.observeTracks(PROJECT_ID).first().single().duration == 23_000L) break
+            }
+            assertEquals(23_000L, dao.observeTracks(PROJECT_ID).first().single().duration)
+
+            vm.toggleSelect("a")
+            startPlayback(vm)
+            advanceUntilIdle()
+
+            val lane = audioController.lastMultiPlaybackSpec?.lanes?.single()
+            assertNotNull(lane)
+            assertEquals(wavPath, lane?.wavFilePath)
+            assertEquals(23_000L, lane?.timelineClipDurationMs)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `recording without record target still creates new track`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav")),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        advanceUntilIdle()
+
+        assertEquals(2, vm.uiState.value.tracks.size)
+        assertNotNull(vm.uiState.value.recordingTrackId)
+        assertEquals("a", vm.uiState.value.tracks.first().id)
+        collectJob.cancel()
+    }
+
     private suspend fun TestScope.waitUntil(predicate: () -> Boolean) {
         repeat(500) {
             if (predicate()) return
@@ -1954,7 +2169,13 @@ class ProjectViewModelTest {
         val repo = ProjectRepository(dao, NoopProjectFileStore)
         val audioImportCoordinator =
             ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider)
-        val recordingCoordinator = ProjectRecordingCoordinator(repo, audioController)
+        val recordingCoordinator =
+            ProjectRecordingCoordinator(
+                repo,
+                audioController,
+                audioFilePathProvider,
+                WavPunchSplicer(),
+            )
         return ProjectViewModel(
             repo,
             audioController,
@@ -2978,6 +3199,8 @@ private object NullTrackOutputPathProvider : AudioFilePathProvider {
     override fun projectRecordingDirectory(projectId: String): String? = null
 
     override fun trackOutputPath(projectId: String, trackId: String): String? = null
+
+    override fun trackRecordingTempPath(projectId: String, trackId: String): String? = null
 }
 
 private class FakeAudioImporter(
@@ -3019,6 +3242,9 @@ private class FakeAudioFilePathProvider(
 
     override fun trackOutputPath(projectId: String, trackId: String): String =
         "$basePath/$projectId/$trackId.wav"
+
+    override fun trackRecordingTempPath(projectId: String, trackId: String): String =
+        "$basePath/$projectId/$trackId.recording.tmp.wav"
 }
 
 internal class FakeAudioController(
@@ -3039,6 +3265,8 @@ internal class FakeAudioController(
     var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
         private set
     var lastPlaybackSpec: PlaybackSpec? = null
+        private set
+    var lastRecordingSpec: RecordingSpec? = null
         private set
 
     /** Test hook invoked at the beginning of native [startRecording] (before JNI work). */
@@ -3069,10 +3297,12 @@ internal class FakeAudioController(
         _recordingInputLevel.value = level
     }
 
-    override fun startRecording(spec: RecordingSpec): String? {
+    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
         onEnterStartRecording?.invoke()
+        lastRecordingSpec = spec
         transportPositionMsValue = spec.timelineStartOffsetMs
-        return startRecordingPath?.replace("default", spec.trackId)
+        if (startRecordingPath == null) return null
+        return outputPath ?: startRecordingPath?.replace("default", spec.trackId)
     }
 
     override fun stopRecording(): Boolean {

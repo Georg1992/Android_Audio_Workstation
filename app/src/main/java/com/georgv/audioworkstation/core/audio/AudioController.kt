@@ -19,7 +19,7 @@ interface AudioController {
     /** True when the native engine is actively playing (same signal as [playbackState] when in sync). */
     fun isPlaybackEngineRunning(): Boolean
 
-    fun startRecording(spec: RecordingSpec): String?
+    fun startRecording(spec: RecordingSpec, outputPath: String? = null): String?
     fun stopRecording(): Boolean
     fun startPlayback(spec: PlaybackSpec): Boolean
     fun startPlayback(spec: MultiPlaybackSpec): Boolean

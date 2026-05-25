@@ -29,6 +29,7 @@ internal class ProjectTransportCommands(
     private val selectedTrackIds: () -> Set<String>,
     private val visibleTracks: () -> List<TrackEntity>,
     private val visibleTrackCount: () -> Int,
+    private val recordTargetTrackId: () -> String?,
     private val waveformStatesByTrackId: () -> Map<String, WaveformState>,
     private val timelineProjectionForTracks: (List<TrackEntity>, Map<String, WaveformState>) -> ProjectTimelineProjection,
     private val loadCurrentProject: suspend (String) -> ProjectEntity?,
@@ -52,12 +53,10 @@ internal class ProjectTransportCommands(
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId())
         val timelineStartOffsetMs =
             timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (timeline.timelineDurationMs > 0L && timelineStartOffsetMs >= timeline.timelineDurationMs) {
-            emitMessage(R.string.error_record_at_timeline_end)
-            return
-        }
 
         val overdubPlaybackTracks = selectedPlayableTracksForOverdub(tracks)
+        val recordTargetTrack =
+            recordTargetTrackId()?.let { targetId -> tracks.find { it.id == targetId } }
 
         recordingSession.armRecordingStartup()
 
@@ -68,6 +67,7 @@ internal class ProjectTransportCommands(
             ensureProject = ensureProject,
             visibleTrackCount = visibleTrackCount,
             persistRecordingRow = persistRecordingRow,
+            recordTargetTrack = recordTargetTrack,
             onPendingTrackAllocated = { pendingTrack ->
                 val overdubStarted =
                     startOverdubPlaybackForPendingTake(

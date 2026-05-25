@@ -27,11 +27,18 @@ open class WavWaveformPeakExtractor(
         withContext(ioDispatcher) {
             val path = wavPath.trim()
             if (path.isEmpty()) return@withContext null
-            cache[path]?.let { return@withContext it }
+            val fingerprint = wavFileContentFingerprint(path) ?: return@withContext null
+            cache[fingerprint]?.let { return@withContext it }
+            dropStaleCacheEntriesForPath(fingerprint)
             val peaks = readPeaks(path) ?: return@withContext null
-            cache[path] = peaks
+            cache[fingerprint] = peaks
             peaks
         }
+
+    private fun dropStaleCacheEntriesForPath(fingerprint: String) {
+        val prefix = wavFilePathPrefix(fingerprint) + "|"
+        cache.keys.removeAll { it.startsWith(prefix) && it != fingerprint }
+    }
 
     private fun readPeaks(wavPath: String): WaveformPeaks? {
         val file = File(wavPath)

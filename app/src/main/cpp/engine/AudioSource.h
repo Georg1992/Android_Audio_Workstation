@@ -42,6 +42,9 @@ public:
 
     virtual int32_t sampleRate() const = 0;
     virtual int32_t channelCount() const = 0;
+
+    /** True when on-disk bytes changed since this source was opened (file-backed sources only). */
+    virtual bool hasDiskContentChanged() const { return false; }
 };
 
 } // namespace dawengine

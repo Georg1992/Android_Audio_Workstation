@@ -10,6 +10,9 @@ interface AudioFilePathProvider {
     fun projectRecordingDirectory(projectId: String): String?
 
     fun trackOutputPath(projectId: String, trackId: String): String?
+
+    /** Temporary capture file for punch recording; must not overwrite the live track WAV. */
+    fun trackRecordingTempPath(projectId: String, trackId: String): String?
 }
 
 @Singleton
@@ -29,5 +32,10 @@ class DefaultAudioFilePathProvider @Inject constructor(
     override fun trackOutputPath(projectId: String, trackId: String): String? {
         val projectDir = projectRecordingDirectory(projectId) ?: return null
         return File(projectDir, "$trackId.wav").absolutePath
+    }
+
+    override fun trackRecordingTempPath(projectId: String, trackId: String): String? {
+        val projectDir = projectRecordingDirectory(projectId) ?: return null
+        return File(projectDir, "$trackId.recording.tmp.wav").absolutePath
     }
 }

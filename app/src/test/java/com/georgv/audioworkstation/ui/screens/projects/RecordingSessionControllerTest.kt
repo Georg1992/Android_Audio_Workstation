@@ -1,7 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -36,7 +38,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
 
             sut.executeRecordPressed(
@@ -64,7 +66,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController(startRecordingPath = null)
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
             var notified = false
 
@@ -95,7 +97,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
             var sawOptimisticBeforeEngineReturn = false
             audio.onEnterStartRecording = {
@@ -130,7 +132,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
             lateinit var idAtPersistEntry: String
 
@@ -164,7 +166,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
 
             sut.executeRecordPressed(
@@ -191,7 +193,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
 
             sut.executeRecordPressed(
@@ -219,7 +221,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList(), failUpsertTrack = true)
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
             var notified = false
 
@@ -251,7 +253,7 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = ProjectRecordingCoordinator(repo, audio)
+            val coord = testProjectRecordingCoordinator(repo, audio)
             val sut = RecordingSessionController(this, audio, coord)
             var notified = false
 
@@ -273,5 +275,48 @@ class RecordingSessionControllerTest {
             assertNull(sut.recordingTrackId.value)
             assertEquals(0, audio.stopRecordingCalls)
             advanceUntilIdle()
+        }
+
+    @Test
+    fun `executeRecordPressed reuses record target track without adding row`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val existing =
+                TrackEntity(
+                    id = "existing",
+                    projectId = PID,
+                    position = 0,
+                    name = "Take 1",
+                    wavFilePath = "old.wav",
+                    duration = 1_000L,
+                )
+            val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(existing))
+            val audio = FakeAudioController()
+            val repo = ProjectRepository(dao, NoopProjectFileStore)
+            val coord = testProjectRecordingCoordinator(repo, audio)
+            val sut = RecordingSessionController(this, audio, coord)
+
+            sut.executeRecordPressed(
+                projectId = PID,
+                projectName = "New",
+                timelineStartOffsetMs = 2_000L,
+                ensureProject = { _, _ -> project() },
+                visibleTrackCount = { 1 },
+                persistRecordingRow = { repo.upsertTracks(listOf(it)) },
+                notifyEngineStartFailed = { throw AssertionError("engine OK") },
+                notifyPersistFailed = { throw AssertionError("persist OK") },
+                storagePrecheck = permissiveStoragePrecheck(),
+                notifyStorageStartBlocked = { throw AssertionError("storage OK") },
+                recordTargetTrack = existing,
+                onPendingTrackAllocated = { true },
+            )
+            advanceUntilIdle()
+
+            assertEquals("existing", sut.recordingTrackId.value)
+            assertEquals(1, dao.observeTracks(PID).first().size)
+            val persisted = dao.observeTracks(PID).first().single()
+            assertEquals("existing", persisted.id)
+            assertEquals(1_000L, persisted.duration)
+            assertEquals(0L, persisted.timelineStartOffsetMs)
+            assertEquals(2_000L, audio.lastRecordingSpec?.timelineStartOffsetMs)
         }
 }

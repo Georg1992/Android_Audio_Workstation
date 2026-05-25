@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.screens.projects
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.ui.components.wavFileContentFingerprint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -13,12 +14,12 @@ internal class ProjectWaveformPeakCoordinator(
     private val waveformStatesByTrackId: MutableStateFlow<Map<String, WaveformState>>,
     private val tracksSnapshot: () -> List<TrackEntity>,
 ) {
-    private val waveformPeakPathsByTrackId = mutableMapOf<String, String>()
+    private val waveformPeakCacheKeysByTrackId = mutableMapOf<String, String>()
     private val waveformExtractionsInFlight = mutableSetOf<String>()
 
     fun resetWhenProjectChanges() {
         waveformStatesByTrackId.value = emptyMap()
-        waveformPeakPathsByTrackId.clear()
+        waveformPeakCacheKeysByTrackId.clear()
         waveformExtractionsInFlight.clear()
     }
 
@@ -28,14 +29,15 @@ internal class ProjectWaveformPeakCoordinator(
         val currentStates = waveformStatesByTrackId.value.toMutableMap()
 
         currentStates.keys.retainAll(playableIds)
-        waveformPeakPathsByTrackId.keys.retainAll(playableIds)
+        waveformPeakCacheKeysByTrackId.keys.retainAll(playableIds)
         waveformExtractionsInFlight.retainAll(playableIds)
 
         playableTracks.forEach { track ->
-            val cachedPath = waveformPeakPathsByTrackId[track.id]
-            if (cachedPath != track.wavFilePath) {
+            val cacheKey = trackWaveformCacheKey(track)
+            val cachedKey = waveformPeakCacheKeysByTrackId[track.id]
+            if (cachedKey != cacheKey) {
                 currentStates.remove(track.id)
-                waveformPeakPathsByTrackId.remove(track.id)
+                waveformPeakCacheKeysByTrackId.remove(track.id)
             }
         }
         if (currentStates != waveformStatesByTrackId.value) {
@@ -43,9 +45,10 @@ internal class ProjectWaveformPeakCoordinator(
         }
 
         playableTracks.forEach { track ->
-            if (waveformPeakPathsByTrackId[track.id] == track.wavFilePath) return@forEach
+            val cacheKey = trackWaveformCacheKey(track) ?: return@forEach
+            if (waveformPeakCacheKeysByTrackId[track.id] == cacheKey) return@forEach
             if (!waveformExtractionsInFlight.add(track.id)) return@forEach
-            waveformPeakPathsByTrackId[track.id] = track.wavFilePath
+            waveformPeakCacheKeysByTrackId[track.id] = cacheKey
             waveformStatesByTrackId.value =
                 waveformStatesByTrackId.value + (track.id to WaveformState.Loading)
             scope.launch {
@@ -54,7 +57,8 @@ internal class ProjectWaveformPeakCoordinator(
                 if (tracksSnapshot().any {
                         it.id == track.id &&
                             it.wavFilePath == track.wavFilePath &&
-                            !it.isRecording
+                            !it.isRecording &&
+                            trackWaveformCacheKey(it) == cacheKey
                     }
                 ) {
                     val state =
@@ -67,5 +71,10 @@ internal class ProjectWaveformPeakCoordinator(
                 }
             }
         }
+    }
+
+    private fun trackWaveformCacheKey(track: TrackEntity): String? {
+        val fingerprint = wavFileContentFingerprint(track.wavFilePath) ?: return null
+        return "$fingerprint|${track.duration ?: 0L}"
     }
 }

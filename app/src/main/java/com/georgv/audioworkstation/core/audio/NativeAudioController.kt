@@ -38,10 +38,12 @@ class NativeAudioController @Inject constructor(
 
     override fun isPlaybackEngineRunning(): Boolean = nativeEngine.isPlaybackActive()
 
-    override fun startRecording(spec: RecordingSpec): String? {
-        val outputPath = audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId) ?: return null
-        val request = spec.toRecordingRequest(outputPath)
-        return outputPath.takeIf {
+    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
+        val resolvedPath =
+            outputPath ?: audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId)
+                ?: return null
+        val request = spec.toRecordingRequest(resolvedPath)
+        return resolvedPath.takeIf {
             val started = nativeEngine.startRecording(request)
             if (started) monitorRecordingInputLevel()
             started

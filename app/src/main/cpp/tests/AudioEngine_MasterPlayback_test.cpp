@@ -425,5 +425,37 @@ TEST_F(AudioEngineMasterPlaybackTest, MultiLaneClipOffsetsLaneBStartsAtFiveSecon
     engine.stopPlayback();
 }
 
+TEST_F(AudioEngineMasterPlaybackTest, ReopensSingleLaneSourceWhenSamePathFileContentChanges) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    const std::string path = "same_path_reopen.wav";
+
+    WriteTempMonoWavFilled(path, kSampleRateHz, kSampleRateHz, 0);
+    ASSERT_TRUE(engine.setPlaybackSource(path, 1.0f, 0L));
+    engine.stopPlayback();
+
+    WriteTempMonoWavFilled(path, kSampleRateHz, kSampleRateHz, 20'000);
+    ASSERT_TRUE(engine.setPlaybackSource(path, 1.0f, 0L));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+    EXPECT_GT(PeakAbsInterleaved(buffer.data(), buffer.size()), 0.05f);
+
+    engine.stopPlayback();
+    std::remove(path.c_str());
+}
+
+TEST_F(AudioEngineMasterPlaybackTest, KeepsSingleLaneSourceWhenSamePathFileIsUnchanged) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    const std::string path = "same_path_unchanged.wav";
+
+    WriteTempMonoWavFilled(path, kSampleRateHz, kSampleRateHz, 20'000);
+    ASSERT_TRUE(engine.setPlaybackSource(path, 1.0f, 0L));
+    engine.stopPlayback();
+    ASSERT_TRUE(engine.setPlaybackSource(path, 1.0f, 0L));
+    engine.stopPlayback();
+    std::remove(path.c_str());
+}
+
 } // namespace
 } // namespace dawengine

@@ -55,6 +55,7 @@ if(BUILD_AUDIOENGINE_GTESTS)
     add_executable(audioengine_master_playback_tests
         tests/AudioEngine_MasterPlayback_test.cpp
         tests/AudioEngine_TransportRecording_test.cpp
+        tests/LocalWavSource_test.cpp
         engine/AudioEngine.cpp
         engine/LocalWavSource.cpp
     )

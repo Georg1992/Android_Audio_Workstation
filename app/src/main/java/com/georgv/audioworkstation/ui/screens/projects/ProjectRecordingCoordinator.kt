@@ -1,10 +1,15 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
+import com.georgv.audioworkstation.core.audio.PreparedExistingTrackRecording
+import com.georgv.audioworkstation.core.audio.RecordingPunchContext
+import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import java.io.File
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -14,7 +19,10 @@ sealed class RecordingStartOutcome {
     /** [AudioController.startRecording] returned null — caller shows [com.georgv.audioworkstation.R.string.error_recording_failed_to_start]. */
     data object EngineStartFailed : RecordingStartOutcome()
 
-    data class ReadyToPersistRecordingRow(val newTrack: TrackEntity) : RecordingStartOutcome()
+    data class ReadyToPersistRecordingRow(
+        val newTrack: TrackEntity,
+        val punchContext: RecordingPunchContext? = null,
+    ) : RecordingStartOutcome()
 }
 
 /**
@@ -24,6 +32,8 @@ sealed class RecordingStartOutcome {
 class ProjectRecordingCoordinator @Inject constructor(
     private val repo: ProjectRepository,
     private val audioController: AudioController,
+    private val audioFilePathProvider: AudioFilePathProvider,
+    private val wavPunchSplicer: WavPunchSplicer,
 ) {
 
     /**
@@ -45,17 +55,76 @@ class ProjectRecordingCoordinator @Inject constructor(
      * Start native capture for a row already published to the recording session flows.
      * On success returns the row enriched with output path + recording timestamps.
      */
-    suspend fun startEngineForAllocatedTrack(project: ProjectEntity, pendingTrack: TrackEntity): RecordingStartOutcome {
+    suspend fun startEngineForAllocatedTrack(
+        project: ProjectEntity,
+        pendingTrack: TrackEntity,
+        punchRecording: PreparedExistingTrackRecording? = null,
+    ): RecordingStartOutcome {
+        val tempRecordingPath =
+            punchRecording?.let {
+                audioFilePathProvider.trackRecordingTempPath(project.id, pendingTrack.id)
+            }
+        val finalWavPath =
+            punchRecording?.let {
+                audioFilePathProvider.trackOutputPath(project.id, pendingTrack.id)
+            }
+
+        tempRecordingPath?.let { File(it).delete() }
+
+        val recordingSpec =
+            punchRecording?.let { prepared ->
+                project.toRecordingSpec(pendingTrack).copy(
+                    timelineStartOffsetMs = prepared.recordingTransportStartMs,
+                )
+            } ?: project.toRecordingSpec(pendingTrack)
+
         val outputPath =
-            audioController.startRecording(project.toRecordingSpec(pendingTrack))
-                ?: return RecordingStartOutcome.EngineStartFailed
+            audioController.startRecording(
+                recordingSpec,
+                outputPath = tempRecordingPath,
+            ) ?: return RecordingStartOutcome.EngineStartFailed
+
+        val persistedWavPath = punchRecording?.track?.wavFilePath?.takeIf { it.isNotBlank() } ?: outputPath
         val newTrack =
             pendingTrack.copy(
-                wavFilePath = outputPath,
+                wavFilePath = persistedWavPath,
                 timeStampStart = System.currentTimeMillis(),
                 isRecording = true,
             )
-        return RecordingStartOutcome.ReadyToPersistRecordingRow(newTrack)
+        val punchContext =
+            punchRecording?.let { prepared ->
+                RecordingPunchContext(
+                    originalWavPath = prepared.track.wavFilePath,
+                    tempRecordingPath = outputPath,
+                    finalWavPath = finalWavPath ?: outputPath,
+                    spliceStartInClipMs = prepared.spliceStartInClipMs,
+                    sampleRateHz = project.sampleRate,
+                    fileBitDepth = project.fileBitDepth,
+                )
+            }
+        return RecordingStartOutcome.ReadyToPersistRecordingRow(
+            newTrack = newTrack,
+            punchContext = punchContext,
+        )
+    }
+
+    /**
+     * Re-arm an existing track row for punch recording — clip timeline position stays unchanged.
+     */
+    fun prepareExistingTrackForRecording(
+        track: TrackEntity,
+        playheadPositionMs: Long,
+    ): PreparedExistingTrackRecording {
+        val spliceStartInClipMs =
+            (playheadPositionMs - track.timelineStartOffsetMs).coerceAtLeast(0L)
+        return PreparedExistingTrackRecording(
+            track =
+                track.copy(
+                    timeStampStop = null,
+                ),
+            spliceStartInClipMs = spliceStartInClipMs,
+            recordingTransportStartMs = playheadPositionMs.coerceAtLeast(0L),
+        )
     }
 
     suspend fun beginRecording(
@@ -63,27 +132,71 @@ class ProjectRecordingCoordinator @Inject constructor(
         project: ProjectEntity,
         visibleTrackCount: Int,
         timelineStartOffsetMs: Long = 0L,
+        recordTargetTrack: TrackEntity? = null,
+        playheadPositionMs: Long = timelineStartOffsetMs,
     ): RecordingStartOutcome {
+        val punchRecording =
+            recordTargetTrack?.let { target ->
+                prepareExistingTrackForRecording(
+                    track = target,
+                    playheadPositionMs = playheadPositionMs,
+                )
+            }
         val pendingTrack =
-            allocatePendingRecordingTrack(
-                projectId = projectId,
-                visibleTrackCount = visibleTrackCount,
-                timelineStartOffsetMs = timelineStartOffsetMs,
-            )
-        return startEngineForAllocatedTrack(project, pendingTrack)
+            punchRecording?.track
+                ?: allocatePendingRecordingTrack(
+                    projectId = projectId,
+                    visibleTrackCount = visibleTrackCount,
+                    timelineStartOffsetMs = timelineStartOffsetMs,
+                )
+        return startEngineForAllocatedTrack(
+            project = project,
+            pendingTrack = pendingTrack,
+            punchRecording = punchRecording,
+        )
     }
 
     /**
-     * Row to persist after a successful [AudioController.stopRecording], matching prior
-     * [ProjectViewModel] finalize math.
+     * Row to persist after a successful [AudioController.stopRecording].
+     * Punch recordings splice temp audio into the live track WAV on success.
      */
-    fun finalizedTrackAfterStop(currentTrack: TrackEntity): TrackEntity {
+    fun finalizeTrackAfterStop(
+        currentTrack: TrackEntity,
+        punchContext: RecordingPunchContext?,
+    ): TrackEntity {
         val stopTimestamp = System.currentTimeMillis()
-        val duration = max(0L, stopTimestamp - currentTrack.timeStampStart)
+        if (punchContext == null) {
+            val duration = max(0L, stopTimestamp - currentTrack.timeStampStart)
+            return currentTrack.copy(
+                timeStampStop = stopTimestamp,
+                duration = duration,
+                isRecording = false,
+            )
+        }
+
+        val spliceResult =
+            wavPunchSplicer.splice(
+                originalWavPath = punchContext.originalWavPath,
+                tempRecordingWavPath = punchContext.tempRecordingPath,
+                finalWavPath = punchContext.finalWavPath,
+                spliceStartInClipMs = punchContext.spliceStartInClipMs,
+                expectedSampleRateHz = punchContext.sampleRateHz,
+                expectedBitDepth = punchContext.fileBitDepth,
+            )
         return currentTrack.copy(
+            wavFilePath = spliceResult.outputPath,
             timeStampStop = stopTimestamp,
-            duration = duration,
+            duration = spliceResult.durationMs,
             isRecording = false,
         )
+    }
+
+    /** @see finalizeTrackAfterStop */
+    fun finalizedTrackAfterStop(currentTrack: TrackEntity): TrackEntity =
+        finalizeTrackAfterStop(currentTrack, punchContext = null)
+
+    fun discardPunchRecordingTempFile(punchContext: RecordingPunchContext?) {
+        val tempPath = punchContext?.tempRecordingPath ?: return
+        File(tempPath).delete()
     }
 }

@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.RecordingPunchContext
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,10 @@ class RecordingSessionController(
     private val _optimisticRecordingTrack = MutableStateFlow<TrackEntity?>(null)
     val optimisticRecordingTrack: StateFlow<TrackEntity?> = _optimisticRecordingTrack.asStateFlow()
 
+    private val _punchRecordingContext = MutableStateFlow<RecordingPunchContext?>(null)
+
+    fun punchRecordingContext(): RecordingPunchContext? = _punchRecordingContext.value
+
     fun hasActiveRecordingTake(): Boolean = _recordingTrackId.value != null
 
     fun isStartupInFlight(): Boolean = _recordingStartup.value
@@ -49,6 +54,7 @@ class RecordingSessionController(
         notifyPersistFailed: () -> Unit,
         storagePrecheck: suspend (ProjectEntity) -> Boolean,
         notifyStorageStartBlocked: () -> Unit,
+        recordTargetTrack: TrackEntity? = null,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean = { true },
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
@@ -64,6 +70,7 @@ class RecordingSessionController(
                 notifyPersistFailed = notifyPersistFailed,
                 storagePrecheck = storagePrecheck,
                 notifyStorageStartBlocked = notifyStorageStartBlocked,
+                recordTargetTrack = recordTargetTrack,
                 onPendingTrackAllocated = onPendingTrackAllocated,
                 onRecordingTransportReady = onRecordingTransportReady,
             )
@@ -86,6 +93,7 @@ class RecordingSessionController(
         notifyPersistFailed: () -> Unit,
         storagePrecheck: suspend (ProjectEntity) -> Boolean,
         notifyStorageStartBlocked: () -> Unit,
+        recordTargetTrack: TrackEntity? = null,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean,
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
@@ -101,12 +109,21 @@ class RecordingSessionController(
                 return
             }
 
+            val preparedExistingTrack =
+                recordTargetTrack?.let { target ->
+                    recordingCoordinator.prepareExistingTrackForRecording(
+                        track = target,
+                        playheadPositionMs = timelineStartOffsetMs,
+                    )
+                }
+
             val pendingTrack =
-                recordingCoordinator.allocatePendingRecordingTrack(
-                    projectId = projectId,
-                    visibleTrackCount = visibleTrackCount(),
-                    timelineStartOffsetMs = timelineStartOffsetMs,
-                )
+                preparedExistingTrack?.track
+                    ?: recordingCoordinator.allocatePendingRecordingTrack(
+                        projectId = projectId,
+                        visibleTrackCount = visibleTrackCount(),
+                        timelineStartOffsetMs = timelineStartOffsetMs,
+                    )
 
             _optimisticRecordingTrack.value = pendingTrack.copy(isRecording = true)
             _recordingTrackId.value = pendingTrack.id
@@ -119,14 +136,15 @@ class RecordingSessionController(
                 return
             }
 
+            val startOutcome =
+                recordingCoordinator.startEngineForAllocatedTrack(
+                    project = currentProject,
+                    pendingTrack = pendingTrack,
+                    punchRecording = preparedExistingTrack,
+                )
+
             val newTrack =
-                when (
-                    val startOutcome =
-                        recordingCoordinator.startEngineForAllocatedTrack(
-                            project = currentProject,
-                            pendingTrack = pendingTrack,
-                        )
-                ) {
+                when (startOutcome) {
                     RecordingStartOutcome.EngineStartFailed -> {
                         _optimisticRecordingTrack.value = null
                         _recordingTrackId.value = null
@@ -134,7 +152,10 @@ class RecordingSessionController(
                         notifyEngineStartFailed()
                         return
                     }
-                    is RecordingStartOutcome.ReadyToPersistRecordingRow -> startOutcome.newTrack
+                    is RecordingStartOutcome.ReadyToPersistRecordingRow -> {
+                        _punchRecordingContext.value = startOutcome.punchContext
+                        startOutcome.newTrack
+                    }
                 }
 
             _optimisticRecordingTrack.value = newTrack
@@ -149,6 +170,8 @@ class RecordingSessionController(
                 _optimisticRecordingTrack.value = null
                 _recordingTrackId.value = null
                 _recordingStartup.value = false
+                recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
+                clearPunchRecordingContext()
                 audioController.stopRecording()
                 notifyPersistFailed()
                 return
@@ -167,6 +190,8 @@ class RecordingSessionController(
 
     /** Clears recording session markers when the bound project id changes ([ProjectViewModel.bind]). */
     fun resetWhenBoundProjectChanges() {
+        recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
+        clearPunchRecordingContext()
         _recordingTrackId.value = null
         _optimisticRecordingTrack.value = null
         _recordingStartup.value = false
@@ -183,6 +208,10 @@ class RecordingSessionController(
     fun clearRecordingTransportMarkers() {
         _recordingTrackId.value = null
         _optimisticRecordingTrack.value = null
+    }
+
+    fun clearPunchRecordingContext() {
+        _punchRecordingContext.value = null
     }
 
     /** Same-module unit tests: seed flows without running the full record pipeline. */

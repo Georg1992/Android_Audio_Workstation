@@ -6,9 +6,29 @@
 #include <utility>
 #include <vector>
 
+#include <sys/stat.h>
+
 namespace dawengine {
 
 namespace {
+
+#if defined(_WIN32)
+using WavStatStruct = struct _stat;
+int wavStat(const char *path, WavStatStruct *st) { return _stat(path, st); }
+#else
+using WavStatStruct = struct stat;
+int wavStat(const char *path, WavStatStruct *st) { return stat(path, st); }
+#endif
+
+bool readFileIdentity(const std::string &path, int64_t &sizeOut, int64_t &mtimeSecOut) {
+    WavStatStruct st {};
+    if (wavStat(path.c_str(), &st) != 0) {
+        return false;
+    }
+    sizeOut = static_cast<int64_t>(st.st_size);
+    mtimeSecOut = static_cast<int64_t>(st.st_mtime);
+    return true;
+}
 
 constexpr uint16_t kPcmFormat = 1u;
 constexpr uint16_t kSupportedBitsPerSample = 16u;
@@ -132,7 +152,20 @@ bool LocalWavSource::open() {
     m_channelCount = static_cast<int32_t>(channelCount);
     m_totalFrames = static_cast<int64_t>(dataSize) / static_cast<int64_t>(bytesPerFrame);
     m_currentFrame = 0;
+    readFileIdentity(m_path, m_openFileSize, m_openLastModifiedSec);
     return true;
+}
+
+bool LocalWavSource::hasDiskContentChanged() const {
+    if (m_path.empty()) {
+        return true;
+    }
+    int64_t size = 0;
+    int64_t mtimeSec = 0;
+    if (!readFileIdentity(m_path, size, mtimeSec)) {
+        return true;
+    }
+    return size != m_openFileSize || mtimeSec != m_openLastModifiedSec;
 }
 
 int32_t LocalWavSource::readFrames(float *dst, int32_t frames) {

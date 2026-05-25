@@ -226,7 +226,8 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
     lane.clipTimelineEndFrame.store(clipEndFrame, std::memory_order_release);
 
     const bool samePath =
-        reuseExistingSourceOnSamePath && !!lane.source && wavPath == lane.currentPath;
+        reuseExistingSourceOnSamePath && !!lane.source && wavPath == lane.currentPath &&
+        !lane.source->hasDiskContentChanged();
     const int32_t ringFrameCapacity = computeRingFramesForSampleRate(m_sampleRate);
     const int32_t prerollTargetFrames = computePrerollFramesForSampleRate(m_sampleRate);
     bool exhaustedAtStart = false;
