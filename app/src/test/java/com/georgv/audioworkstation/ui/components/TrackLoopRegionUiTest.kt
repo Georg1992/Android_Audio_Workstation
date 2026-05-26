@@ -128,17 +128,17 @@ class TrackLoopRegionUiTest {
     }
 
     @Test
-    fun `left handle drag updates loop start immediately`() {
+    fun `left handle drag preserves loop start on begin then updates on move`() {
         val begin =
             beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 200f,
+                pointerXInClipPx = 300f,
                 clipWidthPx = 1_000f,
                 loopStartMs = 6_000L,
                 loopEndMs = 12_000L,
                 sourceDurationMs = 20_000L,
                 handleHitHalfWidthPx = 48f,
             )
-        assertEquals(4_000L, begin.loopStartMs)
+        assertEquals(6_000L, begin.loopStartMs)
         val (start, _) =
             applyLoopRegionActiveDrag(
                 activeMode = begin.activeMode,
@@ -152,17 +152,17 @@ class TrackLoopRegionUiTest {
     }
 
     @Test
-    fun `right handle drag updates loop end immediately`() {
+    fun `right handle drag preserves loop end on begin then updates on move`() {
         val begin =
             beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 800f,
+                pointerXInClipPx = 600f,
                 clipWidthPx = 1_000f,
                 loopStartMs = 6_000L,
                 loopEndMs = 12_000L,
                 sourceDurationMs = 20_000L,
                 handleHitHalfWidthPx = 48f,
             )
-        assertEquals(16_000L, begin.loopEndMs)
+        assertEquals(12_000L, begin.loopEndMs)
         val (_, end) =
             applyLoopRegionActiveDrag(
                 activeMode = begin.activeMode,

@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,6 +18,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +43,9 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
+import com.georgv.audioworkstation.core.track.trackSourcePlayheadMsForClipTimelineWindow
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.max
@@ -321,7 +330,31 @@ fun TrackTimelineLane(
     ) {
         val activeClip = clip ?: return@BoxWithConstraints
         val layout = laneLayout ?: return@BoxWithConstraints
-        val drawGlobalPlayheadInLane = !activeClip.isLoop
+        var loopRegionEditFocus by remember(activeClip.laneId) { mutableStateOf(false) }
+        var laneViewportZoomed by remember(activeClip.laneId) { mutableStateOf(false) }
+        val timelineScale =
+            remember(laneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
+                timelineLaneScaleForLoopEdit(
+                    loopEditFocusActive = false,
+                    laneLayoutDurationMs = laneLayoutDurationMs,
+                    clip = activeClip,
+                )
+            }
+        val sourceFitScale =
+            remember(laneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
+                timelineLaneScaleForLoopEdit(
+                    loopEditFocusActive = true,
+                    laneLayoutDurationMs = laneLayoutDurationMs,
+                    clip = activeClip,
+                )
+            }
+        val laneScale =
+            if (timelineLaneUsesSourceFit(laneViewportZoomed, loopRegionEditFocus)) {
+                sourceFitScale
+            } else {
+                timelineScale
+            }
+        val drawGlobalPlayheadInLane = !activeClip.isLoop && !laneViewportZoomed
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -335,9 +368,20 @@ fun TrackTimelineLane(
                         .weight(TimelineWaveformHeightFraction)
                         .fillMaxWidth(),
                 ) {
-                    val clipStart = maxWidth * layout.startFraction
+                    val waveformAreaWidthPx = with(density) { maxWidth.toPx() }
+                    var loopPreviewStartMs by remember(activeClip.laneId) {
+                        mutableLongStateOf(activeClip.effectiveStartMs)
+                    }
+                    var loopPreviewEndMs by remember(activeClip.laneId) {
+                        mutableLongStateOf(activeClip.effectiveEndMs)
+                    }
+                    LaunchedEffect(activeClip.effectiveStartMs, activeClip.effectiveEndMs) {
+                        loopPreviewStartMs = activeClip.effectiveStartMs
+                        loopPreviewEndMs = activeClip.effectiveEndMs
+                    }
+                    val clipStart = maxWidth * laneScale.clipStartFractionOnWaveformArea()
                     val clipWidth =
-                        (maxWidth * layout.widthFraction)
+                        (maxWidth * laneScale.clipWidthFractionOnWaveformArea())
                             .coerceAtLeast(TimelineClipMinimumWidthDp.dp)
                     val sourcePlayheadMs =
                         trackSourcePlayheadMs(
@@ -348,6 +392,31 @@ fun TrackTimelineLane(
                             loopStartMs = activeClip.effectiveStartMs,
                             loopEndMs = activeClip.effectiveEndMs,
                         )
+                    val clipLocalPlayheadMs =
+                        if (laneViewportZoomed) {
+                            trackSourcePlayheadMsForClipTimelineWindow(
+                                globalPlayheadMs = playheadPositionMs,
+                                timelineStartOffsetMs = activeClip.startOffsetMs,
+                                sourceDurationMs = activeClip.durationMs,
+                                loopEnabled = activeClip.isLoop,
+                                loopStartMs = activeClip.effectiveStartMs,
+                                loopEndMs = activeClip.effectiveEndMs,
+                            )
+                        } else {
+                            null
+                        }
+                    val showLocalPlayhead =
+                        when {
+                            laneViewportZoomed -> clipLocalPlayheadMs != null
+                            activeClip.isLoop ->
+                                trackLocalPlayheadVisibleInClip(
+                                    globalPlayheadMs = playheadPositionMs,
+                                    timelineStartOffsetMs = activeClip.startOffsetMs,
+                                    clipDurationMs = activeClip.durationMs,
+                                )
+                            else -> false
+                        }
+                    val localPlayheadSourceMs = clipLocalPlayheadMs ?: sourcePlayheadMs
                     Box(
                         modifier = Modifier
                             .offset(x = clipStart)
@@ -366,6 +435,18 @@ fun TrackTimelineLane(
                         ) {
                             TimelineLaneWaveformMode.PersistedPeaks -> {
                                 val peaks = (activeClip.waveformState as WaveformState.Ready).peaks
+                                val loopRegionStartFraction =
+                                    if (activeClip.isLoop && activeClip.durationMs > 0L) {
+                                        loopPreviewStartMs.toFloat() / activeClip.durationMs.toFloat()
+                                    } else {
+                                        null
+                                    }
+                                val loopRegionEndFraction =
+                                    if (activeClip.isLoop && activeClip.durationMs > 0L) {
+                                        loopPreviewEndMs.toFloat() / activeClip.durationMs.toFloat()
+                                    } else {
+                                        null
+                                    }
                                 TrackWaveform(
                                     peaks =
                                         waveformPeaksForTimelineClip(
@@ -373,6 +454,8 @@ fun TrackTimelineLane(
                                             clipDurationMs = activeClip.durationMs,
                                         ),
                                     horizontalInsetFraction = 0f,
+                                    loopRegionStartFraction = loopRegionStartFraction,
+                                    loopRegionEndFraction = loopRegionEndFraction,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -392,40 +475,65 @@ fun TrackTimelineLane(
                                     is WaveformState.Ready -> Unit
                                 }
                         }
-                        if (activeClip.isLoop) {
-                            LoopRegionEditor(
+                        if (showLocalPlayhead) {
+                            TimelineLaneLocalPlayheadOverlay(
+                                sourcePlayheadMs = localPlayheadSourceMs,
                                 sourceDurationMs = activeClip.durationMs,
-                                loopStartMs = activeClip.effectiveStartMs,
-                                loopEndMs = activeClip.effectiveEndMs,
-                                editingEnabled = editingEnabled,
-                                onLoopRegionCommit = { startMs, endMs ->
-                                    onLoopRegionCommit?.invoke(startMs, endMs)
-                                },
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .zIndex(1f),
-                            )
-                        }
-                        if (activeClip.isLoop) {
-                            TimelineLanePlayheadOverlay(
-                                timeMs = sourcePlayheadMs,
-                                timelineDurationMs = activeClip.durationMs,
                                 playheadLineWidthPx = playheadLineWidthPx,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
+                    if (activeClip.isLoop) {
+                        LoopRegionEditor(
+                            sourceDurationMs = activeClip.durationMs,
+                            loopStartMs = activeClip.effectiveStartMs,
+                            loopEndMs = activeClip.effectiveEndMs,
+                            editingEnabled = editingEnabled,
+                            onLoopRegionCommit = { startMs, endMs ->
+                                onLoopRegionCommit?.invoke(startMs, endMs)
+                            },
+                            waveformAreaWidthPx = waveformAreaWidthPx,
+                            timelineScale = timelineScale,
+                            sourceFitScale = sourceFitScale,
+                            loopEditFocusActive = loopRegionEditFocus,
+                            persistentViewportZoomed = laneViewportZoomed,
+                            onLoopRegionEditFocusChanged = { loopRegionEditFocus = it },
+                            onLoopRegionPreviewChanged = { startMs, endMs ->
+                                loopPreviewStartMs = startMs
+                                loopPreviewEndMs = endMs
+                            },
+                            modifier =
+                                Modifier
+                                    .matchParentSize()
+                                    .zIndex(1f),
+                        )
+                    }
                 }
                 TimelineRuler(
-                    timelineBaseDurationMs = laneLayoutDurationMs,
-                    clipStartFraction = layout.startFraction,
-                    clipEndFraction = timelineClipEndFraction(layout),
-                    boundaryLabels = timelineRulerBoundaryLabels(
-                        clip = activeClip,
-                        layout = layout,
-                        timelineBaseDurationMs = laneLayoutDurationMs,
-                    ),
+                    timelineBaseDurationMs = laneScale.rulerDurationMs(),
+                    clipStartFraction = laneScale.clipStartFractionOnWaveformArea(),
+                    clipEndFraction = laneScale.rulerClipEndFraction(),
+                    boundaryLabels =
+                        if (laneScale.mode == TimelineLaneScaleMode.SourceFitWhileEditing) {
+                            sourceFitRulerBoundaryLabels(
+                                formattedTimelineStart =
+                                    formatTimelineDuration(activeClip.startOffsetMs),
+                                formattedTimelineEnd =
+                                    formatTimelineDuration(
+                                        timelineClipEndMs(
+                                            activeClip.startOffsetMs,
+                                            activeClip.durationMs,
+                                        ),
+                                    ),
+                            )
+                        } else {
+                            timelineRulerBoundaryLabels(
+                                clip = activeClip,
+                                layout = layout,
+                                timelineBaseDurationMs = laneLayoutDurationMs,
+                            )
+                        },
                     modifier = Modifier
                         .weight(TimelineRulerHeightFraction)
                         .fillMaxWidth(),
@@ -442,6 +550,8 @@ fun TrackTimelineLane(
         }
         ClipMetadataArea(
             clip = activeClip,
+            viewportZoomed = laneViewportZoomed,
+            onViewportZoomedChanged = { laneViewportZoomed = it },
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxWidth(TimelineMetadataWidthFraction)
@@ -482,6 +592,8 @@ private fun TimelineLanePlayheadOverlay(
 @Composable
 private fun ClipMetadataArea(
     clip: TimelineClip,
+    viewportZoomed: Boolean,
+    onViewportZoomedChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val labelStyle =
@@ -496,6 +608,7 @@ private fun ClipMetadataArea(
         } else {
             stringResource(R.string.track_channel_mono)
         }
+    val zoomedLabel = stringResource(R.string.track_lane_viewport_zoomed)
 
     Column(
         modifier = modifier
@@ -504,6 +617,24 @@ private fun ClipMetadataArea(
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (clip.durationMs > 0L) {
+            Text(
+                text = zoomedLabel,
+                style =
+                    labelStyle.copy(
+                        color =
+                            if (viewportZoomed) {
+                                Color.White
+                            } else {
+                                Color.White.copy(alpha = 0.45f)
+                            },
+                    ),
+                modifier =
+                    Modifier.clickable {
+                        onViewportZoomedChanged(!viewportZoomed)
+                    },
+            )
+        }
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = channelLabel,

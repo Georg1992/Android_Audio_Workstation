@@ -76,6 +76,7 @@
     <string name="import_failure_unsupported_channels">Only mono or stereo audio is supported.</string>
     <string name="track_channel_mono">MONO</string>
     <string name="track_channel_stereo">STEREO</string>
+    <string name="track_lane_viewport_zoomed">ZOOMED</string>
     <string name="import_failure_sample_rate_mismatch">Sample rate %1$d Hz does not match project %2$d Hz.</string>
     <string name="import_failure_bit_depth_mismatch">Bit depth %1$d-bit does not match project %2$d-bit.</string>
     <string name="import_failure_write_failed">Failed to import audio: %1$s</string>

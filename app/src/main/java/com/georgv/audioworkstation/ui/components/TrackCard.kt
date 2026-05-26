@@ -571,7 +571,7 @@ fun TrackCard(
                 onDragHandleStart = onDragHandleStart,
                 onDragHandleMove = onDragHandleMove,
                 onDragHandleEnd = onDragHandleEnd,
-                modifier = Modifier.align(Alignment.BottomEnd)
+                modifier = Modifier.align(Alignment.BottomEnd),
             )
         }
     }

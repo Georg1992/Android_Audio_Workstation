@@ -69,6 +69,8 @@ internal data class LoopUiTimelineLaneSnapshot(
     val clipDurationMs: Long,
     val loopStartMs: Long,
     val loopEndMs: Long,
+    val loopRegionEditFocus: Boolean = false,
+    val laneScaleMode: String? = null,
 ) {
     fun formatLine(): String =
         buildString {
@@ -87,6 +89,8 @@ internal data class LoopUiTimelineLaneSnapshot(
             append(" clipDurationMs=").append(clipDurationMs)
             append(" loopStartMs=").append(loopStartMs)
             append(" loopEndMs=").append(loopEndMs)
+            append(" loopRegionEditFocus=").append(loopRegionEditFocus)
+            append(" laneScaleMode=").append(laneScaleMode ?: "null")
         }
 }
 

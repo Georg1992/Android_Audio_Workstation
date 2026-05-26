@@ -65,6 +65,7 @@ data class WaveformPeaks(
 
 private const val RecordingWaveformBarCount = 72
 private const val WaveformCenterAlpha = 0.18f
+private const val WaveformOutsideLoopAlpha = 0.32f
 private const val RecordingWaveformFrameMs = 33L
 private const val RecordingWaveformSilenceFloor = 0.008f
 private const val RecordingWaveformQuietVisiblePeak = 0.16f
@@ -74,6 +75,8 @@ fun TrackWaveform(
     modifier: Modifier = Modifier,
     peaks: WaveformPeaks = WaveformPeaks.Placeholder,
     horizontalInsetFraction: Float = 0.04f,
+    loopRegionStartFraction: Float? = null,
+    loopRegionEndFraction: Float? = null,
 ) {
     if (peaks.isStereo) {
         val left = peaks.leftAmplitudes.orEmpty()
@@ -89,6 +92,8 @@ fun TrackWaveform(
                 barAlphaAt = { 1f },
                 horizontalInsetFraction = horizontalInsetFraction,
                 minCanvasHeight = 0.dp,
+                loopRegionStartFraction = loopRegionStartFraction,
+                loopRegionEndFraction = loopRegionEndFraction,
             )
             WaveformCanvas(
                 modifier = Modifier
@@ -100,6 +105,8 @@ fun TrackWaveform(
                 barAlphaAt = { 1f },
                 horizontalInsetFraction = horizontalInsetFraction,
                 minCanvasHeight = 0.dp,
+                loopRegionStartFraction = loopRegionStartFraction,
+                loopRegionEndFraction = loopRegionEndFraction,
             )
         }
     } else {
@@ -109,6 +116,8 @@ fun TrackWaveform(
             peakAt = { index -> peaks.amplitudes[index] },
             barAlphaAt = { 1f },
             horizontalInsetFraction = horizontalInsetFraction,
+            loopRegionStartFraction = loopRegionStartFraction,
+            loopRegionEndFraction = loopRegionEndFraction,
         )
     }
 }
@@ -154,6 +163,19 @@ fun RecordingWaveform(
     )
 }
 
+private fun waveformBarInLoopRegion(
+    barIndex: Int,
+    peakCount: Int,
+    loopRegionStartFraction: Float?,
+    loopRegionEndFraction: Float?,
+): Boolean {
+    if (loopRegionStartFraction == null || loopRegionEndFraction == null || peakCount <= 0) {
+        return true
+    }
+    val barCenterFraction = (barIndex + 0.5f) / peakCount.toFloat()
+    return barCenterFraction in loopRegionStartFraction..loopRegionEndFraction
+}
+
 @Composable
 private fun WaveformCanvas(
     modifier: Modifier,
@@ -163,6 +185,8 @@ private fun WaveformCanvas(
     barAlphaAt: (Int) -> Float,
     horizontalInsetFraction: Float = 0.04f,
     minCanvasHeight: Dp = Dimens.PlaceholderHeight,
+    loopRegionStartFraction: Float? = null,
+    loopRegionEndFraction: Float? = null,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
     val sizedModifier =
@@ -202,8 +226,21 @@ private fun WaveformCanvas(
             val normalized = peakAt(index).coerceIn(0f, 1f)
             val barHeight = (maxHalfHeight * normalized).coerceAtLeast(1f)
             val left = horizontalInset + index * barSlotWidth + (barSlotWidth - barWidth) / 2f
+            val inLoopRegion =
+                waveformBarInLoopRegion(
+                    barIndex = index,
+                    peakCount = peakCount,
+                    loopRegionStartFraction = loopRegionStartFraction,
+                    loopRegionEndFraction = loopRegionEndFraction,
+                )
+            val barAlpha =
+                if (inLoopRegion) {
+                    barAlphaAt(index).coerceIn(0f, 1f)
+                } else {
+                    WaveformOutsideLoopAlpha
+                }
             drawRoundRect(
-                color = AppColors.Line.copy(alpha = barAlphaAt(index).coerceIn(0f, 1f)),
+                color = AppColors.Line.copy(alpha = barAlpha),
                 topLeft = Offset(left, centerY - barHeight),
                 size = Size(barWidth, barHeight * 2f),
                 cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f),

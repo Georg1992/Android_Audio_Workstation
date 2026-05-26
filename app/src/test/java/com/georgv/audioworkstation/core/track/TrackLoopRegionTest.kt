@@ -393,6 +393,77 @@ class TrackLoopRegionTest {
     }
 
     @Test
+    fun `resolve drag mode prefers move in center when handle bands overlap`() {
+        val clipWidthPx = 1_000f
+        val handleHalfPx = 48f
+        assertEquals(
+            LoopRegionDragMode.MoveRegion,
+            resolveLoopRegionDragModeFromPointerX(
+                pointerXInClipPx = 250f,
+                clipWidthPx = clipWidthPx,
+                loopStartMs = 4_800L,
+                loopEndMs = 5_200L,
+                sourceDurationMs = 20_000L,
+                handleHitHalfWidthPx = handleHalfPx,
+            ),
+        )
+        assertEquals(
+            LoopRegionDragMode.LeftHandle,
+            resolveLoopRegionDragModeFromPointerX(
+                pointerXInClipPx = 241f,
+                clipWidthPx = clipWidthPx,
+                loopStartMs = 4_800L,
+                loopEndMs = 5_200L,
+                sourceDurationMs = 20_000L,
+                handleHitHalfWidthPx = handleHalfPx,
+            ),
+        )
+    }
+
+    @Test
+    fun `resolve drag mode from area pointer selects left handle near clip start`() {
+        val clipStartPx = 120f
+        val clipWidthPx = 800f
+        val handleHalfPx = 24f
+        assertEquals(
+            LoopRegionDragMode.LeftHandle,
+            resolveLoopRegionDragModeFromAreaPointer(
+                areaXPx = clipStartPx - 8f,
+                clipStartPx = clipStartPx,
+                clipWidthPx = clipWidthPx,
+                leftHandleAreaX = clipStartPx,
+                rightHandleAreaX = clipStartPx + clipWidthPx,
+                loopStartMs = 0L,
+                loopEndMs = 20_000L,
+                sourceDurationMs = 20_000L,
+                handleHitHalfWidthPx = handleHalfPx,
+            ),
+        )
+    }
+
+    @Test
+    fun `resolve drag mode from area pointer selects right handle near clip end`() {
+        val clipStartPx = 120f
+        val clipWidthPx = 800f
+        val handleHalfPx = 24f
+        val clipEndPx = clipStartPx + clipWidthPx
+        assertEquals(
+            LoopRegionDragMode.RightHandle,
+            resolveLoopRegionDragModeFromAreaPointer(
+                areaXPx = clipEndPx + 8f,
+                clipStartPx = clipStartPx,
+                clipWidthPx = clipWidthPx,
+                leftHandleAreaX = clipStartPx,
+                rightHandleAreaX = clipEndPx,
+                loopStartMs = 0L,
+                loopEndMs = 20_000L,
+                sourceDurationMs = 20_000L,
+                handleHitHalfWidthPx = handleHalfPx,
+            ),
+        )
+    }
+
+    @Test
     fun `begin drag outside left jumps left handle and locks right edge`() {
         val begin =
             beginLoopRegionDragAtPointer(

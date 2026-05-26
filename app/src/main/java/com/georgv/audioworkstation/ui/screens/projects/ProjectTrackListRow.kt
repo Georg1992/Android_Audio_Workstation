@@ -75,7 +75,6 @@ internal fun LazyItemScope.ProjectTrackListRow(
     recordTargetTrackId: String?,
     recordingInputLevel: Float,
     timelineClipsByTrackId: Map<String, TimelineClip>,
-    timelineBaseDurationMs: Long,
     timelineLaneLayoutDurationMs: Long,
     timelineVisibleDurationMs: Long,
     timelinePlayheadPositionMs: Long,

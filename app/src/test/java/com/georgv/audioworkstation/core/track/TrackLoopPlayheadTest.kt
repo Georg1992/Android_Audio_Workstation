@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
 import com.georgv.audioworkstation.ui.components.timelineClipEffectiveTimelineEndMs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,6 +47,84 @@ class TrackLoopPlayheadTest {
                 loopEnabled = true,
                 loopStartMs = 3_000L,
                 loopEndMs = 10_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `local playhead hidden until global reaches clip timeline start`() {
+        assertFalse(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = 9_999L,
+                timelineStartOffsetMs = 10_000L,
+                clipDurationMs = 30_000L,
+            ),
+        )
+        assertFalse(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = 0L,
+                timelineStartOffsetMs = 10_000L,
+                clipDurationMs = 30_000L,
+            ),
+        )
+        assertTrue(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = 10_000L,
+                timelineStartOffsetMs = 10_000L,
+                clipDurationMs = 30_000L,
+            ),
+        )
+        assertTrue(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = 15_000L,
+                timelineStartOffsetMs = 10_000L,
+                clipDurationMs = 30_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `zoomed clip playhead only visible within clip timeline window`() {
+        assertNull(
+            trackSourcePlayheadMsForClipTimelineWindow(
+                globalPlayheadMs = 19_999L,
+                timelineStartOffsetMs = 20_000L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = false,
+                loopStartMs = 0L,
+                loopEndMs = 30_000L,
+            ),
+        )
+        assertEquals(
+            5_000L,
+            trackSourcePlayheadMsForClipTimelineWindow(
+                globalPlayheadMs = 25_000L,
+                timelineStartOffsetMs = 20_000L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = false,
+                loopStartMs = 0L,
+                loopEndMs = 30_000L,
+            ),
+        )
+        assertEquals(
+            30_000L,
+            trackSourcePlayheadMsForClipTimelineWindow(
+                globalPlayheadMs = 50_000L,
+                timelineStartOffsetMs = 20_000L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = false,
+                loopStartMs = 0L,
+                loopEndMs = 30_000L,
+            ),
+        )
+        assertNull(
+            trackSourcePlayheadMsForClipTimelineWindow(
+                globalPlayheadMs = 50_001L,
+                timelineStartOffsetMs = 20_000L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = false,
+                loopStartMs = 0L,
+                loopEndMs = 30_000L,
             ),
         )
     }

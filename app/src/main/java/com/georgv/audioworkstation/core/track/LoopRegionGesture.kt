@@ -39,6 +39,41 @@ fun loopRegionEdgePx(
  * Maps touch x within the full clip (0..clipWidthPx ↔ 0..sourceDurationMs) to a drag mode.
  * Handle bands are centered on loop edges; outside the loop in ms selects jump modes.
  */
+fun resolveLoopRegionDragModeFromAreaPointer(
+    areaXPx: Float,
+    clipStartPx: Float,
+    clipWidthPx: Float,
+    leftHandleAreaX: Float,
+    rightHandleAreaX: Float,
+    loopStartMs: Long,
+    loopEndMs: Long,
+    sourceDurationMs: Long,
+    handleHitHalfWidthPx: Float,
+    handleTriangleHalfWidthPx: Float = 0f,
+): LoopRegionDragMode {
+    if (clipWidthPx <= 0f || sourceDurationMs <= 0L) {
+        return LoopRegionDragMode.MoveRegion
+    }
+    val handleGrabHalfWidthPx = handleHitHalfWidthPx + handleTriangleHalfWidthPx
+    if (handleGrabHalfWidthPx > 0f) {
+        if (kotlin.math.abs(areaXPx - leftHandleAreaX) <= handleGrabHalfWidthPx) {
+            return LoopRegionDragMode.LeftHandle
+        }
+        if (kotlin.math.abs(areaXPx - rightHandleAreaX) <= handleGrabHalfWidthPx) {
+            return LoopRegionDragMode.RightHandle
+        }
+    }
+    val pointerXInClipPx = (areaXPx - clipStartPx).coerceIn(0f, clipWidthPx)
+    return resolveLoopRegionDragModeFromPointerX(
+        pointerXInClipPx = pointerXInClipPx,
+        clipWidthPx = clipWidthPx,
+        loopStartMs = loopStartMs,
+        loopEndMs = loopEndMs,
+        sourceDurationMs = sourceDurationMs,
+        handleHitHalfWidthPx = handleHitHalfWidthPx,
+    )
+}
+
 fun resolveLoopRegionDragModeFromPointerX(
     pointerXInClipPx: Float,
     clipWidthPx: Float,
@@ -50,9 +85,10 @@ fun resolveLoopRegionDragModeFromPointerX(
     if (clipWidthPx <= 0f || sourceDurationMs <= 0L) {
         return LoopRegionDragMode.MoveRegion
     }
+    val clampedPointerX = pointerXInClipPx.coerceIn(0f, clipWidthPx)
     val pointerMs =
         pointerXToSourceMs(
-            pointerXInClipPx = pointerXInClipPx,
+            pointerXInClipPx = clampedPointerX,
             clipWidthPx = clipWidthPx,
             sourceDurationMs = sourceDurationMs,
         )
@@ -65,20 +101,28 @@ fun resolveLoopRegionDragModeFromPointerX(
     }
     val startPx = loopRegionEdgePx(loopStartMs, clipWidthPx, sourceDurationMs)
     val endPx = loopRegionEdgePx(loopEndMs, clipWidthPx, sourceDurationMs)
-    val leftBandMinX = startPx - handleHitHalfWidthPx
-    val leftBandMaxX = startPx + handleHitHalfWidthPx
-    val rightBandMinX = endPx - handleHitHalfWidthPx
-    val rightBandMaxX = endPx + handleHitHalfWidthPx
+    if (startPx <= handleHitHalfWidthPx && clampedPointerX <= startPx + handleHitHalfWidthPx * 1.5f) {
+        return LoopRegionDragMode.LeftHandle
+    }
+    if (endPx >= clipWidthPx - handleHitHalfWidthPx && clampedPointerX >= endPx - handleHitHalfWidthPx * 1.5f) {
+        return LoopRegionDragMode.RightHandle
+    }
+    val leftBandMinX = (startPx - handleHitHalfWidthPx).coerceAtLeast(0f)
+    val leftBandMaxX = (startPx + handleHitHalfWidthPx).coerceAtMost(clipWidthPx)
+    val rightBandMinX = (endPx - handleHitHalfWidthPx).coerceAtLeast(0f)
+    val rightBandMaxX = (endPx + handleHitHalfWidthPx).coerceAtMost(clipWidthPx)
     if (leftBandMaxX >= rightBandMinX) {
-        return if (pointerXInClipPx <= (startPx + endPx) / 2f) {
-            LoopRegionDragMode.LeftHandle
-        } else {
-            LoopRegionDragMode.RightHandle
+        val loopWidthPx = (endPx - startPx).coerceAtLeast(1f)
+        val edgeHalfWidthPx = minOf(handleHitHalfWidthPx, loopWidthPx * 0.18f)
+        return when {
+            clampedPointerX <= startPx + edgeHalfWidthPx -> LoopRegionDragMode.LeftHandle
+            clampedPointerX >= endPx - edgeHalfWidthPx -> LoopRegionDragMode.RightHandle
+            else -> LoopRegionDragMode.MoveRegion
         }
     }
     return when {
-        pointerXInClipPx in leftBandMinX..leftBandMaxX -> LoopRegionDragMode.LeftHandle
-        pointerXInClipPx in rightBandMinX..rightBandMaxX -> LoopRegionDragMode.RightHandle
+        clampedPointerX in leftBandMinX..leftBandMaxX -> LoopRegionDragMode.LeftHandle
+        clampedPointerX in rightBandMinX..rightBandMaxX -> LoopRegionDragMode.RightHandle
         else -> LoopRegionDragMode.MoveRegion
     }
 }
@@ -100,25 +144,81 @@ fun beginLoopRegionDragAtPointer(
     sourceDurationMs: Long,
     handleHitHalfWidthPx: Float,
 ): LoopRegionDragBeginResult {
+    val clampedPointerX = pointerXInClipPx.coerceIn(0f, clipWidthPx)
     val pointerMs =
         pointerXToSourceMs(
-            pointerXInClipPx = pointerXInClipPx,
+            pointerXInClipPx = clampedPointerX,
             clipWidthPx = clipWidthPx,
             sourceDurationMs = sourceDurationMs,
         )
     val mode =
         resolveLoopRegionDragModeFromPointerX(
-            pointerXInClipPx = pointerXInClipPx,
+            pointerXInClipPx = clampedPointerX,
             clipWidthPx = clipWidthPx,
             loopStartMs = loopStartMs,
             loopEndMs = loopEndMs,
             sourceDurationMs = sourceDurationMs,
             handleHitHalfWidthPx = handleHitHalfWidthPx,
         )
-    return when (mode) {
-        LoopRegionDragMode.JumpLeft,
-        LoopRegionDragMode.LeftHandle,
-        -> {
+    return loopRegionDragBeginForMode(
+        mode = mode,
+        pointerMs = pointerMs,
+        loopStartMs = loopStartMs,
+        loopEndMs = loopEndMs,
+        sourceDurationMs = sourceDurationMs,
+    )
+}
+
+fun beginLoopRegionDragAtAreaPointer(
+    areaXPx: Float,
+    clipStartPx: Float,
+    clipWidthPx: Float,
+    leftHandleAreaX: Float,
+    rightHandleAreaX: Float,
+    loopStartMs: Long,
+    loopEndMs: Long,
+    sourceDurationMs: Long,
+    handleHitHalfWidthPx: Float,
+    handleTriangleHalfWidthPx: Float = 0f,
+): LoopRegionDragBeginResult {
+    val clampedPointerX = (areaXPx - clipStartPx).coerceIn(0f, clipWidthPx)
+    val pointerMs =
+        pointerXToSourceMs(
+            pointerXInClipPx = clampedPointerX,
+            clipWidthPx = clipWidthPx,
+            sourceDurationMs = sourceDurationMs,
+        )
+    val mode =
+        resolveLoopRegionDragModeFromAreaPointer(
+            areaXPx = areaXPx,
+            clipStartPx = clipStartPx,
+            clipWidthPx = clipWidthPx,
+            leftHandleAreaX = leftHandleAreaX,
+            rightHandleAreaX = rightHandleAreaX,
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
+            sourceDurationMs = sourceDurationMs,
+            handleHitHalfWidthPx = handleHitHalfWidthPx,
+            handleTriangleHalfWidthPx = handleTriangleHalfWidthPx,
+        )
+    return loopRegionDragBeginForMode(
+        mode = mode,
+        pointerMs = pointerMs,
+        loopStartMs = loopStartMs,
+        loopEndMs = loopEndMs,
+        sourceDurationMs = sourceDurationMs,
+    )
+}
+
+private fun loopRegionDragBeginForMode(
+    mode: LoopRegionDragMode,
+    pointerMs: Long,
+    loopStartMs: Long,
+    loopEndMs: Long,
+    sourceDurationMs: Long,
+): LoopRegionDragBeginResult =
+    when (mode) {
+        LoopRegionDragMode.JumpLeft -> {
             val (start, end) =
                 applyLoopRegionLeftHandleDrag(
                     pointerMs = pointerMs,
@@ -134,9 +234,16 @@ fun beginLoopRegionDragAtPointer(
                 moveOriginPointerMs = pointerMs,
             )
         }
-        LoopRegionDragMode.JumpRight,
-        LoopRegionDragMode.RightHandle,
-        -> {
+        LoopRegionDragMode.LeftHandle ->
+            LoopRegionDragBeginResult(
+                activeMode = LoopRegionActiveDragMode.LeftHandle,
+                loopStartMs = loopStartMs,
+                loopEndMs = loopEndMs,
+                anchorStartMs = loopStartMs,
+                anchorEndMs = loopEndMs,
+                moveOriginPointerMs = pointerMs,
+            )
+        LoopRegionDragMode.JumpRight -> {
             val (start, end) =
                 applyLoopRegionRightHandleDrag(
                     pointerMs = pointerMs,
@@ -152,6 +259,15 @@ fun beginLoopRegionDragAtPointer(
                 moveOriginPointerMs = pointerMs,
             )
         }
+        LoopRegionDragMode.RightHandle ->
+            LoopRegionDragBeginResult(
+                activeMode = LoopRegionActiveDragMode.RightHandle,
+                loopStartMs = loopStartMs,
+                loopEndMs = loopEndMs,
+                anchorStartMs = loopStartMs,
+                anchorEndMs = loopEndMs,
+                moveOriginPointerMs = pointerMs,
+            )
         LoopRegionDragMode.MoveRegion ->
             LoopRegionDragBeginResult(
                 activeMode = LoopRegionActiveDragMode.MoveRegion,
@@ -162,7 +278,6 @@ fun beginLoopRegionDragAtPointer(
                 moveOriginPointerMs = pointerMs,
             )
     }
-}
 
 fun applyLoopRegionActiveDrag(
     activeMode: LoopRegionActiveDragMode,

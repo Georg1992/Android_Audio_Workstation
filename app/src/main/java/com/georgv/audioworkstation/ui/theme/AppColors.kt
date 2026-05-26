@@ -16,6 +16,8 @@ object AppColors {
 
     // Accent palette
     val Green = Color(0xFF02FC57)
+    /** Loop region handle lines and markers. */
+    val GreenDark = Color(0xFF006B28)
     val Yellow = Color(0xFFFDFF1F)
     val Cyan = Color(0xFF00FFF6)
     val Pink = Color(0xFFFFD2FF)

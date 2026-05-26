@@ -54,6 +54,8 @@ object Dimens {
 
     // drag handle (triangle in track card)
     val DragHandleSize = 24.dp
+    /** Touch target for track reorder handle (visual stays [DragHandleSize]). */
+    val DragHandleTouchTargetSize = 30.dp
 
     // glow effect (reusable "bulb" halo around icons/buttons)
     val GlowBlur = 10.dp

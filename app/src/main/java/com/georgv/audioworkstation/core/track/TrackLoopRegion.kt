@@ -70,6 +70,51 @@ fun TrackEntity.effectiveTimelineEndMs(): Long =
 fun trackLocalTimelineMs(globalPlayheadMs: Long, timelineStartOffsetMs: Long): Long =
     globalPlayheadMs - timelineStartOffsetMs.coerceAtLeast(0L)
 
+/** Whether the lane-local playhead should draw inside this clip. */
+fun trackLocalPlayheadVisibleInClip(
+    globalPlayheadMs: Long,
+    timelineStartOffsetMs: Long,
+    clipDurationMs: Long,
+    limitToClipTimelineWindow: Boolean = false,
+): Boolean {
+    if (clipDurationMs <= 0L) return false
+    val local = trackLocalTimelineMs(globalPlayheadMs, timelineStartOffsetMs)
+    if (local < 0L) return false
+    if (limitToClipTimelineWindow) {
+        return local <= clipDurationMs
+    }
+    return true
+}
+
+/** Source-local playhead x inside a source-fit (zoomed) clip from the global playhead. */
+fun trackSourcePlayheadMsForClipTimelineWindow(
+    globalPlayheadMs: Long,
+    timelineStartOffsetMs: Long,
+    sourceDurationMs: Long,
+    loopEnabled: Boolean,
+    loopStartMs: Long,
+    loopEndMs: Long,
+): Long? {
+    if (
+        !trackLocalPlayheadVisibleInClip(
+            globalPlayheadMs = globalPlayheadMs,
+            timelineStartOffsetMs = timelineStartOffsetMs,
+            clipDurationMs = sourceDurationMs,
+            limitToClipTimelineWindow = true,
+        )
+    ) {
+        return null
+    }
+    return trackSourcePlayheadMs(
+        globalPlayheadMs = globalPlayheadMs,
+        timelineStartOffsetMs = timelineStartOffsetMs,
+        sourceDurationMs = sourceDurationMs,
+        loopEnabled = loopEnabled,
+        loopStartMs = loopStartMs,
+        loopEndMs = loopEndMs,
+    )
+}
+
 /**
  * Source-local playhead for waveform display and loop wrap semantics.
  * Non-loop: track-local timeline ms. Loop: wraps inside [loopStartMs, loopEndMs).
