@@ -8,7 +8,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.WaveformState
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
+import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -74,7 +74,7 @@ internal class ProjectTransportCommands(
                         projectId = projectId,
                         pendingTrack = pendingTrack,
                         timelineStartOffsetMs = timelineStartOffsetMs,
-                        sessionTimelineEndMs = sessionTimelineEndMsForTracks(overdubPlaybackTracks),
+                        sessionTimelineEndMs = sessionTimelineEndMsForPlayback(overdubPlaybackTracks),
                         selectedPlayableTracks = overdubPlaybackTracks,
                     )
                 if (!overdubStarted) {
@@ -135,7 +135,7 @@ internal class ProjectTransportCommands(
         val playbackSpec =
             currentProject.toMultiPlaybackSpec(selectedPlayableTracks)?.copy(
                 startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForTracks(selectedPlayableTracks),
+                sessionTimelineEndMs = sessionTimelineEndMsForPlayback(selectedPlayableTracks),
             )
         if (playbackSpec == null) {
             emitMessage(playbackStartRejectedMessage(selectedPlayableTracks.size))

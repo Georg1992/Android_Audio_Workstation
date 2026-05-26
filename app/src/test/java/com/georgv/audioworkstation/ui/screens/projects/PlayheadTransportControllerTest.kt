@@ -188,36 +188,6 @@ class PlayheadTransportControllerTest {
         }
 
     @Test
-    fun `loop restart resets playhead and continues native poll`() = runTest(mainDispatcherRule.dispatcher) {
-        val playhead = MutableStateFlow(0L)
-        val nativeMs = MutableStateFlow(0L)
-        val sut =
-            PlayheadTransportController(
-                scope = this,
-                playheadPositionMs = playhead,
-                nativeTransportPositionMs = { nativeMs.value },
-                pollIntervalMs = 50L,
-            )
-        sut.setTimelineBaseDurationMs(10_000L)
-        sut.onPlaybackStarted(0L)
-
-        nativeMs.value = 120L
-        advanceTimeBy(50)
-        runCurrent()
-        assertTrue(playhead.value > 0L)
-
-        sut.onLoopRestart()
-        assertEquals(0L, playhead.value)
-
-        nativeMs.value = 80L
-        advanceTimeBy(50)
-        runCurrent()
-        assertTrue(playhead.value > 0L)
-        assertEquals(TransportPlaybackPhase.Playing, sut.phase.value)
-        sut.enterPaused()
-    }
-
-    @Test
     fun `playhead follows native transport during playback without timeline base clamp`() =
         runTest(mainDispatcherRule.dispatcher) {
             val playhead = MutableStateFlow(0L)

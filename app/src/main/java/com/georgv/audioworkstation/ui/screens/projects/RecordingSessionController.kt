@@ -167,13 +167,7 @@ class RecordingSessionController(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
-                _optimisticRecordingTrack.value = null
-                _recordingTrackId.value = null
-                _recordingStartup.value = false
-                recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
-                clearPunchRecordingContext()
-                audioController.stopRecording()
-                notifyPersistFailed()
+                rollbackFailedRecordingPersist(notifyPersistFailed)
                 return
             }
         } finally {
@@ -212,6 +206,16 @@ class RecordingSessionController(
 
     fun clearPunchRecordingContext() {
         _punchRecordingContext.value = null
+    }
+
+    private fun rollbackFailedRecordingPersist(notifyPersistFailed: () -> Unit) {
+        _optimisticRecordingTrack.value = null
+        _recordingTrackId.value = null
+        _recordingStartup.value = false
+        recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
+        clearPunchRecordingContext()
+        audioController.stopRecording()
+        notifyPersistFailed()
     }
 
     /** Same-module unit tests: seed flows without running the full record pipeline. */

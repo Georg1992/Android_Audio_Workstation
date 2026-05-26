@@ -103,8 +103,8 @@ android {
 
     externalNativeBuild {
         cmake {
-            path file("src/main/cpp/CMakeLists.txt")
-            version "3.22.1"
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
@@ -128,12 +128,15 @@ android {
             // Default debug type: no minification so iteration is fast and stack traces are clean.
         }
         release {
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles = [
+                getDefaultProguardFile('proguard-android-optimize.txt'),
+                'proguard-rules.pro',
+            ]
             // Use the placeholder release signing config when configured, otherwise fall back to
             // the debug key so that `:app:assembleRelease` still produces a smoke-testable APK.
-            signingConfig project.hasProperty("RELEASE_STORE_FILE")
+            signingConfig = project.hasProperty("RELEASE_STORE_FILE")
                 ? signingConfigs.release
                 : signingConfigs.debug
         }

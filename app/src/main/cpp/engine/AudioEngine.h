@@ -69,7 +69,10 @@ public:
                             int64_t startPositionMs = 0,
                             int64_t sessionTimelineEndMs = 0,
                             const std::vector<int64_t> &laneClipStartMs = {},
-                            const std::vector<int64_t> &laneClipDurationMs = {});
+                            const std::vector<int64_t> &laneClipDurationMs = {},
+                            const std::vector<uint8_t> &laneLoopEnabled = {},
+                            const std::vector<int64_t> &laneLoopSourceStartMs = {},
+                            const std::vector<int64_t> &laneLoopSourceEndMs = {});
 
     void setPlaybackGain(float gain);
 
@@ -136,6 +139,10 @@ private:
         std::atomic<int64_t> clipTimelineStartFrame{0};
         /** 0 = no explicit timeline clip end (lane active until WAV exhausted). */
         std::atomic<int64_t> clipTimelineEndFrame{0};
+        std::atomic<bool> loopEnabled{false};
+        std::atomic<int64_t> sourceLoopStartFrame{0};
+        /** Exclusive end frame inside the WAV; 0 when loop disabled. */
+        std::atomic<int64_t> sourceLoopEndFrame{0};
     };
 
     struct HotJoinStagingSlot {
@@ -169,12 +176,18 @@ private:
                                   int64_t transportStartFrame,
                                   int64_t clipStartMs,
                                   int64_t clipDurationMs,
-                                  bool reuseExistingSourceOnSamePath);
+                                  bool reuseExistingSourceOnSamePath,
+                                  bool loopEnabled = false,
+                                  int64_t loopSourceStartMs = 0,
+                                  int64_t loopSourceEndMs = 0);
     bool armPlaybackLanesLocked(const std::vector<std::string> &wavPaths,
                                 const std::vector<float> &gains,
                                 int64_t transportStartFrame,
                                 const std::vector<int64_t> &laneClipStartMs,
-                                const std::vector<int64_t> &laneClipDurationMs);
+                                const std::vector<int64_t> &laneClipDurationMs,
+                                const std::vector<uint8_t> &laneLoopEnabled,
+                                const std::vector<int64_t> &laneLoopSourceStartMs,
+                                const std::vector<int64_t> &laneLoopSourceEndMs);
 
     bool openInputStream(int32_t channelCount);
     void closeInputStream();

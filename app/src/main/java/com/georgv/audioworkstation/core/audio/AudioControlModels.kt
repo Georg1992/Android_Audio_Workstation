@@ -1,5 +1,8 @@
 package com.georgv.audioworkstation.core.audio
 
+import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
+import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
+import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
@@ -86,21 +89,54 @@ data class TrackPlaybackLane(
     val timelineClipStartMs: Long = 0L,
     /** Clip length on the timeline (ms); 0 = no explicit timeline end (native uses WAV drain only). */
     val timelineClipDurationMs: Long = 0L,
+    val loopEnabled: Boolean = false,
+    /** Track-local source loop region start (ms from WAV start). */
+    val loopSourceStartMs: Long = 0L,
+    /** Track-local source loop region end (ms from WAV start). */
+    val loopSourceEndMs: Long = 0L,
 ) {
     init {
         require(wavFilePath.isNotBlank()) { "Playback lane requires a WAV path." }
         require(gain in 0f..1f) { "Playback lane gain must be normalized to 0..1." }
         require(timelineClipStartMs >= 0L) { "Timeline clip start must be non-negative." }
         require(timelineClipDurationMs >= 0L) { "Timeline clip duration must be non-negative." }
+        require(loopSourceStartMs >= 0L) { "Loop source start must be non-negative." }
+        require(loopSourceEndMs >= 0L) { "Loop source end must be non-negative." }
     }
 }
 
-/** WAV read offset (ms) for a lane at transport position [playheadMs]. */
+/** WAV read offset (ms) for a lane at transport position [playheadMs] (non-loop lanes). */
 fun laneSourceOffsetMs(playheadMs: Long, clipStartMs: Long): Long =
-    (playheadMs - clipStartMs).coerceAtLeast(0L)
+    laneSourceReadOffsetMs(
+        playheadMs = playheadMs,
+        clipStartMs = clipStartMs,
+        loopEnabled = false,
+        loopSourceStartMs = 0L,
+        loopSourceEndMs = 0L,
+    )
 
-fun isLaneAudibleAtPlayhead(playheadMs: Long, clipStartMs: Long, clipDurationMs: Long): Boolean {
+/** Source read position (ms) including loop wrap; matches native lane seek mapping. */
+fun laneSourceReadOffsetMs(
+    playheadMs: Long,
+    clipStartMs: Long,
+    loopEnabled: Boolean,
+    loopSourceStartMs: Long,
+    loopSourceEndMs: Long,
+): Long {
+    val clipOffset = (playheadMs - clipStartMs).coerceAtLeast(0L)
+    if (!loopEnabled) return clipOffset
+    val loopLength = (loopSourceEndMs - loopSourceStartMs).coerceAtLeast(1L)
+    return loopSourceStartMs + (clipOffset % loopLength)
+}
+
+fun isLaneAudibleAtPlayhead(
+    playheadMs: Long,
+    clipStartMs: Long,
+    clipDurationMs: Long,
+    loopEnabled: Boolean = false,
+): Boolean {
     if (playheadMs < clipStartMs) return false
+    if (loopEnabled) return true
     if (clipDurationMs <= 0L) return true
     return playheadMs < clipStartMs + clipDurationMs
 }
@@ -162,12 +198,17 @@ fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackS
             track.wavFilePath
                 .takeIf { it.isNotBlank() }
                 ?.let { wavFilePath ->
+                    val effectiveStartMs = track.effectiveLoopStartMs()
+                    val effectiveEndMs = track.effectiveLoopEndMs()
                     TrackPlaybackLane(
                         trackId = track.id,
                         wavFilePath = wavFilePath,
                         gain = GainRange.toUnit(track.gain),
                         timelineClipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
-                        timelineClipDurationMs = track.duration ?: 0L,
+                        timelineClipDurationMs = track.sourceDurationMs(),
+                        loopEnabled = track.isLoop,
+                        loopSourceStartMs = effectiveStartMs,
+                        loopSourceEndMs = effectiveEndMs,
                     )
                 }
         }

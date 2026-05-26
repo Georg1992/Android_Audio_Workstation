@@ -248,7 +248,7 @@ fun ProjectScreen(
             val playheadPositionMs = scrubbingPlayheadPositionMs ?: state.playheadPositionMs
             TimelinePlayheadScrubberPanel(
                 playheadPositionMs = playheadPositionMs,
-                timelineDurationMs = state.timelineBaseDurationMs,
+                timelineDurationMs = state.timelineVisibleDurationMs,
                 onPlayheadScrubStarted = { vm.onPlayheadScrubStarted() },
                 onPlayheadScrubCancelled = {
                     scrubbingPlayheadPositionMs = null
@@ -256,11 +256,11 @@ fun ProjectScreen(
                 },
                 onPlayheadPositionPreview = { positionMs ->
                     scrubbingPlayheadPositionMs = positionMs
-                    vm.onPlayheadScrubPreviewPosition(positionMs, state.timelineBaseDurationMs)
+                    vm.onPlayheadScrubPreviewPosition(positionMs, state.timelineVisibleDurationMs)
                 },
                 onPlayheadPositionCommit = { positionMs ->
                     scrubbingPlayheadPositionMs = null
-                    vm.onPlayheadScrubCommittedPosition(positionMs, state.timelineBaseDurationMs)
+                    vm.onPlayheadScrubCommittedPosition(positionMs, state.timelineVisibleDurationMs)
                 },
                 inputLocked =
                     reorderActive ||
@@ -275,7 +275,8 @@ fun ProjectScreen(
                 recordTargetTrackId = state.recordTargetTrackId,
                 recordingInputLevel = state.recordingInputLevel,
                 timelineClipsByTrackId = state.timelineClipsByTrackId,
-                timelineDurationMs = state.timelineBaseDurationMs,
+                timelineBaseDurationMs = state.timelineBaseDurationMs,
+                timelineVisibleDurationMs = state.timelineVisibleDurationMs,
                 timelinePlayheadPositionMs = playheadPositionMs,
                 playbackActive = state.playbackSessionActive,
                 dragController = dragController,
@@ -286,6 +287,7 @@ fun ProjectScreen(
                 onRenameTrack = vm::renameTrack,
                 onToggleRecordTarget = vm::toggleRecordTarget,
                 onToggleLoop = vm::toggleTrackLoop,
+                onUpdateTrackLoopRegion = vm::updateTrackLoopRegion,
                 onReorderTracks = { vm.setTrackOrderSession(projectId, it) },
                 onPersistTrackOrder = { vm.persistTrackOrderToDb(projectId) },
                 onTrackPagingSummaryChange = { trackPagingSummary = it },

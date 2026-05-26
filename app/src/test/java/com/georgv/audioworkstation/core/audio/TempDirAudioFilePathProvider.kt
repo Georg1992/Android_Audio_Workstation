@@ -1,7 +1,5 @@
 package com.georgv.audioworkstation.core.audio
 
-import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.screens.projects.ProjectRecordingCoordinator
 import java.io.File
 
 internal class TempDirAudioFilePathProvider(
@@ -18,15 +16,3 @@ internal class TempDirAudioFilePathProvider(
     override fun trackRecordingTempPath(projectId: String, trackId: String): String =
         File(projectRecordingDirectory(projectId), "$trackId.recording.tmp.wav").absolutePath
 }
-
-internal fun testProjectRecordingCoordinator(
-    repo: ProjectRepository,
-    audio: AudioController,
-    paths: AudioFilePathProvider = TempDirAudioFilePathProvider(),
-): ProjectRecordingCoordinator =
-    ProjectRecordingCoordinator(
-        repo = repo,
-        audioController = audio,
-        audioFilePathProvider = paths,
-        wavPunchSplicer = WavPunchSplicer(),
-    )

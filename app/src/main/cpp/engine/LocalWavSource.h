@@ -45,6 +45,8 @@ public:
     /** True when the on-disk file size or mtime no longer matches the opened snapshot. */
     bool hasDiskContentChanged() const override;
 
+    int64_t currentFrame() const override { return m_currentFrame; }
+
 private:
     std::string m_path;
     std::FILE *m_file = nullptr;

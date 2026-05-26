@@ -64,7 +64,8 @@ fun TrackCard(
     isRecording: Boolean,
     recordingInputLevel: Float = 0f,
     timelineClip: TimelineClip? = null,
-    timelineDurationMs: Long = TimelineMinimumBaseDurationMs,
+    laneLayoutDurationMs: Long = TimelineMinimumBaseDurationMs,
+    globalPlayheadTimelineDurationMs: Long = TimelineMinimumBaseDurationMs,
     timelinePlayheadPositionMs: Long = 0L,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
@@ -75,6 +76,8 @@ fun TrackCard(
     onToggleLoop: (() -> Unit)? = null,
     isLoop: Boolean = false,
     loopToggleEnabled: Boolean = true,
+    loopRegionEditingEnabled: Boolean = false,
+    onLoopRegionCommit: ((loopStartMs: Long, loopEndMs: Long) -> Unit)? = null,
     onToggleRecordTarget: (() -> Unit)? = null,
     isRecordTarget: Boolean = false,
     recordTargetToggleEnabled: Boolean = true,
@@ -145,6 +148,17 @@ fun TrackCard(
         onRename?.invoke(renameFieldValue.text)
     }
 
+    val isolateTimelineTouch = isLoop && timelineClip != null && !dragPreview
+    val cardSelectionClickEnabled = !interactionBlocked && !isRenaming && !dragPreview
+    val cardSelectionInteractionSource = remember { MutableInteractionSource() }
+    val onCardSelectionClick = {
+        if (isMenuOpen) {
+            onMenuDismiss()
+        } else {
+            onClick()
+        }
+    }
+
     Box(
         modifier =
             modifier
@@ -161,20 +175,15 @@ fun TrackCard(
                 .background(bg)
                 .border(Dimens.Stroke, AppColors.Line, cardShape)
                 .then(
-                    if (dragPreview) {
+                    if (dragPreview || isolateTimelineTouch) {
                         Modifier
                     } else {
                         Modifier.clickable(
-                            interactionSource = remember { MutableInteractionSource() },
+                            interactionSource = cardSelectionInteractionSource,
                             indication = null,
-                            enabled = !interactionBlocked && !isRenaming
-                        ) {
-                            if (isMenuOpen) {
-                                onMenuDismiss()
-                            } else {
-                                onClick()
-                            }
-                        }
+                            enabled = cardSelectionClickEnabled,
+                            onClick = onCardSelectionClick,
+                        )
                     }
                 )
     ) {
@@ -209,8 +218,21 @@ fun TrackCard(
                     )
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (isolateTimelineTouch && cardSelectionClickEnabled) {
+                                    Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onCardSelectionClick,
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (!dragPreview && isRenaming) {
                         TextField(
@@ -469,9 +491,12 @@ fun TrackCard(
                 } else {
                     TrackTimelineLane(
                         clip = timelineClip,
-                        timelineDurationMs = timelineDurationMs,
+                        laneLayoutDurationMs = laneLayoutDurationMs,
+                        globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
                         playheadPositionMs = timelinePlayheadPositionMs,
                         recordingInputLevel = recordingInputLevel.takeIf { isRecording },
+                        loopRegionEditingEnabled = loopRegionEditingEnabled,
+                        onLoopRegionCommit = onLoopRegionCommit,
                         modifier = waveformModifier,
                     )
                 }
@@ -481,9 +506,21 @@ fun TrackCard(
 
             if (trackSlotHeight != null) {
                 Box(
-                    modifier = Modifier
-                        .width(Dimens.FaderWidth)
-                        .fillMaxHeight(),
+                    modifier =
+                        Modifier
+                            .width(Dimens.FaderWidth)
+                            .fillMaxHeight()
+                            .then(
+                                if (isolateTimelineTouch && cardSelectionClickEnabled) {
+                                    Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onCardSelectionClick,
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
                 ) {
                     TrackGainSection(
                         gain = gain,

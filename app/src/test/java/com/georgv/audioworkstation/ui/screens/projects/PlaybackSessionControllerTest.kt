@@ -169,72 +169,78 @@ class PlaybackSessionControllerTest {
     }
 
     @Test
-    fun `playback completion restarts native playback when loop is on`() = runTest(mainDispatcherRule.dispatcher) {
-        val audio = PlaybackSessionTestAudio()
-        val visible = listOf(track("a", loop = true))
-        val sut = PlaybackSessionController(
-            scope = this,
-            audioController = audio,
-            loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-            currentProjectId = { PROJECT_ID },
-            visibleTracks = { visible },
-        )
-        armPlaybackMonitor(audio, sut)
-        assertEquals(setOf("a"), sut.sessionTrackIds.value)
-        audio.finishPlaybackPulse()
-        advanceUntilIdle()
-        assertEquals(2, audio.startPlaybackCalls)
-        assertEquals(setOf("a"), sut.sessionTrackIds.value)
-        sut.cancelCompletionMonitorForTransportStop()
-    }
-
-    @Test
-    fun `playback completion restarts the same playing group when any playing track loops`() =
+    fun `playback completion tears down session when native stops with loop lane`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = PlaybackSessionTestAudio()
-            val visible = listOf(
-                track("a", loop = false, wav = "a.wav"),
-                track("b", loop = true, wav = "b.wav"),
-                track("c", loop = true, wav = "c.wav")
-            )
-            val sut = PlaybackSessionController(
-                scope = this,
-                audioController = audio,
-                loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                currentProjectId = { PROJECT_ID },
-                visibleTracks = { visible },
-            )
+            val visible = listOf(track("a", loop = true))
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { visible },
+                )
+            armPlaybackMonitor(audio, sut)
+            assertEquals(setOf("a"), sut.sessionTrackIds.value)
+            audio.finishPlaybackPulse()
+            advanceUntilIdle()
+            assertEquals(1, audio.startPlaybackCalls)
+            assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
+            assertFalse(sut.hasActivePlaybackSession())
+            sut.cancelCompletionMonitorForTransportStop()
+        }
+
+    @Test
+    fun `mixed loop and non-loop completion does not restart whole session`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audio = PlaybackSessionTestAudio()
+            val visible =
+                listOf(
+                    track("a", loop = false, wav = "a.wav"),
+                    track("b", loop = true, wav = "b.wav"),
+                    track("c", loop = true, wav = "c.wav"),
+                )
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { visible },
+                )
 
             val spec =
                 projectFix.toMultiPlaybackSpec(visible.filter { it.id in setOf("a", "b") })
                     ?: error("expected multi spec")
             assertTrue(audio.startPlayback(spec))
             sut.markPlayingAndStartCompletionMonitor(listOf("a", "b"))
+            advanceUntilIdle()
             audio.finishPlaybackPulse()
             advanceUntilIdle()
 
-            assertEquals(setOf("a", "b"), sut.sessionTrackIds.value)
-            assertEquals(listOf("a", "b"), audio.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+            assertEquals(1, audio.startPlaybackCalls)
+            assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
             sut.cancelCompletionMonitorForTransportStop()
         }
 
     @Test
-    fun `playback completion clears playing when loop restart is rejected by engine`() =
+    fun `playback completion clears playing when native stops for loop lane`() =
         runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(startPlaybackPermitted = { invocation -> invocation != 1 })
+            val audio = PlaybackSessionTestAudio()
             val visible = listOf(track("a", loop = true))
-            val sut = PlaybackSessionController(
-                scope = this,
-                audioController = audio,
-                loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                currentProjectId = { PROJECT_ID },
-                visibleTracks = { visible },
-            )
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { visible },
+                )
             armPlaybackMonitor(audio, sut)
             audio.finishPlaybackPulse()
             advanceUntilIdle()
-            assertEquals(2, audio.startPlaybackCalls)
+            assertEquals(1, audio.startPlaybackCalls)
             assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
         }
 
@@ -397,7 +403,7 @@ class PlaybackSessionControllerTest {
         }
 
     @Test
-    fun `loop restart refreshes lane mappings and drops hot join state`() =
+    fun `native stop clears hot join state for loop session without restart`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio =
                 PlaybackSessionTestAudio(
@@ -425,8 +431,9 @@ class PlaybackSessionControllerTest {
             audio.finishPlaybackPulse()
             advanceUntilIdle()
 
-            assertEquals(listOf("a"), sut.sessionLaneTrackIdsForTests().filterNotNull())
-            assertEquals(setOf("a"), sut.sessionTrackIds.value)
+            assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
+            assertTrue(sut.sessionLaneTrackIdsForTests().all { it == null })
+            assertEquals(1, audio.startPlaybackCalls)
             assertEquals(0, sut.hotJoinMonitorCountForTests())
             sut.cancelCompletionMonitorForTransportStop()
         }

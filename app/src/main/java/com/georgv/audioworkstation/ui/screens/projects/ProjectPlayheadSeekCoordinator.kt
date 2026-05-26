@@ -5,7 +5,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.WaveformState
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
+import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,7 +91,7 @@ internal class ProjectPlayheadSeekCoordinator(
         val playbackSpec =
             currentProject.toMultiPlaybackSpec(tracks)?.copy(
                 startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForTracks(tracks),
+                sessionTimelineEndMs = sessionTimelineEndMsForPlayback(tracks),
             ) ?: return false
         if (
             !playbackSession.restartEngineFromPlayhead(

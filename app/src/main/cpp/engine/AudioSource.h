@@ -45,6 +45,9 @@ public:
 
     /** True when on-disk bytes changed since this source was opened (file-backed sources only). */
     virtual bool hasDiskContentChanged() const { return false; }
+
+    /** Current read cursor in frames, or -1 when unknown. */
+    virtual int64_t currentFrame() const { return -1; }
 };
 
 } // namespace dawengine

@@ -41,6 +41,9 @@ class NativeEngine @Inject constructor() {
             sessionTimelineEndMs = spec.sessionTimelineEndMs,
             laneClipStartMs = spec.lanes.map { it.timelineClipStartMs }.toLongArray(),
             laneClipDurationMs = spec.lanes.map { it.timelineClipDurationMs }.toLongArray(),
+            laneLoopEnabled = spec.lanes.map { it.loopEnabled }.toBooleanArray(),
+            laneLoopSourceStartMs = spec.lanes.map { it.loopSourceStartMs }.toLongArray(),
+            laneLoopSourceEndMs = spec.lanes.map { it.loopSourceEndMs }.toLongArray(),
         )
 
     fun setPlaybackGain(gain: Float) {
@@ -125,6 +128,9 @@ class NativeEngine @Inject constructor() {
         sessionTimelineEndMs: Long,
         laneClipStartMs: LongArray,
         laneClipDurationMs: LongArray,
+        laneLoopEnabled: BooleanArray,
+        laneLoopSourceStartMs: LongArray,
+        laneLoopSourceEndMs: LongArray,
     ): Boolean
 
     private external fun nativeSetPlaybackGain(gain: Float)

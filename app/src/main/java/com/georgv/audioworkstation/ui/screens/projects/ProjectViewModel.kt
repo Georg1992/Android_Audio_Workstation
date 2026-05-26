@@ -5,6 +5,8 @@ import com.georgv.audioworkstation.core.util.logWarning
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.track.clampLoopRegionMs
+import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportSource
@@ -25,7 +27,7 @@ import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
-import com.georgv.audioworkstation.ui.components.timelineBaseDurationMs
+import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -74,6 +76,7 @@ data class ProjectUiState(
     val waveformStatesByTrackId: Map<String, WaveformState> = emptyMap(),
     val timelineClipsByTrackId: Map<String, TimelineClip> = emptyMap(),
     val timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
+    val timelineVisibleDurationMs: Long = TimelineMinimumBaseDurationMs,
     val playheadPositionMs: Long = 0L,
     val transportPlaybackPhase: TransportPlaybackPhase = TransportPlaybackPhase.Idle,
     val isRecordingStartup: Boolean = false,
@@ -183,7 +186,6 @@ class ProjectViewModel @Inject constructor(
                 audioController.stopPlayback()
                 playheadTransport.stopAndResetToZero()
             },
-            onLoopRestart = { playheadTransport.onLoopRestart() },
             suppressTransportOnPlaybackCompletion = { recordingSession.hasActiveRecordingTake() },
             onHotJoinFailed = { viewModelScope.launch { emitMessage(R.string.error_playback_failed_to_start) } },
         )
@@ -384,18 +386,27 @@ class ProjectViewModel @Inject constructor(
                     playheadMs = playheadMs,
                     transportPhase = transportPhase,
                 )
+            val extendForAllLoopedPlayback =
+                shouldExtendVisibleTimelineForAllLoopedPlayback(
+                    playbackSessionActive = screen.playbackSessionActive,
+                    sessionTrackIds = screen.sessionTrackIds,
+                    tracks = screen.tracks,
+                )
+            val extendForRecording = transportPhase == TransportPlaybackPhase.Recording
             val timeline =
                 buildProjectTimelineProjection(
                     tracks = screen.tracks,
                     waveformStatesByTrackId = screen.waveformStatesByTrackId,
                     activeRecording = activeRecording,
                     playheadPositionMs = playheadMs,
+                    extendVisibleTimelineForAllLoopedPlayback = extendForAllLoopedPlayback,
+                    extendVisibleTimelineForRecording = extendForRecording,
                 )
             val displayPlayheadMs =
                 if (transportPhase == TransportPlaybackPhase.Recording) {
                     playheadMs.coerceAtLeast(0L)
                 } else {
-                    timelinePlayheadClampedPositionMs(playheadMs, timeline.timelineDurationMs)
+                    timelinePlayheadClampedPositionMs(playheadMs, timeline.visibleTimelineDurationMs)
                 }
             ProjectUiState(
                 projectId = screen.projectId,
@@ -408,7 +419,8 @@ class ProjectViewModel @Inject constructor(
                 recordingInputLevel = screen.recordingInputLevel,
                 waveformStatesByTrackId = screen.waveformStatesByTrackId,
                 timelineClipsByTrackId = timeline.clipsByLaneId,
-                timelineBaseDurationMs = timeline.timelineDurationMs,
+                timelineBaseDurationMs = timeline.baseTimelineDurationMs,
+                timelineVisibleDurationMs = timeline.visibleTimelineDurationMs,
                 playheadPositionMs = displayPlayheadMs,
                 transportPlaybackPhase = transportPhase,
                 isRecordingStartup = screen.isRecordingStartup,
@@ -437,6 +449,8 @@ class ProjectViewModel @Inject constructor(
             waveformStatesByTrackId = waveformStates,
             activeRecording = null,
             playheadPositionMs = playheadMs,
+            extendVisibleTimelineForAllLoopedPlayback = false,
+            extendVisibleTimelineForRecording = false,
         )
 
     private fun currentVisibleTracks(): List<TrackEntity> =
@@ -627,7 +641,31 @@ class ProjectViewModel @Inject constructor(
     fun toggleTrackLoop(trackId: String) {
         if (playbackSession.hasActivePlaybackSession()) return
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-        val updatedTrack = currentTrack.copy(isLoop = !currentTrack.isLoop)
+        val enabling = !currentTrack.isLoop
+        if (enabling && recordTargetTrackId.value == trackId) {
+            recordTargetTrackId.value = null
+        }
+        val updatedTrack = currentTrack.copy(isLoop = enabling)
+        viewModelScope.launch {
+            dbActions.run(R.string.error_loop_update_failed) {
+                repo.upsertTrack(updatedTrack)
+            }
+        }
+    }
+
+    fun updateTrackLoopRegion(trackId: String, loopStartMs: Long, loopEndMs: Long) {
+        if (playbackSession.hasActivePlaybackSession()) return
+        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
+        val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
+        if (!currentTrack.isLoop) return
+        val sourceDuration = currentTrack.sourceDurationMs()
+        if (sourceDuration <= 0L) return
+        val (startMs, endMs) = clampLoopRegionMs(loopStartMs, loopEndMs, sourceDuration)
+        val updatedTrack =
+            currentTrack.copy(
+                loopStartMs = startMs,
+                loopEndMs = endMs,
+            )
         viewModelScope.launch {
             dbActions.run(R.string.error_loop_update_failed) {
                 repo.upsertTrack(updatedTrack)
@@ -639,7 +677,20 @@ class ProjectViewModel @Inject constructor(
         if (playbackSession.hasActivePlaybackSession()) return
         if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
         if (uiState.value.tracks.none { it.id == trackId }) return
-        recordTargetTrackId.value = if (recordTargetTrackId.value == trackId) null else trackId
+        val selecting = recordTargetTrackId.value != trackId
+        if (selecting) {
+            val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
+            if (currentTrack.isLoop) {
+                viewModelScope.launch {
+                    dbActions.run(R.string.error_loop_update_failed) {
+                        repo.upsertTrack(currentTrack.copy(isLoop = false))
+                    }
+                }
+            }
+            recordTargetTrackId.value = trackId
+        } else {
+            recordTargetTrackId.value = null
+        }
     }
 
     /**

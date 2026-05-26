@@ -52,6 +52,22 @@ std::vector<int64_t> JLongArrayToVector(JNIEnv *env, jlongArray array, jsize exp
     return values;
 }
 
+std::vector<uint8_t> JBooleanArrayToVector(JNIEnv *env, jbooleanArray array, jsize expectedSize) {
+    std::vector<uint8_t> values;
+    if (!env || !array || expectedSize <= 0) {
+        return values;
+    }
+    values.resize(static_cast<std::size_t>(expectedSize));
+    env->GetBooleanArrayRegion(array, 0, expectedSize, reinterpret_cast<jboolean *>(values.data()));
+    if (env->ExceptionCheck()) {
+        values.clear();
+    }
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        values[i] = values[i] != 0 ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0);
+    }
+    return values;
+}
+
 bool StartPlaybackSources(dawengine::AudioEngine *engine,
                           int32_t sampleRate,
                           const std::vector<std::string> &paths,
@@ -59,7 +75,10 @@ bool StartPlaybackSources(dawengine::AudioEngine *engine,
                           int64_t startPositionMs,
                           int64_t sessionTimelineEndMs,
                           const std::vector<int64_t> &laneClipStartMs,
-                          const std::vector<int64_t> &laneClipDurationMs) {
+                          const std::vector<int64_t> &laneClipDurationMs,
+                          const std::vector<uint8_t> &laneLoopEnabled,
+                          const std::vector<int64_t> &laneLoopSourceStartMs,
+                          const std::vector<int64_t> &laneLoopSourceEndMs) {
     if (!engine) return false;
 
     engine->configureProject(sampleRate, 16);
@@ -78,7 +97,10 @@ bool StartPlaybackSources(dawengine::AudioEngine *engine,
             startPositionMs,
             sessionTimelineEndMs,
             laneClipStartMs,
-            laneClipDurationMs)) {
+            laneClipDurationMs,
+            laneLoopEnabled,
+            laneLoopSourceStartMs,
+            laneLoopSourceEndMs)) {
         return false;
     }
 
@@ -151,6 +173,9 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
                                 startPositionMs,
                                 sessionTimelineEndMs,
                                 {},
+                                {},
+                                {},
+                                {},
                                 {})
                ? JNI_TRUE
                : JNI_FALSE;
@@ -166,7 +191,10 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
         jlong startPositionMs,
         jlong sessionTimelineEndMs,
         jlongArray laneClipStartMs,
-        jlongArray laneClipDurationMs) {
+        jlongArray laneClipDurationMs,
+        jbooleanArray laneLoopEnabled,
+        jlongArray laneLoopSourceStartMs,
+        jlongArray laneLoopSourceEndMs) {
     auto *engine = EnsureEngine();
     if (!engine || !env || !wavPaths || !gainsArray) return JNI_FALSE;
 
@@ -174,7 +202,17 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
     const jsize gainCount = env->GetArrayLength(gainsArray);
     if (pathCount <= 0 || pathCount != gainCount) {
         StartPlaybackSources(
-            engine, sampleRate, {}, {}, startPositionMs, sessionTimelineEndMs, {}, {});
+            engine,
+            sampleRate,
+            {},
+            {},
+            startPositionMs,
+            sessionTimelineEndMs,
+            {},
+            {},
+            {},
+            {},
+            {});
         return JNI_FALSE;
     }
 
@@ -184,7 +222,17 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
         auto pathObject = static_cast<jstring>(env->GetObjectArrayElement(wavPaths, i));
         if (!pathObject) {
             StartPlaybackSources(
-                engine, sampleRate, {}, {}, startPositionMs, sessionTimelineEndMs, {}, {});
+                engine,
+                sampleRate,
+                {},
+                {},
+                startPositionMs,
+                sessionTimelineEndMs,
+                {},
+                {},
+                {},
+                {},
+                {});
             return JNI_FALSE;
         }
         paths.push_back(JStringToString(env, pathObject));
@@ -199,6 +247,11 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
 
     std::vector<int64_t> clipStarts = JLongArrayToVector(env, laneClipStartMs, pathCount);
     std::vector<int64_t> clipDurations = JLongArrayToVector(env, laneClipDurationMs, pathCount);
+    std::vector<uint8_t> loopEnabled = JBooleanArrayToVector(env, laneLoopEnabled, pathCount);
+    std::vector<int64_t> loopSourceStarts =
+        JLongArrayToVector(env, laneLoopSourceStartMs, pathCount);
+    std::vector<int64_t> loopSourceEnds =
+        JLongArrayToVector(env, laneLoopSourceEndMs, pathCount);
     if (env->ExceptionCheck()) {
         return JNI_FALSE;
     }
@@ -210,7 +263,10 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
                                 startPositionMs,
                                 sessionTimelineEndMs,
                                 clipStarts,
-                                clipDurations)
+                                clipDurations,
+                                loopEnabled,
+                                loopSourceStarts,
+                                loopSourceEnds)
                ? JNI_TRUE
                : JNI_FALSE;
 }

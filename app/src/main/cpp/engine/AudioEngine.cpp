@@ -80,6 +80,82 @@ int64_t laneSourceSeekFrame(int64_t transportStartFrame, int64_t clipStartFrame)
     return transportStartFrame - clipStartFrame;
 }
 
+int64_t laneSourceSeekFrameForArm(int64_t transportStartFrame,
+                                  int64_t clipStartFrame,
+                                  bool loopEnabled,
+                                  int64_t loopSourceStartFrame,
+                                  int64_t loopSourceEndFrame) {
+    const int64_t clipOffset = std::max<int64_t>(0, transportStartFrame - clipStartFrame);
+    if (!loopEnabled) {
+        return laneSourceSeekFrame(transportStartFrame, clipStartFrame);
+    }
+    const int64_t loopLength = loopSourceEndFrame - loopSourceStartFrame;
+    if (loopLength <= 0) return loopSourceStartFrame;
+    return loopSourceStartFrame + (clipOffset % loopLength);
+}
+
+bool laneActiveOnTimelineForPlayback(int64_t transportFrame,
+                                     int64_t clipStartFrame,
+                                     int64_t clipEndFrame,
+                                     bool loopEnabled) {
+    if (transportFrame < clipStartFrame) return false;
+    if (loopEnabled) return true;
+    return laneActiveOnTimeline(transportFrame, clipStartFrame, clipEndFrame);
+}
+
+int32_t readLaneSourceFrames(dawengine::IAudioSource &source,
+                             float *dst,
+                             int32_t maxFrames,
+                             int32_t channels,
+                             bool loopEnabled,
+                             int64_t loopStartFrame,
+                             int64_t loopEndFrame) {
+    if (maxFrames <= 0 || channels <= 0) return 0;
+    if (!loopEnabled) {
+        return source.readFrames(dst, maxFrames);
+    }
+    if (loopEndFrame <= loopStartFrame) return 0;
+
+    int32_t framesWritten = 0;
+    while (framesWritten < maxFrames) {
+        int64_t pos = source.currentFrame();
+        if (pos < 0) {
+            return source.readFrames(dst, maxFrames);
+        }
+        if (pos >= loopEndFrame) {
+            if (!source.seekToFrame(loopStartFrame)) {
+                return framesWritten > 0 ? framesWritten : 0;
+            }
+        }
+        pos = source.currentFrame();
+        const int32_t batchMax = static_cast<int32_t>(std::min<int64_t>(
+            maxFrames - framesWritten,
+            loopEndFrame - pos));
+        if (batchMax <= 0) {
+            if (!source.seekToFrame(loopStartFrame)) {
+                return framesWritten > 0 ? framesWritten : 0;
+            }
+            continue;
+        }
+        const int32_t framesRead = source.readFrames(
+            dst + static_cast<std::size_t>(framesWritten) *
+                      static_cast<std::size_t>(channels),
+            batchMax);
+        if (framesRead < 0) return framesRead;
+        if (framesRead == 0) {
+            if (source.currentFrame() >= loopEndFrame) {
+                if (!source.seekToFrame(loopStartFrame)) {
+                    return framesWritten > 0 ? framesWritten : 0;
+                }
+                continue;
+            }
+            break;
+        }
+        framesWritten += framesRead;
+    }
+    return framesWritten;
+}
+
 } // namespace
 
 namespace dawengine {
@@ -179,6 +255,9 @@ void AudioEngine::setLaneInactiveLocked(PlaybackLaneSlot &lane) {
     lane.srcChannels.store(0, std::memory_order_release);
     lane.clipTimelineStartFrame.store(0, std::memory_order_release);
     lane.clipTimelineEndFrame.store(0, std::memory_order_release);
+    lane.loopEnabled.store(false, std::memory_order_release);
+    lane.sourceLoopStartFrame.store(0, std::memory_order_release);
+    lane.sourceLoopEndFrame.store(0, std::memory_order_release);
     lane.lifecycle.store(PlaybackLaneLifecycle::Inactive, std::memory_order_release);
 }
 
@@ -203,27 +282,45 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
                                            const int64_t transportStartFrame,
                                            const int64_t clipStartMs,
                                            const int64_t clipDurationMs,
-                                           const bool reuseExistingSourceOnSamePath) {
+                                           const bool reuseExistingSourceOnSamePath,
+                                           const bool loopEnabled,
+                                           const int64_t loopSourceStartMs,
+                                           const int64_t loopSourceEndMs) {
     if (laneIndex >= kPlaybackLaneProductCap || wavPath.empty()) {
         return false;
     }
 
     const int64_t clipStartFrame = playbackStartFrameFromMs(clipStartMs, m_sampleRate);
     const int64_t clipEndFrame =
-        clipTimelineEndFrameForLane(clipStartFrame, clipDurationMs, m_sampleRate);
+        loopEnabled
+            ? 0
+            : clipTimelineEndFrameForLane(clipStartFrame, clipDurationMs, m_sampleRate);
+    const int64_t sourceLoopStartFrame =
+        loopEnabled ? playbackStartFrameFromMs(loopSourceStartMs, m_sampleRate) : 0;
+    const int64_t sourceLoopEndFrame =
+        loopEnabled ? playbackStartFrameFromMs(loopSourceEndMs, m_sampleRate) : 0;
     const int64_t sourceSeekFrame =
-        laneSourceSeekFrame(transportStartFrame, clipStartFrame);
+        laneSourceSeekFrameForArm(
+            transportStartFrame,
+            clipStartFrame,
+            loopEnabled,
+            sourceLoopStartFrame,
+            sourceLoopEndFrame);
     const bool activeOnTimeline =
-        laneActiveOnTimeline(transportStartFrame, clipStartFrame, clipEndFrame);
+        laneActiveOnTimelineForPlayback(
+            transportStartFrame, clipStartFrame, clipEndFrame, loopEnabled);
     const bool beforeClipStart = transportStartFrame < clipStartFrame;
     const bool pastClipEnd =
-        clipEndFrame > 0 && transportStartFrame >= clipEndFrame;
+        !loopEnabled && clipEndFrame > 0 && transportStartFrame >= clipEndFrame;
 
     PlaybackLaneSlot &lane = m_playbackLanes[laneIndex];
     lane.gain.store(laneGain, std::memory_order_release);
     lane.audibleEnabled.store(true, std::memory_order_release);
     lane.clipTimelineStartFrame.store(clipStartFrame, std::memory_order_release);
     lane.clipTimelineEndFrame.store(clipEndFrame, std::memory_order_release);
+    lane.loopEnabled.store(loopEnabled, std::memory_order_release);
+    lane.sourceLoopStartFrame.store(sourceLoopStartFrame, std::memory_order_release);
+    lane.sourceLoopEndFrame.store(sourceLoopEndFrame, std::memory_order_release);
 
     const bool samePath =
         reuseExistingSourceOnSamePath && !!lane.source && wavPath == lane.currentPath &&
@@ -238,6 +335,8 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
             exhaustedAtStart = true;
         } else if (beforeClipStart) {
             exhaustedAtStart = false;
+        } else if (loopEnabled) {
+            exhaustedAtStart = sourceLoopEndFrame <= sourceLoopStartFrame;
         } else {
             exhaustedAtStart = isSourceExhaustedAtStart(*lane.source, sourceSeekFrame);
         }
@@ -263,6 +362,8 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
             exhaustedAtStart = true;
         } else if (beforeClipStart) {
             exhaustedAtStart = false;
+        } else if (loopEnabled) {
+            exhaustedAtStart = sourceLoopEndFrame <= sourceLoopStartFrame;
         } else {
             exhaustedAtStart = isSourceExhaustedAtStart(*lane.source, sourceSeekFrame);
         }
@@ -275,7 +376,17 @@ bool AudioEngine::armOnePlaybackLaneLocked(const std::size_t laneIndex,
         const int32_t channels = lane.source->channelCount();
         std::vector<float> preroll(static_cast<std::size_t>(prerollTargetFrames) *
                                    static_cast<std::size_t>(channels));
-        const int32_t prerollFrames = lane.source->readFrames(preroll.data(), prerollTargetFrames);
+        const int32_t prerollFrames =
+            loopEnabled
+                ? readLaneSourceFrames(
+                      *lane.source,
+                      preroll.data(),
+                      prerollTargetFrames,
+                      channels,
+                      true,
+                      sourceLoopStartFrame,
+                      sourceLoopEndFrame)
+                : lane.source->readFrames(preroll.data(), prerollTargetFrames);
         if (prerollFrames < 0) {
             return false;
         }
@@ -295,7 +406,10 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
                                          const std::vector<float> &gains,
                                          const int64_t transportStartFrame,
                                          const std::vector<int64_t> &laneClipStartMs,
-                                         const std::vector<int64_t> &laneClipDurationMs) {
+                                         const std::vector<int64_t> &laneClipDurationMs,
+                                         const std::vector<uint8_t> &laneLoopEnabled,
+                                         const std::vector<int64_t> &laneLoopSourceStartMs,
+                                         const std::vector<int64_t> &laneLoopSourceEndMs) {
     const std::size_t laneCount = wavPaths.size();
     if (laneCount == 0 ||
         laneCount > kPlaybackLaneProductCap ||
@@ -310,6 +424,12 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
             laneClipStartMs.empty() ? 0 : laneClipStartMs[0];
         const int64_t clipDurationMs =
             laneClipDurationMs.empty() ? 0 : laneClipDurationMs[0];
+        const bool loopEnabled =
+            !laneLoopEnabled.empty() && laneLoopEnabled[0] != 0;
+        const int64_t loopSourceStartMs =
+            laneLoopSourceStartMs.empty() ? 0 : laneLoopSourceStartMs[0];
+        const int64_t loopSourceEndMs =
+            laneLoopSourceEndMs.empty() ? 0 : laneLoopSourceEndMs[0];
         if (!armOnePlaybackLaneLocked(
                 0,
                 wavPaths[0],
@@ -317,7 +437,10 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
                 transportStartFrame,
                 clipStartMs,
                 clipDurationMs,
-                true)) {
+                true,
+                loopEnabled,
+                loopSourceStartMs,
+                loopSourceEndMs)) {
             clearPlaybackLanesLocked();
             return false;
         }
@@ -333,6 +456,12 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
             laneIdx < laneClipStartMs.size() ? laneClipStartMs[laneIdx] : 0;
         const int64_t clipDurationMs =
             laneIdx < laneClipDurationMs.size() ? laneClipDurationMs[laneIdx] : 0;
+        const bool loopEnabled =
+            laneIdx < laneLoopEnabled.size() && laneLoopEnabled[laneIdx] != 0;
+        const int64_t loopSourceStartMs =
+            laneIdx < laneLoopSourceStartMs.size() ? laneLoopSourceStartMs[laneIdx] : 0;
+        const int64_t loopSourceEndMs =
+            laneIdx < laneLoopSourceEndMs.size() ? laneLoopSourceEndMs[laneIdx] : 0;
         if (!armOnePlaybackLaneLocked(
                 laneIdx,
                 wavPaths[laneIdx],
@@ -340,7 +469,10 @@ bool AudioEngine::armPlaybackLanesLocked(const std::vector<std::string> &wavPath
                 transportStartFrame,
                 clipStartMs,
                 clipDurationMs,
-                false)) {
+                false,
+                loopEnabled,
+                loopSourceStartMs,
+                loopSourceEndMs)) {
             clearPlaybackLanesLocked();
             return false;
         }
@@ -575,7 +707,10 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
                                      int64_t startPositionMs,
                                      int64_t sessionTimelineEndMs,
                                      const std::vector<int64_t> &laneClipStartMs,
-                                     const std::vector<int64_t> &laneClipDurationMs) {
+                                     const std::vector<int64_t> &laneClipDurationMs,
+                                     const std::vector<uint8_t> &laneLoopEnabled,
+                                     const std::vector<int64_t> &laneLoopSourceStartMs,
+                                     const std::vector<int64_t> &laneLoopSourceEndMs) {
     const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, m_sampleRate);
     int64_t endFrame = playbackStartFrameFromMs(sessionTimelineEndMs, m_sampleRate);
     if (endFrame > 0 && endFrame < startFrame) {
@@ -596,7 +731,14 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
             }
         }
         if (!armPlaybackLanesLocked(
-                wavPaths, gains, startFrame, laneClipStartMs, laneClipDurationMs)) {
+                wavPaths,
+                gains,
+                startFrame,
+                laneClipStartMs,
+                laneClipDurationMs,
+                laneLoopEnabled,
+                laneLoopSourceStartMs,
+                laneLoopSourceEndMs)) {
             resetMasterPlaybackTimeline();
             return false;
         }
@@ -699,6 +841,9 @@ void AudioEngine::ioLoop() {
             bool laneExhausted = false;
             int64_t clipStartFrame = 0;
             int64_t clipEndFrame = 0;
+            bool loopEnabled = false;
+            int64_t sourceLoopStartFrame = 0;
+            int64_t sourceLoopEndFrame = 0;
 
             {
                 std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
@@ -711,8 +856,16 @@ void AudioEngine::ioLoop() {
                     lane.clipTimelineStartFrame.load(std::memory_order_acquire);
                 clipEndFrame =
                     lane.clipTimelineEndFrame.load(std::memory_order_acquire);
-                if (!laneActiveOnTimeline(transportFrame, clipStartFrame, clipEndFrame)) {
-                    if (clipEndFrame > 0 && transportFrame >= clipEndFrame) {
+                loopEnabled =
+                    lane.loopEnabled.load(std::memory_order_acquire);
+                sourceLoopStartFrame =
+                    lane.sourceLoopStartFrame.load(std::memory_order_acquire);
+                sourceLoopEndFrame =
+                    lane.sourceLoopEndFrame.load(std::memory_order_acquire);
+                if (!laneActiveOnTimelineForPlayback(
+                        transportFrame, clipStartFrame, clipEndFrame, loopEnabled)) {
+                    if (!loopEnabled && clipEndFrame > 0 &&
+                        transportFrame >= clipEndFrame) {
                         lane.sourceExhausted.store(true, std::memory_order_release);
                         lane.lifecycle.store(PlaybackLaneLifecycle::Exhausted,
                                              std::memory_order_release);
@@ -742,14 +895,21 @@ void AudioEngine::ioLoop() {
             }
 
             const int32_t framesRead =
-                source->readFrames(scratch.data(), playback::kIoBatchFrames);
+                readLaneSourceFrames(
+                    *source,
+                    scratch.data(),
+                    playback::kIoBatchFrames,
+                    channels,
+                    loopEnabled,
+                    sourceLoopStartFrame,
+                    sourceLoopEndFrame);
 
             if (framesRead > 0) {
                 ring->write(
                     scratch.data(),
                     static_cast<std::size_t>(framesRead) * static_cast<std::size_t>(channels));
                 progressed = true;
-            } else {
+            } else if (!loopEnabled) {
                 markPlaybackLaneExhaustedLocked(laneIdx);
                 progressed = true;
             }
@@ -764,14 +924,30 @@ void AudioEngine::ioLoop() {
 void AudioEngine::renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
                                                    int32_t /*outChannels*/,
                                                    int32_t minimumFramesReturnedFromLanes) {
+    bool hasLoopLane = false;
+    for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
+        const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+        if (!laneLifecycleParticipatesInCompletion(state)) {
+            continue;
+        }
+        if (m_playbackLanes[laneIdx].loopEnabled.load(std::memory_order_acquire)) {
+            hasLoopLane = true;
+            break;
+        }
+    }
+
     const int64_t sessionEndFrame =
         m_playbackSessionEndFrame.load(std::memory_order_acquire);
-    if (sessionEndFrame > 0) {
+    if (sessionEndFrame > 0 && !hasLoopLane) {
         const int64_t transportFrame =
             m_masterPlaybackFrame.load(std::memory_order_acquire);
         if (transportFrame >= sessionEndFrame) {
             m_isPlaying.store(false, std::memory_order_release);
         }
+        return;
+    }
+
+    if (hasLoopLane) {
         return;
     }
 
@@ -786,6 +962,10 @@ void AudioEngine::renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
     for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
         const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
         if (!laneLifecycleParticipatesInCompletion(state)) {
+            continue;
+        }
+
+        if (m_playbackLanes[laneIdx].loopEnabled.load(std::memory_order_acquire)) {
             continue;
         }
 
@@ -864,7 +1044,10 @@ void AudioEngine::render(float *outputInterleaved,
             m_playbackLanes[laneIdx].clipTimelineStartFrame.load(std::memory_order_acquire);
         const int64_t clipEndFrame =
             m_playbackLanes[laneIdx].clipTimelineEndFrame.load(std::memory_order_acquire);
-        if (!laneActiveOnTimeline(transportFrameAtBlock, clipStartFrame, clipEndFrame)) {
+        const bool loopEnabled =
+            m_playbackLanes[laneIdx].loopEnabled.load(std::memory_order_acquire);
+        if (!laneActiveOnTimelineForPlayback(
+                transportFrameAtBlock, clipStartFrame, clipEndFrame, loopEnabled)) {
             continue;
         }
 

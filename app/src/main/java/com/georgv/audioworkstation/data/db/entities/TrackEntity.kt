@@ -32,6 +32,10 @@ data class TrackEntity(
     val duration: Long? = null,
     val isRecording: Boolean = false,
     val isLoop: Boolean = false,
+    /** Track-local loop region start (ms from WAV start). Persisted while loop is off. */
+    val loopStartMs: Long = 0L,
+    /** Track-local loop region end (ms from WAV start); null = full [duration]. */
+    val loopEndMs: Long? = null,
     val isImported: Boolean = false,
     val position: Int = 0,
     /** Timeline position where this clip begins on the project base ruler (ms). */

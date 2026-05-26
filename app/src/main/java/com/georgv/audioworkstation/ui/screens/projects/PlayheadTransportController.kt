@@ -104,16 +104,6 @@ class PlayheadTransportController(
         clearTestNativeOverride()
     }
 
-    fun onLoopRestart() {
-        playheadPositionMs.value = 0L
-        if (_phase.value != TransportPlaybackPhase.Playing) {
-            _phase.value = TransportPlaybackPhase.Playing
-        }
-        if (pollJob?.isActive != true) {
-            startNativePoll()
-        }
-    }
-
     fun abortPlaybackStart() {
         stopNativePoll()
         clearPlaybackSeekDragState()

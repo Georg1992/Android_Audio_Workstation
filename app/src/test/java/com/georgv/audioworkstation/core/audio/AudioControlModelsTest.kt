@@ -104,11 +104,29 @@ class AudioControlModelsTest {
         assertEquals(44_100, spec?.sampleRate)
         assertEquals(2, spec?.lanes?.size)
         assertEquals(
-            TrackPlaybackLane("a", "/tmp/a.wav", 0.25f, timelineClipStartMs = 0L, timelineClipDurationMs = 0L),
+            TrackPlaybackLane(
+                "a",
+                "/tmp/a.wav",
+                0.25f,
+                timelineClipStartMs = 0L,
+                timelineClipDurationMs = 0L,
+                loopEnabled = false,
+                loopSourceStartMs = 0L,
+                loopSourceEndMs = 0L,
+            ),
             spec?.lanes?.get(0),
         )
         assertEquals(
-            TrackPlaybackLane("b", "/tmp/b.wav", 1f, timelineClipStartMs = 0L, timelineClipDurationMs = 0L),
+            TrackPlaybackLane(
+                "b",
+                "/tmp/b.wav",
+                1f,
+                timelineClipStartMs = 0L,
+                timelineClipDurationMs = 0L,
+                loopEnabled = false,
+                loopSourceStartMs = 0L,
+                loopSourceEndMs = 0L,
+            ),
             spec?.lanes?.get(1),
         )
     }

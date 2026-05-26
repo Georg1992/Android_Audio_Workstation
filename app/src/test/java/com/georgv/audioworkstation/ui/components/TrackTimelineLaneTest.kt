@@ -305,6 +305,29 @@ class TrackTimelineLaneTest {
         assertEquals(0L, clip.startOffsetMs)
     }
 
+    @Test
+    fun `looped track base uses full placement duration`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "loop",
+                    projectId = "p",
+                    wavFilePath = "loop.wav",
+                    duration = 20_000L,
+                    isLoop = true,
+                    loopEndMs = 12_000L,
+                ),
+                TrackEntity(id = "base", projectId = "p", wavFilePath = "base.wav", duration = 15_000L),
+            )
+
+        val clips = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap())
+
+        assertEquals(20_000L, timelineBaseDurationMs(clips))
+        assertEquals(true, clips.first { it.clipId == "loop" }.isTimelineBase)
+        assertEquals(false, clips.first { it.clipId == "base" }.isTimelineBase)
+        assertEquals(12_000L, clips.first { it.clipId == "loop" }.effectiveEndMs)
+    }
+
     private fun clip(
         id: String = "clip",
         startOffsetMs: Long = 0L,
@@ -318,5 +341,7 @@ class TrackTimelineLaneTest {
             waveformState = WaveformState.Ready(WaveformPeaks.Placeholder),
             isTimelineBase = false,
             formattedDuration = formatTimelineDuration(durationMs),
+            effectiveStartMs = 0L,
+            effectiveEndMs = durationMs,
         )
 }

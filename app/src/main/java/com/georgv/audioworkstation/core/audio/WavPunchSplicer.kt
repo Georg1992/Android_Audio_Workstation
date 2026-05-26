@@ -38,24 +38,12 @@ class WavPunchSplicer @Inject constructor() {
             validateOriginalMatchesRecording(originalInfo, recordingInfo)
         }
 
-        val channelCount = recordingInfo.channelCount
-        val sampleRateHz = recordingInfo.sampleRateHz
-        val blockAlign = recordingInfo.blockAlign
-
-        val recordStartFrame = msToFramePosition(spliceStartInClipMs.coerceAtLeast(0L), sampleRateHz)
-        val oldTotalFrames = originalInfo?.frameCount ?: 0L
-        val recordedFrames = recordingInfo.frameCount
-
-        val prefixFrames = recordStartFrame
-        val suffixStartFrame = recordStartFrame + recordedFrames
-        val suffixFrames =
-            if (originalInfo != null && suffixStartFrame < oldTotalFrames) {
-                oldTotalFrames - suffixStartFrame
-            } else {
-                0L
-            }
-        val totalFrames = prefixFrames + recordedFrames + suffixFrames
-        val totalDataBytes = totalFrames * blockAlign
+        val plan =
+            buildSplicePlan(
+                originalInfo = originalInfo,
+                recordingInfo = recordingInfo,
+                spliceStartInClipMs = spliceStartInClipMs,
+            )
 
         val finalFile = File(finalWavPath)
         finalFile.parentFile?.mkdirs()
@@ -64,78 +52,23 @@ class WavPunchSplicer @Inject constructor() {
         if (tempOut.exists()) tempOut.delete()
 
         try {
-            FileOutputStream(tempOut).use { out ->
-                writePcm16WavHeader(
-                    out = out,
-                    channelCount = channelCount,
-                    sampleRateHz = sampleRateHz,
-                    dataSizeBytes = totalDataBytes.toInt(),
-                )
-
-                if (originalInfo != null && recordStartFrame <= oldTotalFrames) {
-                    copyPcmFrames(
-                        sourcePath = originalWavPath,
-                        sourceInfo = originalInfo,
-                        startFrame = 0L,
-                        frameCount = recordStartFrame,
-                        out = out,
-                    )
-                } else if (originalInfo != null) {
-                    copyPcmFrames(
-                        sourcePath = originalWavPath,
-                        sourceInfo = originalInfo,
-                        startFrame = 0L,
-                        frameCount = oldTotalFrames,
-                        out = out,
-                    )
-                    writeSilentFrames(
-                        out = out,
-                        frameCount = recordStartFrame - oldTotalFrames,
-                        blockAlign = blockAlign,
-                    )
-                } else if (recordStartFrame > 0L) {
-                    writeSilentFrames(
-                        out = out,
-                        frameCount = recordStartFrame,
-                        blockAlign = blockAlign,
-                    )
-                }
-
-                copyPcmFrames(
-                    sourcePath = tempRecordingWavPath,
-                    sourceInfo = recordingInfo,
-                    startFrame = 0L,
-                    frameCount = recordedFrames,
-                    out = out,
-                )
-
-                if (suffixFrames > 0L && originalInfo != null) {
-                    copyPcmFrames(
-                        sourcePath = originalWavPath,
-                        sourceInfo = originalInfo,
-                        startFrame = suffixStartFrame,
-                        frameCount = suffixFrames,
-                        out = out,
-                    )
-                }
-            }
-
-            if (finalFile.exists() && !finalFile.delete()) {
-                throw IOException("Failed to replace existing track WAV.")
-            }
-            if (!tempOut.renameTo(finalFile)) {
-                throw IOException("Failed to atomically replace track WAV.")
-            }
-
+            writeSpliceOutput(
+                plan = plan,
+                originalWavPath = originalWavPath,
+                originalInfo = originalInfo,
+                tempRecordingWavPath = tempRecordingWavPath,
+                recordingInfo = recordingInfo,
+                tempOut = tempOut,
+            )
+            replaceTrackWavAtomically(tempOut, finalFile)
             File(tempRecordingWavPath).delete()
 
             val oldDurationMs = originalInfo?.durationMs ?: 0L
-            val recordedDurationMs = recordingInfo.durationMs
             val durationMs =
                 resultingClipDurationMs(
                     oldDurationMs = oldDurationMs,
                     spliceStartInClipMs = spliceStartInClipMs.coerceAtLeast(0L),
-                    recordedDurationMs = recordedDurationMs,
+                    recordedDurationMs = recordingInfo.durationMs,
                 )
 
             return WavPunchSpliceResult(
@@ -148,19 +81,157 @@ class WavPunchSplicer @Inject constructor() {
         }
     }
 
+    private data class SplicePlan(
+        val recordStartFrame: Long,
+        val oldTotalFrames: Long,
+        val recordedFrames: Long,
+        val prefixFrames: Long,
+        val suffixStartFrame: Long,
+        val suffixFrames: Long,
+        val totalDataBytes: Int,
+        val channelCount: Int,
+        val sampleRateHz: Int,
+        val blockAlign: Int,
+    )
+
+    private fun buildSplicePlan(
+        originalInfo: WavPcmFileInfo?,
+        recordingInfo: WavPcmFileInfo,
+        spliceStartInClipMs: Long,
+    ): SplicePlan {
+        val recordStartFrame =
+            msToFramePosition(spliceStartInClipMs.coerceAtLeast(0L), recordingInfo.sampleRateHz)
+        val oldTotalFrames = originalInfo?.frameCount ?: 0L
+        val recordedFrames = recordingInfo.frameCount
+        val prefixFrames = recordStartFrame
+        val suffixStartFrame = recordStartFrame + recordedFrames
+        val suffixFrames =
+            if (originalInfo != null && suffixStartFrame < oldTotalFrames) {
+                oldTotalFrames - suffixStartFrame
+            } else {
+                0L
+            }
+        val totalFrames = prefixFrames + recordedFrames + suffixFrames
+        return SplicePlan(
+            recordStartFrame = recordStartFrame,
+            oldTotalFrames = oldTotalFrames,
+            recordedFrames = recordedFrames,
+            prefixFrames = prefixFrames,
+            suffixStartFrame = suffixStartFrame,
+            suffixFrames = suffixFrames,
+            totalDataBytes = (totalFrames * recordingInfo.blockAlign).toInt(),
+            channelCount = recordingInfo.channelCount,
+            sampleRateHz = recordingInfo.sampleRateHz,
+            blockAlign = recordingInfo.blockAlign,
+        )
+    }
+
+    private fun writeSpliceOutput(
+        plan: SplicePlan,
+        originalWavPath: String,
+        originalInfo: WavPcmFileInfo?,
+        tempRecordingWavPath: String,
+        recordingInfo: WavPcmFileInfo,
+        tempOut: File,
+    ) {
+        FileOutputStream(tempOut).use { out ->
+            writePcm16WavHeader(
+                out = out,
+                channelCount = plan.channelCount,
+                sampleRateHz = plan.sampleRateHz,
+                dataSizeBytes = plan.totalDataBytes,
+            )
+            writePrefixSection(
+                out = out,
+                plan = plan,
+                originalWavPath = originalWavPath,
+                originalInfo = originalInfo,
+            )
+            copyPcmFrames(
+                sourcePath = tempRecordingWavPath,
+                sourceInfo = recordingInfo,
+                startFrame = 0L,
+                frameCount = plan.recordedFrames,
+                out = out,
+            )
+            if (plan.suffixFrames > 0L && originalInfo != null) {
+                copyPcmFrames(
+                    sourcePath = originalWavPath,
+                    sourceInfo = originalInfo,
+                    startFrame = plan.suffixStartFrame,
+                    frameCount = plan.suffixFrames,
+                    out = out,
+                )
+            }
+        }
+    }
+
+    private fun writePrefixSection(
+        out: FileOutputStream,
+        plan: SplicePlan,
+        originalWavPath: String,
+        originalInfo: WavPcmFileInfo?,
+    ) {
+        if (originalInfo != null && plan.recordStartFrame <= plan.oldTotalFrames) {
+            copyPcmFrames(
+                sourcePath = originalWavPath,
+                sourceInfo = originalInfo,
+                startFrame = 0L,
+                frameCount = plan.prefixFrames,
+                out = out,
+            )
+            return
+        }
+        if (originalInfo != null) {
+            copyPcmFrames(
+                sourcePath = originalWavPath,
+                sourceInfo = originalInfo,
+                startFrame = 0L,
+                frameCount = plan.oldTotalFrames,
+                out = out,
+            )
+            writeSilentFrames(
+                out = out,
+                frameCount = plan.recordStartFrame - plan.oldTotalFrames,
+                blockAlign = plan.blockAlign,
+            )
+            return
+        }
+        if (plan.recordStartFrame > 0L) {
+            writeSilentFrames(
+                out = out,
+                frameCount = plan.recordStartFrame,
+                blockAlign = plan.blockAlign,
+            )
+        }
+    }
+
+    private fun replaceTrackWavAtomically(tempOut: File, finalFile: File) {
+        if (finalFile.exists() && !finalFile.delete()) {
+            throw IOException("Failed to replace existing track WAV.")
+        }
+        if (!tempOut.renameTo(finalFile)) {
+            throw IOException("Failed to atomically replace track WAV.")
+        }
+    }
+
     private fun validateRecordingFormat(
         info: WavPcmFileInfo,
         expectedSampleRateHz: Int,
         expectedBitDepth: Int,
     ) {
-        if (!info.isSupportedProjectPcm) {
-            throw IOException("Temporary recording uses unsupported PCM layout.")
-        }
-        if (info.sampleRateHz != expectedSampleRateHz) {
-            throw IOException("Temporary recording sample rate does not match project.")
-        }
-        if (info.bitsPerSample != expectedBitDepth) {
-            throw IOException("Temporary recording bit depth does not match project.")
+        val issue =
+            when {
+                !info.isSupportedProjectPcm ->
+                    "Temporary recording uses unsupported PCM layout."
+                info.sampleRateHz != expectedSampleRateHz ->
+                    "Temporary recording sample rate does not match project."
+                info.bitsPerSample != expectedBitDepth ->
+                    "Temporary recording bit depth does not match project."
+                else -> null
+            }
+        if (issue != null) {
+            throw IOException(issue)
         }
     }
 
@@ -223,10 +294,10 @@ class WavPunchSplicer @Inject constructor() {
         dataSizeBytes: Int,
     ) {
         out.writeAscii("RIFF")
-        out.writeUInt32Le(36 + dataSizeBytes)
+        out.writeUInt32Le(PCM16_WAV_RIFF_CHUNK_SIZE + dataSizeBytes)
         out.writeAscii("WAVE")
         out.writeAscii("fmt ")
-        out.writeUInt32Le(16)
+        out.writeUInt32Le(PCM16_FMT_CHUNK_SIZE)
         out.writeUInt16Le(1)
         out.writeUInt16Le(channelCount)
         out.writeUInt32Le(sampleRateHz)
@@ -239,6 +310,8 @@ class WavPunchSplicer @Inject constructor() {
 
     private companion object {
         const val DEFAULT_COPY_BUFFER_BYTES = 16 * 1024
+        const val PCM16_WAV_RIFF_CHUNK_SIZE = 36
+        const val PCM16_FMT_CHUNK_SIZE = 16
     }
 }
 

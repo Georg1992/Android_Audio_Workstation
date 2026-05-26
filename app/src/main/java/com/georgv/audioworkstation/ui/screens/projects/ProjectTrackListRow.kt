@@ -73,7 +73,8 @@ internal fun LazyItemScope.ProjectTrackListRow(
     recordTargetTrackId: String?,
     recordingInputLevel: Float,
     timelineClipsByTrackId: Map<String, TimelineClip>,
-    timelineDurationMs: Long,
+    timelineBaseDurationMs: Long,
+    timelineVisibleDurationMs: Long,
     timelinePlayheadPositionMs: Long,
     trackLayout: ProjectTrackLayoutSpec,
     trackActionsEnabled: Boolean,
@@ -95,6 +96,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
     onRenameTrack: (String, String) -> Unit,
     onToggleRecordTarget: (String) -> Unit,
     onToggleLoop: (String) -> Unit,
+    onUpdateTrackLoopRegion: (String, Long, Long) -> Unit,
     onDragHandleEnd: () -> Unit,
     onDragHandleStarted: (trackId: String) -> Unit,
 ) {
@@ -111,7 +113,8 @@ internal fun LazyItemScope.ProjectTrackListRow(
                     0f
                 },
             timelineClip = timelineClipsByTrackId[track.id],
-            timelineDurationMs = timelineDurationMs,
+            laneLayoutDurationMs = timelineBaseDurationMs,
+            globalPlayheadTimelineDurationMs = timelineVisibleDurationMs,
             timelinePlayheadPositionMs = timelinePlayheadPositionMs,
             gain = track.gain,
             onGainChange = { gain -> onGainChange(track.id, gain) },
@@ -125,6 +128,10 @@ internal fun LazyItemScope.ProjectTrackListRow(
             onToggleLoop = { onToggleLoop(track.id) },
             isLoop = track.isLoop,
             loopToggleEnabled = trackActionsEnabled,
+            loopRegionEditingEnabled = trackActionsEnabled && recordingTrackId == null,
+            onLoopRegionCommit = { startMs, endMs ->
+                onUpdateTrackLoopRegion(track.id, startMs, endMs)
+            },
             trackActionsEnabled = trackActionsEnabled,
             trackId = track.id,
             trackSlotHeight = trackLayout.trackSlotHeight,

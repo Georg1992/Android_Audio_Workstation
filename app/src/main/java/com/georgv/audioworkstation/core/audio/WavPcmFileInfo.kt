@@ -97,12 +97,14 @@ private fun RandomAccessFile.readUInt16Le(): Int {
     return b0 or (b1 shl 8)
 }
 
+private fun allBytesAvailable(vararg bytes: Int): Boolean = bytes.all { it >= 0 }
+
 private fun RandomAccessFile.readUInt32Le(): Long {
     val b0 = read()
     val b1 = read()
     val b2 = read()
     val b3 = read()
-    if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return 0L
+    if (!allBytesAvailable(b0, b1, b2, b3)) return 0L
     return (b0.toLong() and 0xFF) or
         ((b1.toLong() and 0xFF) shl 8) or
         ((b2.toLong() and 0xFF) shl 16) or

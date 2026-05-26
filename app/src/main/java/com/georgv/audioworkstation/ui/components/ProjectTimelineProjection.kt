@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.components
 
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.core.track.effectiveTimelineEndMs
 import kotlin.math.max
 
 /** In-progress take on the shared project timeline (not yet a finalized playable clip). */
@@ -13,22 +14,36 @@ data class ActiveRecordingTimelineClip(
 data class ProjectTimelineProjection(
     val clips: List<TimelineClip>,
     val clipsByLaneId: Map<String, TimelineClip>,
-    /** Shared ruler/waveform duration: max(clip ends, active recording end, playhead). */
-    val timelineDurationMs: Long,
-)
+    /**
+     * Idle/base ruler length from persisted clip placement + full source duration only.
+     * Loop regions do not shrink or grow this value.
+     */
+    val baseTimelineDurationMs: Long,
+    /**
+     * Live ruler length for the global scrubber and non-loop lane playheads.
+     * May extend past [baseTimelineDurationMs] only during all-looped playback past base,
+     * or while recording grows past base.
+     */
+    val visibleTimelineDurationMs: Long,
+) {
+    /** @deprecated Use [visibleTimelineDurationMs]; kept for gradual migration in tests. */
+    val timelineDurationMs: Long get() = visibleTimelineDurationMs
+}
 
 fun buildProjectTimelineProjection(
     tracks: List<TrackEntity>,
     waveformStatesByTrackId: Map<String, WaveformState>,
     activeRecording: ActiveRecordingTimelineClip?,
     playheadPositionMs: Long,
+    extendVisibleTimelineForAllLoopedPlayback: Boolean,
+    extendVisibleTimelineForRecording: Boolean,
 ): ProjectTimelineProjection {
     val persistedClips = projectTimelineClips(tracks, waveformStatesByTrackId)
     val recordingClip =
         activeRecording?.let { recording ->
             activeRecordingTimelineClip(
                 recording = recording,
-                furthestEndMs = persistedClips.maxOfOrNull { timelineClipEndMs(it.startOffsetMs, it.durationMs) },
+                furthestEndMs = persistedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) },
             )
         }
     val clips =
@@ -37,44 +52,86 @@ fun buildProjectTimelineProjection(
         } else {
             persistedClips + recordingClip
         }
-    val furthestClipEndMs =
-        clips.maxOfOrNull { timelineClipEndMs(it.startOffsetMs, it.durationMs) } ?: 0L
-    val timelineDurationMs =
-        timelineDurationMs(
-            furthestClipEndMs = furthestClipEndMs,
+    val baseTimelineDurationMs =
+        timelineBaseDurationMsFromClips(persistedClips)
+    val visibleTimelineDurationMs =
+        visibleTimelineDurationMs(
+            baseTimelineDurationMs = baseTimelineDurationMs,
             playheadPositionMs = playheadPositionMs,
+            activeRecording = activeRecording,
+            extendForAllLoopedPlayback = extendVisibleTimelineForAllLoopedPlayback,
+            extendForRecording = extendVisibleTimelineForRecording,
         )
+    val furthestClipEndMs =
+        clips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
     val clipsWithBase =
         clips.map { clip ->
-            val endMs = timelineClipEndMs(clip.startOffsetMs, clip.durationMs)
+            val endMs = timelineClipEffectiveTimelineEndMs(clip)
             clip.copy(isTimelineBase = endMs == furthestClipEndMs && furthestClipEndMs > 0L)
         }
     return ProjectTimelineProjection(
         clips = clipsWithBase,
         clipsByLaneId = clipsWithBase.associateBy { it.laneId },
-        timelineDurationMs = timelineDurationMs,
+        baseTimelineDurationMs = baseTimelineDurationMs,
+        visibleTimelineDurationMs = visibleTimelineDurationMs,
     )
 }
 
-fun timelineDurationMs(
-    furthestClipEndMs: Long,
-    playheadPositionMs: Long,
-): Long {
+/** Base timeline from persisted clips only (no in-flight recording row, no playhead). */
+fun timelineBaseDurationMsFromClips(clips: List<TimelineClip>): Long {
+    val furthestClipEndMs =
+        clips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
     if (furthestClipEndMs <= 0L) return 0L
-    return max(
-        furthestClipEndMs,
-        playheadPositionMs.coerceAtLeast(0L),
-    ).coerceAtLeast(TimelineMinimumBaseDurationMs)
+    return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+}
+
+fun visibleTimelineDurationMs(
+    baseTimelineDurationMs: Long,
+    playheadPositionMs: Long,
+    activeRecording: ActiveRecordingTimelineClip?,
+    extendForAllLoopedPlayback: Boolean,
+    extendForRecording: Boolean,
+): Long {
+    val recordingEndMs =
+        activeRecording?.let { recording ->
+            recording.startOffsetMs.coerceAtLeast(0L) +
+                recording.elapsedMs.coerceAtLeast(0L)
+        } ?: 0L
+    var visible = max(baseTimelineDurationMs, recordingEndMs)
+    val playheadMs = playheadPositionMs.coerceAtLeast(0L)
+    if (extendForRecording) {
+        visible = max(visible, playheadMs)
+    } else if (extendForAllLoopedPlayback && playheadMs > baseTimelineDurationMs) {
+        visible = max(visible, playheadMs)
+    }
+    if (visible <= 0L) return 0L
+    return visible.coerceAtLeast(TimelineMinimumBaseDurationMs)
+}
+
+fun shouldExtendVisibleTimelineForAllLoopedPlayback(
+    playbackSessionActive: Boolean,
+    sessionTrackIds: Set<String>,
+    tracks: List<TrackEntity>,
+): Boolean {
+    if (!playbackSessionActive || sessionTrackIds.isEmpty()) return false
+    val activeTracks = tracks.filter { it.id in sessionTrackIds }
+    return activeTracks.isNotEmpty() && activeTracks.all { it.isLoop }
 }
 
 /** Absolute session timeline end from persisted clips (no active recording row). */
 fun sessionTimelineEndMsForTracks(tracks: List<TrackEntity>): Long {
     val furthestClipEndMs =
-        tracks.maxOfOrNull { track ->
-            val durationMs = track.duration ?: 0L
-            timelineClipEndMs(track.timelineStartOffsetMs.coerceAtLeast(0L), durationMs)
-        } ?: 0L
+        tracks.maxOfOrNull { track -> track.effectiveTimelineEndMs() } ?: 0L
     return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+}
+
+/**
+ * Native playback session end. Loop-enabled lanes wrap indefinitely in the engine, so session
+ * completion must not be bound to the base timeline when any loop track is playing.
+ */
+fun sessionTimelineEndMsForPlayback(tracks: List<TrackEntity>): Long {
+    if (tracks.any { it.isLoop }) return 0L
+    return sessionTimelineEndMsForTracks(tracks)
 }
 
 private fun activeRecordingTimelineClip(
@@ -94,6 +151,8 @@ private fun activeRecordingTimelineClip(
         isTimelineBase = endMs == baseEnd && baseEnd > 0L,
         formattedDuration = formatTimelineDuration(recording.elapsedMs.coerceAtLeast(0L)),
         isActiveRecording = true,
+        effectiveStartMs = 0L,
+        effectiveEndMs = durationMs,
     )
 }
 

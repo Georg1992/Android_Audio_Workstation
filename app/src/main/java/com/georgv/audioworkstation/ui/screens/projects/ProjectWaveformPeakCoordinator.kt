@@ -54,13 +54,7 @@ internal class ProjectWaveformPeakCoordinator(
             scope.launch {
                 val peaks = waveformPeakExtractor.extract(track.wavFilePath)
                 waveformExtractionsInFlight.remove(track.id)
-                if (tracksSnapshot().any {
-                        it.id == track.id &&
-                            it.wavFilePath == track.wavFilePath &&
-                            !it.isRecording &&
-                            trackWaveformCacheKey(it) == cacheKey
-                    }
-                ) {
+                if (tracksSnapshot().any { trackStillValidForWaveformCache(it, track, cacheKey) }) {
                     val state =
                         if (peaks == null) {
                             WaveformState.Failed
@@ -72,6 +66,16 @@ internal class ProjectWaveformPeakCoordinator(
             }
         }
     }
+
+    private fun trackStillValidForWaveformCache(
+        candidate: TrackEntity,
+        sourceTrack: TrackEntity,
+        cacheKey: String,
+    ): Boolean =
+        candidate.id == sourceTrack.id &&
+            candidate.wavFilePath == sourceTrack.wavFilePath &&
+            !candidate.isRecording &&
+            trackWaveformCacheKey(candidate) == cacheKey
 
     private fun trackWaveformCacheKey(track: TrackEntity): String? {
         val fingerprint = wavFileContentFingerprint(track.wavFilePath) ?: return null

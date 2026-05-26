@@ -7,10 +7,8 @@ import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.audibleTrackIds
 import com.georgv.audioworkstation.core.audio.isTrackLoadedInSessionLane
 import com.georgv.audioworkstation.core.audio.laneAudibilityFromSelection
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,7 +47,6 @@ class PlaybackSessionController(
     private val currentProjectId: () -> String?,
     private val visibleTracks: () -> List<TrackEntity>,
     private val onPlaybackCompleted: () -> Unit = {},
-    private val onLoopRestart: () -> Unit = {},
     private val suppressTransportOnPlaybackCompletion: () -> Boolean = { false },
     private val onHotJoinFailed: () -> Unit = {},
 ) {
@@ -68,7 +65,7 @@ class PlaybackSessionController(
     private val _playbackSessionActive = MutableStateFlow(false)
     val playbackSessionActive: StateFlow<Boolean> = _playbackSessionActive.asStateFlow()
 
-    /** Bumped on session start, teardown, and loop remap — hot-join monitors must match to write lanes. */
+    /** Bumped on session start and teardown — hot-join monitors must match to write lanes. */
     private var playbackSessionEpoch = 0L
 
     /** True when [sessionTrackIds] is non-empty (transport spec armed). */
@@ -283,6 +280,10 @@ class PlaybackSessionController(
         )
     }
 
+    /**
+     * HJ.2 hot-join path: arms a one-shot lane from full track clip bounds.
+     * Loop region metadata is not forwarded — hot-joined tracks play once (MVP limitation).
+     */
     private fun startHotJoinForTrack(track: TrackEntity, selectedTrackIds: Set<String>) {
         val wavPath = track.wavFilePath
         if (wavPath.isBlank()) return
@@ -411,39 +412,11 @@ class PlaybackSessionController(
                     tearDownPlaybackSessionState(endTransport = false)
                     break
                 }
-                if (!shouldRestartLoopPlayback(trackIds)) {
-                    tearDownPlaybackSessionState(endTransport = true)
-                    break
-                }
-                onLoopRestart()
+                tearDownPlaybackSessionState(endTransport = true)
+                break
             }
             playbackMonitorJob = null
         }
-    }
-
-    /**
-     * Loop restart policy: native playback restarts from the original monitor [trackIds] group
-     * (visible tracks with loop flag). Hot-joined lanes from the previous iteration are **not**
-     * carried over — [sessionLaneTrackIds] refresh from the restarted [MultiPlaybackSpec] only.
-     */
-    private suspend fun shouldRestartLoopPlayback(trackIds: Set<String>): Boolean {
-        val currentTracks = visibleTracks().filter { it.id in trackIds }
-        if (currentTracks.isEmpty()) return false
-        if (currentTracks.none { it.isLoop }) return false
-        val pid = currentProjectId() ?: return false
-        val currentProject = loadCurrentProject(pid) ?: return false
-        val spec =
-            currentProject.toMultiPlaybackSpec(currentTracks)?.copy(
-                sessionTimelineEndMs = sessionTimelineEndMsForTracks(currentTracks),
-            ) ?: return false
-        if (!audioController.startPlayback(spec)) {
-            return false
-        }
-        playbackSessionEpoch++
-        clearHotJoinState()
-        refreshSessionLaneMappings(spec.lanes.map { it.trackId })
-        _sessionTrackIds.value = spec.lanes.map { it.trackId }.toSet()
-        return true
     }
 
     private companion object {
