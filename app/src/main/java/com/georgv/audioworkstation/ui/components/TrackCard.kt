@@ -78,6 +78,7 @@ fun TrackCard(
     loopToggleEnabled: Boolean = true,
     loopRegionEditingEnabled: Boolean = false,
     onLoopRegionCommit: ((loopStartMs: Long, loopEndMs: Long) -> Unit)? = null,
+    hasPersistedPlayableAudio: Boolean = false,
     onToggleRecordTarget: (() -> Unit)? = null,
     isRecordTarget: Boolean = false,
     recordTargetToggleEnabled: Boolean = true,
@@ -479,6 +480,25 @@ fun TrackCard(
                     } else {
                         Modifier.fillMaxWidth()
                     }
+                val cardRenderBranch =
+                    when {
+                        timelineClip != null -> "timeline_lane"
+                        isRecording -> "fallback_live_recording"
+                        else -> "fallback_empty_waveform"
+                    }
+                LoopUiLogTrackCardOnChange(
+                    snapshot =
+                        LoopUiTrackCardSnapshot(
+                            trackId = trackId,
+                            isLoop = isLoop,
+                            isRecording = isRecording,
+                            hasTimelineClip = timelineClip != null,
+                            hasPersistedPlayableAudio = hasPersistedPlayableAudio,
+                            recordingInputLevelPresent = isRecording,
+                            renderBranch = cardRenderBranch,
+                            loopRegionEditingEnabled = loopRegionEditingEnabled,
+                        ),
+                )
                 if (timelineClip == null) {
                     if (isRecording) {
                         RecordingWaveform(
@@ -497,6 +517,8 @@ fun TrackCard(
                         recordingInputLevel = recordingInputLevel.takeIf { isRecording },
                         loopRegionEditingEnabled = loopRegionEditingEnabled,
                         onLoopRegionCommit = onLoopRegionCommit,
+                        trackId = trackId,
+                        hasPersistedPlayableAudio = hasPersistedPlayableAudio,
                         modifier = waveformModifier,
                     )
                 }

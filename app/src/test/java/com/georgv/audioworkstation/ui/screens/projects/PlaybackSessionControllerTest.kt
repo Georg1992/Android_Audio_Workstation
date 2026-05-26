@@ -225,6 +225,37 @@ class PlaybackSessionControllerTest {
         }
 
     @Test
+    fun `completion monitor preserves session while native keeps playing with two loop lanes`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audio = PlaybackSessionTestAudio()
+            val visible =
+                listOf(
+                    track("a", loop = true, wav = "a.wav"),
+                    track("b", loop = true, wav = "b.wav"),
+                )
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { visible },
+                )
+            val spec =
+                projectFix.toMultiPlaybackSpec(visible)
+                    ?: error("expected multi spec")
+            assertTrue(audio.startPlayback(spec))
+            sut.markPlayingAndStartCompletionMonitor(listOf("a", "b"))
+            advanceUntilIdle()
+
+            assertEquals(setOf("a", "b"), sut.sessionTrackIds.value)
+            assertTrue(sut.hasActivePlaybackSession())
+            assertEquals(1, audio.startPlaybackCalls)
+
+            sut.cancelCompletionMonitorForTransportStop()
+        }
+
+    @Test
     fun `playback completion clears playing when native stops for loop lane`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = PlaybackSessionTestAudio()

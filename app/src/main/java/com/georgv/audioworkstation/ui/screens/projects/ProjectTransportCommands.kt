@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.WaveformState
+import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -130,7 +131,15 @@ internal class ProjectTransportCommands(
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId())
         val startPositionMs =
             timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
-        if (timeline.timelineDurationMs > 0L && startPositionMs >= timeline.timelineDurationMs) return
+        if (
+            !playbackStartAllowedAtPlayhead(
+                startPositionMs = startPositionMs,
+                timelineBaseDurationMs = timeline.baseTimelineDurationMs,
+                tracks = selectedPlayableTracks,
+            )
+        ) {
+            return
+        }
 
         val playbackSpec =
             currentProject.toMultiPlaybackSpec(selectedPlayableTracks)?.copy(

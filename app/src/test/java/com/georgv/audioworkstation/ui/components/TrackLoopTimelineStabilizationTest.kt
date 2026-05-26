@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.components
 
 import com.georgv.audioworkstation.core.track.clampLoopRegionMs
+import com.georgv.audioworkstation.core.track.loopRegionDisplayBoundsMs
 import com.georgv.audioworkstation.core.track.loopRegionOverlayFractions
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import org.junit.Assert.assertEquals
@@ -23,9 +24,9 @@ class TrackLoopTimelineStabilizationTest {
     }
 
     @Test
-    fun `handle release clamp keeps same overlay fractions`() {
-        val previewStart = 6_000L
-        val previewEnd = 12_000L
+    fun `handle release display bounds stay on committed preview until props catch up`() {
+        val previewStart = 7_000L
+        val previewEnd = 13_000L
         val sourceDurationMs = 20_000L
         val before =
             loopRegionOverlayFractions(
@@ -35,10 +36,20 @@ class TrackLoopTimelineStabilizationTest {
             )
         val (commitStart, commitEnd) =
             clampLoopRegionMs(previewStart, previewEnd, sourceDurationMs)
+        val (displayStart, displayEnd) =
+            loopRegionDisplayBoundsMs(
+                isDragging = false,
+                previewStartMs = commitStart,
+                previewEndMs = commitEnd,
+                pendingCommitStartMs = commitStart,
+                pendingCommitEndMs = commitEnd,
+                loopStartMs = 6_000L,
+                loopEndMs = 12_000L,
+            )
         val after =
             loopRegionOverlayFractions(
-                loopStartMs = commitStart,
-                loopEndMs = commitEnd,
+                loopStartMs = displayStart,
+                loopEndMs = displayEnd,
                 sourceDurationMs = sourceDurationMs,
             )
 

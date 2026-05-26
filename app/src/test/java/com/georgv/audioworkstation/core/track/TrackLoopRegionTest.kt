@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.core.track
 
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -187,6 +188,81 @@ class TrackLoopRegionTest {
         assertEquals(0L, pointerXToSourceMs(0f, 1_000f, 20_000L))
         assertEquals(10_000L, pointerXToSourceMs(500f, 1_000f, 20_000L))
         assertEquals(20_000L, pointerXToSourceMs(1_000f, 1_000f, 20_000L))
+    }
+
+    @Test
+    fun `loopRegionDisplayBoundsMs uses persisted props when idle`() {
+        val (start, end) =
+            loopRegionDisplayBoundsMs(
+                isDragging = false,
+                previewStartMs = 0L,
+                previewEndMs = 20_000L,
+                pendingCommitStartMs = null,
+                pendingCommitEndMs = null,
+                loopStartMs = 6_000L,
+                loopEndMs = 12_000L,
+            )
+
+        assertEquals(6_000L, start)
+        assertEquals(12_000L, end)
+    }
+
+    @Test
+    fun `loopRegionDisplayBoundsMs holds pending commit until props match`() {
+        val (start, end) =
+            loopRegionDisplayBoundsMs(
+                isDragging = false,
+                previewStartMs = 6_000L,
+                previewEndMs = 12_000L,
+                pendingCommitStartMs = 7_000L,
+                pendingCommitEndMs = 13_000L,
+                loopStartMs = 6_000L,
+                loopEndMs = 12_000L,
+            )
+
+        assertEquals(7_000L, start)
+        assertEquals(13_000L, end)
+        assertTrue(
+            loopRegionPendingCommitResolved(
+                loopStartMs = 7_000L,
+                loopEndMs = 13_000L,
+                pendingCommitStartMs = 7_000L,
+                pendingCommitEndMs = 13_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `loopRegionDisplayBoundsMs uses preview while dragging`() {
+        val (start, end) =
+            loopRegionDisplayBoundsMs(
+                isDragging = true,
+                previewStartMs = 8_000L,
+                previewEndMs = 14_000L,
+                pendingCommitStartMs = null,
+                pendingCommitEndMs = null,
+                loopStartMs = 6_000L,
+                loopEndMs = 12_000L,
+            )
+
+        assertEquals(8_000L, start)
+        assertEquals(14_000L, end)
+    }
+
+    @Test
+    fun `hasPersistedPlayableAudio requires wav path and duration`() {
+        assertFalse(
+            TrackEntity(id = "a", projectId = "p", wavFilePath = "", duration = 5_000L)
+                .hasPersistedPlayableAudio(),
+        )
+        assertFalse(
+            TrackEntity(id = "b", projectId = "p", wavFilePath = "b.wav", duration = null)
+                .hasPersistedPlayableAudio(),
+        )
+        assertTrue(
+            TrackEntity(id = "c", projectId = "p", wavFilePath = "c.wav", duration = 5_000L, isRecording = true)
+                .hasPersistedPlayableAudio(),
+        )
     }
 
     @Test

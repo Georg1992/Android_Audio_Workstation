@@ -125,7 +125,34 @@ class ProjectTimelineProjectionTest {
         assertEquals(12_000L, clip.durationMs)
         assertTrue(clip.isActiveRecording)
         assertTrue(clip.isTimelineBase)
+        assertEquals(0L, projection.baseTimelineDurationMs)
+        assertEquals(12_000L, projection.laneLayoutDurationMs)
         assertEquals(12_000L, projection.visibleTimelineDurationMs)
+    }
+
+    @Test
+    fun `first take on empty project has lane layout duration for clip rendering`() {
+        val projection =
+            buildProjectTimelineProjection(
+                tracks = emptyList(),
+                waveformStatesByTrackId = emptyMap(),
+                activeRecording =
+                    ActiveRecordingTimelineClip(
+                        trackId = "rec",
+                        startOffsetMs = 0L,
+                        elapsedMs = 0L,
+                    ),
+                playheadPositionMs = 0L,
+                extendVisibleTimelineForAllLoopedPlayback = false,
+                extendVisibleTimelineForRecording = true,
+            )
+
+        val clip = projection.clipsByLaneId["rec"]
+        assertNotNull(clip)
+        assertEquals(1L, clip!!.durationMs)
+        assertEquals(0L, projection.baseTimelineDurationMs)
+        assertEquals(1L, projection.laneLayoutDurationMs)
+        assertNotNull(timelineClipLayout(clip, projection.laneLayoutDurationMs))
     }
 
     @Test
@@ -189,6 +216,114 @@ class ProjectTimelineProjectionTest {
         assertEquals(10_000L, projection.baseTimelineDurationMs)
         assertEquals(15_000L, projection.visibleTimelineDurationMs)
         assertTrue(projection.clipsByLaneId["rec"]!!.isTimelineBase)
+    }
+
+    @Test
+    fun `punch recording merges active flag into persisted clip with loop bounds`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "target",
+                    projectId = "p",
+                    wavFilePath = "target.wav",
+                    duration = 20_000L,
+                    isRecording = true,
+                    isLoop = true,
+                    loopStartMs = 6_000L,
+                    loopEndMs = 12_000L,
+                ),
+            )
+        val projection =
+            buildProjectTimelineProjection(
+                tracks = tracks,
+                waveformStatesByTrackId =
+                    mapOf("target" to WaveformState.Ready(WaveformPeaks.Placeholder)),
+                activeRecording =
+                    ActiveRecordingTimelineClip(
+                        trackId = "target",
+                        startOffsetMs = 0L,
+                        elapsedMs = 3_000L,
+                    ),
+                playheadPositionMs = 3_000L,
+                extendVisibleTimelineForAllLoopedPlayback = false,
+                extendVisibleTimelineForRecording = true,
+            )
+
+        val clip = projection.clipsByLaneId["target"]!!
+        assertTrue(clip.isActiveRecording)
+        assertEquals(20_000L, clip.durationMs)
+        assertEquals(6_000L, clip.effectiveStartMs)
+        assertEquals(12_000L, clip.effectiveEndMs)
+        assertTrue(clip.waveformState is WaveformState.Ready)
+    }
+
+    @Test
+    fun `loop bounds survive playback projection with extended visible timeline`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "loop",
+                    projectId = "p",
+                    wavFilePath = "loop.wav",
+                    duration = 20_000L,
+                    isLoop = true,
+                    loopStartMs = 6_000L,
+                    loopEndMs = 12_000L,
+                ),
+            )
+        val projection =
+            buildProjectTimelineProjection(
+                tracks = tracks,
+                waveformStatesByTrackId = emptyMap(),
+                activeRecording = null,
+                playheadPositionMs = 25_000L,
+                extendVisibleTimelineForAllLoopedPlayback = true,
+                extendVisibleTimelineForRecording = false,
+            )
+
+        val clip = projection.clipsByLaneId["loop"]!!
+        assertEquals(6_000L, clip.effectiveStartMs)
+        assertEquals(12_000L, clip.effectiveEndMs)
+        assertEquals(25_000L, projection.visibleTimelineDurationMs)
+        assertEquals(20_000L, projection.baseTimelineDurationMs)
+    }
+
+    @Test
+    fun `timelineClipsWithActiveRecording keeps persisted clip when lane already exists`() {
+        val persisted =
+            TimelineClip(
+                clipId = "a",
+                laneId = "a",
+                startOffsetMs = 0L,
+                durationMs = 10_000L,
+                waveformState = WaveformState.Ready(WaveformPeaks.Placeholder),
+                isTimelineBase = true,
+                formattedDuration = "0:10",
+                isLoop = true,
+                effectiveStartMs = 2_000L,
+                effectiveEndMs = 8_000L,
+            )
+        val recording =
+            TimelineClip(
+                clipId = "a",
+                laneId = "a",
+                startOffsetMs = 0L,
+                durationMs = 1L,
+                waveformState = WaveformState.NoWaveform,
+                isTimelineBase = true,
+                formattedDuration = "0:00",
+                isActiveRecording = true,
+                effectiveStartMs = 0L,
+                effectiveEndMs = 1L,
+            )
+
+        val merged = timelineClipsWithActiveRecording(listOf(persisted), recording).single()
+
+        assertTrue(merged.isActiveRecording)
+        assertEquals(10_000L, merged.durationMs)
+        assertEquals(2_000L, merged.effectiveStartMs)
+        assertEquals(8_000L, merged.effectiveEndMs)
+        assertTrue(merged.waveformState is WaveformState.Ready)
     }
 
     @Test

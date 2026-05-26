@@ -21,9 +21,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.TrackCard
+import com.georgv.audioworkstation.ui.components.loopRegionEditingEnabled
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.layout.ProjectTrackLayoutSpec
 
@@ -74,9 +76,11 @@ internal fun LazyItemScope.ProjectTrackListRow(
     recordingInputLevel: Float,
     timelineClipsByTrackId: Map<String, TimelineClip>,
     timelineBaseDurationMs: Long,
+    timelineLaneLayoutDurationMs: Long,
     timelineVisibleDurationMs: Long,
     timelinePlayheadPositionMs: Long,
     trackLayout: ProjectTrackLayoutSpec,
+    playbackActive: Boolean,
     trackActionsEnabled: Boolean,
     listInteractionLocked: Boolean,
     reorderActive: Boolean,
@@ -113,7 +117,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
                     0f
                 },
             timelineClip = timelineClipsByTrackId[track.id],
-            laneLayoutDurationMs = timelineBaseDurationMs,
+            laneLayoutDurationMs = timelineLaneLayoutDurationMs,
             globalPlayheadTimelineDurationMs = timelineVisibleDurationMs,
             timelinePlayheadPositionMs = timelinePlayheadPositionMs,
             gain = track.gain,
@@ -128,7 +132,12 @@ internal fun LazyItemScope.ProjectTrackListRow(
             onToggleLoop = { onToggleLoop(track.id) },
             isLoop = track.isLoop,
             loopToggleEnabled = trackActionsEnabled,
-            loopRegionEditingEnabled = trackActionsEnabled && recordingTrackId == null,
+            hasPersistedPlayableAudio = track.hasPersistedPlayableAudio(),
+            loopRegionEditingEnabled =
+                loopRegionEditingEnabled(
+                    playbackActive = playbackActive,
+                    recordingActive = recordingTrackId != null,
+                ),
             onLoopRegionCommit = { startMs, endMs ->
                 onUpdateTrackLoopRegion(track.id, startMs, endMs)
             },

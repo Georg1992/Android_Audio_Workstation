@@ -276,6 +276,7 @@ fun ProjectScreen(
                 recordingInputLevel = state.recordingInputLevel,
                 timelineClipsByTrackId = state.timelineClipsByTrackId,
                 timelineBaseDurationMs = state.timelineBaseDurationMs,
+                timelineLaneLayoutDurationMs = state.timelineLaneLayoutDurationMs,
                 timelineVisibleDurationMs = state.timelineVisibleDurationMs,
                 timelinePlayheadPositionMs = playheadPositionMs,
                 playbackActive = state.playbackSessionActive,

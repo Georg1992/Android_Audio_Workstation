@@ -4,6 +4,7 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrackTimelineLaneTest {
@@ -172,7 +173,46 @@ class TrackTimelineLaneTest {
 
         val clips = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap())
 
-        assertEquals(listOf("a", "e"), clips.map { it.clipId })
+        assertEquals(listOf("a", "d", "e"), clips.map { it.clipId })
+    }
+
+    @Test
+    fun `project timeline clips exclude brand new recording take without persisted audio`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "new-take",
+                    projectId = "p",
+                    wavFilePath = "",
+                    duration = null,
+                    isRecording = true,
+                ),
+            )
+
+        assertTrue(projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap()).isEmpty())
+    }
+
+    @Test
+    fun `project timeline clips keep loop bounds for recording punch target`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "target",
+                    projectId = "p",
+                    wavFilePath = "target.wav",
+                    duration = 20_000L,
+                    isRecording = true,
+                    isLoop = true,
+                    loopStartMs = 6_000L,
+                    loopEndMs = 12_000L,
+                ),
+            )
+
+        val clip = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap()).single()
+
+        assertEquals(true, clip.isLoop)
+        assertEquals(6_000L, clip.effectiveStartMs)
+        assertEquals(12_000L, clip.effectiveEndMs)
     }
 
     @Test

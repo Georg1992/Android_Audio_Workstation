@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,7 +26,9 @@ import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.core.track.applyLoopRegionActiveDrag
 import com.georgv.audioworkstation.core.track.beginLoopRegionDragAtPointer
 import com.georgv.audioworkstation.core.track.clampLoopRegionMs
+import com.georgv.audioworkstation.core.track.loopRegionDisplayBoundsMs
 import com.georgv.audioworkstation.core.track.loopRegionOverlayFractions
+import com.georgv.audioworkstation.core.track.loopRegionPendingCommitResolved
 import com.georgv.audioworkstation.core.track.pointerXToSourceMs
 import com.georgv.audioworkstation.ui.theme.AppColors
 
@@ -46,13 +49,44 @@ fun LoopRegionEditor(
     var previewStartMs by remember { mutableLongStateOf(loopStartMs) }
     var previewEndMs by remember { mutableLongStateOf(loopEndMs) }
     var isDragging by remember { mutableStateOf(false) }
+    var pendingCommitStartMs by remember { mutableStateOf<Long?>(null) }
+    var pendingCommitEndMs by remember { mutableStateOf<Long?>(null) }
 
-    LaunchedEffect(loopStartMs, loopEndMs, sourceDurationMs, isDragging) {
-        if (!isDragging) {
-            previewStartMs = loopStartMs
-            previewEndMs = loopEndMs
+    val latestLoopStartMs by rememberUpdatedState(loopStartMs)
+    val latestLoopEndMs by rememberUpdatedState(loopEndMs)
+
+    LaunchedEffect(latestLoopStartMs, latestLoopEndMs, isDragging, pendingCommitStartMs, pendingCommitEndMs) {
+        if (isDragging) return@LaunchedEffect
+        if (
+            loopRegionPendingCommitResolved(
+                loopStartMs = latestLoopStartMs,
+                loopEndMs = latestLoopEndMs,
+                pendingCommitStartMs = pendingCommitStartMs,
+                pendingCommitEndMs = pendingCommitEndMs,
+            )
+        ) {
+            pendingCommitStartMs = null
+            pendingCommitEndMs = null
+            previewStartMs = latestLoopStartMs
+            previewEndMs = latestLoopEndMs
+            return@LaunchedEffect
+        }
+        if (pendingCommitStartMs == null) {
+            previewStartMs = latestLoopStartMs
+            previewEndMs = latestLoopEndMs
         }
     }
+
+    val (displayStartMs, displayEndMs) =
+        loopRegionDisplayBoundsMs(
+            isDragging = isDragging,
+            previewStartMs = previewStartMs,
+            previewEndMs = previewEndMs,
+            pendingCommitStartMs = pendingCommitStartMs,
+            pendingCommitEndMs = pendingCommitEndMs,
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
+        )
 
     val density = LocalDensity.current
     val handleHitHalfWidthPx = with(density) { LoopRegionHandleHitWidthDp.toPx() / 2f }
@@ -63,6 +97,7 @@ fun LoopRegionEditor(
                 .fillMaxSize()
                 .then(
                     if (editingEnabled) {
+                        // Keys must stay stable for the whole gesture — never include preview/display bounds.
                         Modifier.pointerInput(
                             sourceDurationMs,
                             editingEnabled,
@@ -76,6 +111,21 @@ fun LoopRegionEditor(
 
                                     val clipWidthPx = size.width.toFloat()
                                     if (clipWidthPx <= 0f) return@awaitEachGesture
+
+                                    val (dragStartMs, dragEndMs) =
+                                        loopRegionDisplayBoundsMs(
+                                            isDragging = false,
+                                            previewStartMs = previewStartMs,
+                                            previewEndMs = previewEndMs,
+                                            pendingCommitStartMs = pendingCommitStartMs,
+                                            pendingCommitEndMs = pendingCommitEndMs,
+                                            loopStartMs = latestLoopStartMs,
+                                            loopEndMs = latestLoopEndMs,
+                                        )
+                                    previewStartMs = dragStartMs
+                                    previewEndMs = dragEndMs
+                                    pendingCommitStartMs = null
+                                    pendingCommitEndMs = null
 
                                     val begin =
                                         beginLoopRegionDragAtPointer(
@@ -119,13 +169,17 @@ fun LoopRegionEditor(
                                         )
                                     previewStartMs = commitStart
                                     previewEndMs = commitEnd
+                                    pendingCommitStartMs = commitStart
+                                    pendingCommitEndMs = commitEnd
                                     onLoopRegionCommit(commitStart, commitEnd)
                                     committed = true
                                 } finally {
                                     isDragging = false
                                     if (!committed) {
-                                        previewStartMs = loopStartMs
-                                        previewEndMs = loopEndMs
+                                        previewStartMs = latestLoopStartMs
+                                        previewEndMs = latestLoopEndMs
+                                        pendingCommitStartMs = null
+                                        pendingCommitEndMs = null
                                     }
                                 }
                             }
@@ -137,8 +191,8 @@ fun LoopRegionEditor(
     ) {
         val fractions =
             loopRegionOverlayFractions(
-                loopStartMs = previewStartMs,
-                loopEndMs = previewEndMs,
+                loopStartMs = displayStartMs,
+                loopEndMs = displayEndMs,
                 sourceDurationMs = sourceDurationMs,
             )
         val overlayStart = maxWidth * fractions.startFraction

@@ -28,6 +28,7 @@ import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
 import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
+import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -76,6 +77,7 @@ data class ProjectUiState(
     val waveformStatesByTrackId: Map<String, WaveformState> = emptyMap(),
     val timelineClipsByTrackId: Map<String, TimelineClip> = emptyMap(),
     val timelineBaseDurationMs: Long = TimelineMinimumBaseDurationMs,
+    val timelineLaneLayoutDurationMs: Long = TimelineMinimumBaseDurationMs,
     val timelineVisibleDurationMs: Long = TimelineMinimumBaseDurationMs,
     val playheadPositionMs: Long = 0L,
     val transportPlaybackPhase: TransportPlaybackPhase = TransportPlaybackPhase.Idle,
@@ -403,10 +405,17 @@ class ProjectViewModel @Inject constructor(
                     extendVisibleTimelineForRecording = extendForRecording,
                 )
             val displayPlayheadMs =
-                if (transportPhase == TransportPlaybackPhase.Recording) {
-                    playheadMs.coerceAtLeast(0L)
-                } else {
-                    timelinePlayheadClampedPositionMs(playheadMs, timeline.visibleTimelineDurationMs)
+                when {
+                    transportPhase == TransportPlaybackPhase.Recording -> {
+                        playheadMs.coerceAtLeast(0L)
+                    }
+                    extendForAllLoopedPlayback &&
+                        transportPhase == TransportPlaybackPhase.Playing -> {
+                        playheadMs.coerceIn(0L, TimelineMaxDurationMs)
+                    }
+                    else -> {
+                        timelinePlayheadClampedPositionMs(playheadMs, timeline.visibleTimelineDurationMs)
+                    }
                 }
             ProjectUiState(
                 projectId = screen.projectId,
@@ -420,6 +429,7 @@ class ProjectViewModel @Inject constructor(
                 waveformStatesByTrackId = screen.waveformStatesByTrackId,
                 timelineClipsByTrackId = timeline.clipsByLaneId,
                 timelineBaseDurationMs = timeline.baseTimelineDurationMs,
+                timelineLaneLayoutDurationMs = timeline.laneLayoutDurationMs,
                 timelineVisibleDurationMs = timeline.visibleTimelineDurationMs,
                 playheadPositionMs = displayPlayheadMs,
                 transportPlaybackPhase = transportPhase,

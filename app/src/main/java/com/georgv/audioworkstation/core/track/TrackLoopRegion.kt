@@ -7,6 +7,38 @@ const val TrackLoopRegionMinLengthMs = 100L
 
 fun TrackEntity.sourceDurationMs(): Long = duration?.coerceAtLeast(0L) ?: 0L
 
+/** Existing on-disk audio that can be shown on the timeline (including punch-record targets). */
+fun TrackEntity.hasPersistedPlayableAudio(): Boolean =
+    wavFilePath.isNotBlank() && sourceDurationMs() > 0L
+
+/** Overlay/drag display bounds: preview while dragging, hold commit until props match, else persisted. */
+fun loopRegionDisplayBoundsMs(
+    isDragging: Boolean,
+    previewStartMs: Long,
+    previewEndMs: Long,
+    pendingCommitStartMs: Long?,
+    pendingCommitEndMs: Long?,
+    loopStartMs: Long,
+    loopEndMs: Long,
+): Pair<Long, Long> =
+    when {
+        isDragging -> previewStartMs to previewEndMs
+        pendingCommitStartMs != null && pendingCommitEndMs != null ->
+            pendingCommitStartMs to pendingCommitEndMs
+        else -> loopStartMs to loopEndMs
+    }
+
+fun loopRegionPendingCommitResolved(
+    loopStartMs: Long,
+    loopEndMs: Long,
+    pendingCommitStartMs: Long?,
+    pendingCommitEndMs: Long?,
+): Boolean =
+    pendingCommitStartMs != null &&
+        pendingCommitEndMs != null &&
+        loopStartMs == pendingCommitStartMs &&
+        loopEndMs == pendingCommitEndMs
+
 /** Track-local start of the active clip region (ms from WAV start). */
 fun TrackEntity.effectiveLoopStartMs(): Long =
     if (!isLoop) {
@@ -71,7 +103,11 @@ fun clampLoopRegionMs(
     return start to finalEnd
 }
 
-/** Maps track-local loop bounds to fractions within the full-source waveform clip. */
+data class LoopRegionOverlayFractions(
+    val startFraction: Float,
+    val endFraction: Float,
+)
+
 fun loopRegionOverlayFractions(
     loopStartMs: Long,
     loopEndMs: Long,
@@ -86,11 +122,6 @@ fun loopRegionOverlayFractions(
         (loopEndMs.toDouble() / sourceDurationMs.toDouble()).toFloat().coerceIn(0f, 1f)
     return LoopRegionOverlayFractions(startFraction = startFraction, endFraction = endFraction)
 }
-
-data class LoopRegionOverlayFractions(
-    val startFraction: Float,
-    val endFraction: Float,
-)
 
 fun pointerXToSourceMs(pointerXInClipPx: Float, clipWidthPx: Float, sourceDurationMs: Long): Long {
     if (clipWidthPx <= 0f || sourceDurationMs <= 0L) return 0L

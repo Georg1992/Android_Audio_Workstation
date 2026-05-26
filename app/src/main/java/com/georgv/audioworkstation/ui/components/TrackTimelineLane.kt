@@ -27,14 +27,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
+import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -106,7 +107,8 @@ fun projectTimelineClips(
 ): List<TimelineClip> {
     val playableTracks = tracks.mapNotNull { track ->
         val durationMs = track.duration?.takeIf { it > 0L } ?: return@mapNotNull null
-        if (track.wavFilePath.isBlank() || track.isRecording) return@mapNotNull null
+        if (track.wavFilePath.isBlank()) return@mapNotNull null
+        if (track.isRecording && !track.hasPersistedPlayableAudio()) return@mapNotNull null
         val startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
         track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = durationMs.coerceAtLeast(0L))
     }
@@ -272,11 +274,42 @@ fun TrackTimelineLane(
     recordingInputLevel: Float? = null,
     loopRegionEditingEnabled: Boolean = false,
     onLoopRegionCommit: ((loopStartMs: Long, loopEndMs: Long) -> Unit)? = null,
+    trackId: String? = null,
+    hasPersistedPlayableAudio: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
     val density = LocalDensity.current
     val playheadLineWidthPx = with(density) { 1.dp.toPx() }
+    val laneLayout = clip?.let { timelineClipLayout(it, laneLayoutDurationMs) }
+    val editingEnabled = loopRegionEditingEnabled && onLoopRegionCommit != null
+    val waveformMode =
+        clip?.let { activeClip ->
+            timelineLaneWaveformMode(
+                waveformState = activeClip.waveformState,
+                isActiveRecording = activeClip.isActiveRecording,
+                recordingInputLevel = recordingInputLevel,
+            )
+        }
+    LoopUiLogTimelineLaneOnChange(
+        snapshot =
+            LoopUiTimelineLaneSnapshot(
+                trackId = trackId ?: clip?.laneId,
+                isLoop = clip?.isLoop ?: false,
+                isActiveRecording = clip?.isActiveRecording ?: false,
+                hasPersistedPlayableAudio = hasPersistedPlayableAudio,
+                recordingInputLevelPresent = recordingInputLevel != null,
+                waveformStateType = clip?.waveformState?.debugTypeName() ?: "null",
+                waveformMode = waveformMode,
+                laneLayoutResolved = laneLayout != null,
+                loopOverlayVisible = clip?.isLoop == true && (clip.durationMs > 0L),
+                localPlayheadVisible = clip?.isLoop == true && (clip.durationMs > 0L) && laneLayout != null,
+                editingEnabled = editingEnabled,
+                clipDurationMs = clip?.durationMs ?: 0L,
+                loopStartMs = clip?.effectiveStartMs ?: 0L,
+                loopEndMs = clip?.effectiveEndMs ?: 0L,
+            ),
+    )
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -286,34 +319,14 @@ fun TrackTimelineLane(
             .background(AppColors.Bg)
             .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
-        val layout = clip?.let { timelineClipLayout(it, laneLayoutDurationMs) } ?: return@BoxWithConstraints
-        val drawGlobalPlayheadInLane = !clip.isLoop
+        val activeClip = clip ?: return@BoxWithConstraints
+        val layout = laneLayout ?: return@BoxWithConstraints
+        val drawGlobalPlayheadInLane = !activeClip.isLoop
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .fillMaxWidth(TimelineWaveformWidthFraction)
                 .fillMaxHeight()
-                .then(
-                    if (drawGlobalPlayheadInLane) {
-                        Modifier.drawBehind {
-                            if (size.width <= 0f || size.height <= 0f) return@drawBehind
-                            val x =
-                                timelineMsToX(
-                                    timeMs = playheadPositionMs,
-                                    timelineDurationMs = globalPlayheadTimelineDurationMs,
-                                    contentWidthPx = size.width,
-                                )
-                            drawLine(
-                                color = AppColors.Red,
-                                start = Offset(x, 0f),
-                                end = Offset(x, size.height),
-                                strokeWidth = playheadLineWidthPx,
-                            )
-                        }
-                    } else {
-                        Modifier
-                    },
-                )
                 .reportLaneWaveformBounds(),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -329,11 +342,11 @@ fun TrackTimelineLane(
                     val sourcePlayheadMs =
                         trackSourcePlayheadMs(
                             globalPlayheadMs = playheadPositionMs,
-                            timelineStartOffsetMs = clip.startOffsetMs,
-                            sourceDurationMs = clip.durationMs,
-                            loopEnabled = clip.isLoop,
-                            loopStartMs = clip.effectiveStartMs,
-                            loopEndMs = clip.effectiveEndMs,
+                            timelineStartOffsetMs = activeClip.startOffsetMs,
+                            sourceDurationMs = activeClip.durationMs,
+                            loopEnabled = activeClip.isLoop,
+                            loopStartMs = activeClip.effectiveStartMs,
+                            loopEndMs = activeClip.effectiveEndMs,
                         )
                     Box(
                         modifier = Modifier
@@ -344,59 +357,63 @@ fun TrackTimelineLane(
                             .background(AppColors.SurfacePanel)
                             .padding(top = Dimens.TightGap, start = 1.dp),
                     ) {
-                        if (clip.isActiveRecording && recordingInputLevel != null) {
-                            RecordingWaveform(
-                                inputLevel = recordingInputLevel,
-                                modifier = Modifier.fillMaxSize(),
+                        when (
+                            timelineLaneWaveformMode(
+                                waveformState = activeClip.waveformState,
+                                isActiveRecording = activeClip.isActiveRecording,
+                                recordingInputLevel = recordingInputLevel,
                             )
-                        } else {
-                            when (val waveform = clip.waveformState) {
-                                WaveformState.Loading ->
-                                    WaveformStatusText("Generating...")
-                                WaveformState.Failed ->
-                                    WaveformStatusText("No waveform")
-                                WaveformState.NoWaveform ->
-                                    WaveformStatusText("No audio")
-                                is WaveformState.Ready ->
-                                    TrackWaveform(
-                                        peaks =
-                                            waveformPeaksForTimelineClip(
-                                                peaks = waveform.peaks,
-                                                clipDurationMs = clip.durationMs,
-                                            ),
-                                        horizontalInsetFraction = 0f,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
+                        ) {
+                            TimelineLaneWaveformMode.PersistedPeaks -> {
+                                val peaks = (activeClip.waveformState as WaveformState.Ready).peaks
+                                TrackWaveform(
+                                    peaks =
+                                        waveformPeaksForTimelineClip(
+                                            peaks = peaks,
+                                            clipDurationMs = activeClip.durationMs,
+                                        ),
+                                    horizontalInsetFraction = 0f,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
                             }
+                            TimelineLaneWaveformMode.LiveRecordingMeter ->
+                                RecordingWaveform(
+                                    inputLevel = recordingInputLevel!!,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            TimelineLaneWaveformMode.Status ->
+                                when (activeClip.waveformState) {
+                                    WaveformState.Loading ->
+                                        WaveformStatusText("Generating...")
+                                    WaveformState.Failed ->
+                                        WaveformStatusText("No waveform")
+                                    WaveformState.NoWaveform ->
+                                        WaveformStatusText("No audio")
+                                    is WaveformState.Ready -> Unit
+                                }
                         }
-                        if (clip.isLoop) {
+                        if (activeClip.isLoop) {
                             LoopRegionEditor(
-                                sourceDurationMs = clip.durationMs,
-                                loopStartMs = clip.effectiveStartMs,
-                                loopEndMs = clip.effectiveEndMs,
-                                editingEnabled = loopRegionEditingEnabled && onLoopRegionCommit != null,
+                                sourceDurationMs = activeClip.durationMs,
+                                loopStartMs = activeClip.effectiveStartMs,
+                                loopEndMs = activeClip.effectiveEndMs,
+                                editingEnabled = editingEnabled,
                                 onLoopRegionCommit = { startMs, endMs ->
                                     onLoopRegionCommit?.invoke(startMs, endMs)
                                 },
-                                modifier = Modifier.fillMaxSize(),
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .zIndex(1f),
                             )
                         }
-                        if (clip.isLoop) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                if (size.width <= 0f || size.height <= 0f) return@Canvas
-                                val x =
-                                    timelineMsToX(
-                                        timeMs = sourcePlayheadMs,
-                                        timelineDurationMs = clip.durationMs,
-                                        contentWidthPx = size.width,
-                                    )
-                                drawLine(
-                                    color = AppColors.Red,
-                                    start = Offset(x, 0f),
-                                    end = Offset(x, size.height),
-                                    strokeWidth = playheadLineWidthPx,
-                                )
-                            }
+                        if (activeClip.isLoop) {
+                            TimelineLanePlayheadOverlay(
+                                timeMs = sourcePlayheadMs,
+                                timelineDurationMs = activeClip.durationMs,
+                                playheadLineWidthPx = playheadLineWidthPx,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
                     }
                 }
@@ -405,7 +422,7 @@ fun TrackTimelineLane(
                     clipStartFraction = layout.startFraction,
                     clipEndFraction = timelineClipEndFraction(layout),
                     boundaryLabels = timelineRulerBoundaryLabels(
-                        clip = clip,
+                        clip = activeClip,
                         layout = layout,
                         timelineBaseDurationMs = laneLayoutDurationMs,
                     ),
@@ -414,13 +431,50 @@ fun TrackTimelineLane(
                         .fillMaxWidth(),
                 )
             }
+            if (drawGlobalPlayheadInLane) {
+                TimelineLanePlayheadOverlay(
+                    timeMs = playheadPositionMs,
+                    timelineDurationMs = globalPlayheadTimelineDurationMs,
+                    playheadLineWidthPx = playheadLineWidthPx,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         ClipMetadataArea(
-            clip = clip,
+            clip = activeClip,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxWidth(TimelineMetadataWidthFraction)
                 .fillMaxHeight(),
+        )
+    }
+}
+
+@Composable
+private fun TimelineLanePlayheadOverlay(
+    timeMs: Long,
+    timelineDurationMs: Long,
+    playheadLineWidthPx: Float,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .zIndex(2f),
+    ) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        val x =
+            timelineMsToX(
+                timeMs = timeMs,
+                timelineDurationMs = timelineDurationMs,
+                contentWidthPx = size.width,
+            )
+        drawLine(
+            color = AppColors.Red,
+            start = Offset(x, 0f),
+            end = Offset(x, size.height),
+            strokeWidth = playheadLineWidthPx,
         )
     }
 }

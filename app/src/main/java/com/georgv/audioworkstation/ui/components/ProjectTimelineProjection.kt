@@ -20,6 +20,11 @@ data class ProjectTimelineProjection(
      */
     val baseTimelineDurationMs: Long,
     /**
+     * Lane clip layout duration: persisted base, or active recording extent when the project
+     * has no finalized clips yet (first take on an empty timeline).
+     */
+    val laneLayoutDurationMs: Long,
+    /**
      * Live ruler length for the global scrubber and non-loop lane playheads.
      * May extend past [baseTimelineDurationMs] only during all-looped playback past base,
      * or while recording grows past base.
@@ -46,14 +51,14 @@ fun buildProjectTimelineProjection(
                 furthestEndMs = persistedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) },
             )
         }
-    val clips =
-        if (recordingClip == null) {
-            persistedClips
-        } else {
-            persistedClips + recordingClip
-        }
+    val clips = timelineClipsWithActiveRecording(persistedClips, recordingClip)
     val baseTimelineDurationMs =
         timelineBaseDurationMsFromClips(persistedClips)
+    val laneLayoutDurationMs =
+        timelineLaneLayoutDurationMs(
+            persistedClips = persistedClips,
+            mergedClips = clips,
+        )
     val visibleTimelineDurationMs =
         visibleTimelineDurationMs(
             baseTimelineDurationMs = baseTimelineDurationMs,
@@ -73,6 +78,7 @@ fun buildProjectTimelineProjection(
         clips = clipsWithBase,
         clipsByLaneId = clipsWithBase.associateBy { it.laneId },
         baseTimelineDurationMs = baseTimelineDurationMs,
+        laneLayoutDurationMs = laneLayoutDurationMs,
         visibleTimelineDurationMs = visibleTimelineDurationMs,
     )
 }
@@ -83,6 +89,23 @@ fun timelineBaseDurationMsFromClips(clips: List<TimelineClip>): Long {
         clips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
     if (furthestClipEndMs <= 0L) return 0L
     return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+}
+
+/**
+ * Duration used to lay out lane clips. Matches [timelineBaseDurationMsFromClips] when persisted
+ * audio exists; otherwise uses the active recording clip so the first take on an empty project
+ * still renders waveform and playhead.
+ */
+fun timelineLaneLayoutDurationMs(
+    persistedClips: List<TimelineClip>,
+    mergedClips: List<TimelineClip>,
+): Long {
+    val persistedBase = timelineBaseDurationMsFromClips(persistedClips)
+    if (persistedBase > 0L) return persistedBase
+    val recordingLayoutEndMs =
+        mergedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
+    if (recordingLayoutEndMs <= 0L) return 0L
+    return recordingLayoutEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
 }
 
 fun visibleTimelineDurationMs(
@@ -101,8 +124,8 @@ fun visibleTimelineDurationMs(
     val playheadMs = playheadPositionMs.coerceAtLeast(0L)
     if (extendForRecording) {
         visible = max(visible, playheadMs)
-    } else if (extendForAllLoopedPlayback && playheadMs > baseTimelineDurationMs) {
-        visible = max(visible, playheadMs)
+    } else if (extendForAllLoopedPlayback) {
+        visible = max(visible, playheadMs.coerceAtLeast(baseTimelineDurationMs))
     }
     if (visible <= 0L) return 0L
     return visible.coerceAtLeast(TimelineMinimumBaseDurationMs)
@@ -123,6 +146,21 @@ fun sessionTimelineEndMsForTracks(tracks: List<TrackEntity>): Long {
     val furthestClipEndMs =
         tracks.maxOfOrNull { track -> track.effectiveTimelineEndMs() } ?: 0L
     return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+}
+
+/**
+ * Open-ended native playback when any selected lane loops (mixed or all-loop sessions).
+ */
+fun hasOpenEndedPlaybackSession(tracks: List<TrackEntity>): Boolean = tracks.any { it.isLoop }
+
+/** Allow starting/restarting playback at the base timeline end when any lane loops. */
+fun playbackStartAllowedAtPlayhead(
+    startPositionMs: Long,
+    timelineBaseDurationMs: Long,
+    tracks: List<TrackEntity>,
+): Boolean {
+    if (timelineBaseDurationMs <= 0L || startPositionMs < timelineBaseDurationMs) return true
+    return hasOpenEndedPlaybackSession(tracks)
 }
 
 /**
@@ -154,6 +192,25 @@ private fun activeRecordingTimelineClip(
         effectiveStartMs = 0L,
         effectiveEndMs = durationMs,
     )
+}
+
+/**
+ * When punch-recording into an existing track, keep the persisted clip (waveform + loop bounds)
+ * and only mark it active. Brand-new takes still use the standalone active-recording clip.
+ */
+internal fun timelineClipsWithActiveRecording(
+    persistedClips: List<TimelineClip>,
+    recordingClip: TimelineClip?,
+): List<TimelineClip> {
+    if (recordingClip == null) return persistedClips
+    val existing = persistedClips.find { it.laneId == recordingClip.laneId } ?: return persistedClips + recordingClip
+    return persistedClips.map { clip ->
+        if (clip.laneId == recordingClip.laneId) {
+            clip.copy(isActiveRecording = true)
+        } else {
+            clip
+        }
+    }
 }
 
 /** Minimum visible clip width on the timeline while elapsed is still 0. */

@@ -700,6 +700,7 @@ void AudioEngine::resetMasterPlaybackTimeline() {
     m_masterPlaybackStartFrame.store(0, std::memory_order_release);
     m_masterPlaybackFrame.store(0, std::memory_order_release);
     m_playbackSessionEndFrame.store(0, std::memory_order_release);
+    m_sessionHasLoopLanes.store(false, std::memory_order_release);
 }
 
 bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
@@ -742,6 +743,19 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
             resetMasterPlaybackTimeline();
             return false;
         }
+        bool sessionHasLoopLanes = false;
+        for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneProductCap; ++laneIdx) {
+            const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
+            if (state != PlaybackLaneLifecycle::Active &&
+                state != PlaybackLaneLifecycle::Exhausted) {
+                continue;
+            }
+            if (m_playbackLanes[laneIdx].loopEnabled.load(std::memory_order_acquire)) {
+                sessionHasLoopLanes = true;
+                break;
+            }
+        }
+        m_sessionHasLoopLanes.store(sessionHasLoopLanes, std::memory_order_release);
     }
 
     initializeMasterPlaybackTimeline(startFrame);
@@ -924,6 +938,10 @@ void AudioEngine::ioLoop() {
 void AudioEngine::renderMaybeCompletePlaybackMaster(int32_t numFramesOutput,
                                                    int32_t /*outChannels*/,
                                                    int32_t minimumFramesReturnedFromLanes) {
+    if (m_sessionHasLoopLanes.load(std::memory_order_acquire)) {
+        return;
+    }
+
     bool hasLoopLane = false;
     for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
         const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);

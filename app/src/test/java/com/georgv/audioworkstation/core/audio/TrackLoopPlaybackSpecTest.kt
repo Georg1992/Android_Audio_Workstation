@@ -147,6 +147,43 @@ class TrackLoopPlaybackSpecTest {
   }
 
   @Test
+  fun `toMultiPlaybackSpec maps loop fields for every looped lane`() {
+    val trackA =
+        TrackEntity(
+            id = "a",
+            projectId = "project-1",
+            wavFilePath = "/tmp/a.wav",
+            duration = 20_000L,
+            isLoop = true,
+            loopStartMs = 1_000L,
+            loopEndMs = 4_000L,
+        )
+    val trackB =
+        TrackEntity(
+            id = "b",
+            projectId = "project-1",
+            wavFilePath = "/tmp/b.wav",
+            duration = 15_000L,
+            isLoop = true,
+            loopStartMs = 2_500L,
+            loopEndMs = 7_500L,
+        )
+
+    val spec = project.toMultiPlaybackSpec(listOf(trackA, trackB))!!
+
+    assertEquals(0L, sessionTimelineEndMsForPlayback(listOf(trackA, trackB)))
+    assertEquals(2, spec.lanes.size)
+    val laneA = spec.lanes[0]
+    val laneB = spec.lanes[1]
+    assertTrue(laneA.loopEnabled)
+    assertTrue(laneB.loopEnabled)
+    assertEquals(1_000L, laneA.loopSourceStartMs)
+    assertEquals(4_000L, laneA.loopSourceEndMs)
+    assertEquals(2_500L, laneB.loopSourceStartMs)
+    assertEquals(7_500L, laneB.loopSourceEndMs)
+  }
+
+  @Test
   fun `toMultiPlaybackSpec leaves loop fields off for one-shot tracks`() {
     val track =
         TrackEntity(

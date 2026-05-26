@@ -682,5 +682,174 @@ TEST_F(AudioEngineMasterPlaybackTest, MixedOneShotAndLoopLaneKeepsPlaybackAlive)
     std::remove(loopWav.c_str());
 }
 
+TEST_F(AudioEngineMasterPlaybackTest, TwoLoopLanesSameLengthRemainActiveAndAudible) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    constexpr int64_t kLoopEndMs = 1'500L;
+
+    const std::string loopA = WriteTempMonoWavFilled(
+        "two_loop_a.wav", kSampleRateHz, kSampleRateHz * 2, 12'000);
+    const std::string loopB = WriteTempMonoWavFilled(
+        "two_loop_b.wav", kSampleRateHz, kSampleRateHz * 2, 18'000);
+    ASSERT_FALSE(loopA.empty());
+    ASSERT_FALSE(loopB.empty());
+
+    ASSERT_TRUE(engine.setPlaybackSources(
+        std::vector<std::string>{loopA, loopB},
+        std::vector<float>{1.0f, 1.0f},
+        0L,
+        0L,
+        std::vector<int64_t>{0L, 0L},
+        std::vector<int64_t>{kLoopEndMs, kLoopEndMs},
+        std::vector<uint8_t>{1, 1},
+        std::vector<int64_t>{0L, 0L},
+        std::vector<int64_t>{kLoopEndMs, kLoopEndMs}));
+
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(0));
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(1));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    float peak = 0.0f;
+    int64_t prevTransportMs = -1;
+    for (int block = 0; block < 900; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+        peak = std::max(peak, PeakAbsInterleaved(buffer.data(), buffer.size()));
+        const int64_t transportMs = engine.transportPositionMs();
+        ASSERT_GT(transportMs, prevTransportMs);
+        prevTransportMs = transportMs;
+    }
+
+    EXPECT_GT(peak, 0.05f);
+    EXPECT_TRUE(engine.isPlaybackActive());
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(0));
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(1));
+    EXPECT_GE(engine.transportPositionMs(), 3'500);
+    engine.stopPlayback();
+    std::remove(loopA.c_str());
+    std::remove(loopB.c_str());
+}
+
+TEST_F(AudioEngineMasterPlaybackTest, TwoLoopLanesDifferentLengthsWrapIndependently) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    constexpr int64_t kLoopEndShortMs = 1'000L;
+    constexpr int64_t kLoopEndLongMs = 2'500L;
+
+    const std::string shortLoop = WriteTempMonoWavFilled(
+        "short_loop.wav", kSampleRateHz, kSampleRateHz * 4, 14'000);
+    const std::string longLoop = WriteTempMonoWavFilled(
+        "long_loop.wav", kSampleRateHz, kSampleRateHz * 6, 20'000);
+    ASSERT_FALSE(shortLoop.empty());
+    ASSERT_FALSE(longLoop.empty());
+
+    ASSERT_TRUE(engine.setPlaybackSources(
+        std::vector<std::string>{shortLoop, longLoop},
+        std::vector<float>{1.0f, 1.0f},
+        0L,
+        0L,
+        std::vector<int64_t>{0L, 0L},
+        std::vector<int64_t>{kLoopEndShortMs, kLoopEndLongMs},
+        std::vector<uint8_t>{1, 1},
+        std::vector<int64_t>{0L, 0L},
+        std::vector<int64_t>{kLoopEndShortMs, kLoopEndLongMs}));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    for (int block = 0; block < 1'000; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+    }
+
+    EXPECT_TRUE(engine.isPlaybackActive());
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(0));
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(1));
+    EXPECT_GE(engine.transportPositionMs(), 4'000);
+    engine.stopPlayback();
+    std::remove(shortLoop.c_str());
+    std::remove(longLoop.c_str());
+}
+
+TEST_F(AudioEngineMasterPlaybackTest, MixedOneShotAndTwoLoopLanesKeepsLoopLanesActive) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    constexpr int64_t kOneShotDurationMs = 800L;
+    constexpr int64_t kLoopShortEndMs = 1'200L;
+    constexpr int64_t kLoopLongEndMs = 2'400L;
+
+    const std::string oneShotWav = WriteTempMonoWavFilled(
+        "mixed3_one_shot.wav", kSampleRateHz, kSampleRateHz, 12'000);
+    const std::string loopShortWav = WriteTempMonoWavFilled(
+        "mixed3_loop_short.wav", kSampleRateHz, kSampleRateHz * 4, 16'000);
+    const std::string loopLongWav = WriteTempMonoWavFilled(
+        "mixed3_loop_long.wav", kSampleRateHz, kSampleRateHz * 6, 22'000);
+    ASSERT_FALSE(oneShotWav.empty());
+    ASSERT_FALSE(loopShortWav.empty());
+    ASSERT_FALSE(loopLongWav.empty());
+
+    ASSERT_TRUE(engine.setPlaybackSources(
+        std::vector<std::string>{oneShotWav, loopShortWav, loopLongWav},
+        std::vector<float>{1.0f, 1.0f, 1.0f},
+        0L,
+        0L,
+        std::vector<int64_t>{0L, 0L, 0L},
+        std::vector<int64_t>{kOneShotDurationMs, kLoopShortEndMs, kLoopLongEndMs},
+        std::vector<uint8_t>{0, 1, 1},
+        std::vector<int64_t>{0L, 0L, 0L},
+        std::vector<int64_t>{0L, kLoopShortEndMs, kLoopLongEndMs}));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    int64_t prevTransportMs = -1;
+    for (int block = 0; block < 900; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+        const int64_t transportMs = engine.transportPositionMs();
+        ASSERT_GT(transportMs, prevTransportMs);
+        prevTransportMs = transportMs;
+    }
+
+    EXPECT_TRUE(engine.isPlaybackActive());
+    EXPECT_EQ(PlaybackLaneLifecycle::Exhausted, engine.laneLifecycle(0));
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(1));
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(2));
+    EXPECT_GE(engine.transportPositionMs(), 4'000);
+    engine.stopPlayback();
+    std::remove(oneShotWav.c_str());
+    std::remove(loopShortWav.c_str());
+    std::remove(loopLongWav.c_str());
+}
+
+TEST_F(AudioEngineMasterPlaybackTest, TransportFrameMonotonicPastBaseTimelineEnd) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    constexpr int64_t kBaseTimelineEndMs = 2'000L;
+    constexpr int64_t kLoopEndMs = 1'000L;
+
+    const std::string loopWav = WriteTempMonoWavFilled(
+        "monotonic_loop.wav", kSampleRateHz, kSampleRateHz * 4, 15'000);
+    ASSERT_FALSE(loopWav.empty());
+
+    ASSERT_TRUE(engine.setPlaybackSources(
+        std::vector<std::string>{loopWav},
+        std::vector<float>{1.0f},
+        0L,
+        0L,
+        std::vector<int64_t>{0L},
+        std::vector<int64_t>{kBaseTimelineEndMs},
+        std::vector<uint8_t>{1},
+        std::vector<int64_t>{0L},
+        std::vector<int64_t>{kLoopEndMs}));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    int64_t prevTransportFrame = -1;
+    for (int block = 0; block < 600; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+        const int64_t transportFrame = engine.transportFrame();
+        ASSERT_GT(transportFrame, prevTransportFrame);
+        prevTransportFrame = transportFrame;
+    }
+
+    EXPECT_TRUE(engine.isPlaybackActive());
+    EXPECT_GT(engine.transportPositionMs(), kBaseTimelineEndMs);
+    engine.stopPlayback();
+    std::remove(loopWav.c_str());
+}
+
 } // namespace
 } // namespace dawengine

@@ -248,6 +248,8 @@ private:
     alignas(8) std::atomic<int64_t> m_masterPlaybackFrame{0};
     /** Absolute timeline end frame; 0 = complete on lane drain (legacy tests). */
     alignas(8) std::atomic<int64_t> m_playbackSessionEndFrame{0};
+    /** Set at arm when any lane has loop enabled; prevents lane-drain auto-stop. */
+    alignas(8) std::atomic<bool> m_sessionHasLoopLanes{false};
 
     std::thread m_ioThread;
     std::atomic<bool> m_ioRunning{false};
