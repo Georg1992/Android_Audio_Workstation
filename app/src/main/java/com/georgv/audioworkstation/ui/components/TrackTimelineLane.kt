@@ -151,11 +151,6 @@ private data class TimelineClipSpan(
     val durationMs: Long,
 )
 
-fun timelineBaseDurationMs(clips: List<TimelineClip>): Long =
-    clips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) }
-        ?.coerceAtLeast(TimelineMinimumBaseDurationMs)
-        ?: TimelineMinimumBaseDurationMs
-
 /**
  * Maps full-file [WaveformPeaks] to the timeline clip width when the on-disk WAV is longer than
  * [clipDurationMs], so the visible waveform matches the audio segment the engine plays from offset 0.

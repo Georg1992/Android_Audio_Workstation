@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
 import android.util.Log
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -11,49 +10,20 @@ object TimelineGeometryDebug {
     const val TAG = "TimelineGeometry"
 
     var loggingEnabled: Boolean = false
-
-    val scrubberWaveformBounds = mutableStateOf<TimelineWaveformBoundsReport?>(null)
-    val laneWaveformBounds = mutableStateOf<TimelineWaveformBoundsReport?>(null)
-
-    fun reset() {
-        scrubberWaveformBounds.value = null
-        laneWaveformBounds.value = null
-    }
 }
 
-data class TimelineWaveformBoundsReport(
-    val label: String,
-    val globalXPx: Float,
-    val widthPx: Float,
-)
-
 fun Modifier.reportScrubberWaveformBounds(): Modifier =
-    reportTimelineWaveformBounds("scrubber") {
-        TimelineGeometryDebug.scrubberWaveformBounds.value = it
-    }
+    reportTimelineWaveformBounds("scrubber")
 
 fun Modifier.reportLaneWaveformBounds(): Modifier =
-    reportTimelineWaveformBounds("lane") {
-        TimelineGeometryDebug.laneWaveformBounds.value = it
-    }
+    reportTimelineWaveformBounds("lane")
 
-private fun Modifier.reportTimelineWaveformBounds(
-    label: String,
-    store: (TimelineWaveformBoundsReport) -> Unit,
-): Modifier =
+private fun Modifier.reportTimelineWaveformBounds(label: String): Modifier =
     onGloballyPositioned { coordinates ->
+        if (!TimelineGeometryDebug.loggingEnabled) return@onGloballyPositioned
         val bounds = coordinates.boundsInRoot()
-        val report =
-            TimelineWaveformBoundsReport(
-                label = label,
-                globalXPx = bounds.left,
-                widthPx = bounds.width,
-            )
-        store(report)
-        if (TimelineGeometryDebug.loggingEnabled) {
-            Log.d(
-                TimelineGeometryDebug.TAG,
-                "$label waveform area globalX=${report.globalXPx} width=${report.widthPx}",
-            )
-        }
+        Log.d(
+            TimelineGeometryDebug.TAG,
+            "$label waveform area globalX=${bounds.left} width=${bounds.width}",
+        )
     }

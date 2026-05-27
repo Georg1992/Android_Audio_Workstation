@@ -17,7 +17,7 @@ import androidx.compose.runtime.setValue
 object LoopUiDiagnostics {
     const val TAG = "LOOP_UI"
 
-    var enabled: Boolean = true
+    var enabled: Boolean = false
 }
 
 internal fun WaveformState.debugTypeName(): String =

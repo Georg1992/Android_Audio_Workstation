@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
+import com.georgv.audioworkstation.core.track.loopRegionOverlayFractions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -69,7 +70,7 @@ class TimelineLaneScaleTest {
     @Test
     fun `overlay fractions map loop bounds across source duration`() {
         val fractions =
-            loopOverlayFractionsForLaneClip(
+            loopRegionOverlayFractions(
                 loopStartMs = 2_000L,
                 loopEndMs = 6_000L,
                 sourceDurationMs = 8_000L,

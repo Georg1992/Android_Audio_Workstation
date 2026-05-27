@@ -1,7 +1,5 @@
 package com.georgv.audioworkstation.ui.components
 
-import com.georgv.audioworkstation.core.track.LoopRegionOverlayFractions
-import com.georgv.audioworkstation.core.track.loopRegionOverlayFractions
 import com.georgv.audioworkstation.core.track.pointerXToSourceMs
 import kotlin.math.min
 
@@ -92,17 +90,6 @@ fun xInLaneClipToSourceMs(
     sourceDurationMs: Long,
 ): Long = pointerXToSourceMs(xPx, clipWidthPx, sourceDurationMs)
 
-fun loopOverlayFractionsForLaneClip(
-    loopStartMs: Long,
-    loopEndMs: Long,
-    sourceDurationMs: Long,
-): LoopRegionOverlayFractions =
-    loopRegionOverlayFractions(
-        loopStartMs = loopStartMs,
-        loopEndMs = loopEndMs,
-        sourceDurationMs = sourceDurationMs,
-    )
-
 fun TimelineLaneScale.waveformClipWidthPx(waveformAreaWidthPx: Float): Float =
     waveformAreaWidthPx * clipWidthFractionOnWaveformArea()
 
@@ -138,17 +125,6 @@ fun pointerAreaXToSourceMs(
         clipWidthPx = clipWidthPx,
         sourceDurationMs = laneScale.sourceDurationMs,
     )
-}
-
-fun sourceMsDeltaFromAreaDeltaPx(
-    deltaAreaPx: Float,
-    laneScale: TimelineLaneScale,
-    waveformAreaWidthPx: Float,
-): Long {
-    val clipWidthPx = laneScale.waveformClipWidthPx(waveformAreaWidthPx)
-    if (clipWidthPx <= 0f) return 0L
-    return (deltaAreaPx.toDouble() / clipWidthPx.toDouble() * laneScale.sourceDurationMs.toDouble())
-        .toLong()
 }
 
 /** Lane ruler duration: project timeline idle, source duration while loop edit-focused. */

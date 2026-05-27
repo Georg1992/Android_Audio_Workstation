@@ -157,30 +157,18 @@ class TrackLoopRegionTest {
 
     @Test
     fun `outside tap right of region moves right handle to pointer`() {
-        val (start, end) =
-            applyLoopRegionOutsideTap(
-                pointerMs = 18_000L,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 900f)
 
-        assertEquals(6_000L, start)
-        assertEquals(18_000L, end)
+        assertEquals(6_000L, begin.loopStartMs)
+        assertEquals(18_000L, begin.loopEndMs)
     }
 
     @Test
     fun `outside tap left of region moves left handle to pointer`() {
-        val (start, end) =
-            applyLoopRegionOutsideTap(
-                pointerMs = 2_000L,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 100f)
 
-        assertEquals(2_000L, start)
-        assertEquals(12_000L, end)
+        assertEquals(2_000L, begin.loopStartMs)
+        assertEquals(12_000L, begin.loopEndMs)
     }
 
     @Test
@@ -289,22 +277,6 @@ class TrackLoopRegionTest {
 
         assertEquals(0L, start)
         assertEquals(100L, end)
-    }
-
-    @Test
-    fun `resolve drag mode maps outside pointer to jump modes`() {
-        assertEquals(
-            LoopRegionDragMode.JumpLeft,
-            resolveLoopRegionDragMode(pointerMs = 1_000L, loopStartMs = 6_000L, loopEndMs = 12_000L),
-        )
-        assertEquals(
-            LoopRegionDragMode.JumpRight,
-            resolveLoopRegionDragMode(pointerMs = 15_000L, loopStartMs = 6_000L, loopEndMs = 12_000L),
-        )
-        assertEquals(
-            LoopRegionDragMode.MoveRegion,
-            resolveLoopRegionDragMode(pointerMs = 8_000L, loopStartMs = 6_000L, loopEndMs = 12_000L),
-        )
     }
 
     @Test
@@ -465,15 +437,7 @@ class TrackLoopRegionTest {
 
     @Test
     fun `begin drag outside left jumps left handle and locks right edge`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 100f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 16f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 100f)
 
         assertEquals(LoopRegionActiveDragMode.LeftHandle, begin.activeMode)
         assertEquals(2_000L, begin.loopStartMs)
@@ -483,15 +447,7 @@ class TrackLoopRegionTest {
 
     @Test
     fun `begin drag outside right jumps right handle and locks left edge`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 700f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 16f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 700f)
 
         assertEquals(LoopRegionActiveDragMode.RightHandle, begin.activeMode)
         assertEquals(6_000L, begin.loopStartMs)
@@ -501,15 +457,7 @@ class TrackLoopRegionTest {
 
     @Test
     fun `begin drag inside region selects move without changing bounds`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 400f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 16f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 400f)
 
         assertEquals(LoopRegionActiveDragMode.MoveRegion, begin.activeMode)
         assertEquals(6_000L, begin.loopStartMs)
@@ -520,12 +468,9 @@ class TrackLoopRegionTest {
     @Test
     fun `active drag preserves fixed edge for left handle`() {
         val (start, end) =
-            applyLoopRegionActiveDrag(
-                activeMode = LoopRegionActiveDragMode.LeftHandle,
+            applyLoopRegionLeftHandleDrag(
                 pointerMs = 4_000L,
-                anchorStartMs = 4_000L,
-                anchorEndMs = 12_000L,
-                moveOriginPointerMs = 0L,
+                loopEndMs = 12_000L,
                 sourceDurationMs = 20_000L,
             )
 
@@ -536,17 +481,33 @@ class TrackLoopRegionTest {
     @Test
     fun `active drag preserves fixed edge for right handle`() {
         val (start, end) =
-            applyLoopRegionActiveDrag(
-                activeMode = LoopRegionActiveDragMode.RightHandle,
+            applyLoopRegionRightHandleDrag(
                 pointerMs = 15_000L,
-                anchorStartMs = 6_000L,
-                anchorEndMs = 15_000L,
-                moveOriginPointerMs = 0L,
+                loopStartMs = 6_000L,
                 sourceDurationMs = 20_000L,
             )
 
         assertEquals(6_000L, start)
         assertEquals(15_000L, end)
+    }
+
+    private fun beginLoopRegionDragAtClipX(pointerXInClipPx: Float): LoopRegionDragBeginResult {
+        val clipStartPx = 0f
+        val clipWidthPx = 1_000f
+        val loopStartMs = 6_000L
+        val loopEndMs = 12_000L
+        val sourceDurationMs = 20_000L
+        return beginLoopRegionDragAtAreaPointer(
+            areaXPx = clipStartPx + pointerXInClipPx,
+            clipStartPx = clipStartPx,
+            clipWidthPx = clipWidthPx,
+            leftHandleAreaX = clipStartPx + clipWidthPx * (loopStartMs.toDouble() / sourceDurationMs.toDouble()).toFloat(),
+            rightHandleAreaX = clipStartPx + clipWidthPx * (loopEndMs.toDouble() / sourceDurationMs.toDouble()).toFloat(),
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
+            sourceDurationMs = sourceDurationMs,
+            handleHitHalfWidthPx = 16f,
+        )
     }
 
     private fun track(

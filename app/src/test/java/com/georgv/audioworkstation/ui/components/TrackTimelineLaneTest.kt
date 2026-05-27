@@ -16,7 +16,7 @@ class TrackTimelineLaneTest {
             clip(id = "long", durationMs = 30_000L)
         )
 
-        assertEquals(30_000L, timelineBaseDurationMs(clips))
+        assertEquals(30_000L, timelineBaseDurationMsFromClips(clips))
     }
 
     @Test
@@ -26,7 +26,7 @@ class TrackTimelineLaneTest {
             clip(id = "late", durationMs = 5_000L, startOffsetMs = 30_000L),
         )
 
-        assertEquals(35_000L, timelineBaseDurationMs(clips))
+        assertEquals(35_000L, timelineBaseDurationMsFromClips(clips))
     }
 
     @Test
@@ -34,12 +34,12 @@ class TrackTimelineLaneTest {
         val beyondViewport = TimelineMaxDurationMs + 60_000L
         val clips = listOf(clip(durationMs = beyondViewport))
 
-        assertEquals(beyondViewport, timelineBaseDurationMs(clips))
+        assertEquals(beyondViewport, timelineBaseDurationMsFromClips(clips))
     }
 
     @Test
-    fun `base duration has a safe minimum for empty content`() {
-        assertEquals(TimelineMinimumBaseDurationMs, timelineBaseDurationMs(emptyList()))
+    fun `base duration is zero for empty content`() {
+        assertEquals(0L, timelineBaseDurationMsFromClips(emptyList()))
     }
 
     @Test
@@ -255,7 +255,7 @@ class TrackTimelineLaneTest {
 
         val clips = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap())
 
-        assertEquals(4_000L, timelineBaseDurationMs(clips))
+        assertEquals(4_000L, timelineBaseDurationMsFromClips(clips))
         assertEquals(true, clips.first { it.clipId == "long" }.isTimelineBase)
     }
 
@@ -362,7 +362,7 @@ class TrackTimelineLaneTest {
 
         val clips = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap())
 
-        assertEquals(20_000L, timelineBaseDurationMs(clips))
+        assertEquals(20_000L, timelineBaseDurationMsFromClips(clips))
         assertEquals(true, clips.first { it.clipId == "loop" }.isTimelineBase)
         assertEquals(false, clips.first { it.clipId == "base" }.isTimelineBase)
         assertEquals(12_000L, clips.first { it.clipId == "loop" }.effectiveEndMs)

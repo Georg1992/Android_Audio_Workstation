@@ -152,6 +152,7 @@ internal class ProjectTransportCommands(
         }
 
         if (!audioController.startPlayback(playbackSpec)) {
+            playheadTransport.abortPlaybackStart()
             emitMessage(R.string.error_playback_failed_to_start)
             return
         }

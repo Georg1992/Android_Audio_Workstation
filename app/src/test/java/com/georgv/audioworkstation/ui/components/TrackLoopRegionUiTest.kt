@@ -1,7 +1,9 @@
 package com.georgv.audioworkstation.ui.components
 
-import com.georgv.audioworkstation.core.track.applyLoopRegionActiveDrag
-import com.georgv.audioworkstation.core.track.beginLoopRegionDragAtPointer
+import com.georgv.audioworkstation.core.track.applyLoopRegionLeftHandleDrag
+import com.georgv.audioworkstation.core.track.applyLoopRegionMoveDrag
+import com.georgv.audioworkstation.core.track.applyLoopRegionRightHandleDrag
+import com.georgv.audioworkstation.core.track.beginLoopRegionDragAtAreaPointer
 import com.georgv.audioworkstation.core.track.loopRegionDisplayBoundsMs
 import com.georgv.audioworkstation.core.track.loopRegionOverlayFractions
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
@@ -129,23 +131,12 @@ class TrackLoopRegionUiTest {
 
     @Test
     fun `left handle drag preserves loop start on begin then updates on move`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 300f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 48f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 300f, handleHitHalfWidthPx = 48f)
         assertEquals(6_000L, begin.loopStartMs)
         val (start, _) =
-            applyLoopRegionActiveDrag(
-                activeMode = begin.activeMode,
+            applyLoopRegionLeftHandleDrag(
                 pointerMs = 5_000L,
-                anchorStartMs = begin.anchorStartMs,
-                anchorEndMs = begin.anchorEndMs,
-                moveOriginPointerMs = begin.moveOriginPointerMs,
+                loopEndMs = begin.anchorEndMs,
                 sourceDurationMs = 20_000L,
             )
         assertEquals(5_000L, start)
@@ -153,23 +144,12 @@ class TrackLoopRegionUiTest {
 
     @Test
     fun `right handle drag preserves loop end on begin then updates on move`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 600f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 48f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 600f, handleHitHalfWidthPx = 48f)
         assertEquals(12_000L, begin.loopEndMs)
         val (_, end) =
-            applyLoopRegionActiveDrag(
-                activeMode = begin.activeMode,
+            applyLoopRegionRightHandleDrag(
                 pointerMs = 15_000L,
-                anchorStartMs = begin.anchorStartMs,
-                anchorEndMs = begin.anchorEndMs,
-                moveOriginPointerMs = begin.moveOriginPointerMs,
+                loopStartMs = begin.anchorStartMs,
                 sourceDurationMs = 20_000L,
             )
         assertEquals(15_000L, end)
@@ -177,22 +157,12 @@ class TrackLoopRegionUiTest {
 
     @Test
     fun `region drag moves whole loop region`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 500f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 48f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 500f, handleHitHalfWidthPx = 48f)
         val (start, end) =
-            applyLoopRegionActiveDrag(
-                activeMode = begin.activeMode,
-                pointerMs = 12_000L,
-                anchorStartMs = begin.anchorStartMs,
-                anchorEndMs = begin.anchorEndMs,
-                moveOriginPointerMs = begin.moveOriginPointerMs,
+            applyLoopRegionMoveDrag(
+                deltaMs = 12_000L - begin.moveOriginPointerMs,
+                loopStartMs = begin.anchorStartMs,
+                loopEndMs = begin.anchorEndMs,
                 sourceDurationMs = 20_000L,
             )
         assertEquals(8_000L, start)
@@ -201,15 +171,7 @@ class TrackLoopRegionUiTest {
 
     @Test
     fun `outside right tap jumps right handle to pointer`() {
-        val begin =
-            beginLoopRegionDragAtPointer(
-                pointerXInClipPx = 900f,
-                clipWidthPx = 1_000f,
-                loopStartMs = 6_000L,
-                loopEndMs = 12_000L,
-                sourceDurationMs = 20_000L,
-                handleHitHalfWidthPx = 48f,
-            )
+        val begin = beginLoopRegionDragAtClipX(pointerXInClipPx = 900f, handleHitHalfWidthPx = 48f)
         assertEquals(18_000L, begin.loopEndMs)
         assertEquals(6_000L, begin.loopStartMs)
     }
@@ -257,5 +219,27 @@ class TrackLoopRegionUiTest {
         val clip = projection.clipsByLaneId["loop"]!!
         assertEquals(2_000L, clip.effectiveStartMs)
         assertEquals(9_000L, clip.effectiveEndMs)
+    }
+
+    private fun beginLoopRegionDragAtClipX(
+        pointerXInClipPx: Float,
+        handleHitHalfWidthPx: Float,
+    ): com.georgv.audioworkstation.core.track.LoopRegionDragBeginResult {
+        val clipStartPx = 0f
+        val clipWidthPx = 1_000f
+        val loopStartMs = 6_000L
+        val loopEndMs = 12_000L
+        val sourceDurationMs = 20_000L
+        return beginLoopRegionDragAtAreaPointer(
+            areaXPx = clipStartPx + pointerXInClipPx,
+            clipStartPx = clipStartPx,
+            clipWidthPx = clipWidthPx,
+            leftHandleAreaX = clipStartPx + clipWidthPx * (loopStartMs.toDouble() / sourceDurationMs.toDouble()).toFloat(),
+            rightHandleAreaX = clipStartPx + clipWidthPx * (loopEndMs.toDouble() / sourceDurationMs.toDouble()).toFloat(),
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
+            sourceDurationMs = sourceDurationMs,
+            handleHitHalfWidthPx = handleHitHalfWidthPx,
+        )
     }
 }
