@@ -8,7 +8,9 @@ import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
+import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
 import com.georgv.audioworkstation.ui.components.timelineClipEffectiveTimelineEndMs
+import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -79,6 +81,155 @@ class TrackLoopPlayheadTest {
                 globalPlayheadMs = 15_000L,
                 timelineStartOffsetMs = 10_000L,
                 clipDurationMs = 30_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `looped local playhead stays visible after global exceeds clip duration`() {
+        assertTrue(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = 50_001L,
+                timelineStartOffsetMs = 20_000L,
+                clipDurationMs = 30_000L,
+                loopEnabled = true,
+            ),
+        )
+        assertEquals(
+            4_001L,
+            trackSourcePlayheadMsForClipTimelineWindow(
+                globalPlayheadMs = 50_001L,
+                timelineStartOffsetMs = 20_000L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = true,
+                loopStartMs = 2_000L,
+                loopEndMs = 9_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `looped local playhead stays visible after global exceeds base timeline`() {
+        val baseTimelineMs = 20_000L
+        val globalPastBase = baseTimelineMs + 2_000L
+        assertTrue(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = globalPastBase,
+                timelineStartOffsetMs = 0L,
+                clipDurationMs = 20_000L,
+                loopEnabled = true,
+            ),
+        )
+        assertEquals(
+            3_000L,
+            trackSourcePlayheadMs(
+                globalPlayheadMs = globalPastBase,
+                timelineStartOffsetMs = 0L,
+                sourceDurationMs = 20_000L,
+                loopEnabled = true,
+                loopStartMs = 2_000L,
+                loopEndMs = 9_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `looped source playhead wraps across many cycles`() {
+        val loopStartMs = 1_000L
+        val loopEndMs = 4_000L
+        val loopLengthMs = loopEndMs - loopStartMs
+        val timelineStartMs = 5_000L
+        repeat(12) { cycle ->
+            val globalMs = timelineStartMs + cycle * loopLengthMs + 500L
+            assertEquals(
+                loopStartMs + 500L,
+                trackSourcePlayheadMs(
+                    globalPlayheadMs = globalMs,
+                    timelineStartOffsetMs = timelineStartMs,
+                    sourceDurationMs = 20_000L,
+                    loopEnabled = true,
+                    loopStartMs = loopStartMs,
+                    loopEndMs = loopEndMs,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `mixed loop session extends visible timeline past base for advancing playhead`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "one-shot",
+                    projectId = "p",
+                    wavFilePath = "a.wav",
+                    duration = 10_000L,
+                ),
+                TrackEntity(
+                    id = "loop",
+                    projectId = "p",
+                    wavFilePath = "b.wav",
+                    duration = 30_000L,
+                    isLoop = true,
+                    loopStartMs = 2_000L,
+                    loopEndMs = 9_000L,
+                ),
+            )
+        val playheadMs = 35_000L
+        assertTrue(
+            shouldExtendVisibleTimelineForAllLoopedPlayback(
+                playbackSessionActive = true,
+                sessionTrackIds = setOf("one-shot", "loop"),
+                tracks = tracks,
+            ),
+        )
+        val projection =
+            buildProjectTimelineProjection(
+                tracks = tracks,
+                waveformStatesByTrackId = emptyMap(),
+                activeRecording = null,
+                playheadPositionMs = playheadMs,
+                extendVisibleTimelineForAllLoopedPlayback = true,
+                extendVisibleTimelineForRecording = false,
+            )
+        assertEquals(30_000L, projection.baseTimelineDurationMs)
+        assertEquals(playheadMs, projection.visibleTimelineDurationMs)
+        assertEquals(
+            playheadMs,
+            timelinePlayheadClampedPositionMs(playheadMs, projection.visibleTimelineDurationMs),
+        )
+        assertEquals(
+            2_000L,
+            trackSourcePlayheadMs(
+                globalPlayheadMs = playheadMs,
+                timelineStartOffsetMs = 0L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = true,
+                loopStartMs = 2_000L,
+                loopEndMs = 9_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `non-loop playhead hidden after clip timeline window ends`() {
+        assertFalse(
+            trackLocalPlayheadVisibleInClip(
+                globalPlayheadMs = 50_001L,
+                timelineStartOffsetMs = 20_000L,
+                clipDurationMs = 30_000L,
+                loopEnabled = false,
+                limitToClipTimelineWindow = true,
+            ),
+        )
+        assertNull(
+            trackSourcePlayheadMsForClipTimelineWindow(
+                globalPlayheadMs = 50_001L,
+                timelineStartOffsetMs = 20_000L,
+                sourceDurationMs = 30_000L,
+                loopEnabled = false,
+                loopStartMs = 0L,
+                loopEndMs = 30_000L,
             ),
         )
     }

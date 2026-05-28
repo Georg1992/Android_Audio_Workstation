@@ -2898,6 +2898,59 @@ class ProjectViewModelTest {
         }
 
     @Test
+    fun `transport seek scrub with only loop track selected uses full project timeline`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val longMs = 300_000L
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "long", position = 0, wavFilePath = "long.wav")
+                                .copy(duration = longMs),
+                            track(
+                                id = "loop",
+                                position = 1,
+                                wavFilePath = "loop.wav",
+                            ).copy(
+                                duration = 30_000L,
+                                isLoop = true,
+                                loopStartMs = 7_000L,
+                                loopEndMs = 16_000L,
+                            ),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            val fullTimelineMs = vm.uiState.value.timelineVisibleDurationMs
+            assertEquals(longMs, fullTimelineMs)
+
+            vm.toggleSelect("loop")
+            startPlayback(vm)
+            vm.cancelPlaybackCompletionMonitorForTests()
+            advanceUntilIdle()
+
+            val seekMs = playheadMsAtFraction(0.6f, fullTimelineMs)
+            vm.onPlayheadScrubStarted()
+            advanceUntilIdle()
+            vm.onPlayheadScrubPreviewPosition(seekMs, fullTimelineMs)
+            advanceUntilIdle()
+            assertEquals(seekMs, vm.uiState.value.playheadPositionMs)
+
+            vm.onPlayheadScrubCommittedPosition(seekMs, fullTimelineMs)
+            advanceUntilIdle()
+
+            assertEquals(seekMs, audioController.lastMultiPlaybackSpec?.startPositionMs)
+            assertEquals(seekMs, vm.uiState.value.playheadPositionMs)
+            assertEquals(TransportPlaybackPhase.Playing, vm.uiState.value.transportPlaybackPhase)
+            collectJob.cancel()
+        }
+
+    @Test
     fun `transport seek scrub ignored during recording`() = runTest(mainDispatcherRule.dispatcher) {
         val dao =
             FakeProjectDao(

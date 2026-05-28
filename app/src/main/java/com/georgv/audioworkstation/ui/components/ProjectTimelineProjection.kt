@@ -26,7 +26,7 @@ data class ProjectTimelineProjection(
     val laneLayoutDurationMs: Long,
     /**
      * Live ruler length for the global scrubber and non-loop lane playheads.
-     * May extend past [baseTimelineDurationMs] only during all-looped playback past base,
+     * May extend past [baseTimelineDurationMs] during looped playback past base,
      * or while recording grows past base.
      */
     val visibleTimelineDurationMs: Long,
@@ -131,14 +131,17 @@ fun visibleTimelineDurationMs(
     return visible.coerceAtLeast(TimelineMinimumBaseDurationMs)
 }
 
+/**
+ * Extends the visible ruler while any looping lane is in the active playback session
+ * (all-loop or mixed loop + one-shot).
+ */
 fun shouldExtendVisibleTimelineForAllLoopedPlayback(
     playbackSessionActive: Boolean,
     sessionTrackIds: Set<String>,
     tracks: List<TrackEntity>,
 ): Boolean {
     if (!playbackSessionActive || sessionTrackIds.isEmpty()) return false
-    val activeTracks = tracks.filter { it.id in sessionTrackIds }
-    return activeTracks.isNotEmpty() && activeTracks.all { it.isLoop }
+    return tracks.any { it.id in sessionTrackIds && it.isLoop }
 }
 
 /** Absolute session timeline end from persisted clips (no active recording row). */

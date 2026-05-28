@@ -23,6 +23,8 @@ internal class ProjectPlayheadSeekCoordinator(
     private val selectedTrackIds: () -> Set<String>,
     private val loadCurrentProject: suspend (String) -> ProjectEntity?,
     private val selectedPlayableTracks: () -> List<TrackEntity>,
+    /** Full project timeline extent (all visible tracks), same as [ProjectTransportCommands.performPlayPressed]. */
+    private val timelineTracksForPlayhead: () -> List<TrackEntity>,
     private val timelineProjection: (List<TrackEntity>, Map<String, WaveformState>) -> ProjectTimelineProjection,
     private val waveformStatesByTrackId: () -> Map<String, WaveformState>,
 ) {
@@ -85,7 +87,8 @@ internal class ProjectPlayheadSeekCoordinator(
         val currentProject = loadCurrentProject(currentProjectId) ?: return false
         val tracks = selectedPlayableTracks()
         if (tracks.isEmpty()) return false
-        val timeline = timelineProjection(tracks, waveformStatesByTrackId())
+        val timeline =
+            timelineProjection(timelineTracksForPlayhead(), waveformStatesByTrackId())
         val startPositionMs =
             timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
         if (

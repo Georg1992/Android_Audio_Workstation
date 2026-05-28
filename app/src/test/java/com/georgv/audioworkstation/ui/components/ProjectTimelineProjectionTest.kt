@@ -413,10 +413,17 @@ class ProjectTimelineProjectionTest {
                 tracks = tracks,
             ),
         )
-        assertFalse(
+        assertTrue(
             shouldExtendVisibleTimelineForAllLoopedPlayback(
                 playbackSessionActive = true,
                 sessionTrackIds = setOf("a", "b"),
+                tracks = tracks,
+            ),
+        )
+        assertFalse(
+            shouldExtendVisibleTimelineForAllLoopedPlayback(
+                playbackSessionActive = true,
+                sessionTrackIds = setOf("b"),
                 tracks = tracks,
             ),
         )

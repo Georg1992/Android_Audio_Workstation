@@ -4,16 +4,23 @@ package com.georgv.audioworkstation.core.track
 fun trackLocalTimelineMs(globalPlayheadMs: Long, timelineStartOffsetMs: Long): Long =
     globalPlayheadMs - timelineStartOffsetMs.coerceAtLeast(0L)
 
-/** Whether the lane-local playhead should draw inside this clip. */
+/**
+ * Whether the lane-local playhead should draw inside this clip.
+ *
+ * Looped clips stay visible once playback reaches the clip start, even when the global
+ * playhead moves past [clipDurationMs] or the base timeline (source position wraps).
+ */
 fun trackLocalPlayheadVisibleInClip(
     globalPlayheadMs: Long,
     timelineStartOffsetMs: Long,
     clipDurationMs: Long,
+    loopEnabled: Boolean = false,
     limitToClipTimelineWindow: Boolean = false,
 ): Boolean {
     if (clipDurationMs <= 0L) return false
     val local = trackLocalTimelineMs(globalPlayheadMs, timelineStartOffsetMs)
     if (local < 0L) return false
+    if (loopEnabled) return true
     if (limitToClipTimelineWindow) {
         return local <= clipDurationMs
     }
@@ -34,7 +41,8 @@ fun trackSourcePlayheadMsForClipTimelineWindow(
             globalPlayheadMs = globalPlayheadMs,
             timelineStartOffsetMs = timelineStartOffsetMs,
             clipDurationMs = sourceDurationMs,
-            limitToClipTimelineWindow = true,
+            loopEnabled = loopEnabled,
+            limitToClipTimelineWindow = !loopEnabled,
         )
     ) {
         return null

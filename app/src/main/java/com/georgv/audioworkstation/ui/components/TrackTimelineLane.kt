@@ -408,6 +408,7 @@ fun TrackTimelineLane(
                                     globalPlayheadMs = playheadPositionMs,
                                     timelineStartOffsetMs = activeClip.startOffsetMs,
                                     clipDurationMs = activeClip.durationMs,
+                                    loopEnabled = true,
                                 )
                             else -> false
                         }

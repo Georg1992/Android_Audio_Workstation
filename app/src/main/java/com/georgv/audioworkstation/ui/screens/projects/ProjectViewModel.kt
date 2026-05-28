@@ -217,6 +217,7 @@ class ProjectViewModel @Inject constructor(
             selectedTrackIds = { selectedTrackIds.value },
             loadCurrentProject = { pid -> loadCurrentProject(pid) },
             selectedPlayableTracks = { selectedPlayableTracks() },
+            timelineTracksForPlayhead = { currentVisibleTracks() },
             timelineProjection = { tracks, waveformStates ->
                 timelineProjectionForTracks(tracks, waveformStates)
             },
