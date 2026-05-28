@@ -74,6 +74,10 @@ class NativeAudioController @Inject constructor(
         nativeEngine.setPlaybackGain(gain)
     }
 
+    override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
+        nativeEngine.setPlaybackLaneGain(laneIndex, gain)
+    }
+
     override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) {
         audibleByLaneIndex.forEachIndexed { laneIndex, audible ->
             nativeEngine.setPlaybackLaneAudible(laneIndex, audible)

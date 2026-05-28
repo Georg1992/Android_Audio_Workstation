@@ -270,6 +270,7 @@ private class NoOpAudioControllerForRobolectric : AudioController {
     override fun startPlayback(spec: PlaybackSpec): Boolean = false
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
     override fun setPlaybackGain(gain: Float) = Unit
+    override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
     override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
     override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
     override fun beginHotJoinLane(

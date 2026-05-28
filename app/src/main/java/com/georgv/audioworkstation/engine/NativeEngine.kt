@@ -50,6 +50,10 @@ class NativeEngine @Inject constructor() {
         nativeSetPlaybackGain(gain)
     }
 
+    fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
+        nativeSetPlaybackLaneGain(laneIndex, gain.coerceIn(0f, 1f))
+    }
+
     fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
         nativeSetPlaybackLaneAudible(laneIndex, audible)
     }
@@ -134,6 +138,8 @@ class NativeEngine @Inject constructor() {
     ): Boolean
 
     private external fun nativeSetPlaybackGain(gain: Float)
+
+    private external fun nativeSetPlaybackLaneGain(laneIndex: Int, gain: Float)
 
     private external fun nativeSetPlaybackLaneAudible(laneIndex: Int, audible: Boolean)
 

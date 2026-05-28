@@ -345,6 +345,45 @@ TEST_F(AudioEngineMasterPlaybackTest, TransportAdvancesThroughSessionEndWhenLane
     engine.stopPlayback();
 }
 
+TEST_F(AudioEngineMasterPlaybackTest, LiveLaneGainUpdatesDuringRender) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    constexpr int16_t kSampleValue = 20'000;
+
+    const std::string wav = WriteTempMonoWavFilled(
+        "live_lane_gain.wav", kSampleRateHz, kSampleRateHz * 4, kSampleValue);
+    ASSERT_FALSE(wav.empty());
+    ASSERT_TRUE(engine.setPlaybackSource(wav, 1.0f, 0L));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    const std::size_t bufferSamples = buffer.size();
+
+    float peakAtFullGain = 0.0f;
+    for (int block = 0; block < 32; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+        peakAtFullGain =
+            std::max(peakAtFullGain, PeakAbsInterleaved(buffer.data(), bufferSamples));
+        if (peakAtFullGain > 0.05f) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_GT(peakAtFullGain, 0.05f);
+
+    engine.setPlaybackLaneGain(0, 0.25f);
+
+    float peakAtReducedGain = 0.0f;
+    for (int block = 0; block < 32; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+        peakAtReducedGain =
+            std::max(peakAtReducedGain, PeakAbsInterleaved(buffer.data(), bufferSamples));
+    }
+    ASSERT_GT(peakAtReducedGain, 0.01f);
+    EXPECT_LT(peakAtReducedGain, peakAtFullGain * 0.55f);
+
+    engine.stopPlayback();
+}
+
 TEST_F(AudioEngineMasterPlaybackTest, MultiLaneClipOffsetsLaneBStartsAtFiveSeconds) {
     constexpr int32_t kSampleRateHz = 48'000;
     constexpr int32_t kRenderFrames = 256;

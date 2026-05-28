@@ -612,10 +612,39 @@ class ProjectViewModelTest {
         vm.setTrackGain("a", 25f)
         runCurrent()
 
-        assertEquals(0.25f, audioController.lastPlaybackGain)
+        assertEquals(listOf(0 to 0.25f), audioController.playbackLaneGainCalls)
         stopPlaybackFully(vm)
         collectJob.cancel()
     }
+
+    @Test
+    fun `setTrackGain pushes live per-lane gain during multi-track playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(
+                    track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f),
+                    track(id = "b", position = 1, wavFilePath = "b.wav", gain = 50f),
+                ),
+            )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            vm.toggleSelect("b")
+            advanceUntilIdle()
+            startPlayback(vm)
+
+            vm.setTrackGain("b", 30f)
+            runCurrent()
+
+            assertEquals(listOf(1 to 0.3f), audioController.playbackLaneGainCalls)
+            stopPlaybackFully(vm)
+            collectJob.cancel()
+        }
 
     @Test
     fun `setTrackOrderSession and persistTrackOrderToDb keep reordered positions`() = runTest(mainDispatcherRule.dispatcher) {
@@ -3502,6 +3531,7 @@ internal class FakeAudioController(
         private set
     var lastPlaybackGain: Float? = null
         private set
+    val playbackLaneGainCalls = mutableListOf<Pair<Int, Float>>()
     var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
         private set
     var lastPlaybackSpec: PlaybackSpec? = null
@@ -3573,6 +3603,13 @@ internal class FakeAudioController(
 
     override fun setPlaybackGain(gain: Float) {
         lastPlaybackGain = gain
+    }
+
+    override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
+        playbackLaneGainCalls.add(laneIndex to gain)
+        if (laneIndex == 0) {
+            lastPlaybackGain = gain
+        }
     }
 
     var lastArmedLaneAudibility: BooleanArray? = null

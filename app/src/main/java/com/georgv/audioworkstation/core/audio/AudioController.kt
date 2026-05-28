@@ -26,6 +26,12 @@ interface AudioController {
     fun setPlaybackGain(gain: Float)
 
     /**
+     * Live per-lane gain while playback is active. [laneIndex] matches
+     * [MultiPlaybackSpec.lanes] / [PlaybackSessionController] session lane order.
+     */
+    fun setPlaybackLaneGain(laneIndex: Int, gain: Float)
+
+    /**
      * Live audibility for lanes already armed in the current session (HJ.1). Index matches
      * [MultiPlaybackSpec.lanes] order from the last successful [startPlayback].
      */

@@ -76,6 +76,9 @@ public:
 
     void setPlaybackGain(float gain);
 
+    /** Live per-lane gain (0..1); safe while Oboe is running — atomic read in [render]. */
+    void setPlaybackLaneGain(std::size_t laneIndex, float gain);
+
     /** HJ.1 live audibility; lane must be [PlaybackLaneLifecycle::Active]. */
     void setPlaybackLaneAudible(std::size_t laneIndex, bool audible);
 

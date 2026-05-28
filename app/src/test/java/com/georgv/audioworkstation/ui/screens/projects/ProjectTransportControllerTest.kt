@@ -189,7 +189,7 @@ class ProjectTransportControllerTest {
         override fun startPlayback(spec: MultiPlaybackSpec): Boolean = true
 
         override fun setPlaybackGain(gain: Float) = Unit
-
+        override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
         override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
 
         override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit

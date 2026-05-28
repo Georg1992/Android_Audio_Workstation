@@ -790,6 +790,8 @@ private class PlaybackSessionTestAudio(
 
     override fun setPlaybackGain(gain: Float) = Unit
 
+    override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
+
     var lastArmedLaneAudibility: BooleanArray? = null
         private set
 

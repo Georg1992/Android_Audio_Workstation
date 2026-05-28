@@ -717,10 +717,11 @@ class ProjectViewModel @Inject constructor(
             return
         }
         optimisticTrackGains.value = optimisticTrackGains.value + (trackId to gain.coerceIn(GainRange.Min, GainRange.Max))
-        // Live gain API applies to single-track transport-start spec, not per hot-join lane.
-        if (playbackSession.sessionTrackIds.value == setOf(trackId)) {
-            audioController.setPlaybackGain(GainRange.toUnit(gain))
+        if (!playbackSession.hasActivePlaybackSession() || !audioController.isPlaybackEngineRunning()) {
+            return
         }
+        val laneIndex = playbackSession.livePlaybackLaneIndexForTrack(trackId) ?: return
+        audioController.setPlaybackLaneGain(laneIndex, GainRange.toUnit(gain))
     }
 
     /** Commit the latest gain value to the DB. Called when the user releases the fader. */

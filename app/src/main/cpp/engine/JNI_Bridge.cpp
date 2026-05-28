@@ -282,6 +282,17 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetPlaybackGain(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetPlaybackLaneGain(
+        JNIEnv *,
+        jobject,
+        jint laneIndex,
+        jfloat gain) {
+    if (g_engine && laneIndex >= 0) {
+        g_engine->setPlaybackLaneGain(static_cast<std::size_t>(laneIndex), gain);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetPlaybackLaneAudible(
         JNIEnv *,
         jobject,

@@ -274,6 +274,13 @@ class PlaybackSessionController(
     private fun trackLaneIndex(trackId: String): Int? =
         sessionLaneTrackIds.indexOfFirst { it == trackId }.takeIf { it >= 0 }
 
+    /**
+     * Native lane index for live gain/audibility while a session is active, including hot-join
+     * lanes that are still preparing.
+     */
+    fun livePlaybackLaneIndexForTrack(trackId: String): Int? =
+        trackLaneIndex(trackId) ?: preparingLaneIndexByTrackId[trackId]
+
     private fun syncLaneAudibilityFromSelection(selectedTrackIds: Set<String>) {
         audioController.setArmedPlaybackLaneAudibility(
             laneAudibilityFromSelection(sessionLaneTrackIds, selectedTrackIds),

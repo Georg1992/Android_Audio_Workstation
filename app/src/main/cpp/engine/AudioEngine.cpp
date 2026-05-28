@@ -766,7 +766,20 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
 }
 
 void AudioEngine::setPlaybackGain(float gain) {
-    m_playbackLanes[0].gain.store(gain, std::memory_order_release);
+    setPlaybackLaneGain(0, gain);
+}
+
+void AudioEngine::setPlaybackLaneGain(const std::size_t laneIndex, const float gain) {
+    if (laneIndex >= kPlaybackLaneProductCap) {
+        return;
+    }
+    const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIndex);
+    if (state == PlaybackLaneLifecycle::Inactive ||
+        state == PlaybackLaneLifecycle::Cancelled) {
+        return;
+    }
+    const float clampedGain = std::clamp(gain, 0.0f, 1.0f);
+    m_playbackLanes[laneIndex].gain.store(clampedGain, std::memory_order_release);
 }
 
 void AudioEngine::setPlaybackLaneAudible(const std::size_t laneIndex, const bool audible) {
@@ -1291,7 +1304,6 @@ bool AudioEngine::commitHotJoinLaneLocked(const std::size_t laneIndex) {
     lane.source = staging.source;
     storeLaneRing(lane.ring, std::move(staging.ring));
     lane.currentPath = staging.path;
-    lane.gain.store(staging.gain, std::memory_order_release);
     const bool publishAudible =
         m_playbackLanes[laneIndex].hotJoinPublishAudible.load(std::memory_order_acquire);
     lane.audibleEnabled.store(publishAudible, std::memory_order_release);
