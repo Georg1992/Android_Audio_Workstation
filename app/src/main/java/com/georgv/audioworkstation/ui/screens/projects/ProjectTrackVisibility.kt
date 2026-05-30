@@ -10,6 +10,7 @@ internal fun visibleTracksWithRecordingOptimistic(
     optimisticOrder: List<TrackEntity>?,
     optimisticRecording: TrackEntity?,
     optimisticGains: Map<String, Float> = emptyMap(),
+    optimisticPans: Map<String, Float> = emptyMap(),
 ): List<TrackEntity> {
     val base = optimisticOrder ?: projectTracksList
     val withRecording =
@@ -21,10 +22,19 @@ internal fun visibleTracksWithRecordingOptimistic(
                 }
             else -> base + optimisticRecording
         }
-    if (optimisticGains.isEmpty()) return withRecording
-    return withRecording.map { track ->
-        val gain = optimisticGains[track.id] ?: return@map track
-        track.copy(gain = gain)
+    val withGains =
+        if (optimisticGains.isEmpty()) {
+            withRecording
+        } else {
+            withRecording.map { track ->
+                val gain = optimisticGains[track.id] ?: return@map track
+                track.copy(gain = gain)
+            }
+        }
+    if (optimisticPans.isEmpty()) return withGains
+    return withGains.map { track ->
+        val pan = optimisticPans[track.id] ?: return@map track
+        track.copy(pan = pan)
     }
 }
 

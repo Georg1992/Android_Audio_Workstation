@@ -32,6 +32,7 @@ interface AudioController {
     fun stopRecording(): Boolean
     fun startPlayback(spec: MultiPlaybackSpec): Boolean
     fun setPlaybackLaneGain(laneIndex: Int, gain: Float)
+    fun setPlaybackLanePan(laneIndex: Int, pan: Float)
 
     /**
      * Live audibility for lanes already armed in the current session (HJ.1). Index matches
@@ -54,6 +55,7 @@ interface AudioController {
         loopEnabled: Boolean = false,
         loopSourceStartMs: Long = 0L,
         loopSourceEndMs: Long = 0L,
+        pan: Float = 0f,
     ): Int
 
     /** HJ.2: cancel [PlaybackLaneLifecycle.Preparing] / [ReadyToCommit] on [laneIndex]. */

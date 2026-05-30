@@ -287,6 +287,8 @@ fun ProjectScreen(
                 onDeleteTrack = vm::deleteTrack,
                 onGainChange = vm::setTrackGain,
                 onGainCommit = vm::commitTrackGain,
+                onPanChange = vm::setTrackPan,
+                onPanCommit = vm::commitTrackPan,
                 onRenameTrack = vm::renameTrack,
                 onToggleRecordTarget = vm::toggleRecordTarget,
                 onToggleLoop = vm::toggleTrackLoop,

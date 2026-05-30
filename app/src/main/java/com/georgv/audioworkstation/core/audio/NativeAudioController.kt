@@ -74,6 +74,10 @@ class NativeAudioController @Inject constructor(
         nativeEngine.setPlaybackLaneGain(laneIndex, gain)
     }
 
+    override fun setPlaybackLanePan(laneIndex: Int, pan: Float) {
+        nativeEngine.setPlaybackLanePan(laneIndex, pan)
+    }
+
     override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) {
         audibleByLaneIndex.forEachIndexed { laneIndex, audible ->
             nativeEngine.setPlaybackLaneAudible(laneIndex, audible)
@@ -92,6 +96,7 @@ class NativeAudioController @Inject constructor(
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        pan: Float,
     ): Int =
         nativeEngine.beginHotJoinLane(
             wavFilePath,
@@ -101,6 +106,7 @@ class NativeAudioController @Inject constructor(
             loopEnabled,
             loopSourceStartMs,
             loopSourceEndMs,
+            pan,
         )
 
     override fun cancelHotJoinLane(laneIndex: Int) {

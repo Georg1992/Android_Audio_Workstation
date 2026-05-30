@@ -80,10 +80,14 @@ public:
                             const std::vector<int64_t> &laneClipDurationMs = {},
                             const std::vector<uint8_t> &laneLoopEnabled = {},
                             const std::vector<int64_t> &laneLoopSourceStartMs = {},
-                            const std::vector<int64_t> &laneLoopSourceEndMs = {});
+                            const std::vector<int64_t> &laneLoopSourceEndMs = {},
+                            const std::vector<float> &lanePan = {});
 
     /** Live per-lane gain (0..1); safe while Oboe is running — atomic read in [render]. */
     void setPlaybackLaneGain(std::size_t laneIndex, float gain);
+
+    /** Live per-lane pan (-1..+1); safe while Oboe is running — atomic read in [render]. */
+    void setPlaybackLanePan(std::size_t laneIndex, float pan);
 
     /** HJ.1 live audibility; lane must be [PlaybackLaneLifecycle::Active]. */
     void setPlaybackLaneAudible(std::size_t laneIndex, bool audible);
@@ -98,7 +102,8 @@ public:
                              int64_t clipDurationMs = 0,
                              bool loopEnabled = false,
                              int64_t loopSourceStartMs = 0,
-                             int64_t loopSourceEndMs = 0);
+                             int64_t loopSourceEndMs = 0,
+                             float pan = 0.0f);
 
     /** HJ.2: cancel a preparing/ready lane; no-op for active session lanes (use [setPlaybackLaneAudible]). */
     void cancelHotJoinLane(std::size_t laneIndex);
@@ -147,6 +152,7 @@ private:
         /** Cleared by [cancelHotJoinLane]; commit publishes audible only if still true (HJ.2). */
         std::atomic<bool> hotJoinPublishAudible{true};
         std::atomic<float> gain{1.0f};
+        std::atomic<float> pan{0.0f};
         std::atomic<int32_t> srcChannels{0};
         std::atomic<int64_t> clipTimelineStartFrame{0};
         /** 0 = no explicit timeline clip end (lane active until WAV exhausted). */
@@ -162,6 +168,7 @@ private:
         std::shared_ptr<RingBuffer> ring;
         std::string path;
         float gain = 1.0f;
+        float pan = 0.0f;
         int32_t channels = 0;
         int64_t clipStartMs = 0;
         int64_t clipDurationMs = 0;
@@ -174,6 +181,7 @@ private:
         std::size_t laneIndex = 0;
         std::string wavPath;
         float gain = 1.0f;
+        float pan = 0.0f;
         int64_t clipStartMs = 0;
         int64_t clipDurationMs = 0;
         bool loopEnabled = false;
@@ -197,7 +205,8 @@ private:
                                   bool reuseExistingSourceOnSamePath,
                                   bool loopEnabled = false,
                                   int64_t loopSourceStartMs = 0,
-                                  int64_t loopSourceEndMs = 0);
+                                  int64_t loopSourceEndMs = 0,
+                                  float lanePan = 0.0f);
     bool armPlaybackLanesLocked(const std::vector<std::string> &wavPaths,
                                 const std::vector<float> &gains,
                                 int64_t transportStartFrame,
@@ -205,7 +214,8 @@ private:
                                 const std::vector<int64_t> &laneClipDurationMs,
                                 const std::vector<uint8_t> &laneLoopEnabled,
                                 const std::vector<int64_t> &laneLoopSourceStartMs,
-                                const std::vector<int64_t> &laneLoopSourceEndMs);
+                                const std::vector<int64_t> &laneLoopSourceEndMs,
+                                const std::vector<float> &lanePan = {});
 
     bool openInputStream(int32_t channelCount);
     void closeInputStream();

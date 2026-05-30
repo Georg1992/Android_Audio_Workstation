@@ -62,6 +62,7 @@
     <string name="cd_record_target_on">Record target on</string>
     <string name="cd_record_target_off">Record target off</string>
     <string name="cd_track_menu">Track menu</string>
+    <string name="cd_track_pan">Track pan %1$s %2$s</string>
 
     <!-- Validation errors -->
     <string name="error_project_name_blank">Project name cannot be blank.</string>
@@ -104,6 +105,7 @@
     <string name="error_rename_track_failed">Failed to rename track.</string>
     <string name="error_loop_update_failed">Failed to update loop setting.</string>
     <string name="error_gain_update_failed">Failed to update track gain.</string>
+    <string name="error_pan_update_failed">Failed to update track pan.</string>
     <string name="error_save_track_order_failed">Failed to save track order.</string>
     <string name="error_save_imported_track_failed">Failed to save imported track.</string>
     <string name="error_recording_metadata_failed">Failed to update recording metadata.</string>

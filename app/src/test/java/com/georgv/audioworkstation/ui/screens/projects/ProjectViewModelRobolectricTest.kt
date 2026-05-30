@@ -272,6 +272,7 @@ private class NoOpAudioControllerForRobolectric : AudioController {
     override fun stopRecording(): Boolean = true
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
+    override fun setPlaybackLanePan(laneIndex: Int, pan: Float) = Unit
     override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
     override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
     override fun beginHotJoinLane(
@@ -282,6 +283,7 @@ private class NoOpAudioControllerForRobolectric : AudioController {
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        pan: Float,
     ): Int = -1
     override fun cancelHotJoinLane(laneIndex: Int) = Unit
     override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =

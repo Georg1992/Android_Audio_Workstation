@@ -88,6 +88,7 @@ class AudioControlModelsTest {
                 loopEnabled = false,
                 loopSourceStartMs = 0L,
                 loopSourceEndMs = 0L,
+                pan = 0f,
             ),
             spec?.lanes?.get(0),
         )
@@ -101,6 +102,7 @@ class AudioControlModelsTest {
                 loopEnabled = false,
                 loopSourceStartMs = 0L,
                 loopSourceEndMs = 0L,
+                pan = 0f,
             ),
             spec?.lanes?.get(1),
         )

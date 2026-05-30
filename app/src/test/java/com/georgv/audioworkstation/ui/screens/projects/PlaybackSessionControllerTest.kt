@@ -865,6 +865,8 @@ private class PlaybackSessionTestAudio(
 
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
 
+    override fun setPlaybackLanePan(laneIndex: Int, pan: Float) = Unit
+
     var lastArmedLaneAudibility: BooleanArray? = null
         private set
 
@@ -898,6 +900,7 @@ private class PlaybackSessionTestAudio(
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        pan: Float,
     ): Int {
         beginHotJoinCalls += 1
         lastHotJoinClipStartMs = timelineClipStartMs

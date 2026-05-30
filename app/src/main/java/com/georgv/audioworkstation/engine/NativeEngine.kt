@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.engine
 
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingRequest
 import javax.inject.Inject
@@ -40,10 +41,15 @@ class NativeEngine @Inject constructor() {
             laneLoopEnabled = spec.lanes.map { it.loopEnabled }.toBooleanArray(),
             laneLoopSourceStartMs = spec.lanes.map { it.loopSourceStartMs }.toLongArray(),
             laneLoopSourceEndMs = spec.lanes.map { it.loopSourceEndMs }.toLongArray(),
+            lanePan = spec.lanes.map { it.pan }.toFloatArray(),
         )
 
     fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
         nativeSetPlaybackLaneGain(laneIndex, gain.coerceIn(0f, 1f))
+    }
+
+    fun setPlaybackLanePan(laneIndex: Int, pan: Float) {
+        nativeSetPlaybackLanePan(laneIndex, PanRange.clamp(pan))
     }
 
     fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
@@ -58,6 +64,7 @@ class NativeEngine @Inject constructor() {
         loopEnabled: Boolean = false,
         loopSourceStartMs: Long = 0L,
         loopSourceEndMs: Long = 0L,
+        pan: Float = 0f,
     ): Int =
         nativeBeginHotJoinLane(
             wavFilePath,
@@ -67,6 +74,7 @@ class NativeEngine @Inject constructor() {
             loopEnabled,
             loopSourceStartMs,
             loopSourceEndMs,
+            pan,
         )
 
     fun cancelHotJoinLane(laneIndex: Int) {
@@ -129,9 +137,12 @@ class NativeEngine @Inject constructor() {
         laneLoopEnabled: BooleanArray,
         laneLoopSourceStartMs: LongArray,
         laneLoopSourceEndMs: LongArray,
+        lanePan: FloatArray,
     ): Boolean
 
     private external fun nativeSetPlaybackLaneGain(laneIndex: Int, gain: Float)
+
+    private external fun nativeSetPlaybackLanePan(laneIndex: Int, pan: Float)
 
     private external fun nativeSetPlaybackLaneAudible(laneIndex: Int, audible: Boolean)
 
@@ -143,6 +154,7 @@ class NativeEngine @Inject constructor() {
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        pan: Float,
     ): Int
 
     private external fun nativeCancelHotJoinLane(laneIndex: Int)

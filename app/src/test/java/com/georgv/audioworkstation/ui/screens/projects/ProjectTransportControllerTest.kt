@@ -213,6 +213,7 @@ class ProjectTransportControllerTest {
         }
 
         override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
+        override fun setPlaybackLanePan(laneIndex: Int, pan: Float) = Unit
         override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
 
         override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
@@ -225,6 +226,7 @@ class ProjectTransportControllerTest {
             loopEnabled: Boolean,
             loopSourceStartMs: Long,
             loopSourceEndMs: Long,
+            pan: Float,
         ): Int = -1
 
         override fun cancelHotJoinLane(laneIndex: Int) = Unit

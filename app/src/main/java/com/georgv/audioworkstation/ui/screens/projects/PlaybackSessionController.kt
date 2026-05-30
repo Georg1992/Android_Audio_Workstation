@@ -307,6 +307,7 @@ class PlaybackSessionController(
                 loopEnabled = laneSpec.loopEnabled,
                 loopSourceStartMs = laneSpec.loopSourceStartMs,
                 loopSourceEndMs = laneSpec.loopSourceEndMs,
+                pan = laneSpec.pan,
             )
         if (laneIndex < 0) {
             onHotJoinFailed()

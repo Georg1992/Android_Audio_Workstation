@@ -215,3 +215,12 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
         )
     }
 }
+
+/** Per-track stereo pan (-1 left .. +1 right). Existing rows default to center. */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN pan REAL NOT NULL DEFAULT 0",
+        )
+    }
+}

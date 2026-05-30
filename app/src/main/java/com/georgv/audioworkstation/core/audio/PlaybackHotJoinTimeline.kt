@@ -27,6 +27,7 @@ data class HotJoinLaneSpec(
     val loopEnabled: Boolean,
     val loopSourceStartMs: Long,
     val loopSourceEndMs: Long,
+    val pan: Float,
 )
 
 fun TrackEntity.toHotJoinLaneSpec(): HotJoinLaneSpec =
@@ -36,4 +37,5 @@ fun TrackEntity.toHotJoinLaneSpec(): HotJoinLaneSpec =
         loopEnabled = isLoop,
         loopSourceStartMs = effectiveLoopStartMs(),
         loopSourceEndMs = effectiveLoopEndMs(),
-)
+        pan = PanRange.clamp(pan),
+    )

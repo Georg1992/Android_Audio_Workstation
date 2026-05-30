@@ -26,6 +26,8 @@ data class TrackEntity(
     /** PCM channel count in [wavFilePath] (1 = mono, 2 = stereo). */
     val channelCount: Int = 1,
     val gain: Float = 100f,
+    /** Stereo pan -1 (full left) .. +1 (full right); 0 = center. */
+    val pan: Float = 0f,
     val wavFilePath: String = "",
     val timeStampStart: Long = 0L,
     val timeStampStop: Long? = null,

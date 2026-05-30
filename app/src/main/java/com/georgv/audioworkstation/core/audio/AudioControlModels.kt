@@ -29,6 +29,28 @@ object GainRange {
     fun toUnit(percent: Float): Float = (percent / Max).coerceIn(0f, 1f)
 }
 
+/** UI-facing stereo pan: -1 = full left, 0 = center, +1 = full right. Stored on [TrackEntity.pan]. */
+object PanRange {
+    const val Min = -1f
+    const val Max = 1f
+    const val Center = 0f
+    val Range: ClosedFloatingPointRange<Float> = Min..Max
+
+    fun clamp(value: Float): Float = value.coerceIn(Min, Max)
+
+    fun label(pan: Float): String =
+        when {
+            pan == 0f -> "C"
+            pan < 0f -> "L"
+            else -> "R"
+        }
+
+    fun formatValue(pan: Float): String {
+        val clamped = clamp(pan)
+        return if (clamped == 0f) "0.0" else String.format("%+.1f", clamped)
+    }
+}
+
 /**
  * The sample rates a user can choose from when creating a project.
  *
@@ -71,6 +93,8 @@ data class TrackPlaybackLane(
     val trackId: String,
     val wavFilePath: String,
     val gain: Float,
+    /** Normalized stereo pan -1..+1; 0 = center. */
+    val pan: Float = 0f,
     /** Timeline position (ms) where this clip starts on the project timeline. */
     val timelineClipStartMs: Long = 0L,
     /** Clip length on the timeline (ms); 0 = no explicit timeline end (native uses WAV drain only). */
@@ -84,6 +108,7 @@ data class TrackPlaybackLane(
     init {
         require(wavFilePath.isNotBlank()) { "Playback lane requires a WAV path." }
         require(gain in 0f..1f) { "Playback lane gain must be normalized to 0..1." }
+        require(pan in -1f..1f) { "Playback lane pan must be normalized to -1..1." }
         require(timelineClipStartMs >= 0L) { "Timeline clip start must be non-negative." }
         require(timelineClipDurationMs >= 0L) { "Timeline clip duration must be non-negative." }
         require(loopSourceStartMs >= 0L) { "Loop source start must be non-negative." }
@@ -179,6 +204,7 @@ fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackS
                         trackId = track.id,
                         wavFilePath = wavFilePath,
                         gain = GainRange.toUnit(track.gain),
+                        pan = PanRange.clamp(track.pan),
                         timelineClipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
                         timelineClipDurationMs = track.sourceDurationMs(),
                         loopEnabled = track.isLoop,

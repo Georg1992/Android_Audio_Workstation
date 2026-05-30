@@ -70,6 +70,9 @@ fun TrackCard(
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
+    pan: Float = 0f,
+    onPanChange: ((Float) -> Unit)? = null,
+    onPanCommit: ((Float) -> Unit)? = null,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onRename: ((String) -> Unit)? = null,
@@ -468,6 +471,14 @@ fun TrackCard(
                             )
                         }
                     }
+
+                    Spacer(Modifier.width(Dimens.IconGlowSpacing))
+                    TrackPanKnob(
+                        pan = pan,
+                        onPanChange = if (dragPreview) null else onPanChange,
+                        onPanCommit = if (dragPreview) null else onPanCommit,
+                        enabled = !dragPreview && !interactionBlocked && onPanChange != null,
+                    )
                 }
 
                 Spacer(Modifier.height(Dimens.PanelPadding))

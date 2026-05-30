@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
+import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.core.audio.MasterPeakMeter
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
@@ -154,6 +155,7 @@ class ProjectViewModel @Inject constructor(
      */
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
     private val optimisticTrackGains = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private val optimisticTrackPans = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val recordingSession =
         RecordingSessionController(
             scope = viewModelScope,
@@ -166,6 +168,7 @@ class ProjectViewModel @Inject constructor(
             guard = recordingStorageGuard,
         )
     private var recordingStorageMonitorEnabledForTests = true
+    private var masterPeakPollEnabledForTests = true
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
 
@@ -192,6 +195,7 @@ class ProjectViewModel @Inject constructor(
                     optimisticTracks.value,
                     recordingSession.optimisticRecordingTrack.value,
                     optimisticTrackGains.value,
+                    optimisticTrackPans.value,
                 )
             },
             onPlaybackCompleted = {
@@ -316,12 +320,26 @@ class ProjectViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            combine(projectTracks, optimisticTrackPans) { tracks, pans -> tracks to pans }
+                .collect { (tracks, pans) ->
+                    if (pans.isEmpty()) return@collect
+                    val next =
+                        pans.filter { (trackId, pan) ->
+                            tracks.any { it.id == trackId && it.pan != pan }
+                        }
+                    if (next.size != pans.size) {
+                        optimisticTrackPans.value = next
+                    }
+                }
+        }
+        viewModelScope.launch {
             combine(projectTracks, recordingSession.optimisticRecordingTrack) { tracks, optRecording ->
                 visibleTracksWithRecordingOptimistic(
                     tracks,
                     optimisticTracks.value,
                     optRecording,
                     optimisticTrackGains.value,
+                    optimisticTrackPans.value,
                 )
             }.collect { tracks ->
                 waveformPeaks.refreshPeakRequests(tracks)
@@ -340,17 +358,19 @@ class ProjectViewModel @Inject constructor(
     private val projectScreenSnapshot =
         combine(
             combine(projectId, resolvedProject) { pid, proj -> pid to proj },
-            combine(projectTracks, optimisticTracks, recordingSession.optimisticRecordingTrack, optimisticTrackGains) {
+            combine(projectTracks, optimisticTracks, recordingSession.optimisticRecordingTrack, optimisticTrackGains, optimisticTrackPans) {
                     projectTracksList,
                     optimisticOrder,
                     optimisticRecording,
                     optimisticGains,
+                    optimisticPans,
                 ->
                 visibleTracksWithRecordingOptimistic(
                     projectTracksList,
                     optimisticOrder,
                     optimisticRecording,
                     optimisticGains,
+                    optimisticPans,
                 )
             },
             combine(
@@ -468,7 +488,7 @@ class ProjectViewModel @Inject constructor(
             playheadTransport.phase.collect { phase ->
                 masterPeakPollJob?.cancel()
                 masterPeakPollJob = null
-                if (phase == TransportPlaybackPhase.Playing) {
+                if (phase == TransportPlaybackPhase.Playing && masterPeakPollEnabledForTests) {
                     masterPeakPollJob =
                         viewModelScope.launch {
                             while (isActive) {
@@ -514,6 +534,7 @@ class ProjectViewModel @Inject constructor(
             optimisticTracks.value,
             recordingSession.optimisticRecordingTrack.value,
             optimisticTrackGains.value,
+            optimisticTrackPans.value,
         )
 
     private fun selectedPlayableTracks(): List<TrackEntity> {
@@ -537,6 +558,7 @@ class ProjectViewModel @Inject constructor(
             playheadSeek.resetWhenProjectChanges()
             optimisticTracks.value = null
             optimisticTrackGains.value = emptyMap()
+            optimisticTrackPans.value = emptyMap()
             waveformPeaks.resetWhenProjectChanges()
             recordingSession.resetWhenBoundProjectChanges()
             recordingStorageMonitor.stop()
@@ -579,6 +601,14 @@ class ProjectViewModel @Inject constructor(
 
     internal fun setRecordingStorageMonitorEnabledForTests(enabled: Boolean) {
         recordingStorageMonitorEnabledForTests = enabled
+    }
+
+    internal fun setMasterPeakPollEnabledForTests(enabled: Boolean) {
+        masterPeakPollEnabledForTests = enabled
+        if (!enabled) {
+            masterPeakPollJob?.cancel()
+            masterPeakPollJob = null
+        }
     }
 
     internal fun advancePlayheadNativeTransportForTests(positionMs: Long) {
@@ -782,6 +812,33 @@ class ProjectViewModel @Inject constructor(
         val updatedTrack = currentTrack.copy(gain = gain)
         viewModelScope.launch {
             dbActions.run(R.string.error_gain_update_failed) {
+                repo.upsertTrack(updatedTrack)
+            }
+        }
+    }
+
+    fun setTrackPan(trackId: String, pan: Float) {
+        if (!uiState.value.tracks.any { it.id == trackId }) {
+            return
+        }
+        val clamped = PanRange.clamp(pan)
+        optimisticTrackPans.value = optimisticTrackPans.value + (trackId to clamped)
+        if (!playbackSession.hasActivePlaybackSession() || !audioController.isPlaybackEngineRunning()) {
+            return
+        }
+        val laneIndex = playbackSession.livePlaybackLaneIndexForTrack(trackId) ?: return
+        audioController.setPlaybackLanePan(laneIndex, clamped)
+    }
+
+    fun commitTrackPan(trackId: String, pan: Float) {
+        val currentTrack = projectTracks.value.find { it.id == trackId } ?: return
+        val clamped = PanRange.clamp(pan)
+        if (clamped == currentTrack.pan) {
+            return
+        }
+        val updatedTrack = currentTrack.copy(pan = clamped)
+        viewModelScope.launch {
+            dbActions.run(R.string.error_pan_update_failed) {
                 repo.upsertTrack(updatedTrack)
             }
         }

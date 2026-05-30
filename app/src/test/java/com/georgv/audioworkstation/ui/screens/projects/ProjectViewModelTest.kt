@@ -196,6 +196,7 @@ class ProjectViewModelTest {
 
             vm.toggleSelect("a")
             runCurrent()
+            vm.setMasterPeakPollEnabledForTests(true)
             startPlayback(vm)
             runCurrent()
 
@@ -237,6 +238,7 @@ class ProjectViewModelTest {
             vm.bind(PROJECT_ID)
             vm.toggleSelect("a")
             runCurrent()
+            vm.setMasterPeakPollEnabledForTests(true)
             startPlayback(vm)
             runCurrent()
 
@@ -286,6 +288,7 @@ class ProjectViewModelTest {
             runCurrent()
             vm.toggleSelect("a")
             runCurrent()
+            vm.setMasterPeakPollEnabledForTests(true)
             startPlayback(vm)
             runCurrent()
 
@@ -304,6 +307,7 @@ class ProjectViewModelTest {
             runCurrent()
             vm.performStopPressed()
             runCurrent()
+            vm.setMasterPeakPollEnabledForTests(true)
             startPlayback(vm)
             runCurrent()
             audioController.setMasterPeakHoldLinear(2.5f)
@@ -669,6 +673,26 @@ class ProjectViewModelTest {
 
         assertEquals(42f, vm.uiState.value.tracks.single().gain)
         assertEquals(42f, dao.observeTracks(PROJECT_ID).first().single().gain)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `commitTrackPan persists pan to dao`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(
+            projects = listOf(project()),
+            tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", pan = 0f))
+        )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.commitTrackPan("a", -0.5f)
+        advanceUntilIdle()
+
+        assertEquals(-0.5f, vm.uiState.value.tracks.single().pan)
+        assertEquals(-0.5f, dao.observeTracks(PROJECT_ID).first().single().pan)
         collectJob.cancel()
     }
 
@@ -2500,6 +2524,7 @@ class ProjectViewModelTest {
         ).also {
             it.setPlayheadNativePollEnabledForTests(false)
             it.setRecordingStorageMonitorEnabledForTests(false)
+            it.setMasterPeakPollEnabledForTests(false)
         }
     }
 
@@ -3588,6 +3613,7 @@ class ProjectViewModelTest {
         loopStartMs: Long = 0L,
         loopEndMs: Long? = null,
         duration: Long? = null,
+        pan: Float = 0f,
         timelineStartOffsetMs: Long = 0L,
     ) = TrackEntity(
         id = id,
@@ -3596,6 +3622,7 @@ class ProjectViewModelTest {
         position = position,
         wavFilePath = wavFilePath,
         gain = gain,
+        pan = pan,
         isLoop = isLoop,
         loopStartMs = loopStartMs,
         loopEndMs = loopEndMs,
@@ -3755,6 +3782,12 @@ internal class FakeAudioController(
         playbackLaneGainCalls.add(laneIndex to gain)
     }
 
+    val playbackLanePanCalls = mutableListOf<Pair<Int, Float>>()
+
+    override fun setPlaybackLanePan(laneIndex: Int, pan: Float) {
+        playbackLanePanCalls.add(laneIndex to pan)
+    }
+
     var lastArmedLaneAudibility: BooleanArray? = null
         private set
     var armedLaneAudibilityCalls = 0
@@ -3798,6 +3831,7 @@ internal class FakeAudioController(
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        pan: Float,
     ): Int {
         beginHotJoinCalls += 1
         lastHotJoinWavPath = wavFilePath
