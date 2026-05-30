@@ -81,7 +81,6 @@ fun TrackCard(
     loopToggleEnabled: Boolean = true,
     loopRegionEditingEnabled: Boolean = false,
     onLoopRegionCommit: ((loopStartMs: Long, loopEndMs: Long) -> Unit)? = null,
-    hasPersistedPlayableAudio: Boolean = false,
     onToggleRecordTarget: (() -> Unit)? = null,
     isRecordTarget: Boolean = false,
     recordTargetToggleEnabled: Boolean = true,
@@ -509,8 +508,6 @@ fun TrackCard(
                         recordingInputLevel = if (isRecording) recordingInputLevel else null,
                         loopRegionEditingEnabled = loopRegionEditingEnabled,
                         onLoopRegionCommit = onLoopRegionCommit,
-                        trackId = trackId,
-                        hasPersistedPlayableAudio = hasPersistedPlayableAudio,
                         modifier = waveformModifier,
                     )
                 }

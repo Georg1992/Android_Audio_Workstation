@@ -21,7 +21,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.TrackCard
@@ -136,7 +135,6 @@ internal fun LazyItemScope.ProjectTrackListRow(
             onToggleLoop = { onToggleLoop(track.id) },
             isLoop = track.isLoop,
             loopToggleEnabled = trackActionsEnabled,
-            hasPersistedPlayableAudio = track.hasPersistedPlayableAudio(),
             loopRegionEditingEnabled =
                 loopRegionEditingEnabled(
                     playbackActive = playbackActive,

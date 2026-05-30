@@ -278,8 +278,6 @@ fun TrackTimelineLane(
     recordingInputLevel: Float? = null,
     loopRegionEditingEnabled: Boolean = false,
     onLoopRegionCommit: ((loopStartMs: Long, loopEndMs: Long) -> Unit)? = null,
-    trackId: String? = null,
-    hasPersistedPlayableAudio: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)

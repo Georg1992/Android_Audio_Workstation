@@ -34,8 +34,9 @@ import kotlin.math.sin
 
 private const val PanKnobStartDegrees = 120f
 private const val PanKnobSweepDegrees = 300f
+private const val FullCircleDegrees = 360f
 
-private fun panKnobEndDegrees(): Float = (PanKnobStartDegrees + PanKnobSweepDegrees) % 360f
+private fun panKnobEndDegrees(): Float = (PanKnobStartDegrees + PanKnobSweepDegrees) % FullCircleDegrees
 
 private fun degreesToRad(degrees: Float): Float = Math.toRadians(degrees.toDouble()).toFloat()
 
@@ -46,23 +47,23 @@ private fun panToIndicatorAngleRad(pan: Float): Float {
 }
 
 private fun isOnPanKnobArc(degrees: Float): Boolean {
-    val relative = (degrees - PanKnobStartDegrees + 360f) % 360f
+    val relative = (degrees - PanKnobStartDegrees + FullCircleDegrees) % FullCircleDegrees
     return relative <= PanKnobSweepDegrees
 }
 
 private fun angleRadToPan(angleRad: Float): Float {
     var degrees = Math.toDegrees(angleRad.toDouble()).toFloat()
-    while (degrees < 0f) degrees += 360f
-    while (degrees >= 360f) degrees -= 360f
+    while (degrees < 0f) degrees += FullCircleDegrees
+    while (degrees >= FullCircleDegrees) degrees -= FullCircleDegrees
     val clampedDegrees =
         if (isOnPanKnobArc(degrees)) {
             degrees
         } else {
-            val distToStart = (PanKnobStartDegrees - degrees + 360f) % 360f
-            val distToEnd = (degrees - panKnobEndDegrees() + 360f) % 360f
+            val distToStart = (PanKnobStartDegrees - degrees + FullCircleDegrees) % FullCircleDegrees
+            val distToEnd = (degrees - panKnobEndDegrees() + FullCircleDegrees) % FullCircleDegrees
             if (distToStart <= distToEnd) PanKnobStartDegrees else panKnobEndDegrees()
         }
-    val relative = (clampedDegrees - PanKnobStartDegrees + 360f) % 360f
+    val relative = (clampedDegrees - PanKnobStartDegrees + FullCircleDegrees) % FullCircleDegrees
     val normalized = relative / PanKnobSweepDegrees
     return PanRange.clamp(normalized * 2f - 1f)
 }
