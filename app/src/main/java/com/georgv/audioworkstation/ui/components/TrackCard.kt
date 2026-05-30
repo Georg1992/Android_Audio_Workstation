@@ -480,25 +480,6 @@ fun TrackCard(
                     } else {
                         Modifier.fillMaxWidth()
                     }
-                val cardRenderBranch =
-                    when {
-                        timelineClip != null -> "timeline_lane"
-                        isRecording -> "fallback_live_recording"
-                        else -> "fallback_empty_waveform"
-                    }
-                LoopUiLogTrackCardOnChange(
-                    snapshot =
-                        LoopUiTrackCardSnapshot(
-                            trackId = trackId,
-                            isLoop = isLoop,
-                            isRecording = isRecording,
-                            hasTimelineClip = timelineClip != null,
-                            hasPersistedPlayableAudio = hasPersistedPlayableAudio,
-                            recordingInputLevelPresent = isRecording,
-                            renderBranch = cardRenderBranch,
-                            loopRegionEditingEnabled = loopRegionEditingEnabled,
-                        ),
-                )
                 if (timelineClip == null) {
                     if (isRecording) {
                         RecordingWaveform(
@@ -514,7 +495,7 @@ fun TrackCard(
                         laneLayoutDurationMs = laneLayoutDurationMs,
                         globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
                         playheadPositionMs = timelinePlayheadPositionMs,
-                        recordingInputLevel = recordingInputLevel.takeIf { isRecording },
+                        recordingInputLevel = if (isRecording) recordingInputLevel else null,
                         loopRegionEditingEnabled = loopRegionEditingEnabled,
                         onLoopRegionCommit = onLoopRegionCommit,
                         trackId = trackId,

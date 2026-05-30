@@ -53,7 +53,7 @@ internal class ProjectTransportCommands(
         val tracks = visibleTracks()
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId())
         val timelineStartOffsetMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
+            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.visibleTimelineDurationMs)
 
         val overdubPlaybackTracks = selectedPlayableTracksForOverdub(tracks)
         val recordTargetTrack =
@@ -130,7 +130,7 @@ internal class ProjectTransportCommands(
         val tracks = visibleTracks()
         val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId())
         val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
+            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.visibleTimelineDurationMs)
         if (
             !playbackStartAllowedAtPlayhead(
                 startPositionMs = startPositionMs,

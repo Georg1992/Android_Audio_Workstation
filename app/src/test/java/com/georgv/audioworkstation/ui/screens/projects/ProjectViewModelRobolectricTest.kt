@@ -11,8 +11,8 @@ import com.georgv.audioworkstation.core.audio.AudioImportResult
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.AudioImportTarget
 import com.georgv.audioworkstation.core.audio.AudioImporter
+import com.georgv.audioworkstation.core.audio.MasterOutputMeterState
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
-import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingSpec
@@ -263,13 +263,14 @@ class ProjectViewModelRobolectricTest {
 private class NoOpAudioControllerForRobolectric : AudioController {
     override val playbackState = MutableStateFlow(false)
     override val recordingInputLevel = MutableStateFlow(0f)
+    override fun readMasterPeakHoldLinear(): Float = 0f
+
+    override fun resetMasterPeakHold() = Unit
     override fun transportPositionMs(): Long = 0L
     override fun isPlaybackEngineRunning(): Boolean = playbackState.value
     override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
     override fun stopRecording(): Boolean = true
-    override fun startPlayback(spec: PlaybackSpec): Boolean = false
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
-    override fun setPlaybackGain(gain: Float) = Unit
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
     override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
     override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
@@ -278,11 +279,15 @@ private class NoOpAudioControllerForRobolectric : AudioController {
         gain: Float,
         timelineClipStartMs: Long,
         timelineClipDurationMs: Long,
+        loopEnabled: Boolean,
+        loopSourceStartMs: Long,
+        loopSourceEndMs: Long,
     ): Int = -1
     override fun cancelHotJoinLane(laneIndex: Int) = Unit
     override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
         PlaybackLaneLifecycle.Inactive
     override fun stopPlayback(): Boolean = true
+
     override fun release() = Unit
 }
 

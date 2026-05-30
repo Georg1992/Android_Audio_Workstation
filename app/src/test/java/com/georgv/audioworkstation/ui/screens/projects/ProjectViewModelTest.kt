@@ -8,9 +8,10 @@ import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.AudioImportTarget
 import com.georgv.audioworkstation.core.audio.AudioImporter
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
+import com.georgv.audioworkstation.core.audio.MasterPeakMeter
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
-import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
@@ -172,6 +173,158 @@ class ProjectViewModelTest {
         assertEquals(0.73f, vm.uiState.value.recordingInputLevel, 0.0001f)
         collectJob.cancel()
     }
+
+    @Test
+    fun `master session peak indicator holds peak while paused and resets on full stop`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            assertEquals("0 dB", vm.uiState.value.masterPeakDbText)
+            assertEquals(MasterPeakIndicatorLevel.Inactive, vm.uiState.value.masterPeakIndicatorLevel)
+
+            vm.toggleSelect("a")
+            runCurrent()
+            startPlayback(vm)
+            runCurrent()
+
+            audioController.setMasterPeakHoldLinear(0.316f)
+            advanceTimeBy(150)
+            runCurrent()
+            assertEquals("-10.0 dB", vm.uiState.value.masterPeakDbText)
+            assertEquals(MasterPeakIndicatorLevel.Green, vm.uiState.value.masterPeakIndicatorLevel)
+
+            vm.performStopPressed()
+            runCurrent()
+            assertEquals(TransportPlaybackPhase.Paused, vm.uiState.value.transportPlaybackPhase)
+            assertEquals("-10.0 dB", vm.uiState.value.masterPeakDbText)
+            assertEquals(MasterPeakIndicatorLevel.Green, vm.uiState.value.masterPeakIndicatorLevel)
+
+            vm.performStopPressed()
+            runCurrent()
+            assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
+            assertEquals("0 dB", vm.uiState.value.masterPeakDbText)
+            assertEquals(MasterPeakIndicatorLevel.Inactive, vm.uiState.value.masterPeakIndicatorLevel)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `clicking master peak indicator resets display without stopping playback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            vm.toggleSelect("a")
+            runCurrent()
+            startPlayback(vm)
+            runCurrent()
+
+            audioController.setMasterPeakHoldLinear(MasterPeakMeter.SOFT_CLIP_THRESHOLD_LINEAR)
+            advanceTimeBy(150)
+            runCurrent()
+            assertEquals(MasterPeakIndicatorLevel.Yellow, vm.uiState.value.masterPeakIndicatorLevel)
+
+            vm.onMasterPeakIndicatorClicked()
+            runCurrent()
+            assertEquals("0 dB", vm.uiState.value.masterPeakDbText)
+            assertEquals(MasterPeakIndicatorLevel.Green, vm.uiState.value.masterPeakIndicatorLevel)
+            assertTrue(audioController.isPlaybackEngineRunning())
+
+            audioController.setMasterPeakHoldLinear(0.5f)
+            advanceTimeBy(150)
+            runCurrent()
+            assertEquals(MasterPeakIndicatorLevel.Green, vm.uiState.value.masterPeakIndicatorLevel)
+
+            vm.performStopPressed()
+            runCurrent()
+            vm.performStopPressed()
+            runCurrent()
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `master overload warning emits once per playback session`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao =
+                FakeProjectDao(
+                    projects = listOf(project()),
+                    tracks =
+                        listOf(
+                            track(id = "a", position = 0, wavFilePath = "a.wav").copy(duration = 30_000L),
+                        ),
+                )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+            val messages = mutableListOf<Int>()
+            val messageJob = backgroundScope.launch {
+                vm.userMessages.collect { messages.add(it.resId) }
+            }
+
+            vm.bind(PROJECT_ID)
+            runCurrent()
+            vm.toggleSelect("a")
+            runCurrent()
+            startPlayback(vm)
+            runCurrent()
+
+            audioController.setMasterPeakHoldLinear(2.5f)
+            advanceTimeBy(150)
+            runCurrent()
+            assertEquals(MasterPeakIndicatorLevel.Red, vm.uiState.value.masterPeakIndicatorLevel)
+            assertEquals(listOf(R.string.warning_master_output_overloaded), messages)
+
+            audioController.setMasterPeakHoldLinear(3.0f)
+            advanceTimeBy(150)
+            runCurrent()
+            assertEquals(listOf(R.string.warning_master_output_overloaded), messages)
+
+            vm.performStopPressed()
+            runCurrent()
+            vm.performStopPressed()
+            runCurrent()
+            startPlayback(vm)
+            runCurrent()
+            audioController.setMasterPeakHoldLinear(2.5f)
+            advanceTimeBy(150)
+            runCurrent()
+            assertEquals(
+                listOf(
+                    R.string.warning_master_output_overloaded,
+                    R.string.warning_master_output_overloaded,
+                ),
+                messages,
+            )
+
+            vm.performStopPressed()
+            runCurrent()
+            vm.performStopPressed()
+            runCurrent()
+
+            collectJob.cancel()
+            messageJob.cancel()
+        }
 
     @Test
     fun `toggleSelect adds and removes selected track`() = runTest(mainDispatcherRule.dispatcher) {
@@ -3529,12 +3682,8 @@ internal class FakeAudioController(
 ) : AudioController {
     var startPlaybackCalls = 0
         private set
-    var lastPlaybackGain: Float? = null
-        private set
     val playbackLaneGainCalls = mutableListOf<Pair<Int, Float>>()
     var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
-        private set
-    var lastPlaybackSpec: PlaybackSpec? = null
         private set
     var lastRecordingSpec: RecordingSpec? = null
         private set
@@ -3551,12 +3700,19 @@ internal class FakeAudioController(
     override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
     private val _recordingInputLevel = MutableStateFlow(0f)
     override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
+    var masterPeakHoldLinearValue = 0f
 
     var transportPositionMsValue: Long = 0L
 
     override fun transportPositionMs(): Long = transportPositionMsValue
 
     override fun isPlaybackEngineRunning(): Boolean = _playbackState.value
+
+    override fun readMasterPeakHoldLinear(): Float = masterPeakHoldLinearValue
+
+    override fun resetMasterPeakHold() {
+        masterPeakHoldLinearValue = 0f
+    }
 
     /** Simulates the engine reporting playback completion. */
     fun completePlayback() {
@@ -3565,6 +3721,10 @@ internal class FakeAudioController(
 
     fun emitRecordingInputLevel(level: Float) {
         _recordingInputLevel.value = level
+    }
+
+    fun setMasterPeakHoldLinear(linearPeak: Float) {
+        masterPeakHoldLinearValue = linearPeak
     }
 
     override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
@@ -3581,16 +3741,6 @@ internal class FakeAudioController(
         return stopRecordingResult
     }
 
-    override fun startPlayback(spec: PlaybackSpec): Boolean {
-        startPlaybackCalls += 1
-        lastPlaybackSpec = spec
-        lastPlaybackGain = spec.gain
-        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
-        val playing = permitted && startPlaybackResult
-        _playbackState.value = playing
-        return playing
-    }
-
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
         startPlaybackCalls += 1
         lastMultiPlaybackSpec = spec
@@ -3601,15 +3751,8 @@ internal class FakeAudioController(
         return playing
     }
 
-    override fun setPlaybackGain(gain: Float) {
-        lastPlaybackGain = gain
-    }
-
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
         playbackLaneGainCalls.add(laneIndex to gain)
-        if (laneIndex == 0) {
-            lastPlaybackGain = gain
-        }
     }
 
     var lastArmedLaneAudibility: BooleanArray? = null
@@ -3637,6 +3780,12 @@ internal class FakeAudioController(
         private set
     var lastHotJoinClipDurationMs: Long? = null
         private set
+    var lastHotJoinLoopEnabled: Boolean? = null
+        private set
+    var lastHotJoinLoopSourceStartMs: Long? = null
+        private set
+    var lastHotJoinLoopSourceEndMs: Long? = null
+        private set
     var hotJoinReturnLaneIndex: Int = 1
     var hotJoinCommitLifecycle: PlaybackLaneLifecycle = PlaybackLaneLifecycle.Active
     private val laneLifecycleOverrides = mutableMapOf<Int, PlaybackLaneLifecycle>()
@@ -3646,12 +3795,18 @@ internal class FakeAudioController(
         gain: Float,
         timelineClipStartMs: Long,
         timelineClipDurationMs: Long,
+        loopEnabled: Boolean,
+        loopSourceStartMs: Long,
+        loopSourceEndMs: Long,
     ): Int {
         beginHotJoinCalls += 1
         lastHotJoinWavPath = wavFilePath
         lastHotJoinGain = gain
         lastHotJoinClipStartMs = timelineClipStartMs
         lastHotJoinClipDurationMs = timelineClipDurationMs
+        lastHotJoinLoopEnabled = loopEnabled
+        lastHotJoinLoopSourceStartMs = loopSourceStartMs
+        lastHotJoinLoopSourceEndMs = loopSourceEndMs
         laneLifecycleOverrides[hotJoinReturnLaneIndex] = PlaybackLaneLifecycle.Preparing
         laneLifecycleOverrides[hotJoinReturnLaneIndex] = hotJoinCommitLifecycle
         return hotJoinReturnLaneIndex
@@ -3668,6 +3823,7 @@ internal class FakeAudioController(
         stopPlaybackCalls += 1
         _playbackState.value = false
         transportPositionMsValue = 0L
+        masterPeakHoldLinearValue = 0f
         return stopPlaybackResult
     }
 

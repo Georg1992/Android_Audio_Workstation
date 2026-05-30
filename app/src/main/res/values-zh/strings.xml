@@ -100,6 +100,7 @@
     <string name="error_single_track_playback_only">目前仅支持播放一个选中音轨。</string>
     <string name="error_no_audio_for_selected_tracks">所选音轨尚无音频。</string>
     <string name="error_playback_failed_to_start">无法开始播放。</string>
+    <string name="warning_master_output_overloaded">主输出过载。请降低轨道音量。</string>
     <string name="error_create_project_failed">创建项目失败。</string>
     <string name="error_delete_project_failed">删除项目失败。</string>
     <string name="error_delete_track_failed">删除音轨失败。</string>

@@ -66,8 +66,10 @@ if(BUILD_AUDIOENGINE_GTESTS)
     target_link_libraries(audioengine_master_playback_tests PRIVATE
         GTest::gtest_main
         oboe
-        ${log-lib}
     )
+    if(ANDROID)
+        target_link_libraries(audioengine_master_playback_tests PRIVATE ${log-lib})
+    endif()
 endif()
 
 add_library(audioworkstation SHARED

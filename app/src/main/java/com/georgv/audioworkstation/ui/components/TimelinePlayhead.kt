@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -113,6 +114,7 @@ fun rememberTimelinePlayheadWaveformMetrics(
 fun TimelinePlayheadTrackRowSlot(
     timelineDurationMs: Long,
     modifier: Modifier = Modifier,
+    metadataContent: @Composable BoxScope.() -> Unit = {},
     waveformContent: @Composable BoxScope.(TimelinePlayheadWaveformMetrics) -> Unit,
 ) {
     Row(modifier = modifier.fillMaxWidth()) {
@@ -126,11 +128,14 @@ fun TimelinePlayheadTrackRowSlot(
                     timelineDurationMs = timelineDurationMs,
                     waveformContent = waveformContent,
                 )
-                Spacer(
+                Box(
                     modifier = Modifier
                         .weight(TimelineMetadataWidthFraction)
                         .fillMaxHeight(),
-                )
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    metadataContent()
+                }
             }
         }
         Spacer(Modifier.width(Dimens.Gap))

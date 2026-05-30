@@ -60,6 +60,14 @@ public:
         return m_recordingInputLevel.load(std::memory_order_acquire);
     }
 
+    /** Session maximum pre-soft-clip master peak (linear) for the current playback arm. */
+    float masterPeakHoldLinear() const {
+        return m_masterPeakHoldLinear.load(std::memory_order_acquire);
+    }
+
+    /** Clears session peak-hold display; does not affect playback or transport. */
+    void resetMasterPeakHold();
+
     bool setPlaybackSource(const std::string &wavPath,
                            float gain,
                            int64_t startPositionMs = 0,
@@ -74,8 +82,6 @@ public:
                             const std::vector<int64_t> &laneLoopSourceStartMs = {},
                             const std::vector<int64_t> &laneLoopSourceEndMs = {});
 
-    void setPlaybackGain(float gain);
-
     /** Live per-lane gain (0..1); safe while Oboe is running — atomic read in [render]. */
     void setPlaybackLaneGain(std::size_t laneIndex, float gain);
 
@@ -89,7 +95,10 @@ public:
     int32_t beginHotJoinLane(const std::string &wavPath,
                              float gain,
                              int64_t clipStartMs = 0,
-                             int64_t clipDurationMs = 0);
+                             int64_t clipDurationMs = 0,
+                             bool loopEnabled = false,
+                             int64_t loopSourceStartMs = 0,
+                             int64_t loopSourceEndMs = 0);
 
     /** HJ.2: cancel a preparing/ready lane; no-op for active session lanes (use [setPlaybackLaneAudible]). */
     void cancelHotJoinLane(std::size_t laneIndex);
@@ -156,6 +165,9 @@ private:
         int32_t channels = 0;
         int64_t clipStartMs = 0;
         int64_t clipDurationMs = 0;
+        bool loopEnabled = false;
+        int64_t loopSourceStartMs = 0;
+        int64_t loopSourceEndMs = 0;
     };
 
     struct HotJoinWorkItem {
@@ -164,6 +176,9 @@ private:
         float gain = 1.0f;
         int64_t clipStartMs = 0;
         int64_t clipDurationMs = 0;
+        bool loopEnabled = false;
+        int64_t loopSourceStartMs = 0;
+        int64_t loopSourceEndMs = 0;
     };
 
     static int32_t computeRingFramesForSampleRate(int32_t sampleRateHz);
@@ -233,6 +248,7 @@ private:
     std::thread m_recordThread;
     std::atomic<bool> m_isRecording{false};
     std::atomic<float> m_recordingInputLevel{0.0f};
+    std::atomic<float> m_masterPeakHoldLinear{0.0f};
 
     std::mutex m_playbackMutex;
     std::array<PlaybackLaneSlot, kPlaybackLaneCount> m_playbackLanes{};

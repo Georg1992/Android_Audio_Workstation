@@ -25,11 +25,4 @@ class MasterPlaybackTimelineTest {
         val startFrame = (sampleRate.toLong() * 30_000L) / 1000L
         assertEquals(30_000L, transportFrameToMs(startFrame, sampleRate))
     }
-
-    @Test
-    fun `masterPlaybackFrameToMs alias matches transportFrameToMs`() {
-        val frame = 1_488_000L
-        val rate = 48_000
-        assertEquals(transportFrameToMs(frame, rate), masterPlaybackFrameToMs(frame, rate))
-    }
 }

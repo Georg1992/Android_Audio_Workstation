@@ -67,20 +67,6 @@ data class RecordingRequest(
     val timelineStartOffsetMs: Long = 0L,
 )
 
-data class PlaybackSpec(
-    val sampleRate: Int,
-    val wavFilePath: String,
-    val gain: Float,
-    val startPositionMs: Long = 0L,
-    /** Absolute timeline end (ms); 0 = native lane-drain completion (tests only). */
-    val sessionTimelineEndMs: Long = 0L,
-) {
-    init {
-        require(startPositionMs >= 0L) { "Playback start position must be non-negative." }
-        require(sessionTimelineEndMs >= 0L) { "Session timeline end must be non-negative." }
-    }
-}
-
 data class TrackPlaybackLane(
     val trackId: String,
     val wavFilePath: String,
@@ -181,17 +167,6 @@ fun RecordingSpec.toRecordingRequest(outputPath: String): RecordingRequest =
         timelineStartOffsetMs = timelineStartOffsetMs,
     )
 
-fun ProjectEntity.toPlaybackSpec(track: TrackEntity): PlaybackSpec? =
-    track.wavFilePath
-        .takeIf { it.isNotBlank() }
-        ?.let { wavFilePath ->
-            PlaybackSpec(
-                sampleRate = sampleRate,
-                wavFilePath = wavFilePath,
-                gain = GainRange.toUnit(track.gain)
-            )
-        }
-
 fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackSpec? {
     val lanes = tracks
         .mapNotNull { track ->
@@ -215,4 +190,89 @@ fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackS
 
     if (lanes.size !in 1..MultiPlaybackSpec.MaxLanes) return null
     return MultiPlaybackSpec(sampleRate = sampleRate, lanes = lanes)
+}
+
+/** UI state for the master session peak / safety indicator on the global playhead panel. */
+enum class MasterPeakIndicatorLevel {
+    /** No active playback session peak to display. */
+    Inactive,
+    /** Held pre-soft-clip peak is below the master safety knee. */
+    Green,
+    /**
+     * Held pre-soft-clip peak reached the master safety soft-clip threshold at least once
+     * during this peak-hold window (~-0.09 dBFS at 0.99 linear). Yellow means the safety
+     * stage has engaged — not hard clipping.
+     */
+    Yellow,
+    /** Held pre-soft-clip peak reached severe overload (safety stage saturated). */
+    Red,
+}
+
+data class MasterOutputMeterState(
+    val peakDbText: String = "0 dB",
+    val indicatorLevel: MasterPeakIndicatorLevel = MasterPeakIndicatorLevel.Inactive,
+)
+
+/** Converts native master peak hold (linear, pre soft-clip) into playhead-panel display values. */
+object MasterPeakMeter {
+    /**
+     * Matches native [kMasterSafetyThreshold] in AudioEngine.cpp (~-0.09 dBFS).
+     * Green: held peak < this. Yellow: held peak >= this and < [SEVERE_OVERLOAD_THRESHOLD_LINEAR].
+     */
+    const val SOFT_CLIP_THRESHOLD_LINEAR = 0.99f
+
+    /**
+     * Pre-soft-clip peaks at or above this level are severe overload (~+6 dB above the knee).
+     * Native soft-clip output asymptotes to 1.0 FS; at input 2.0 the safety stage is saturated.
+     */
+    const val SEVERE_OVERLOAD_THRESHOLD_LINEAR = 2.0f
+
+    private const val MIN_PEAK_LINEAR = 1e-6f
+
+    fun indicatorLevelForPeak(peakLinear: Float, isStopped: Boolean): MasterPeakIndicatorLevel {
+        if (isStopped) {
+            return MasterPeakIndicatorLevel.Inactive
+        }
+        val peak = peakLinear.coerceAtLeast(0f)
+        if (peak <= MIN_PEAK_LINEAR) {
+            return MasterPeakIndicatorLevel.Green
+        }
+        return when {
+            peak >= SEVERE_OVERLOAD_THRESHOLD_LINEAR -> MasterPeakIndicatorLevel.Red
+            peak >= SOFT_CLIP_THRESHOLD_LINEAR -> MasterPeakIndicatorLevel.Yellow
+            else -> MasterPeakIndicatorLevel.Green
+        }
+    }
+
+    fun fromPeakHoldLinear(peakLinear: Float, isStopped: Boolean): MasterOutputMeterState {
+        if (isStopped) {
+            return MasterOutputMeterState()
+        }
+        val peak = peakLinear.coerceAtLeast(0f)
+        if (peak <= MIN_PEAK_LINEAR) {
+            return MasterOutputMeterState(
+                peakDbText = "0 dB",
+                indicatorLevel = MasterPeakIndicatorLevel.Green,
+            )
+        }
+        val dbfs = 20.0 * kotlin.math.log10(peak.toDouble())
+        return MasterOutputMeterState(
+            peakDbText = formatDbfs(dbfs),
+            indicatorLevel = indicatorLevelForPeak(peak, isStopped = false),
+        )
+    }
+
+    private fun formatDbfs(dbfs: Double): String {
+        val rounded = kotlin.math.round(dbfs * 10.0) / 10.0
+        if (rounded == 0.0) {
+            return "0 dB"
+        }
+        val magnitude = kotlin.math.abs(rounded)
+        val formatted = String.format(java.util.Locale.US, "%.1f", magnitude)
+        return if (rounded > 0) {
+            "+$formatted dB"
+        } else {
+            "-$formatted dB"
+        }
+    }
 }

@@ -90,7 +90,7 @@ internal class ProjectPlayheadSeekCoordinator(
         val timeline =
             timelineProjection(timelineTracksForPlayhead(), waveformStatesByTrackId())
         val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.timelineDurationMs)
+            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.visibleTimelineDurationMs)
         if (
             !playbackStartAllowedAtPlayhead(
                 startPositionMs = startPositionMs,

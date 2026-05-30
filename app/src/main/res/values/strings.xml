@@ -96,6 +96,7 @@
     <string name="error_single_track_playback_only">Playback currently supports one selected track at a time.</string>
     <string name="error_no_audio_for_selected_tracks">Selected tracks have no audio yet.</string>
     <string name="error_playback_failed_to_start">Failed to start playback.</string>
+    <string name="warning_master_output_overloaded">Master output is overloaded. Reduce track volumes.</string>
     <string name="error_create_project_failed">Failed to create project.</string>
     <string name="error_delete_project_failed">Failed to delete project.</string>
     <string name="error_delete_track_failed">Failed to delete track.</string>

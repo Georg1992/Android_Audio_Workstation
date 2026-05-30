@@ -11,6 +11,8 @@ import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
+import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
+import com.georgv.audioworkstation.core.audio.MasterPeakMeter
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
@@ -40,9 +42,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.math.max
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -83,6 +90,8 @@ data class ProjectUiState(
     val transportPlaybackPhase: TransportPlaybackPhase = TransportPlaybackPhase.Idle,
     val isRecordingStartup: Boolean = false,
     val recordTargetTrackId: String? = null,
+    val masterPeakDbText: String = "0 dB",
+    val masterPeakIndicatorLevel: MasterPeakIndicatorLevel = MasterPeakIndicatorLevel.Inactive,
 ) {
     val isPlayEnabled: Boolean
         get() = selectedTrackIds.isNotEmpty()
@@ -119,6 +128,7 @@ class ProjectViewModel @Inject constructor(
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
     private val playheadPositionMs = MutableStateFlow(0L)
+    private val masterPeakHoldLinear = MutableStateFlow(0f)
     private val playheadTransport =
         PlayheadTransportController(
             scope = viewModelScope,
@@ -186,6 +196,7 @@ class ProjectViewModel @Inject constructor(
             },
             onPlaybackCompleted = {
                 audioController.stopPlayback()
+                resetMasterPeakHoldDisplay()
                 playheadTransport.stopAndResetToZero()
             },
             suppressTransportOnPlaybackCompletion = { recordingSession.hasActiveRecordingTake() },
@@ -380,14 +391,14 @@ class ProjectViewModel @Inject constructor(
             playheadPositionMs,
             playheadTransport.phase,
             recordTargetTrackId,
-        ) { snapshot, playheadMs, transportPhase, recordTargetId ->
+            masterPeakHoldLinear,
+        ) { snapshot, playheadMs, transportPhase, recordTargetId, peakHoldLinear ->
             val (_, screen) = snapshot
             val activeRecording =
                 activeRecordingTimelineClip(
                     tracks = screen.tracks,
                     recordingTrackId = screen.recordingTrackId,
                     playheadMs = playheadMs,
-                    transportPhase = transportPhase,
                 )
             val extendForAllLoopedPlayback =
                 shouldExtendVisibleTimelineForAllLoopedPlayback(
@@ -418,6 +429,14 @@ class ProjectViewModel @Inject constructor(
                         timelinePlayheadClampedPositionMs(playheadMs, timeline.visibleTimelineDurationMs)
                     }
                 }
+            val showSessionMasterPeak =
+                transportPhase == TransportPlaybackPhase.Playing ||
+                    transportPhase == TransportPlaybackPhase.Paused
+            val masterMeter =
+                MasterPeakMeter.fromPeakHoldLinear(
+                    peakLinear = peakHoldLinear,
+                    isStopped = !showSessionMasterPeak,
+                )
             ProjectUiState(
                 projectId = screen.projectId,
                 project = screen.project,
@@ -436,10 +455,35 @@ class ProjectViewModel @Inject constructor(
                 transportPlaybackPhase = transportPhase,
                 isRecordingStartup = screen.isRecordingStartup,
                 recordTargetTrackId = recordTargetId,
+                masterPeakDbText = masterMeter.peakDbText,
+                masterPeakIndicatorLevel = masterMeter.indicatorLevel,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
 
+    private var masterPeakPollJob: Job? = null
+    private var masterOverloadWarningShownThisSession = false
+
     init {
+        viewModelScope.launch {
+            playheadTransport.phase.collect { phase ->
+                masterPeakPollJob?.cancel()
+                masterPeakPollJob = null
+                if (phase == TransportPlaybackPhase.Playing) {
+                    masterPeakPollJob =
+                        viewModelScope.launch {
+                            while (isActive) {
+                                val nativePeak = audioController.readMasterPeakHoldLinear()
+                                val updated = max(masterPeakHoldLinear.value, nativePeak)
+                                if (updated != masterPeakHoldLinear.value) {
+                                    masterPeakHoldLinear.value = updated
+                                    maybeEmitMasterOverloadWarning(updated)
+                                }
+                                delay(MASTER_PEAK_HOLD_POLL_MS)
+                            }
+                        }
+                }
+            }
+        }
         viewModelScope.launch {
             uiState
                 .map { it.timelineBaseDurationMs to it.transportPlaybackPhase }
@@ -489,6 +533,7 @@ class ProjectViewModel @Inject constructor(
     suspend fun bind(projectId: String) {
         if (this.projectId.value != projectId) {
             transportController.resetPlaybackForProjectChange()
+            resetMasterPeakHoldDisplay()
             playheadSeek.resetWhenProjectChanges()
             optimisticTracks.value = null
             optimisticTrackGains.value = emptyMap()
@@ -827,6 +872,9 @@ class ProjectViewModel @Inject constructor(
     }
 
     internal suspend fun performPlayPressed() {
+        if (playheadTransport.phase.value == TransportPlaybackPhase.Idle) {
+            resetMasterPeakHoldDisplay()
+        }
         transportCommands.performPlayPressed()
     }
 
@@ -837,12 +885,38 @@ class ProjectViewModel @Inject constructor(
 
     internal suspend fun performStopPressed() {
         transportCommands.performStopPressed()
+        if (playheadTransport.phase.value == TransportPlaybackPhase.Idle) {
+            resetMasterPeakHoldDisplay()
+        }
+    }
+
+    private fun resetMasterPeakHoldDisplay() {
+        audioController.resetMasterPeakHold()
+        masterPeakHoldLinear.value = 0f
+        masterOverloadWarningShownThisSession = false
+    }
+
+    fun onMasterPeakIndicatorClicked() {
+        audioController.resetMasterPeakHold()
+        masterPeakHoldLinear.value = 0f
+    }
+
+    private fun maybeEmitMasterOverloadWarning(peakLinear: Float) {
+        if (masterOverloadWarningShownThisSession) return
+        if (MasterPeakMeter.indicatorLevelForPeak(peakLinear, isStopped = false) !=
+            MasterPeakIndicatorLevel.Red
+        ) {
+            return
+        }
+        masterOverloadWarningShownThisSession = true
+        emitMessage(R.string.warning_master_output_overloaded)
     }
 
     internal suspend fun performStopRecordingForStorageExhaustion() {
         if (!recordingSession.hasActiveRecordingTake()) return
         recordingStorageMonitor.stop()
         transportController.stopAll()
+        resetMasterPeakHoldDisplay()
         playheadTransport.stopAndResetToZero()
         emitMessage(R.string.error_recording_stopped_storage)
     }
@@ -851,6 +925,7 @@ class ProjectViewModel @Inject constructor(
         recordingStorageMonitor.stop()
         transportController.stopAll()
         playheadTransport.stopAndResetToZero()
+        resetMasterPeakHoldDisplay()
         // Release the persistent Oboe stream and streaming I/O thread once the
         // project screen goes away. Without this we'd keep the audio device
         // open for the lifetime of the process even after the user navigates
@@ -887,5 +962,6 @@ class ProjectViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "ProjectViewModel"
+        const val MASTER_PEAK_HOLD_POLL_MS = 150L
     }
 }

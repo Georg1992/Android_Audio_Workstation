@@ -1,7 +1,10 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -22,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -32,10 +37,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
 import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
@@ -130,6 +137,45 @@ fun TransportPanel(
                 modifier = Modifier.alpha(if (inputLocked) Alphas.Disabled else 1f),
             )
         }
+    }
+}
+
+@Composable
+fun MasterOutputPeakIndicator(
+    peakDbText: String,
+    indicatorLevel: MasterPeakIndicatorLevel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val lampColor =
+        when (indicatorLevel) {
+            MasterPeakIndicatorLevel.Red -> AppColors.Red
+            MasterPeakIndicatorLevel.Yellow -> AppColors.Yellow
+            MasterPeakIndicatorLevel.Green -> AppColors.Green
+            MasterPeakIndicatorLevel.Inactive -> AppColors.Green.copy(alpha = 0.35f)
+        }
+    Column(
+        modifier =
+            modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Dimens.TightGap),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(lampColor),
+        )
+        Text(
+            text = peakDbText,
+            style = AppText.TopBarTitle.copy(fontSize = 8.sp),
+            color = AppColors.Text,
+            maxLines = 1,
+        )
     }
 }
 

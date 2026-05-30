@@ -13,6 +13,15 @@ interface AudioController {
     /** Latest normalized recording input level for lightweight UI metering, in 0f..1f. */
     val recordingInputLevel: StateFlow<Float>
 
+    /** Reads the native session max master peak (linear, pre soft-clip). */
+    fun readMasterPeakHoldLinear(): Float
+
+    /**
+     * Clears native session peak-hold. Playback and transport are unchanged.
+     * UI should also reset its displayed peak after calling this.
+     */
+    fun resetMasterPeakHold()
+
     /** Absolute timeline position in ms from the native transport clock (Clock.2+). */
     fun transportPositionMs(): Long
 
@@ -21,14 +30,7 @@ interface AudioController {
 
     fun startRecording(spec: RecordingSpec, outputPath: String? = null): String?
     fun stopRecording(): Boolean
-    fun startPlayback(spec: PlaybackSpec): Boolean
     fun startPlayback(spec: MultiPlaybackSpec): Boolean
-    fun setPlaybackGain(gain: Float)
-
-    /**
-     * Live per-lane gain while playback is active. [laneIndex] matches
-     * [MultiPlaybackSpec.lanes] / [PlaybackSessionController] session lane order.
-     */
     fun setPlaybackLaneGain(laneIndex: Int, gain: Float)
 
     /**
@@ -49,6 +51,9 @@ interface AudioController {
         gain: Float,
         timelineClipStartMs: Long = 0L,
         timelineClipDurationMs: Long = 0L,
+        loopEnabled: Boolean = false,
+        loopSourceStartMs: Long = 0L,
+        loopSourceEndMs: Long = 0L,
     ): Int
 
     /** HJ.2: cancel [PlaybackLaneLifecycle.Preparing] / [ReadyToCommit] on [laneIndex]. */

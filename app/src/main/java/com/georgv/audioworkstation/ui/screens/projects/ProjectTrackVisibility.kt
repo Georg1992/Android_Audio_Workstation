@@ -28,14 +28,16 @@ internal fun visibleTracksWithRecordingOptimistic(
     }
 }
 
+/**
+ * Live recording clip for timeline projection. Active whenever [recordingTrackId] is set —
+ * including play+record overdub startup before transport enters [TransportPlaybackPhase.Recording].
+ */
 internal fun activeRecordingTimelineClip(
     tracks: List<TrackEntity>,
     recordingTrackId: String?,
     playheadMs: Long,
-    transportPhase: TransportPlaybackPhase,
 ): ActiveRecordingTimelineClip? {
     val recordingId = recordingTrackId ?: return null
-    if (transportPhase != TransportPlaybackPhase.Recording) return null
     val recordingTrack = tracks.find { it.id == recordingId } ?: return null
     val startOffsetMs = recordingTrack.timelineStartOffsetMs.coerceAtLeast(0L)
     val elapsedMs = (playheadMs - startOffsetMs).coerceAtLeast(0L)

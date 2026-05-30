@@ -183,8 +183,11 @@ class ProjectTimelineProjectionTest {
             )
 
         assertEquals(5_000L, projection.baseTimelineDurationMs)
+        assertEquals(38_000L, projection.laneLayoutDurationMs)
         assertEquals(38_000L, projection.visibleTimelineDurationMs)
-        assertTrue(projection.clipsByLaneId["rec"]!!.isTimelineBase)
+        val recordingClip = projection.clipsByLaneId["rec"]!!
+        assertTrue(recordingClip.isTimelineBase)
+        assertNotNull(timelineClipLayout(recordingClip, projection.laneLayoutDurationMs))
     }
 
     @Test
@@ -214,8 +217,11 @@ class ProjectTimelineProjectionTest {
             )
 
         assertEquals(10_000L, projection.baseTimelineDurationMs)
+        assertEquals(15_000L, projection.laneLayoutDurationMs)
         assertEquals(15_000L, projection.visibleTimelineDurationMs)
-        assertTrue(projection.clipsByLaneId["rec"]!!.isTimelineBase)
+        val recordingClip = projection.clipsByLaneId["rec"]!!
+        assertTrue(recordingClip.isTimelineBase)
+        assertNotNull(timelineClipLayout(recordingClip, projection.laneLayoutDurationMs))
     }
 
     @Test

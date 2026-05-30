@@ -2,7 +2,6 @@ package com.georgv.audioworkstation.engine
 
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
-import com.georgv.audioworkstation.core.audio.PlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingRequest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,14 +22,11 @@ class NativeEngine @Inject constructor() {
 
     fun recordingInputLevel(): Float = nativeGetRecordingInputLevel().coerceIn(0f, 1f)
 
-    fun startPlayback(spec: PlaybackSpec): Boolean =
-        nativeStartPlayback(
-            sampleRate = spec.sampleRate,
-            wavPath = spec.wavFilePath,
-            gain = spec.gain,
-            startPositionMs = spec.startPositionMs,
-            sessionTimelineEndMs = spec.sessionTimelineEndMs,
-        )
+    fun masterPeakHoldLinear(): Float = nativeGetMasterPeakHoldLinear().coerceAtLeast(0f)
+
+    fun resetMasterPeakHold() {
+        nativeResetMasterPeakHold()
+    }
 
     fun startMultiPlayback(spec: MultiPlaybackSpec): Boolean =
         nativeStartMultiPlayback(
@@ -46,10 +42,6 @@ class NativeEngine @Inject constructor() {
             laneLoopSourceEndMs = spec.lanes.map { it.loopSourceEndMs }.toLongArray(),
         )
 
-    fun setPlaybackGain(gain: Float) {
-        nativeSetPlaybackGain(gain)
-    }
-
     fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
         nativeSetPlaybackLaneGain(laneIndex, gain.coerceIn(0f, 1f))
     }
@@ -63,12 +55,18 @@ class NativeEngine @Inject constructor() {
         gain: Float,
         timelineClipStartMs: Long = 0L,
         timelineClipDurationMs: Long = 0L,
+        loopEnabled: Boolean = false,
+        loopSourceStartMs: Long = 0L,
+        loopSourceEndMs: Long = 0L,
     ): Int =
         nativeBeginHotJoinLane(
             wavFilePath,
             gain,
             timelineClipStartMs,
             timelineClipDurationMs,
+            loopEnabled,
+            loopSourceStartMs,
+            loopSourceEndMs,
         )
 
     fun cancelHotJoinLane(laneIndex: Int) {
@@ -116,13 +114,9 @@ class NativeEngine @Inject constructor() {
 
     private external fun nativeGetRecordingInputLevel(): Float
 
-    private external fun nativeStartPlayback(
-        sampleRate: Int,
-        wavPath: String,
-        gain: Float,
-        startPositionMs: Long,
-        sessionTimelineEndMs: Long,
-    ): Boolean
+    private external fun nativeGetMasterPeakHoldLinear(): Float
+
+    private external fun nativeResetMasterPeakHold()
 
     private external fun nativeStartMultiPlayback(
         sampleRate: Int,
@@ -137,8 +131,6 @@ class NativeEngine @Inject constructor() {
         laneLoopSourceEndMs: LongArray,
     ): Boolean
 
-    private external fun nativeSetPlaybackGain(gain: Float)
-
     private external fun nativeSetPlaybackLaneGain(laneIndex: Int, gain: Float)
 
     private external fun nativeSetPlaybackLaneAudible(laneIndex: Int, audible: Boolean)
@@ -148,6 +140,9 @@ class NativeEngine @Inject constructor() {
         gain: Float,
         timelineClipStartMs: Long,
         timelineClipDurationMs: Long,
+        loopEnabled: Boolean,
+        loopSourceStartMs: Long,
+        loopSourceEndMs: Long,
     ): Int
 
     private external fun nativeCancelHotJoinLane(laneIndex: Int)

@@ -2,8 +2,9 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.MasterOutputMeterState
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
-import com.georgv.audioworkstation.core.audio.PlaybackSpec
+import com.georgv.audioworkstation.core.audio.TrackPlaybackLane
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -70,7 +71,14 @@ class ProjectTransportControllerTest {
                 visibleTracks = { emptyList() },
             )
 
-            assertTrue(audio.startPlayback(PlaybackSpec(48_000, "x.wav", 1f)))
+            assertTrue(
+                audio.startPlayback(
+                    MultiPlaybackSpec(
+                        sampleRate = 48_000,
+                        lanes = listOf(TrackPlaybackLane("x", "x.wav", 1f)),
+                    ),
+                ),
+            )
             playback.markPlayingAndStartCompletionMonitor("x")
             advanceUntilIdle()
 
@@ -106,7 +114,14 @@ class ProjectTransportControllerTest {
                 currentProjectId = { PID },
                 visibleTracks = { emptyList() },
             )
-            assertTrue(audio.startPlayback(PlaybackSpec(48_000, "x.wav", 1f)))
+            assertTrue(
+                audio.startPlayback(
+                    MultiPlaybackSpec(
+                        sampleRate = 48_000,
+                        lanes = listOf(TrackPlaybackLane("x", "x.wav", 1f)),
+                    ),
+                ),
+            )
             playback.markPlayingAndStartCompletionMonitor("x")
             advanceUntilIdle()
 
@@ -134,7 +149,14 @@ class ProjectTransportControllerTest {
                 currentProjectId = { PID },
                 visibleTracks = { emptyList() },
             )
-            assertTrue(audio.startPlayback(PlaybackSpec(48_000, "x.wav", 1f)))
+            assertTrue(
+                audio.startPlayback(
+                    MultiPlaybackSpec(
+                        sampleRate = 48_000,
+                        lanes = listOf(TrackPlaybackLane("x", "x.wav", 1f)),
+                    ),
+                ),
+            )
             playback.markPlayingAndStartCompletionMonitor("z")
             advanceUntilIdle()
 
@@ -159,6 +181,10 @@ class ProjectTransportControllerTest {
         override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
         override val recordingInputLevel: StateFlow<Float> = MutableStateFlow(0f)
 
+        override fun readMasterPeakHoldLinear(): Float = 0f
+
+        override fun resetMasterPeakHold() = Unit
+
         override fun transportPositionMs(): Long = 0L
 
         override fun isPlaybackEngineRunning(): Boolean = _playbackState.value
@@ -179,16 +205,13 @@ class ProjectTransportControllerTest {
             return true
         }
 
-        override fun startPlayback(spec: PlaybackSpec): Boolean {
+        override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
             startPlaybackCalls++
             journal += "startPlayback:$startPlaybackCalls"
             _playbackState.value = true
             return true
         }
 
-        override fun startPlayback(spec: MultiPlaybackSpec): Boolean = true
-
-        override fun setPlaybackGain(gain: Float) = Unit
         override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
         override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
 
@@ -199,6 +222,9 @@ class ProjectTransportControllerTest {
             gain: Float,
             timelineClipStartMs: Long,
             timelineClipDurationMs: Long,
+            loopEnabled: Boolean,
+            loopSourceStartMs: Long,
+            loopSourceEndMs: Long,
         ): Int = -1
 
         override fun cancelHotJoinLane(laneIndex: Int) = Unit

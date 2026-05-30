@@ -249,6 +249,9 @@ fun ProjectScreen(
             TimelinePlayheadScrubberPanel(
                 playheadPositionMs = playheadPositionMs,
                 timelineDurationMs = state.timelineVisibleDurationMs,
+                masterPeakDbText = state.masterPeakDbText,
+                masterPeakIndicatorLevel = state.masterPeakIndicatorLevel,
+                onMasterPeakIndicatorClick = { vm.onMasterPeakIndicatorClicked() },
                 onPlayheadScrubStarted = { vm.onPlayheadScrubStarted() },
                 onPlayheadScrubCancelled = {
                     scrubbingPlayheadPositionMs = null

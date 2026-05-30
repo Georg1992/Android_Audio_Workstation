@@ -287,33 +287,6 @@ fun TrackTimelineLane(
     val playheadLineWidthPx = with(density) { 1.dp.toPx() }
     val laneLayout = clip?.let { timelineClipLayout(it, laneLayoutDurationMs) }
     val editingEnabled = loopRegionEditingEnabled && onLoopRegionCommit != null
-    val waveformMode =
-        clip?.let { activeClip ->
-            timelineLaneWaveformMode(
-                waveformState = activeClip.waveformState,
-                isActiveRecording = activeClip.isActiveRecording,
-                recordingInputLevel = recordingInputLevel,
-            )
-        }
-    LoopUiLogTimelineLaneOnChange(
-        snapshot =
-            LoopUiTimelineLaneSnapshot(
-                trackId = trackId ?: clip?.laneId,
-                isLoop = clip?.isLoop ?: false,
-                isActiveRecording = clip?.isActiveRecording ?: false,
-                hasPersistedPlayableAudio = hasPersistedPlayableAudio,
-                recordingInputLevelPresent = recordingInputLevel != null,
-                waveformStateType = clip?.waveformState?.debugTypeName() ?: "null",
-                waveformMode = waveformMode,
-                laneLayoutResolved = laneLayout != null,
-                loopOverlayVisible = clip?.isLoop == true && (clip.durationMs > 0L),
-                localPlayheadVisible = clip?.isLoop == true && (clip.durationMs > 0L) && laneLayout != null,
-                editingEnabled = editingEnabled,
-                clipDurationMs = clip?.durationMs ?: 0L,
-                loopStartMs = clip?.effectiveStartMs ?: 0L,
-                loopEndMs = clip?.effectiveEndMs ?: 0L,
-            ),
-    )
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -457,7 +430,7 @@ fun TrackTimelineLane(
                             }
                             TimelineLaneWaveformMode.LiveRecordingMeter ->
                                 RecordingWaveform(
-                                    inputLevel = recordingInputLevel!!,
+                                    inputLevel = recordingInputLevel ?: 0f,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             TimelineLaneWaveformMode.Status ->

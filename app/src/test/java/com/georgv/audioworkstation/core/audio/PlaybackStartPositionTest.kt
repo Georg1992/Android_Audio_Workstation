@@ -3,16 +3,9 @@ package com.georgv.audioworkstation.core.audio
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlaybackStartPositionTest {
-
-    @Test
-    fun `PlaybackSpec defaults startPositionMs to zero`() {
-        val spec = PlaybackSpec(sampleRate = 48_000, wavFilePath = "a.wav", gain = 1f)
-        assertEquals(0L, spec.startPositionMs)
-    }
 
     @Test
     fun `MultiPlaybackSpec defaults startPositionMs to zero`() {
@@ -56,7 +49,11 @@ class PlaybackStartPositionTest {
     @Test
     fun `negative start position is rejected`() {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
-            PlaybackSpec(sampleRate = 48_000, wavFilePath = "a.wav", gain = 1f, startPositionMs = -1L)
+            MultiPlaybackSpec(
+                sampleRate = 48_000,
+                lanes = listOf(TrackPlaybackLane("a", "a.wav", 1f)),
+                startPositionMs = -1L,
+            )
         }
     }
 }

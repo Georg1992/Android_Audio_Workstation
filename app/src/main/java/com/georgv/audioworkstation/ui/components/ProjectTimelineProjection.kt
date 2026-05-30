@@ -30,10 +30,7 @@ data class ProjectTimelineProjection(
      * or while recording grows past base.
      */
     val visibleTimelineDurationMs: Long,
-) {
-    /** @deprecated Use [visibleTimelineDurationMs]; kept for gradual migration in tests. */
-    val timelineDurationMs: Long get() = visibleTimelineDurationMs
-}
+)
 
 fun buildProjectTimelineProjection(
     tracks: List<TrackEntity>,
@@ -92,20 +89,19 @@ fun timelineBaseDurationMsFromClips(clips: List<TimelineClip>): Long {
 }
 
 /**
- * Duration used to lay out lane clips. Matches [timelineBaseDurationMsFromClips] when persisted
- * audio exists; otherwise uses the active recording clip so the first take on an empty project
- * still renders waveform and playhead.
+ * Duration used to lay out lane clips. Extends past persisted base when a recording (or any merged
+ * clip) starts or ends beyond existing audio so [timelineClipLayout] can place the clip.
  */
 fun timelineLaneLayoutDurationMs(
     persistedClips: List<TimelineClip>,
     mergedClips: List<TimelineClip>,
 ): Long {
     val persistedBase = timelineBaseDurationMsFromClips(persistedClips)
-    if (persistedBase > 0L) return persistedBase
-    val recordingLayoutEndMs =
+    val mergedEndMs =
         mergedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
-    if (recordingLayoutEndMs <= 0L) return 0L
-    return recordingLayoutEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+    val layoutEndMs = maxOf(persistedBase, mergedEndMs)
+    if (layoutEndMs <= 0L) return 0L
+    return layoutEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
 }
 
 fun visibleTimelineDurationMs(

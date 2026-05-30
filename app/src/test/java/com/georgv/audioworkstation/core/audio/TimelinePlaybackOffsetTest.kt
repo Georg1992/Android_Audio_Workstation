@@ -64,6 +64,87 @@ class TimelinePlaybackOffsetTest {
         assertFalse(isLaneAudibleAtPlayhead(spec.startPositionMs, spec.lanes[2].timelineClipStartMs, spec.lanes[2].timelineClipDurationMs))
     }
 
+    @Test
+    fun `loop clip at 30s playhead 0 is silent until clip then wraps loop region`() {
+        val track =
+            TrackEntity(
+                id = "loop-late",
+                projectId = "p",
+                wavFilePath = "loop-late.wav",
+                duration = 20_000L,
+                timelineStartOffsetMs = 30_000L,
+                isLoop = true,
+                loopStartMs = 0L,
+                loopEndMs = 5_000L,
+            )
+        val spec = project.toMultiPlaybackSpec(listOf(track))!!.copy(startPositionMs = 0L)
+        val lane = spec.lanes.single()
+
+        assertEquals(30_000L, lane.timelineClipStartMs)
+        assertFalse(
+            isLaneAudibleAtPlayhead(
+                playheadMs = 0L,
+                clipStartMs = lane.timelineClipStartMs,
+                clipDurationMs = lane.timelineClipDurationMs,
+                loopEnabled = lane.loopEnabled,
+            ),
+        )
+        assertEquals(
+            0L,
+            laneSourceReadOffsetMs(
+                playheadMs = 0L,
+                clipStartMs = lane.timelineClipStartMs,
+                loopEnabled = lane.loopEnabled,
+                loopSourceStartMs = lane.loopSourceStartMs,
+                loopSourceEndMs = lane.loopSourceEndMs,
+            ),
+        )
+        assertTrue(
+            isLaneAudibleAtPlayhead(
+                playheadMs = 30_000L,
+                clipStartMs = lane.timelineClipStartMs,
+                clipDurationMs = lane.timelineClipDurationMs,
+                loopEnabled = lane.loopEnabled,
+            ),
+        )
+        assertEquals(
+            0L,
+            laneSourceReadOffsetMs(
+                playheadMs = 30_000L,
+                clipStartMs = lane.timelineClipStartMs,
+                loopEnabled = lane.loopEnabled,
+                loopSourceStartMs = lane.loopSourceStartMs,
+                loopSourceEndMs = lane.loopSourceEndMs,
+            ),
+        )
+    }
+
+    @Test
+    fun `loop clip at 0s playhead 0 is audible immediately`() {
+        val track =
+            TrackEntity(
+                id = "loop-now",
+                projectId = "p",
+                wavFilePath = "loop-now.wav",
+                duration = 10_000L,
+                timelineStartOffsetMs = 0L,
+                isLoop = true,
+                loopStartMs = 1_000L,
+                loopEndMs = 4_000L,
+            )
+        val spec = project.toMultiPlaybackSpec(listOf(track))!!.copy(startPositionMs = 0L)
+        val lane = spec.lanes.single()
+
+        assertTrue(
+            isLaneAudibleAtPlayhead(
+                playheadMs = 0L,
+                clipStartMs = lane.timelineClipStartMs,
+                clipDurationMs = lane.timelineClipDurationMs,
+                loopEnabled = lane.loopEnabled,
+            ),
+        )
+    }
+
     private fun spec(playheadMs: Long, clipStartMs: Long, durationMs: Long): MultiPlaybackSpec =
         project.toMultiPlaybackSpec(
             listOf(track(id = "t", clipStartMs = clipStartMs, durationMs = durationMs)),

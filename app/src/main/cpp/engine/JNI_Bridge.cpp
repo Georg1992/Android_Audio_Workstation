@@ -150,35 +150,16 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetRecordingInputLeve
     return g_engine ? g_engine->recordingInputLevel() : 0.0f;
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartPlayback(
-        JNIEnv *env,
-        jobject,
-        jint sampleRate,
-        jstring wavPath,
-        jfloat gain,
-        jlong startPositionMs,
-        jlong sessionTimelineEndMs) {
-    auto *engine = EnsureEngine();
-    if (!engine) return JNI_FALSE;
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetMasterPeakHoldLinear(JNIEnv *, jobject) {
+    return g_engine ? g_engine->masterPeakHoldLinear() : 0.0f;
+}
 
-    const std::string path = JStringToString(env, wavPath);
-    const std::vector<std::string> paths{path};
-    const std::vector<float> gains{gain};
-
-    return StartPlaybackSources(engine,
-                                sampleRate,
-                                paths,
-                                gains,
-                                startPositionMs,
-                                sessionTimelineEndMs,
-                                {},
-                                {},
-                                {},
-                                {},
-                                {})
-               ? JNI_TRUE
-               : JNI_FALSE;
+extern "C" JNIEXPORT void JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeResetMasterPeakHold(JNIEnv *, jobject) {
+    if (g_engine) {
+        g_engine->resetMasterPeakHold();
+    }
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -272,16 +253,6 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartMultiPlayback(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetPlaybackGain(
-        JNIEnv *,
-        jobject,
-        jfloat gain) {
-    if (g_engine) {
-        g_engine->setPlaybackGain(gain);
-    }
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetPlaybackLaneGain(
         JNIEnv *,
         jobject,
@@ -310,13 +281,19 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeBeginHotJoinLane(
         jstring wavPath,
         jfloat gain,
         jlong clipStartMs,
-        jlong clipDurationMs) {
+        jlong clipDurationMs,
+        jboolean loopEnabled,
+        jlong loopSourceStartMs,
+        jlong loopSourceEndMs) {
     if (!g_engine) return -1;
     return g_engine->beginHotJoinLane(
         JStringToString(env, wavPath),
         gain,
         static_cast<int64_t>(clipStartMs),
-        static_cast<int64_t>(clipDurationMs));
+        static_cast<int64_t>(clipDurationMs),
+        loopEnabled == JNI_TRUE,
+        static_cast<int64_t>(loopSourceStartMs),
+        static_cast<int64_t>(loopSourceEndMs));
 }
 
 extern "C" JNIEXPORT void JNICALL

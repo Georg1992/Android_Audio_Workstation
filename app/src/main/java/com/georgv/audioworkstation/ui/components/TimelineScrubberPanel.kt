@@ -3,20 +3,29 @@ package com.georgv.audioworkstation.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -25,20 +34,32 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
+import com.georgv.audioworkstation.ui.theme.AppText
+import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 private val ScrubberPanelShape = RoundedCornerShape(Dimens.TileRadius)
 
-private const val ScrubberRulerMinorTickHeightFraction = 0.5f
+private const val ScrubberRulerMinorTickHeightFraction = 0.58f
 private const val ScrubberRulerMajorTickHeightFraction = 1f
-private const val ScrubberRulerLabelBandFraction = 0.38f
+private const val ScrubberRulerLabelBandFraction = 0.30f
 private const val ScrubberMinLabelSpacingFraction = 0.11f
+private const val ScrubberRulerMinorTickAlpha = 0.38f
+private const val ScrubberRulerMajorTickAlpha = 0.64f
+private const val ScrubberRulerMajorTickStrokePx = 1.25f
+private val ScrubberUtilityZoneBackground = AppColors.SurfacePressed
+private val ScrubberUtilityZoneDividerWidth = 2.dp
+private val ScrubberUtilityZoneInsetShadowWidth = 3.dp
 
 @Composable
 fun TimelinePlayheadScrubberPanel(
     playheadPositionMs: Long,
     timelineDurationMs: Long,
+    masterPeakDbText: String = "0 dB",
+    masterPeakIndicatorLevel: MasterPeakIndicatorLevel = MasterPeakIndicatorLevel.Inactive,
+    onMasterPeakIndicatorClick: () -> Unit = {},
     onPlayheadScrubStarted: () -> Unit = {},
     onPlayheadScrubCancelled: () -> Unit = {},
     onPlayheadPositionPreview: (Long) -> Unit,
@@ -46,7 +67,7 @@ fun TimelinePlayheadScrubberPanel(
     inputLocked: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
@@ -54,6 +75,11 @@ fun TimelinePlayheadScrubberPanel(
             .background(AppColors.SurfacePanel, ScrubberPanelShape)
             .border(Dimens.Stroke, AppColors.Line, ScrubberPanelShape),
     ) {
+        val utilityZoneWidth =
+            (maxWidth - Dimens.Gap - Dimens.FaderWidth) * TimelineMetadataWidthFraction +
+                Dimens.Gap +
+                Dimens.FaderWidth
+
         TimelinePlayheadTrackRowSlot(
             timelineDurationMs = timelineDurationMs,
             modifier = Modifier.fillMaxSize(),
@@ -69,6 +95,65 @@ fun TimelinePlayheadScrubberPanel(
                 inputLocked = inputLocked,
             )
         }
+        TimelinePlayheadUtilityStrip(
+            modifier =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(utilityZoneWidth)
+                    .fillMaxHeight()
+                    .alpha(if (inputLocked) Alphas.Disabled else 1f),
+        ) {
+            MasterOutputPeakIndicator(
+                peakDbText = masterPeakDbText,
+                indicatorLevel = masterPeakIndicatorLevel,
+                onClick = onMasterPeakIndicatorClick,
+            )
+        }
+    }
+}
+
+/**
+ * Right-side status/utility column aligned with track-card metadata + fader chrome.
+ * Additional meters (CPU, latency, project info) can be added as sibling composables here.
+ */
+@Composable
+private fun TimelinePlayheadUtilityStrip(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(modifier = modifier) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(ScrubberUtilityZoneBackground)
+                    .drawBehind {
+                        val insetPx = ScrubberUtilityZoneInsetShadowWidth.toPx()
+                        if (insetPx > 0f) {
+                            drawRect(
+                                color = Color.Black.copy(alpha = 0.07f),
+                                size = Size(insetPx, size.height),
+                            )
+                        }
+                    },
+        )
+        Box(
+            modifier =
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .width(ScrubberUtilityZoneDividerWidth)
+                    .fillMaxHeight()
+                    .background(AppColors.Line),
+        )
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = Dimens.TightGap),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            content = content,
+        )
     }
 }
 
@@ -101,7 +186,7 @@ private fun TimelineScrubberWaveformSlot(
         }
     val labelStyle =
         TextStyle(
-            color = AppColors.Line.copy(alpha = 0.82f),
+            color = AppColors.Line.copy(alpha = 0.88f),
             fontSize = 7.sp,
             fontFamily = FontFamily.Monospace,
             platformStyle = PlatformTextStyle(includeFontPadding = false),
@@ -109,8 +194,8 @@ private fun TimelineScrubberWaveformSlot(
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (ticks.isNotEmpty()) {
-            val minorTickColor = AppColors.Line.copy(alpha = 0.28f)
-            val majorTickColor = AppColors.Line.copy(alpha = 0.52f)
+            val minorTickColor = AppColors.Line.copy(alpha = ScrubberRulerMinorTickAlpha)
+            val majorTickColor = AppColors.Line.copy(alpha = ScrubberRulerMajorTickAlpha)
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val labelBandHeightPx = size.height * ScrubberRulerLabelBandFraction
@@ -133,7 +218,7 @@ private fun TimelineScrubberWaveformSlot(
                         color = if (tick.isMajor) majorTickColor else minorTickColor,
                         start = Offset(x, baselineY),
                         end = Offset(x, baselineY - tickHeight),
-                        strokeWidth = 1f,
+                        strokeWidth = if (tick.isMajor) ScrubberRulerMajorTickStrokePx else 1f,
                     )
                 }
             }

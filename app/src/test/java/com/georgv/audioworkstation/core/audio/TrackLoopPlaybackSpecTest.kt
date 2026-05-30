@@ -73,6 +73,40 @@ class TrackLoopPlaybackSpecTest {
   }
 
   @Test
+  fun `looped track is silent at playhead before timeline clip start`() {
+    val track =
+        TrackEntity(
+            id = "loop",
+            projectId = "project-1",
+            wavFilePath = "/tmp/loop.wav",
+            duration = 20_000L,
+            timelineStartOffsetMs = 30_000L,
+            isLoop = true,
+            loopStartMs = 2_000L,
+            loopEndMs = 8_000L,
+        )
+
+    val lane = project.toMultiPlaybackSpec(listOf(track))!!.lanes.single()
+
+    assertFalse(
+        isLaneAudibleAtPlayhead(
+            playheadMs = 0L,
+            clipStartMs = lane.timelineClipStartMs,
+            clipDurationMs = lane.timelineClipDurationMs,
+            loopEnabled = lane.loopEnabled,
+        ),
+    )
+    assertTrue(
+        isLaneAudibleAtPlayhead(
+            playheadMs = 30_000L,
+            clipStartMs = lane.timelineClipStartMs,
+            clipDurationMs = lane.timelineClipDurationMs,
+            loopEnabled = lane.loopEnabled,
+        ),
+    )
+  }
+
+  @Test
   fun `looped track lane source read offset wraps inside loop region`() {
     val track =
         TrackEntity(

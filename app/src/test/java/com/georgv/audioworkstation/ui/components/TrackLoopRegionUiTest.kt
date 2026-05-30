@@ -17,9 +17,9 @@ import org.junit.Test
 class TrackLoopRegionUiTest {
 
     @Test
-    fun `persisted peaks win over live recording meter`() {
+    fun `active recording uses live meter even when persisted peaks exist`() {
         assertEquals(
-            TimelineLaneWaveformMode.PersistedPeaks,
+            TimelineLaneWaveformMode.LiveRecordingMeter,
             timelineLaneWaveformMode(
                 waveformState = WaveformState.Ready(WaveformPeaks.Placeholder),
                 isActiveRecording = true,
@@ -36,6 +36,18 @@ class TrackLoopRegionUiTest {
                 waveformState = WaveformState.NoWaveform,
                 isActiveRecording = true,
                 recordingInputLevel = 0.25f,
+            ),
+        )
+    }
+
+    @Test
+    fun `live recording meter used without input level snapshot`() {
+        assertEquals(
+            TimelineLaneWaveformMode.LiveRecordingMeter,
+            timelineLaneWaveformMode(
+                waveformState = WaveformState.NoWaveform,
+                isActiveRecording = true,
+                recordingInputLevel = null,
             ),
         )
     }
@@ -90,7 +102,7 @@ class TrackLoopRegionUiTest {
         assertEquals(12_000L, clip.effectiveEndMs)
         assertTrue(clip.waveformState is WaveformState.Ready)
         assertEquals(
-            TimelineLaneWaveformMode.PersistedPeaks,
+            TimelineLaneWaveformMode.LiveRecordingMeter,
             timelineLaneWaveformMode(
                 waveformState = clip.waveformState,
                 isActiveRecording = clip.isActiveRecording,

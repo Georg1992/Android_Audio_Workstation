@@ -11,17 +11,16 @@ enum class TimelineLaneWaveformMode {
 }
 
 /**
- * Persisted peaks always win when ready; live meter is only for active recording without peaks.
+ * Active recording always uses the live input meter; persisted peaks resume after the take ends.
  */
 fun timelineLaneWaveformMode(
     waveformState: WaveformState,
     isActiveRecording: Boolean,
-    recordingInputLevel: Float?,
+    @Suppress("UNUSED_PARAMETER") recordingInputLevel: Float?,
 ): TimelineLaneWaveformMode =
     when {
+        isActiveRecording -> TimelineLaneWaveformMode.LiveRecordingMeter
         waveformState is WaveformState.Ready -> TimelineLaneWaveformMode.PersistedPeaks
-        isActiveRecording && recordingInputLevel != null ->
-            TimelineLaneWaveformMode.LiveRecordingMeter
         else -> TimelineLaneWaveformMode.Status
     }
 

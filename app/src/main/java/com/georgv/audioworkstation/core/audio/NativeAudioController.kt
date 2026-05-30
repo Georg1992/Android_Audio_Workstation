@@ -34,6 +34,12 @@ class NativeAudioController @Inject constructor(
     private val _recordingInputLevel = MutableStateFlow(0f)
     override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
 
+    override fun readMasterPeakHoldLinear(): Float = nativeEngine.masterPeakHoldLinear()
+
+    override fun resetMasterPeakHold() {
+        nativeEngine.resetMasterPeakHold()
+    }
+
     override fun transportPositionMs(): Long = nativeEngine.transportPositionMs()
 
     override fun isPlaybackEngineRunning(): Boolean = nativeEngine.isPlaybackActive()
@@ -58,20 +64,10 @@ class NativeAudioController @Inject constructor(
         return ok
     }
 
-    override fun startPlayback(spec: PlaybackSpec): Boolean {
-        val started = nativeEngine.startPlayback(spec)
-        if (started) monitorPlaybackCompletion()
-        return started
-    }
-
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
         val started = nativeEngine.startMultiPlayback(spec)
         if (started) monitorPlaybackCompletion()
         return started
-    }
-
-    override fun setPlaybackGain(gain: Float) {
-        nativeEngine.setPlaybackGain(gain)
     }
 
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
@@ -93,12 +89,18 @@ class NativeAudioController @Inject constructor(
         gain: Float,
         timelineClipStartMs: Long,
         timelineClipDurationMs: Long,
+        loopEnabled: Boolean,
+        loopSourceStartMs: Long,
+        loopSourceEndMs: Long,
     ): Int =
         nativeEngine.beginHotJoinLane(
             wavFilePath,
             gain,
             timelineClipStartMs,
             timelineClipDurationMs,
+            loopEnabled,
+            loopSourceStartMs,
+            loopSourceEndMs,
         )
 
     override fun cancelHotJoinLane(laneIndex: Int) {
@@ -138,9 +140,6 @@ class NativeAudioController @Inject constructor(
     private fun monitorPlaybackCompletion() {
         _playbackState.value = true
         monitorJob?.cancel()
-        // The native engine signals completion only via its `isPlaybackActive` flag, so we
-        // poll it on a background dispatcher and flip the StateFlow. This keeps the polling
-        // out of the ViewModel and lets all callers stay reactive.
         monitorJob = monitorScope.launch {
             while (nativeEngine.isPlaybackActive()) {
                 delay(POLL_INTERVAL_MS)

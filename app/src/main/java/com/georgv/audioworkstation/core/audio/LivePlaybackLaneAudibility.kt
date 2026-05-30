@@ -14,12 +14,3 @@ fun laneAudibilityFromSelection(
         val trackId = sessionLaneTrackIds[index] ?: return@BooleanArray false
         trackId in selectedTrackIds
     }
-
-/** Legacy helper for transport-start lane lists (initial arm order). */
-fun armedLaneAudibilityFromSelection(
-    armedTrackIdsInLaneOrder: List<String>,
-    selectedTrackIds: Set<String>,
-): BooleanArray =
-    BooleanArray(armedTrackIdsInLaneOrder.size) { index ->
-        armedTrackIdsInLaneOrder[index] in selectedTrackIds
-    }

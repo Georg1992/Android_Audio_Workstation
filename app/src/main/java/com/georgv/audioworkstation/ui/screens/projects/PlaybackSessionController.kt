@@ -5,6 +5,8 @@ import com.georgv.audioworkstation.core.audio.GainRange
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.audibleTrackIds
+import com.georgv.audioworkstation.core.audio.shouldHotJoinTrackAtTransport
+import com.georgv.audioworkstation.core.audio.toHotJoinLaneSpec
 import com.georgv.audioworkstation.core.audio.isTrackLoadedInSessionLane
 import com.georgv.audioworkstation.core.audio.laneAudibilityFromSelection
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -137,12 +139,6 @@ class PlaybackSessionController(
             if (track.id in _preparingTrackIds.value) continue
             startHotJoinForTrack(track, selectedTrackIds)
         }
-    }
-
-    /** @deprecated Use [onSelectionChangedDuringPlayback]; kept for direct HJ.1-only callers in tests. */
-    fun syncLiveAudibilityFromSelection(selectedTrackIds: Set<String>) {
-        if (!_playbackSessionActive.value || !audioController.isPlaybackEngineRunning()) return
-        syncLaneAudibilityFromSelection(selectedTrackIds)
     }
 
     fun sessionLaneTrackIdsForTests(): Array<String?> = sessionLaneTrackIds.copyOf()
@@ -288,26 +284,29 @@ class PlaybackSessionController(
     }
 
     /**
-     * HJ.2 hot-join path: arms a one-shot lane from full track clip bounds.
-     * Loop region metadata is not forwarded — hot-joined tracks play once (MVP limitation).
+     * HJ.2 hot-join: arms a lane from track clip bounds and loop region metadata.
+     * Timeline placement is enforced by native render/ioLoop — lane may commit before clip start
+     * but stays silent until transport reaches [TrackEntity.timelineStartOffsetMs].
      */
     private fun startHotJoinForTrack(track: TrackEntity, selectedTrackIds: Set<String>) {
         val wavPath = track.wavFilePath
         if (wavPath.isBlank()) return
 
-        val clipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
-        val clipDurationMs = track.duration ?: 0L
         val transportMs = audioController.transportPositionMs()
-        if (clipDurationMs > 0L && transportMs >= clipStartMs + clipDurationMs) {
+        if (!shouldHotJoinTrackAtTransport(track, transportMs)) {
             return
         }
 
+        val laneSpec = track.toHotJoinLaneSpec()
         val laneIndex =
             audioController.beginHotJoinLane(
                 wavFilePath = wavPath,
                 gain = GainRange.toUnit(track.gain),
-                timelineClipStartMs = clipStartMs,
-                timelineClipDurationMs = clipDurationMs,
+                timelineClipStartMs = laneSpec.timelineClipStartMs,
+                timelineClipDurationMs = laneSpec.timelineClipDurationMs,
+                loopEnabled = laneSpec.loopEnabled,
+                loopSourceStartMs = laneSpec.loopSourceStartMs,
+                loopSourceEndMs = laneSpec.loopSourceEndMs,
             )
         if (laneIndex < 0) {
             onHotJoinFailed()

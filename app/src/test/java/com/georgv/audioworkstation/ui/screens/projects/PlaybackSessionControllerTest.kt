@@ -2,9 +2,10 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.MasterOutputMeterState
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
-import com.georgv.audioworkstation.core.audio.PlaybackSpec
+import com.georgv.audioworkstation.core.audio.TrackPlaybackLane
 import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -44,7 +45,11 @@ class PlaybackSessionControllerTest {
             channelMode = ChannelMode.MONO,
         )
 
-    private fun engineSpec() = PlaybackSpec(sampleRate = 48_000, wavFilePath = "a.wav", gain = 1f)
+    private fun engineSpec() =
+        MultiPlaybackSpec(
+            sampleRate = 48_000,
+            lanes = listOf(TrackPlaybackLane("a", "a.wav", 1f)),
+        )
 
     /** Matches [ProjectViewModel.onPlayPressed]: native start then [PlaybackSessionController.markPlayingAndStartCompletionMonitor]. */
     private suspend fun TestScope.armPlaybackMonitor(audio: PlaybackSessionTestAudio, sut: PlaybackSessionController) {
@@ -54,7 +59,7 @@ class PlaybackSessionControllerTest {
     }
 
     @Test
-    fun `syncLiveAudibility maps selection to armed lanes without restarting playback`() =
+    fun `onSelectionChangedDuringPlayback maps selection to armed lanes without restarting playback`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = PlaybackSessionTestAudio()
             val sut = PlaybackSessionController(
@@ -67,14 +72,14 @@ class PlaybackSessionControllerTest {
             armPlaybackMonitor(audio, sut)
             assertEquals("a", sut.sessionLaneTrackIdsForTests()[0])
 
-            sut.syncLiveAudibilityFromSelection(emptySet())
+            sut.onSelectionChangedDuringPlayback(emptySet(), emptyList())
             advanceUntilIdle()
             assertEquals(1, audio.startPlaybackCalls)
             val muted = audio.lastArmedLaneAudibility
             requireNotNull(muted)
             assertFalse(muted[0])
 
-            sut.syncLiveAudibilityFromSelection(setOf("a"))
+            sut.onSelectionChangedDuringPlayback(setOf("a"), emptyList())
             advanceUntilIdle()
             val restored = audio.lastArmedLaneAudibility
             requireNotNull(restored)
@@ -132,7 +137,7 @@ class PlaybackSessionControllerTest {
         }
 
     @Test
-    fun `syncLiveAudibility is no-op when playback is idle`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `onSelectionChangedDuringPlayback is no-op when playback is idle`() = runTest(mainDispatcherRule.dispatcher) {
         val audio = PlaybackSessionTestAudio()
         val sut = PlaybackSessionController(
             scope = this,
@@ -141,7 +146,7 @@ class PlaybackSessionControllerTest {
             currentProjectId = { PROJECT_ID },
             visibleTracks = { emptyList() },
         )
-        sut.syncLiveAudibilityFromSelection(setOf("a"))
+        sut.onSelectionChangedDuringPlayback(setOf("a"), emptyList())
         advanceUntilIdle()
         org.junit.Assert.assertNull(audio.lastArmedLaneAudibility)
     }
@@ -602,6 +607,80 @@ class PlaybackSessionControllerTest {
         }
 
     @Test
+    fun `hot join forwards loop metadata for loop track`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audio =
+                PlaybackSessionTestAudio(
+                    hotJoinLifecycleByLane =
+                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
+                ).apply {
+                    transportPositionMsValue = 35_000L
+                }
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { emptyList() },
+                )
+            armPlaybackMonitor(audio, sut)
+            val trackB =
+                track("b", loop = true, wav = "b.wav").copy(
+                    timelineStartOffsetMs = 30_000L,
+                    duration = 20_000L,
+                    loopStartMs = 0L,
+                    loopEndMs = 5_000L,
+                )
+            sut.onSelectionChangedDuringPlayback(
+                selectedTrackIds = setOf("a", "b"),
+                playableTracks = listOf(track("a", loop = false), trackB),
+            )
+            advanceUntilIdle()
+
+            assertEquals(1, audio.beginHotJoinCalls)
+            assertEquals(30_000L, audio.lastHotJoinClipStartMs)
+            assertTrue(audio.lastHotJoinLoopEnabled)
+            assertEquals(0L, audio.lastHotJoinLoopSourceStartMs)
+            assertEquals(5_000L, audio.lastHotJoinLoopSourceEndMs)
+            sut.cancelCompletionMonitorForTransportStop()
+        }
+
+    @Test
+    fun `hot join still starts for loop track before clip start`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audio =
+                PlaybackSessionTestAudio(
+                    hotJoinLifecycleByLane =
+                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
+                ).apply {
+                    transportPositionMsValue = 10_000L
+                }
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { emptyList() },
+                )
+            armPlaybackMonitor(audio, sut)
+            val trackB =
+                track("b", loop = true, wav = "b.wav").copy(
+                    timelineStartOffsetMs = 30_000L,
+                    duration = 20_000L,
+                )
+            sut.onSelectionChangedDuringPlayback(
+                selectedTrackIds = setOf("a", "b"),
+                playableTracks = listOf(track("a", loop = false), trackB),
+            )
+            advanceUntilIdle()
+
+            assertEquals(1, audio.beginHotJoinCalls)
+            sut.cancelCompletionMonitorForTransportStop()
+        }
+
+    @Test
     fun `hot join starts before clip start for silent pre clip region`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio =
@@ -699,7 +778,7 @@ class PlaybackSessionControllerTest {
                     visibleTracks = { emptyList() },
                 )
             armPlaybackMonitor(audio, sut)
-            sut.syncLiveAudibilityFromSelection(emptySet())
+            sut.onSelectionChangedDuringPlayback(emptySet(), emptyList())
             advanceUntilIdle()
 
             assertEquals("a", sut.sessionLaneTrackIdsForTests()[0])
@@ -757,6 +836,10 @@ private class PlaybackSessionTestAudio(
     override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
     override val recordingInputLevel: StateFlow<Float> = MutableStateFlow(0f)
 
+    override fun readMasterPeakHoldLinear(): Float = 0f
+
+    override fun resetMasterPeakHold() = Unit
+
     var transportPositionMsValue: Long = 0L
 
     override fun transportPositionMs(): Long = transportPositionMsValue
@@ -771,14 +854,6 @@ private class PlaybackSessionTestAudio(
 
     override fun stopRecording(): Boolean = true
 
-    override fun startPlayback(spec: PlaybackSpec): Boolean {
-        startPlaybackCalls += 1
-        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
-        val playing = permitted && startPlaybackResult
-        _playbackState.value = playing
-        return playing
-    }
-
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
         startPlaybackCalls += 1
         lastMultiPlaybackSpec = spec
@@ -787,8 +862,6 @@ private class PlaybackSessionTestAudio(
         _playbackState.value = playing
         return playing
     }
-
-    override fun setPlaybackGain(gain: Float) = Unit
 
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
 
@@ -813,16 +886,25 @@ private class PlaybackSessionTestAudio(
 
     var lastHotJoinClipStartMs: Long = 0L
     var lastHotJoinClipDurationMs: Long = 0L
+    var lastHotJoinLoopEnabled: Boolean = false
+    var lastHotJoinLoopSourceStartMs: Long = 0L
+    var lastHotJoinLoopSourceEndMs: Long = 0L
 
     override fun beginHotJoinLane(
         wavFilePath: String,
         gain: Float,
         timelineClipStartMs: Long,
         timelineClipDurationMs: Long,
+        loopEnabled: Boolean,
+        loopSourceStartMs: Long,
+        loopSourceEndMs: Long,
     ): Int {
         beginHotJoinCalls += 1
         lastHotJoinClipStartMs = timelineClipStartMs
         lastHotJoinClipDurationMs = timelineClipDurationMs
+        lastHotJoinLoopEnabled = loopEnabled
+        lastHotJoinLoopSourceStartMs = loopSourceStartMs
+        lastHotJoinLoopSourceEndMs = loopSourceEndMs
         return 1
     }
 

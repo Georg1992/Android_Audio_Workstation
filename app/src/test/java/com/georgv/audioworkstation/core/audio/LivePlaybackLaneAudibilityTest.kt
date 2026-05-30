@@ -8,26 +8,26 @@ import org.junit.Test
 class LivePlaybackLaneAudibilityTest {
 
     @Test
-    fun `armed lane audibility follows selection for armed tracks only`() {
-        val armed = listOf("a", "b", "c")
+    fun `lane audibility follows selection for loaded session lanes`() {
+        val lanes = arrayOf<String?>("a", "b", "c")
         assertArrayEquals(
             booleanArrayOf(true, true, false),
-            armedLaneAudibilityFromSelection(armed, setOf("a", "b")),
+            laneAudibilityFromSelection(lanes, setOf("a", "b")),
         )
     }
 
     @Test
     fun `non-armed selection does not appear in lane audibility array`() {
-        val armed = listOf("a")
-        val audibility = armedLaneAudibilityFromSelection(armed, setOf("a", "z"))
+        val lanes = arrayOf<String?>("a")
+        val audibility = laneAudibilityFromSelection(lanes, setOf("a", "z"))
         org.junit.Assert.assertEquals(1, audibility.size)
         assertTrue(audibility[0])
     }
 
     @Test
-    fun `deselecting armed lane marks lane inaudible`() {
+    fun `deselecting loaded lane marks lane inaudible`() {
         val audibility =
-            armedLaneAudibilityFromSelection(listOf("a", "b"), setOf("b"))
+            laneAudibilityFromSelection(arrayOf<String?>("a", "b"), setOf("b"))
         assertFalse(audibility[0])
         assertTrue(audibility[1])
     }
