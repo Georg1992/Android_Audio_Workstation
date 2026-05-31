@@ -82,7 +82,7 @@ class NativeEngine @Inject constructor() {
     }
 
     fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
-        PlaybackLaneLifecycle.entries[nativeGetPlaybackLaneLifecycle(laneIndex).toInt()]
+        PlaybackLaneLifecycle.entries[nativeGetPlaybackLaneLifecycle(laneIndex)]
 
     fun isPlaybackActive(): Boolean = nativeIsPlaybackActive()
 

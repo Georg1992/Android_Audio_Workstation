@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.components
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -14,6 +15,7 @@ import org.junit.Test
 import java.io.File
 import java.io.FileOutputStream
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WavWaveformPeakExtractorTest {
 
     @Test

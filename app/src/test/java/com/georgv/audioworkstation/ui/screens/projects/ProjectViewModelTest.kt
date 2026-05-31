@@ -3759,7 +3759,7 @@ internal class FakeAudioController(
         lastRecordingSpec = spec
         transportPositionMsValue = spec.timelineStartOffsetMs
         if (startRecordingPath == null) return null
-        return outputPath ?: startRecordingPath?.replace("default", spec.trackId)
+        return outputPath ?: startRecordingPath.replace("default", spec.trackId)
     }
 
     override fun stopRecording(): Boolean {

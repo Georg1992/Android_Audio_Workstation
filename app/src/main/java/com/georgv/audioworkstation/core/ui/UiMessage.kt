@@ -11,8 +11,8 @@ import androidx.annotation.StringRes
  * Android `Context`/`Resources` lookups — this is what makes the JVM unit tests still trivial.
  */
 data class UiMessage(
-    @StringRes val resId: Int,
-    val args: List<Any> = emptyList()
+    @param:StringRes val resId: Int,
+    val args: List<Any> = emptyList(),
 ) {
     constructor(@StringRes resId: Int, vararg args: Any) : this(resId, args.toList())
 }

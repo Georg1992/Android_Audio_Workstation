@@ -1,13 +1,12 @@
 package com.georgv.audioworkstation
 
 import android.os.Bundle
-import android.view.Window
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.core.view.WindowCompat
 import com.georgv.audioworkstation.ui.AppRoot
 import com.georgv.audioworkstation.ui.theme.AppColors
 import dagger.hilt.android.AndroidEntryPoint
@@ -19,21 +18,14 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        window.applyAppChromeBars(AppColors.Bg)
+        val barArgb = AppColors.Bg.toArgb()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(barArgb, barArgb),
+            navigationBarStyle = SystemBarStyle.light(barArgb, barArgb),
+        )
 
         setContent {
             AppRoot()
-        }
-    }
-
-    /** System bars track [AppColors.Bg]; light appearance → dark icons (aligned with Line on shell). */
-    private fun Window.applyAppChromeBars(bg: Color) {
-        val argb = bg.toArgb()
-        statusBarColor = argb
-        navigationBarColor = argb
-        WindowCompat.getInsetsController(this, decorView)?.apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
         }
     }
 }
