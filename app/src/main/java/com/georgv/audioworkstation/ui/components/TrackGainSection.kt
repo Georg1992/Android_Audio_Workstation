@@ -31,6 +31,8 @@ fun TrackGainSection(
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)?,
     enabled: Boolean,
+    onGainDragStart: (() -> Unit)? = null,
+    onGainDragEnd: (() -> Unit)? = null,
     fillTrackHeight: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -58,6 +60,8 @@ fun TrackGainSection(
                 onValueChangeFinished = {
                     onGainCommit?.invoke(displayGain)
                 },
+                onDragStart = onGainDragStart,
+                onDragEnd = onGainDragEnd,
                 valueRange = GainRange.Range,
                 enabled = enabled,
                 modifier = Modifier
@@ -98,6 +102,8 @@ fun TrackGainSection(
             onValueChangeFinished = {
                 onGainCommit?.invoke(displayGain)
             },
+            onDragStart = onGainDragStart,
+            onDragEnd = onGainDragEnd,
             valueRange = GainRange.Range,
             enabled = enabled,
             modifier = Modifier

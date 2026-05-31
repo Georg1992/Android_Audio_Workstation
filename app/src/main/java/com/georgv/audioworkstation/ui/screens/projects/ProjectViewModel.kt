@@ -817,12 +817,15 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Live pan while the knob is dragged: pushes to the audio engine only.
+     * UI state stays in [TrackPanKnob] until [commitTrackPan] on release.
+     */
     fun setTrackPan(trackId: String, pan: Float) {
         if (!uiState.value.tracks.any { it.id == trackId }) {
             return
         }
         val clamped = PanRange.clamp(pan)
-        optimisticTrackPans.value = optimisticTrackPans.value + (trackId to clamped)
         if (!playbackSession.hasActivePlaybackSession() || !audioController.isPlaybackEngineRunning()) {
             return
         }
@@ -834,8 +837,10 @@ class ProjectViewModel @Inject constructor(
         val currentTrack = projectTracks.value.find { it.id == trackId } ?: return
         val clamped = PanRange.clamp(pan)
         if (clamped == currentTrack.pan) {
+            optimisticTrackPans.value = optimisticTrackPans.value - trackId
             return
         }
+        optimisticTrackPans.value = optimisticTrackPans.value + (trackId to clamped)
         val updatedTrack = currentTrack.copy(pan = clamped)
         viewModelScope.launch {
             dbActions.run(R.string.error_pan_update_failed) {

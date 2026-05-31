@@ -70,6 +70,9 @@ fun TrackCard(
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
+    gainFaderEnabled: Boolean = true,
+    onGainDragStart: (() -> Unit)? = null,
+    onGainDragEnd: (() -> Unit)? = null,
     pan: Float = 0f,
     onPanChange: ((Float) -> Unit)? = null,
     onPanCommit: ((Float) -> Unit)? = null,
@@ -152,7 +155,8 @@ fun TrackCard(
     }
 
     val isolateTimelineTouch = isLoop && timelineClip != null && !dragPreview
-    val cardSelectionClickEnabled = !interactionBlocked && !isRenaming && !dragPreview
+    val cardSelectionClickEnabled =
+        !interactionBlocked && !isRenaming && !dragPreview
     val cardSelectionInteractionSource = remember { MutableInteractionSource() }
     val onCardSelectionClick = {
         if (isMenuOpen) {
@@ -235,7 +239,7 @@ fun TrackCard(
                                     Modifier
                                 },
                             ),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Bottom,
                 ) {
                     if (!dragPreview && isRenaming) {
                         TextField(
@@ -476,7 +480,10 @@ fun TrackCard(
                         pan = pan,
                         onPanChange = if (dragPreview) null else onPanChange,
                         onPanCommit = if (dragPreview) null else onPanCommit,
-                        enabled = !dragPreview && !interactionBlocked && onPanChange != null,
+                        enabled =
+                            !dragPreview &&
+                                !interactionBlocked &&
+                                onPanChange != null,
                     )
                 }
 
@@ -537,7 +544,13 @@ fun TrackCard(
                         gain = gain,
                         onGainChange = if (dragPreview) null else onGainChange,
                         onGainCommit = if (dragPreview) null else onGainCommit,
-                        enabled = !dragPreview && !interactionBlocked && onGainChange != null,
+                        enabled =
+                            !dragPreview &&
+                                !interactionBlocked &&
+                                onGainChange != null &&
+                                gainFaderEnabled,
+                        onGainDragStart = if (dragPreview) null else onGainDragStart,
+                        onGainDragEnd = if (dragPreview) null else onGainDragEnd,
                         fillTrackHeight = true,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -547,7 +560,13 @@ fun TrackCard(
                     gain = gain,
                     onGainChange = if (dragPreview) null else onGainChange,
                     onGainCommit = if (dragPreview) null else onGainCommit,
-                    enabled = !dragPreview && !interactionBlocked && onGainChange != null,
+                    enabled =
+                        !dragPreview &&
+                            !interactionBlocked &&
+                            onGainChange != null &&
+                            gainFaderEnabled,
+                    onGainDragStart = if (dragPreview) null else onGainDragStart,
+                    onGainDragEnd = if (dragPreview) null else onGainDragEnd,
                 )
             }
         }

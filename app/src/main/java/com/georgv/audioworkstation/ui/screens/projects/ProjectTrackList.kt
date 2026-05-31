@@ -122,6 +122,7 @@ fun ProjectTrackList(
     var nextSettleUid by remember { mutableLongStateOf(1L) }
 
     var openOverflowMenuTrackId by remember { mutableStateOf<String?>(null) }
+    var activeGainDragTrackId by remember { mutableStateOf<String?>(null) }
 
     val tracksSnap by rememberUpdatedState(tracks)
 
@@ -133,7 +134,10 @@ fun ProjectTrackList(
     val reorderActive = dragController.isDragging
     val trackActionsEnabled = trackActionsEnabled(playbackActive)
     LaunchedEffect(listInteractionLocked, trackActionsEnabled) {
-        if (listInteractionLocked || !trackActionsEnabled) openOverflowMenuTrackId = null
+        if (listInteractionLocked || !trackActionsEnabled) {
+            openOverflowMenuTrackId = null
+            activeGainDragTrackId = null
+        }
     }
 
     Box(modifier = modifier.fillMaxWidth()) {
@@ -376,6 +380,16 @@ fun ProjectTrackList(
                                 onDeleteTrack = onDeleteTrack,
                                 onGainChange = onGainChange,
                                 onGainCommit = onGainCommit,
+                                gainFaderEnabled =
+                                    activeGainDragTrackId == null || activeGainDragTrackId == track.id,
+                                onGainDragStart = { trackId ->
+                                    activeGainDragTrackId = trackId
+                                },
+                                onGainDragEnd = { trackId ->
+                                    if (activeGainDragTrackId == trackId) {
+                                        activeGainDragTrackId = null
+                                    }
+                                },
                                 onPanChange = onPanChange,
                                 onPanCommit = onPanCommit,
                                 onRenameTrack = onRenameTrack,

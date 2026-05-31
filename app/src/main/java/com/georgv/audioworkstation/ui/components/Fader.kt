@@ -56,6 +56,8 @@ fun Fader(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     onValueChangeFinished: (() -> Unit)? = null,
+    onDragStart: (() -> Unit)? = null,
+    onDragEnd: (() -> Unit)? = null,
     valueRange: ClosedFloatingPointRange<Float> = GainRange.Range,
     enabled: Boolean = true,
     trackWidth: Dp = Dimens.FaderTrackWidth,
@@ -82,6 +84,8 @@ fun Fader(
     var lastHeightPx by remember { mutableFloatStateOf(0f) }
     val latestOnValueChange by rememberUpdatedState(onValueChange)
     val latestOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
+    val latestOnDragStart by rememberUpdatedState(onDragStart)
+    val latestOnDragEnd by rememberUpdatedState(onDragEnd)
 
     fun clamp(v: Float) = v.coerceIn(valueRange.start, valueRange.endInclusive)
 
@@ -150,6 +154,7 @@ fun Fader(
                     down.consume()
                     pendingCommittedLocal = null
                     isDragging = true
+                    latestOnDragStart?.invoke()
                     val initialValue = yToValue(down.position.y, h)
                     localValue = initialValue
                     latestOnValueChange(initialValue)
@@ -172,6 +177,7 @@ fun Fader(
                             pendingCommittedLocal = clamp(localValue)
                         }
                         latestOnValueChangeFinished?.invoke()
+                        latestOnDragEnd?.invoke()
                     }
                 }
             }
