@@ -30,9 +30,10 @@ object Dimens {
     val LangChipRadius = 6.dp
 
     // track card (layout policy also drives project list row height — see projectTrackLayoutSpec)
-    val MenuButtonSize = 40.dp
-    /** Loop + overflow menu on track cards (30% smaller than [MenuButtonSize]). */
     val TrackHeaderButtonSize = 28.dp
+    val TrackActionLedSize = 3.dp
+    val TrackActionLedInset = 3.dp
+    val TrackActionIconGlowBlur = 5.dp
     val PlaceholderHeight = 56.dp
     val FaderWidth = 40.dp
     val FaderMinHeight = 100.dp
@@ -58,7 +59,6 @@ object Dimens {
     val DragHandleTouchTargetSize = 30.dp
 
     // glow effect (reusable "bulb" halo around icons/buttons)
-    val GlowBlur = 10.dp
     // spacing between adjacent icons so their glows don't cross into each other
     val IconGlowSpacing = 12.dp
 

@@ -40,7 +40,6 @@ private val LoopRegionHandleLineWidthDp = 1.dp
 private val LoopRegionHandleTriangleWidthDp = 10.dp
 private val LoopRegionHandleTriangleHeightDp = 8.dp
 private val LoopRegionHandleHitWidthDp = 28.dp
-private const val LoopRegionFillAlpha = 0.38f
 
 private enum class LoopRegionHandleSide {
     Start,
@@ -338,7 +337,7 @@ fun LoopRegionEditor(
                     .offset(x = regionOffset)
                     .width(regionWidth)
                     .fillMaxHeight()
-                    .background(AppColors.Green.copy(alpha = LoopRegionFillAlpha)),
+                    .background(AppColors.LoopRegionFill),
         )
         if (editingEnabled) {
             LoopRegionEdgeHandle(
@@ -368,7 +367,7 @@ private fun LoopRegionEdgeHandle(
     val lineWidthPx = with(density) { LoopRegionHandleLineWidthDp.toPx() }
     val triangleWidthPx = with(density) { LoopRegionHandleTriangleWidthDp.toPx() }
     val triangleHeightPx = with(density) { LoopRegionHandleTriangleHeightDp.toPx() }
-    val handleColor = AppColors.GreenDark
+    val handleColor = AppColors.Line
     val lineX =
         when (side) {
             LoopRegionHandleSide.Start -> triangleWidthPx

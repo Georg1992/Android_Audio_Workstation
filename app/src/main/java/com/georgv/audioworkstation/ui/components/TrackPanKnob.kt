@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -35,6 +36,7 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -46,6 +48,8 @@ private const val FullCircleDegrees = 360f
 /** A full -1..+1 sweep takes roughly this many knob widths of drag distance. */
 private const val PanKnobWidthsForFullSpan = 5f
 private val PanKnobValueLineHeight = 7.sp
+
+private fun panKnobCenterRelativeDegrees(): Float = PanKnobSweepDegrees * 0.5f
 
 private fun panKnobEndDegrees(): Float = (PanKnobStartDegrees + PanKnobSweepDegrees) % FullCircleDegrees
 
@@ -96,8 +100,6 @@ fun TrackPanKnob(
     onPanChange: ((Float) -> Unit)?,
     onPanCommit: ((Float) -> Unit)?,
     enabled: Boolean,
-    onPanDragStart: (() -> Unit)? = null,
-    onPanDragEnd: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var dragPan by remember { mutableStateOf<Float?>(null) }
@@ -128,8 +130,6 @@ fun TrackPanKnob(
     val panPerPixel = if (knobSizePx > 0f) 2f / (knobSizePx * PanKnobWidthsForFullSpan) else 0f
     val latestOnPanChange by rememberUpdatedState(onPanChange)
     val latestOnPanCommit by rememberUpdatedState(onPanCommit)
-    val latestOnPanDragStart by rememberUpdatedState(onPanDragStart)
-    val latestOnPanDragEnd by rememberUpdatedState(onPanDragEnd)
 
     Column(
         modifier =
@@ -145,13 +145,11 @@ fun TrackPanKnob(
                                     PanRange.snapToIndicatorStep(dragPan ?: currentPan),
                                 )
                                 dragPan = null
-                                latestOnPanDragEnd?.invoke()
                             }
                             detectDragGestures(
                                 onDragStart = {
                                     dragPan = currentPan
                                     lastEmittedSnap = PanRange.snapToIndicatorStep(currentPan)
-                                    latestOnPanDragStart?.invoke()
                                 },
                                 onDragEnd = commitDrag,
                                 onDragCancel = commitDrag,
@@ -192,11 +190,12 @@ fun TrackPanKnob(
                     radius = radius,
                     center = center,
                 )
+                val ringStroke = Stroke(width = stroke, cap = StrokeCap.Round)
                 drawCircle(
                     color = AppColors.Line,
                     radius = radius,
                     center = center,
-                    style = Stroke(width = stroke),
+                    style = ringStroke,
                 )
                 val tickCount = 11
                 val tickInner = radius - 0.5f
@@ -214,6 +213,35 @@ fun TrackPanKnob(
                             center + Offset(cos(tickAngle) * tickOuter, sin(tickAngle) * tickOuter),
                         strokeWidth = 1f,
                         cap = StrokeCap.Round,
+                    )
+                }
+                val centerRelativeDeg = panKnobCenterRelativeDegrees()
+                val indicatorRelativeDeg = panToRelativeDegrees(displayPan)
+                val panArcSweepDeg = abs(indicatorRelativeDeg - centerRelativeDeg)
+                if (panArcSweepDeg > 0.05f) {
+                    val arcStartDeg =
+                        PanKnobStartDegrees + minOf(centerRelativeDeg, indicatorRelativeDeg)
+                    val panArcBounds =
+                        Offset(center.x - radius, center.y - radius) to Size(radius * 2f, radius * 2f)
+                    val panArcHaloStroke = Stroke(width = stroke + 2f, cap = StrokeCap.Round)
+                    val panArcStroke = Stroke(width = stroke + 1f, cap = StrokeCap.Round)
+                    drawArc(
+                        color = AppColors.Line,
+                        startAngle = arcStartDeg,
+                        sweepAngle = panArcSweepDeg,
+                        useCenter = false,
+                        topLeft = panArcBounds.first,
+                        size = panArcBounds.second,
+                        style = panArcHaloStroke,
+                    )
+                    drawArc(
+                        color = AppColors.Cyan,
+                        startAngle = arcStartDeg,
+                        sweepAngle = panArcSweepDeg,
+                        useCenter = false,
+                        topLeft = panArcBounds.first,
+                        size = panArcBounds.second,
+                        style = panArcStroke,
                     )
                 }
                 val indicatorAngle = panToIndicatorAngleRad(displayPan)

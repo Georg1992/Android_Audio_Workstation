@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 
 object AppColors {
 
@@ -16,8 +17,10 @@ object AppColors {
 
     // Accent palette
     val Green = Color(0xFF02FC57)
-    /** Loop region handle lines and markers. */
-    val GreenDark = Color(0xFF006B28)
+    /** Loop region overlay tint on the timeline waveform. */
+    val LoopRegionFill = Green.copy(alpha = Alphas.LoopRegionFill)
+    /** Opaque loop tint for header buttons — matches [LoopRegionFill] on [SurfacePanel]. */
+    val LoopButtonActiveBackground = lerp(SurfacePanel, Green, Alphas.LoopRegionFill)
     val Yellow = Color(0xFFFDFF1F)
     val Cyan = Color(0xFF00FFF6)
     val Pink = Color(0xFFFFD2FF)
@@ -52,4 +55,18 @@ object Alphas {
     const val HandleIdle = 0.35f
     /** Reorder handle, active. */
     const val HandleActive = 0.85f
+    /** Track header action button — pressed scale target. */
+    const val TrackActionPressedScale = 0.95f
+    /** Idle chrome border. */
+    const val TrackActionBorderIdle = 0.22f
+    /** Active chrome border. */
+    const val TrackActionBorderActive = 0.52f
+    /** Pressed chrome border. */
+    const val TrackActionBorderPressed = 0.38f
+    /** Idle icon tint. */
+    const val TrackActionIconIdle = 0.38f
+    /** Active icon inner glow peak. */
+    const val TrackActionIconGlow = 0.42f
+    /** Loop region overlay fill alpha. */
+    const val LoopRegionFill = 0.38f
 }

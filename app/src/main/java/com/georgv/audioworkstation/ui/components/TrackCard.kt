@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -125,7 +124,6 @@ fun TrackCard(
     val focusRequester = remember(trackId) { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val buttonShape = RoundedCornerShape(Dimens.MediumRadius)
 
     val showHandle =
         !dragPreview && trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
@@ -311,36 +309,24 @@ fun TrackCard(
                                 trackActionsEnabled &&
                                 !interactionBlocked &&
                                 !isRenaming
-                        Box(
-                            modifier = Modifier
-                                .width(Dimens.TrackHeaderButtonSize)
-                                .height(Dimens.TrackHeaderButtonSize)
-                                .then(
-                                    if (isRecordTarget) Modifier.glow(
-                                        color = AppColors.Red,
-                                        blurRadius = Dimens.GlowBlur,
-                                        cornerRadius = Dimens.MediumRadius
-                                    ) else Modifier
-                                )
-                                .clip(buttonShape)
-                                .alpha(if ((recordTargetToggleEnabled && trackActionsEnabled) || dragPreview) 1f else 0.45f)
-                                .background(if (isRecordTarget) AppColors.Red else AppColors.Bg)
-                                .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                                .then(
-                                    if (recordTargetInteractive) {
-                                        Modifier.clickable { toggleRecordTarget.invoke() }
-                                    } else {
-                                        Modifier
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.FiberManualRecord,
-                                contentDescription = stringResource(
-                                    if (isRecordTarget) R.string.cd_record_target_on else R.string.cd_record_target_off
-                                ),
-                                tint = if (isRecordTarget) AppColors.Line else AppColors.Line
+                        TrackActionButton(
+                            active = isRecordTarget,
+                            enabled = recordTargetInteractive,
+                            accentColor = AppColors.Red,
+                            activeBorderColor = AppColors.Line,
+                            onClick = { toggleRecordTarget?.invoke() },
+                        ) { iconTint ->
+                            RecordTargetButtonIcon(
+                                active = isRecordTarget,
+                                tint = iconTint,
+                                contentDescription =
+                                    stringResource(
+                                        if (isRecordTarget) {
+                                            R.string.cd_record_target_on
+                                        } else {
+                                            R.string.cd_record_target_off
+                                        }
+                                    ),
                             )
                         }
                         Spacer(Modifier.width(Dimens.IconGlowSpacing))
@@ -355,36 +341,23 @@ fun TrackCard(
                                 trackActionsEnabled &&
                                 !interactionBlocked &&
                                 !isRenaming
-                        Box(
-                            modifier = Modifier
-                                .width(Dimens.TrackHeaderButtonSize)
-                                .height(Dimens.TrackHeaderButtonSize)
-                                .then(
-                                    if (isLoop) Modifier.glow(
-                                        color = AppColors.Accent,
-                                        blurRadius = Dimens.GlowBlur,
-                                        cornerRadius = Dimens.MediumRadius
-                                    ) else Modifier
-                                )
-                                .clip(buttonShape)
-                                .alpha(if ((loopToggleEnabled && trackActionsEnabled) || dragPreview) 1f else 0.45f)
-                                .background(if (isLoop) AppColors.Accent else AppColors.Bg)
-                                .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                                .then(
-                                    if (loopInteractive) {
-                                        Modifier.clickable { toggleLoop.invoke() }
-                                    } else {
-                                        Modifier
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        TrackActionButton(
+                            active = isLoop,
+                            enabled = loopInteractive,
+                            accentColor = AppColors.Accent,
+                            activeBackgroundColor = AppColors.LoopButtonActiveBackground,
+                            activeBorderColor = AppColors.Line,
+                            activeIconColor = AppColors.Line,
+                            showActiveGlow = false,
+                            showActiveLed = false,
+                            onClick = { toggleLoop?.invoke() },
+                        ) { iconTint ->
                             Icon(
                                 imageVector = Icons.Filled.Loop,
                                 contentDescription = stringResource(
                                     if (isLoop) R.string.cd_loop_on else R.string.cd_loop_off
                                 ),
-                                tint = if (isLoop) AppColors.Red else AppColors.Line
+                                tint = iconTint,
                             )
                         }
                         Spacer(Modifier.width(Dimens.IconGlowSpacing))
@@ -392,62 +365,38 @@ fun TrackCard(
 
                     val menuDropdownShape = RoundedCornerShape(Dimens.TileRadius)
                     Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .width(Dimens.TrackHeaderButtonSize)
-                                    .height(Dimens.TrackHeaderButtonSize)
-                                    .then(
-                                        if (!dragPreview && trackActionsEnabled && isMenuOpen) {
-                                            Modifier.glow(
-                                                color = AppColors.Accent,
-                                                blurRadius = Dimens.GlowBlur,
-                                                cornerRadius = Dimens.MediumRadius
-                                            )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .clip(buttonShape)
-                                    .alpha(if (trackActionsEnabled || dragPreview) 1f else 0.45f)
-                                    .background(
-                                        if (!dragPreview && trackActionsEnabled && isMenuOpen) {
-                                            AppColors.Accent
-                                        } else {
-                                            AppColors.Bg
-                                        }
-                                    )
-                                    .border(Dimens.Stroke, AppColors.Line, buttonShape)
-                                    .then(
-                                        if (trackMenuClickDisabled(
-                                                dragPreview,
-                                                interactionBlocked,
-                                                trackActionsEnabled,
-                                                isRenaming,
-                                            )
-                                        ) {
-                                            Modifier
-                                        } else {
-                                            Modifier.clickable {
-                                                if (isMenuOpen) {
-                                                    onMenuDismiss()
-                                                } else {
-                                                    onMenuOpen()
-                                                }
-                                            }
-                                        }
-                                    ),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                        TrackActionButton(
+                            active = false,
+                            enabled =
+                                !trackMenuClickDisabled(
+                                    dragPreview,
+                                    interactionBlocked,
+                                    trackActionsEnabled,
+                                    isRenaming,
+                                ),
+                            accentColor = AppColors.Accent,
+                            backgroundOverride =
+                                if (!dragPreview && trackActionsEnabled && isMenuOpen) {
+                                    AppColors.SurfacePressed
+                                } else {
+                                    null
+                                },
+                            borderColor = AppColors.Line,
+                            idleIconColor = AppColors.Line,
+                            showActiveGlow = false,
+                            showActiveLed = false,
+                            onClick = {
+                                if (isMenuOpen) {
+                                    onMenuDismiss()
+                                } else {
+                                    onMenuOpen()
+                                }
+                            },
+                        ) { iconTint ->
                             Icon(
                                 imageVector = Icons.Filled.MoreVert,
                                 contentDescription = stringResource(R.string.cd_track_menu),
-                                tint =
-                                    if (!dragPreview && trackActionsEnabled && isMenuOpen) {
-                                        AppColors.Red
-                                    } else {
-                                        AppColors.Line
-                                    }
+                                tint = iconTint,
                             )
                         }
                         DropdownMenu(
