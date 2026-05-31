@@ -289,6 +289,19 @@ fun TrackCard(
                         )
                     }
 
+                    if (!isRenaming) {
+                        TrackPanKnob(
+                            pan = pan,
+                            onPanChange = if (dragPreview) null else onPanChange,
+                            onPanCommit = if (dragPreview) null else onPanCommit,
+                            enabled =
+                                !dragPreview &&
+                                    !interactionBlocked &&
+                                    onPanChange != null,
+                        )
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
+                    }
+
                     if (showRecordTargetChrome) {
                         val toggleRecordTarget = onToggleRecordTarget
                         val recordTargetInteractive =
@@ -474,17 +487,6 @@ fun TrackCard(
                             )
                         }
                     }
-
-                    Spacer(Modifier.width(Dimens.IconGlowSpacing))
-                    TrackPanKnob(
-                        pan = pan,
-                        onPanChange = if (dragPreview) null else onPanChange,
-                        onPanCommit = if (dragPreview) null else onPanCommit,
-                        enabled =
-                            !dragPreview &&
-                                !interactionBlocked &&
-                                onPanChange != null,
-                    )
                 }
 
                 Spacer(Modifier.height(Dimens.PanelPadding))

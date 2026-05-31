@@ -5,6 +5,7 @@ import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
 import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import kotlin.math.roundToInt
 
 enum class ChannelMode {
     MONO,
@@ -34,9 +35,19 @@ object PanRange {
     const val Min = -1f
     const val Max = 1f
     const val Center = 0f
+    /** Pan knob indicator detents from center to full L/R. */
+    const val IndicatorStep = 0.1f
     val Range: ClosedFloatingPointRange<Float> = Min..Max
 
     fun clamp(value: Float): Float = value.coerceIn(Min, Max)
+
+    /** Snaps pan to [IndicatorStep] increments for the knob arrow (0, ±0.1, ±0.2, … ±1). */
+    fun snapToIndicatorStep(value: Float): Float {
+        val clamped = clamp(value)
+        if (clamped == 0f) return Center
+        val stepped = (clamped / IndicatorStep).roundToInt() * IndicatorStep
+        return clamp(stepped)
+    }
 
     fun label(pan: Float): String =
         when {
@@ -45,9 +56,18 @@ object PanRange {
             else -> "R"
         }
 
+    /** Knob readout: C at center, L/R at extremes, otherwise 0.1L–0.9L or 0.1R–0.9R. */
     fun formatValue(pan: Float): String {
         val clamped = clamp(pan)
-        return if (clamped == 0f) "0.0" else String.format("%+.1f", clamped)
+        if (clamped == 0f) return "C"
+        val tenths = (kotlin.math.abs(clamped) * 10f).roundToInt().coerceAtMost(10) / 10f
+        if (tenths == 0f) return "C"
+        if (tenths >= 1f) return if (clamped < 0f) "L" else "R"
+        return if (clamped < 0f) {
+            String.format("%.1fL", tenths)
+        } else {
+            String.format("%.1fR", tenths)
+        }
     }
 }
 

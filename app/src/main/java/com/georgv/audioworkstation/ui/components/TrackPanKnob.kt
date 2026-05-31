@@ -100,10 +100,9 @@ fun TrackPanKnob(
     onPanDragEnd: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    // Local override while the finger is down; null means "follow the external pan value".
     var dragPan by remember { mutableStateOf<Float?>(null) }
-    val displayPan = dragPan ?: PanRange.clamp(pan)
-    // pointerInput runs once, so the gesture needs the live pan to seed each new drag.
+    val continuousPan = dragPan ?: PanRange.clamp(pan)
+    val displayPan = PanRange.snapToIndicatorStep(continuousPan)
     val currentPan by rememberUpdatedState(PanRange.clamp(pan))
 
     val label = PanRange.label(displayPan)
@@ -127,6 +126,10 @@ fun TrackPanKnob(
         )
     val panGestureEnabled = enabled && onPanChange != null
     val panPerPixel = if (knobSizePx > 0f) 2f / (knobSizePx * PanKnobWidthsForFullSpan) else 0f
+    val latestOnPanChange by rememberUpdatedState(onPanChange)
+    val latestOnPanCommit by rememberUpdatedState(onPanCommit)
+    val latestOnPanDragStart by rememberUpdatedState(onPanDragStart)
+    val latestOnPanDragEnd by rememberUpdatedState(onPanDragEnd)
 
     Column(
         modifier =
@@ -136,27 +139,35 @@ fun TrackPanKnob(
                 .then(
                     if (panGestureEnabled) {
                         Modifier.pointerInput(Unit) {
+                            var lastEmittedSnap = PanRange.snapToIndicatorStep(currentPan)
                             val commitDrag: () -> Unit = {
-                                onPanCommit?.invoke(dragPan ?: currentPan)
+                                latestOnPanCommit?.invoke(
+                                    PanRange.snapToIndicatorStep(dragPan ?: currentPan),
+                                )
                                 dragPan = null
-                                onPanDragEnd?.invoke()
+                                latestOnPanDragEnd?.invoke()
                             }
                             detectDragGestures(
                                 onDragStart = {
                                     dragPan = currentPan
-                                    onPanDragStart?.invoke()
+                                    lastEmittedSnap = PanRange.snapToIndicatorStep(currentPan)
+                                    latestOnPanDragStart?.invoke()
                                 },
                                 onDragEnd = commitDrag,
                                 onDragCancel = commitDrag,
                             ) { change, dragAmount ->
                                 change.consume()
-                                // Virtual-knob delta: right and up increase, left and down decrease.
                                 val knobDelta = dragAmount.x - dragAmount.y
                                 val nextPan =
-                                    ((dragPan ?: currentPan) + knobDelta * panPerPixel)
-                                        .coerceIn(PanRange.Min, PanRange.Max)
+                                    PanRange.clamp(
+                                        (dragPan ?: currentPan) + knobDelta * panPerPixel,
+                                    )
                                 dragPan = nextPan
-                                onPanChange?.invoke(nextPan)
+                                val snapped = PanRange.snapToIndicatorStep(nextPan)
+                                if (snapped != lastEmittedSnap) {
+                                    lastEmittedSnap = snapped
+                                    latestOnPanChange?.invoke(snapped)
+                                }
                             }
                         }
                     } else {
@@ -171,9 +182,7 @@ fun TrackPanKnob(
             lineHeight = PanKnobValueLineHeight,
             maxLines = 1,
         )
-        Box(
-            modifier = Modifier.size(knobSize),
-        ) {
+        Box(modifier = Modifier.size(knobSize)) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val stroke = Dimens.Stroke.toPx().coerceAtLeast(1f)
                 val radius = size.minDimension / 2f - stroke - 2f
@@ -228,13 +237,13 @@ fun TrackPanKnob(
                 )
             }
             PanSweepEndpointLabel(
-                text = "-1",
+                text = "L",
                 degrees = PanKnobStartDegrees,
                 labelDistanceFromCenterPx = labelDistanceFromCenterPx,
                 style = valueLabelStyle,
             )
             PanSweepEndpointLabel(
-                text = "1",
+                text = "R",
                 degrees = panKnobEndDegrees(),
                 labelDistanceFromCenterPx = labelDistanceFromCenterPx,
                 style = valueLabelStyle,
