@@ -1,19 +1,27 @@
 package com.georgv.audioworkstation.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -22,7 +30,6 @@ import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenScaffold(
     title: String = "",
@@ -42,45 +49,97 @@ fun ScreenScaffold(
         containerColor = AppColors.Bg,
         snackbarHost = snackbarHost,
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    if (topBarAlertMessage != null) {
-                        Text(
-                            text = topBarAlertMessage,
-                            style = AppText.TopBarTitle,
-                            color = AppColors.Line
-                        )
-                    } else {
-                        titleContent?.invoke() ?: Text(
-                            text = title,
-                            style = AppText.TopBarTitle,
-                            color = AppColors.Line
-                        )
-                    }
-                },
-                modifier = Modifier.height(Dimens.TopBarHeight),
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.cd_back),
-                            tint = AppColors.Line
-                            )
-                        }
-                    }
-                },
+            CompactScreenTopBar(
+                topBarContainerColor = topBarContainerColor,
+                topBarAlertMessage = topBarAlertMessage,
+                title = title,
+                titleContent = titleContent,
+                onBack = onBack,
                 actions = actions,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = topBarContainerColor,
-                    scrolledContainerColor = topBarContainerColor,
-                    navigationIconContentColor = AppColors.Line,
-                    titleContentColor = AppColors.Line,
-                    actionIconContentColor = AppColors.Line
-                )
             )
-        }
+        },
     ) { padding ->
         content(padding)
+    }
+}
+
+@Composable
+private fun CompactScreenTopBar(
+    topBarContainerColor: Color,
+    topBarAlertMessage: String?,
+    title: String,
+    titleContent: @Composable (() -> Unit)?,
+    onBack: (() -> Unit)?,
+    actions: @Composable RowScope.() -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(topBarContainerColor)
+                .statusBarsPadding(),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(Dimens.TopBarHeight),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier.size(Dimens.TopBarHeight),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (onBack != null) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.cd_back),
+                            tint = AppColors.Line,
+                            modifier =
+                                Modifier
+                                    .size(Dimens.TopBarHeight)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onBack,
+                                    )
+                                    .padding(Dimens.TopBarNavIconInset),
+                        )
+                    }
+                }
+                Box(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.height(Dimens.TopBarHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions,
+                )
+            }
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = Dimens.TopBarHeight),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (topBarAlertMessage != null) {
+                    Text(
+                        text = topBarAlertMessage,
+                        style = AppText.TopBarTitle,
+                        color = AppColors.Line,
+                        maxLines = 1,
+                    )
+                } else {
+                    titleContent?.invoke() ?: Text(
+                        text = title,
+                        style = AppText.TopBarTitle,
+                        color = AppColors.Line,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 }

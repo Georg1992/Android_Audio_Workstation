@@ -104,8 +104,8 @@ internal fun LazyItemScope.ProjectTrackListRow(
     onToggleRecordTarget: (String) -> Unit,
     onToggleLoop: (String) -> Unit,
     onUpdateTrackLoopRegion: (String, Long, Long) -> Unit,
-    onDragHandleEnd: () -> Unit,
-    onDragHandleStarted: (trackId: String) -> Unit,
+    onReorderDragEnd: () -> Unit,
+    onReorderDragStarted: (trackId: String) -> Unit,
 ) {
     @Composable
     fun RowTrackCard() {
@@ -153,11 +153,10 @@ internal fun LazyItemScope.ProjectTrackListRow(
             trackId = track.id,
             trackSlotHeight = trackLayout.trackSlotHeight,
             interactionBlocked = listInteractionLocked,
-            blockDragHandle =
+            blockReorderDrag =
                 (reorderActive && dragController.draggingKey != track.id) ||
                     dropSettleInProgress,
-            dragHandleEnabled = true,
-            onDragHandleStart = { positionInRoot ->
+            onReorderDragStart = { positionInRoot ->
                 val bounds = itemBoundsMap[track.id] ?: return@TrackCard
                 val offsetFromFinger = positionInRoot - Offset(bounds.left, bounds.top)
                 val fixedXInParentPx = bounds.left - listParentBoundsInRoot.left
@@ -169,10 +168,10 @@ internal fun LazyItemScope.ProjectTrackListRow(
                     overlayWidthPx = bounds.right - bounds.left,
                     overlayHeightPx = bounds.bottom - bounds.top,
                 )
-                onDragHandleStarted(track.id)
+                onReorderDragStarted(track.id)
             },
-            onDragHandleMove = { positionInRoot -> dragController.update(positionInRoot) },
-            onDragHandleEnd = onDragHandleEnd,
+            onReorderDragMove = { positionInRoot -> dragController.update(positionInRoot) },
+            onReorderDragEnd = onReorderDragEnd,
             isMenuOpen = isMenuOpen,
             onMenuOpen = onMenuOpen,
             onMenuDismiss = onMenuDismiss,

@@ -6,11 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import androidx.compose.foundation.text.KeyboardActions
@@ -94,15 +95,13 @@ fun TrackCard(
      */
     trackSlotHeight: Dp? = null,
     trackId: String? = null,
-    onDragHandleStart: ((positionInRoot: Offset) -> Unit)? = null,
-    onDragHandleMove: ((positionInRoot: Offset) -> Unit)? = null,
-    onDragHandleEnd: (() -> Unit)? = null,
+    onReorderDragStart: ((positionInRoot: Offset) -> Unit)? = null,
+    onReorderDragMove: ((positionInRoot: Offset) -> Unit)? = null,
+    onReorderDragEnd: (() -> Unit)? = null,
     /** When true, card tap, menu, and fader do not respond. */
     interactionBlocked: Boolean = false,
-    /** When true, the reorder handle consumes touches but does not start a drag (other row is being dragged). */
-    blockDragHandle: Boolean = false,
-    /** When false, reorder handle is dimmed and does not start a drag (e.g. row clipped by list). */
-    dragHandleEnabled: Boolean = true,
+    /** When true, card consumes touches but does not start a drag (other row is being dragged). */
+    blockReorderDrag: Boolean = false,
     /**
      * Non-interactive overlay: same chrome and layout density as a normal card, without gestures.
      */
@@ -125,8 +124,12 @@ fun TrackCard(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val showHandle =
-        !dragPreview && trackId != null && onDragHandleStart != null && onDragHandleMove != null && onDragHandleEnd != null
+    val reorderGestureEnabled =
+        !dragPreview &&
+            trackId != null &&
+            onReorderDragStart != null &&
+            onReorderDragMove != null &&
+            onReorderDragEnd != null
     val showLoopChrome = dragPreview || onToggleLoop != null
     val showRecordTargetChrome = dragPreview || onToggleRecordTarget != null
 
@@ -179,16 +182,17 @@ fun TrackCard(
                 .clip(cardShape)
                 .background(bg)
                 .border(Dimens.Stroke, AppColors.Line, cardShape)
+                .consumeAllPointers(enabled = reorderGestureEnabled && blockReorderDrag)
                 .then(
-                    if (dragPreview || isolateTimelineTouch) {
-                        Modifier
-                    } else {
+                    if (!reorderGestureEnabled && !dragPreview && !isolateTimelineTouch) {
                         Modifier.clickable(
                             interactionSource = cardSelectionInteractionSource,
                             indication = null,
                             enabled = cardSelectionClickEnabled,
                             onClick = onCardSelectionClick,
                         )
+                    } else {
+                        Modifier
                     }
                 )
     ) {
@@ -522,15 +526,20 @@ fun TrackCard(
             }
         }
 
-        if (showHandle) {
-            TrackReorderHandle(
-                trackId = trackId,
-                blockDragHandle = blockDragHandle,
-                dragHandleEnabled = dragHandleEnabled,
-                onDragHandleStart = onDragHandleStart,
-                onDragHandleMove = onDragHandleMove,
-                onDragHandleEnd = onDragHandleEnd,
-                modifier = Modifier.align(Alignment.BottomEnd),
+        if (reorderGestureEnabled && !blockReorderDrag) {
+            Box(
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .trackCardLongPressReorderGesture(
+                            enabled = true,
+                            blockReorderDrag = false,
+                            tapEnabled = cardSelectionClickEnabled && !isolateTimelineTouch,
+                            onTap = onCardSelectionClick,
+                            onReorderDragStart = onReorderDragStart,
+                            onReorderDragMove = onReorderDragMove,
+                            onReorderDragEnd = onReorderDragEnd,
+                        ),
             )
         }
     }

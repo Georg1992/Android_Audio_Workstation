@@ -36,7 +36,7 @@ object AppColors {
 
     // Fader
     val FaderTrackAbove = WhiteSoft
-    val FaderTrackBelow = Line
+    val FaderTrackBelow = Cyan
     val FaderTrackBorder = Line
     val FaderTick = Line
     val FaderThumb = SurfaceRaised
@@ -51,10 +51,6 @@ object Alphas {
     const val MutedIcon = 0.65f
     /** Heavy shadow / spot color for elevated drag overlays. */
     const val OverlayShadow = 0.6f
-    /** Reorder handle, idle. */
-    const val HandleIdle = 0.35f
-    /** Reorder handle, active. */
-    const val HandleActive = 0.85f
     /** Track header action button — pressed scale target. */
     const val TrackActionPressedScale = 0.95f
     /** Idle chrome border. */

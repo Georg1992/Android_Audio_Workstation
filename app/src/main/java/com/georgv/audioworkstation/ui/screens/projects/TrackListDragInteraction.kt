@@ -67,7 +67,7 @@ internal data class DropSettleSnap(
 internal class TrackListDragInteractionState(
     val edgeHoldBanner: EdgeHoldBanner,
     val completeDrop: () -> Unit,
-    val onDragHandleStarted: (String) -> Unit,
+    val onReorderDragStarted: (String) -> Unit,
     val dragSurfaceModifier: Modifier,
 )
 
@@ -170,7 +170,7 @@ internal fun rememberTrackListDragInteraction(
             with(density) { 44.dp.toPx() }
         }
 
-    // Movement updates come only from TrackReorderHandle (captures pointer during drag).
+    // Movement updates come only from the track card reorder gesture (captures pointer during drag).
     // This block detects release -> completeDrop. Do not duplicate dragController.update here.
     // Do not key on listBoundsInRoot or currentPage: layout restarts would reset edge-hold state.
     LaunchedEffect(dragController.draggingKey, pageSize, edgeBandPx) {
@@ -261,7 +261,7 @@ internal fun rememberTrackListDragInteraction(
     return TrackListDragInteractionState(
         edgeHoldBanner = edgeHoldBanner,
         completeDrop = latestCompleteDrop,
-        onDragHandleStarted = { trackId ->
+        onReorderDragStarted = { trackId ->
             draggingGlobalIndex = tracksSnap.indexOfFirst { it.id == trackId }
         },
         dragSurfaceModifier = dragSurfaceModifier,

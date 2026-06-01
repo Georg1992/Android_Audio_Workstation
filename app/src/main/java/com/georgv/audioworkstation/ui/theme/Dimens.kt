@@ -22,8 +22,9 @@ object Dimens {
     /** Horizontal inset of track cards from the project list; inner row padding compensates so timeline stays aligned with the scrubber. */
     val TrackCardOuterPaddingHorizontal = PanelPadding
 
-    // top bar
+    // top bar (content row below status bar)
     val TopBarHeight = 30.dp
+    val TopBarNavIconInset = 5.dp
 
     // language icon
     val LangChipSize = 28.dp
@@ -52,11 +53,6 @@ object Dimens {
 
     // main tile narrow breakpoint
     val MainTileNarrowBreakpoint = 170.dp
-
-    // drag handle (triangle in track card)
-    val DragHandleSize = 24.dp
-    /** Touch target for track reorder handle (visual stays [DragHandleSize]). */
-    val DragHandleTouchTargetSize = 30.dp
 
     // glow effect (reusable "bulb" halo around icons/buttons)
     // spacing between adjacent icons so their glows don't cross into each other

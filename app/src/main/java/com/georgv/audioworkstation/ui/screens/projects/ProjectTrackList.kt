@@ -396,8 +396,8 @@ fun ProjectTrackList(
                                 onToggleRecordTarget = onToggleRecordTarget,
                                 onToggleLoop = onToggleLoop,
                                 onUpdateTrackLoopRegion = onUpdateTrackLoopRegion,
-                                onDragHandleEnd = dragInteraction.completeDrop,
-                                onDragHandleStarted = dragInteraction.onDragHandleStarted,
+                                onReorderDragEnd = dragInteraction.completeDrop,
+                                onReorderDragStarted = dragInteraction.onReorderDragStarted,
                             )
                         }
                     }
