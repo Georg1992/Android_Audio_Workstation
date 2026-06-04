@@ -293,13 +293,6 @@ private class NoOpAudioControllerForRobolectric : AudioController {
     override fun release() = Unit
 }
 
-private class ThrowingAudioImporterForRobolectric : AudioImporter {
-    override suspend fun import(
-        source: AudioImportSource,
-        destinationPath: String,
-        target: AudioImportTarget,
-    ): AudioImportResult = error("import not used")
-}
 
 private class NullablePathAudioFileProvider(
     private val path: String?,

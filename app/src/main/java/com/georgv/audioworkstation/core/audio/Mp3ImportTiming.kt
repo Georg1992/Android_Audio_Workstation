@@ -11,8 +11,34 @@ import android.util.Log
  * Session ends at READY (decode complete). Post-READY exact waveform extraction is logged
  * separately via [logPostReadyWaveformExtract].
  */
-internal object Mp3ImportTiming {
-    const val TAG = "MP3_IMPORT_TIMING"
+internal open class Mp3ImportTimingCore {
+    companion object {
+        const val TAG = "MP3_IMPORT_TIMING"
+
+        private val SUMMARY_STAGE_KEYS =
+            listOf(
+                "metadata_read",
+                "db_upsert_importing",
+                "extractor_setup",
+                "track_selection",
+                "codec_creation",
+                "codec_configure_start",
+                "decode_loop",
+                "input_feeding_total",
+                "input_dequeue_wait",
+                "extractor_read_sample_data",
+                "codec_queue_input_buffer",
+                "output_dequeue_wait",
+                "pcm_convert",
+                "pcm16_fast_path",
+                "output_buffer_hold",
+                "resample",
+                "wav_write",
+                "progress_callback",
+                "wav_header_patch",
+                "db_ready_update",
+            )
+    }
 
     private val lock = Any()
 
@@ -340,26 +366,15 @@ internal object Mp3ImportTiming {
     private fun logSummary(snapshot: SessionSnapshot) {
         Log.i(TAG, "SUMMARY outcome=${snapshot.outcome}")
         Log.i(TAG, "SUMMARY total_ms=${snapshot.totalMs}")
-        Log.i(TAG, "SUMMARY metadata_read_ms=${snapshot.stageMs["metadata_read"] ?: 0}")
-        Log.i(TAG, "SUMMARY db_upsert_importing_ms=${snapshot.stageMs["db_upsert_importing"] ?: 0}")
-        Log.i(TAG, "SUMMARY extractor_setup_ms=${snapshot.stageMs["extractor_setup"] ?: 0}")
-        Log.i(TAG, "SUMMARY track_selection_ms=${snapshot.stageMs["track_selection"] ?: 0}")
-        Log.i(TAG, "SUMMARY codec_creation_ms=${snapshot.stageMs["codec_creation"] ?: 0}")
-        Log.i(TAG, "SUMMARY codec_configure_start_ms=${snapshot.stageMs["codec_configure_start"] ?: 0}")
-        Log.i(TAG, "SUMMARY decode_loop_ms=${snapshot.stageMs["decode_loop"] ?: 0}")
-        Log.i(TAG, "SUMMARY input_feeding_total_ms=${snapshot.stageMs["input_feeding_total"] ?: 0}")
-        Log.i(TAG, "SUMMARY input_dequeue_wait_ms=${snapshot.stageMs["input_dequeue_wait"] ?: 0}")
-        Log.i(TAG, "SUMMARY extractor_read_sample_data_ms=${snapshot.stageMs["extractor_read_sample_data"] ?: 0}")
-        Log.i(TAG, "SUMMARY codec_queue_input_buffer_ms=${snapshot.stageMs["codec_queue_input_buffer"] ?: 0}")
-        Log.i(TAG, "SUMMARY output_dequeue_wait_ms=${snapshot.stageMs["output_dequeue_wait"] ?: 0}")
-        Log.i(TAG, "SUMMARY pcm_convert_ms=${snapshot.stageMs["pcm_convert"] ?: 0}")
-        Log.i(TAG, "SUMMARY pcm16_fast_path_ms=${snapshot.stageMs["pcm16_fast_path"] ?: 0}")
-        Log.i(TAG, "SUMMARY output_buffer_hold_ms=${snapshot.stageMs["output_buffer_hold"] ?: 0}")
-        Log.i(TAG, "SUMMARY resample_ms=${snapshot.stageMs["resample"] ?: 0}")
-        Log.i(TAG, "SUMMARY wav_write_ms=${snapshot.stageMs["wav_write"] ?: 0}")
-        Log.i(TAG, "SUMMARY progress_callback_ms=${snapshot.stageMs["progress_callback"] ?: 0}")
-        Log.i(TAG, "SUMMARY wav_header_patch_ms=${snapshot.stageMs["wav_header_patch"] ?: 0}")
-        Log.i(TAG, "SUMMARY db_ready_update_ms=${snapshot.stageMs["db_ready_update"] ?: 0}")
+        SUMMARY_STAGE_KEYS.forEach { stage ->
+            Log.i(TAG, "SUMMARY ${stage}_ms=${snapshot.stageMs[stage] ?: 0}")
+        }
+        logSummaryCompact(snapshot)
+        logSummaryCounters(snapshot)
+        logSummaryInput(snapshot)
+    }
+
+    private fun logSummaryCompact(snapshot: SessionSnapshot) {
         Log.i(
             TAG,
             "SUMMARY compact " +
@@ -385,6 +400,9 @@ internal object Mp3ImportTiming {
                 "pcmBytes=${snapshot.pcmBytesWritten} " +
                 "frames=${snapshot.decodedFrameCount}",
         )
+    }
+
+    private fun logSummaryCounters(snapshot: SessionSnapshot) {
         Log.i(
             TAG,
             "SUMMARY counters " +
@@ -394,6 +412,9 @@ internal object Mp3ImportTiming {
                 "avgOutputBufferBytes=${snapshot.avgOutputBufferSize} " +
                 "maxOutputBufferBytes=${snapshot.maxOutputBufferSize}",
         )
+    }
+
+    private fun logSummaryInput(snapshot: SessionSnapshot) {
         Log.i(
             TAG,
             "SUMMARY input " +
@@ -421,36 +442,6 @@ internal object Mp3ImportTiming {
             } else {
                 0L
             }
-        val avgOutputBufferSize =
-            if (outputBufferSizeCount > 0) {
-                outputBufferSizeSum / outputBufferSizeCount
-            } else {
-                0L
-            }
-        val avgSamplesPerInputBuffer =
-            if (inputSamplesInBatchCount > 0) {
-                inputSamplesInBatchSum / inputSamplesInBatchCount
-            } else {
-                0
-            }
-        val avgInputBytesPerBuffer =
-            if (inputBuffersQueued > 0) {
-                compressedBytesRead / inputBuffersQueued
-            } else {
-                0L
-            }
-        val avgExtractorSampleSize =
-            if (extractorSampleSizeCount > 0) {
-                extractorSampleSizeSum / extractorSampleSizeCount
-            } else {
-                0L
-            }
-        val codecInputCapacityAvg =
-            if (codecInputCapacityCount > 0) {
-                codecInputCapacitySum / codecInputCapacityCount
-            } else {
-                0L
-            }
         return SessionSnapshot(
             outcome = outcome,
             sessionLabel = sessionLabel,
@@ -475,29 +466,19 @@ internal object Mp3ImportTiming {
             pcmBytesWritten = pcmBytesWritten,
             decodedFrameCount = decodedFrameCount,
             progressCallbackCount = progressCallbackCount,
-            avgOutputBufferSize = avgOutputBufferSize,
+            avgOutputBufferSize = averageOrZero(outputBufferSizeSum, outputBufferSizeCount),
             maxOutputBufferSize = maxOutputBufferSize,
             inputBatchingEnabled = inputBatchingEnabled,
             formatMaxInputSize = formatMaxInputSize,
             inputSamplesRead = inputSamplesRead,
-            avgSamplesPerInputBuffer = avgSamplesPerInputBuffer,
-            avgInputBytesPerBuffer = avgInputBytesPerBuffer,
+            avgSamplesPerInputBuffer = averageOrZero(inputSamplesInBatchSum, inputSamplesInBatchCount),
+            avgInputBytesPerBuffer = averageOrZero(compressedBytesRead, inputBuffersQueued),
             maxInputBytesPerBuffer = maxInputBytesPerBuffer,
-            avgExtractorSampleSize = avgExtractorSampleSize,
-            minExtractorSampleSize =
-                if (extractorSampleSizeCount > 0) {
-                    minExtractorSampleSize
-                } else {
-                    0
-                },
+            avgExtractorSampleSize = averageOrZero(extractorSampleSizeSum, extractorSampleSizeCount),
+            minExtractorSampleSize = if (extractorSampleSizeCount > 0) minExtractorSampleSize else 0,
             maxExtractorSampleSize = maxExtractorSampleSize,
-            codecInputCapacityMin =
-                if (codecInputCapacityCount > 0) {
-                    codecInputCapacityMin
-                } else {
-                    0
-                },
-            codecInputCapacityAvg = codecInputCapacityAvg,
+            codecInputCapacityMin = if (codecInputCapacityCount > 0) codecInputCapacityMin else 0,
+            codecInputCapacityAvg = averageOrZero(codecInputCapacitySum, codecInputCapacityCount),
             codecInputCapacityMax = codecInputCapacityMax,
             timestampsMonotonic = timestampsMonotonic,
             failureStage = failureStage,
@@ -505,6 +486,10 @@ internal object Mp3ImportTiming {
             partialWavDeleted = partialWavDeleted,
         )
     }
+
+    private fun averageOrZero(sum: Long, count: Int): Long = if (count > 0) sum / count else 0L
+
+    private fun averageOrZero(sum: Int, count: Int): Int = if (count > 0) sum / count else 0
 
     private fun addStageLocked(stage: String, durationMs: Long) {
         stageMs[stage] = (stageMs[stage] ?: 0L) + durationMs
@@ -614,3 +599,5 @@ internal object Mp3ImportTiming {
         val partialWavDeleted: Boolean,
     )
 }
+
+internal object Mp3ImportTiming : Mp3ImportTimingCore()

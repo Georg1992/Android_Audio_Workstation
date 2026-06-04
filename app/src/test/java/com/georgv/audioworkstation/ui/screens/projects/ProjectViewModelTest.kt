@@ -3685,37 +3685,6 @@ private object NullTrackOutputPathProvider : AudioFilePathProvider {
     override fun trackRecordingTempPath(projectId: String, trackId: String): String? = null
 }
 
-private class FakeAudioImporter(
-    private val result: AudioImportResult = AudioImportResult.Success(
-        durationMs = 1_000L,
-        channelMode = ChannelMode.MONO,
-        channelCount = 1,
-    ),
-    private val wavSamplesToWrite: ShortArray? = null
-) : AudioImporter {
-    var importCalls: Int = 0
-        private set
-    var lastTarget: AudioImportTarget? = null
-        private set
-    var lastDestination: String? = null
-        private set
-
-    override suspend fun import(
-        source: AudioImportSource,
-        destinationPath: String,
-        target: AudioImportTarget
-    ): AudioImportResult {
-        importCalls += 1
-        lastTarget = target
-        lastDestination = destinationPath
-        wavSamplesToWrite?.let { samples ->
-            val destination = File(destinationPath)
-            destination.parentFile?.mkdirs()
-            tempWav(samples).copyTo(destination, overwrite = true)
-        }
-        return result
-    }
-}
 
 private class FakeAudioFilePathProvider(
     private val basePath: String = "imports"

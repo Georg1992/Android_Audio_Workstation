@@ -590,30 +590,9 @@ class ProjectViewModel @Inject constructor(
         }
         this.projectId.value = projectId
         if (projectChanged) {
-            recoverStaleImports(projectId)
+            recoverStaleImports(repo, projectId, importJobs)
         }
-        awaitProjectTracksSynced(projectId)
-    }
-
-    /** [projectTracks] is fed by [SharingStarted.WhileSubscribed]; wait until it matches the repo. */
-    private suspend fun awaitProjectTracksSynced(projectId: String) {
-        val expectedTracks = repo.observeTracks(projectId).first()
-        projectTracks.first { it == expectedTracks }
-    }
-
-    private suspend fun recoverStaleImports(projectId: String) {
-        val stale =
-            repo.observeTracks(projectId).first().filter { track ->
-                track.importStatus == TrackImportStatus.IMPORTING &&
-                    importJobs[track.id]?.isActive != true
-            }
-        if (stale.isEmpty()) return
-        stale.forEach { track ->
-            if (track.wavFilePath.isNotBlank()) {
-                File(track.wavFilePath).delete()
-            }
-        }
-        repo.upsertTracks(stale.map { it.copy(importStatus = TrackImportStatus.FAILED) })
+        awaitProjectTracksSynced(repo, projectTracks, projectId)
     }
 
     fun setPlayheadPositionMs(positionMs: Long, timelineBaseDurationMs: Long) {

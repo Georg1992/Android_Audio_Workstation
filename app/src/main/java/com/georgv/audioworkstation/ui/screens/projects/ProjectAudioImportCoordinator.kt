@@ -77,7 +77,15 @@ class ProjectAudioImportCoordinator @Inject constructor(
             )
 
         return when (detectImportFormat(source)) {
-            DetectedImportFormat.PcmWav -> runSynchronousWavImport(source, pendingTrack, destinationPath, target, suggestedName, visibleTrackCount)
+            DetectedImportFormat.PcmWav ->
+                runSynchronousWavImport(
+                    source = source,
+                    pendingTrack = pendingTrack,
+                    destinationPath = destinationPath,
+                    target = target,
+                    suggestedName = suggestedName,
+                    visibleTrackCount = visibleTrackCount,
+                )
             DetectedImportFormat.CompressedAudio ->
                 prepareCompressedImport(
                     source = source,
@@ -162,25 +170,41 @@ class ProjectAudioImportCoordinator @Inject constructor(
         suggestedName: String?,
         visibleTrackCount: Int,
     ): ProjectAudioImportOutcome {
-        val uriSource =
-            source as? UriBackedAudioImportSource
-                ?: run {
-                    Mp3ImportTiming.beginSession("compressed_import")
-                    Mp3ImportTiming.recordFailure(
-                        stage = "source_not_uri_backed",
-                        error = null,
-                        partialWavDeleted = false,
-                    )
-                    Mp3ImportTiming.endSession("rejected")
-                    return ProjectAudioImportOutcome.ImportRejected(
-                        AudioImportResult.Failure.UnsupportedEncoding,
-                    )
-                }
+        val uriSource = source as? UriBackedAudioImportSource ?: return rejectNonUriCompressedImport()
+        return startCompressedImport(
+            uriSource = uriSource,
+            pendingTrack = pendingTrack,
+            destinationPath = destinationPath,
+            target = target,
+            suggestedName = suggestedName,
+            visibleTrackCount = visibleTrackCount,
+        )
+    }
 
+    private fun rejectNonUriCompressedImport(): ProjectAudioImportOutcome {
+        Mp3ImportTiming.beginSession("compressed_import")
+        Mp3ImportTiming.recordFailure(
+            stage = "source_not_uri_backed",
+            error = null,
+            partialWavDeleted = false,
+        )
+        Mp3ImportTiming.endSession("rejected")
+        return ProjectAudioImportOutcome.ImportRejected(
+            AudioImportResult.Failure.UnsupportedEncoding,
+        )
+    }
+
+    private fun startCompressedImport(
+        uriSource: UriBackedAudioImportSource,
+        pendingTrack: TrackEntity,
+        destinationPath: String,
+        target: AudioImportTarget,
+        suggestedName: String?,
+        visibleTrackCount: Int,
+    ): ProjectAudioImportOutcome {
         Mp3ImportTiming.beginSession("compressed_import uri=${uriSource.uri}")
         Mp3ImportTiming.startStage("metadata_read")
-        val metadata =
-            CompressedAudioMetadataReader.read(context, uriSource.uri)
+        val metadata = CompressedAudioMetadataReader.read(context, uriSource.uri)
         Mp3ImportTiming.stopStage("metadata_read")
         if (metadata == null) {
             Mp3ImportTiming.recordFailure(stage = "metadata_read", error = null, partialWavDeleted = false)

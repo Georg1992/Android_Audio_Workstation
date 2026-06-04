@@ -60,55 +60,63 @@ class MediaCodecAudioImporter @Inject constructor(
                     onProgress = onProgress,
                 )
             try {
-                when (val result = pipeline.decode()) {
-                    is AudioImportResult.Failure -> {
-                        destinationFile.delete()
-                        Mp3ImportTiming.recordFailure(
-                            stage = "decode_${result.javaClass.simpleName}",
-                            error = null,
-                            partialWavDeleted = true,
-                        )
-                        result
-                    }
-                    is AudioImportResult.Success -> result
-                }
-            } catch (cancellation: CancellationException) {
-                destinationFile.delete()
-                Mp3ImportTiming.recordFailure(
-                    stage = "decode_cancelled",
-                    error = cancellation,
-                    partialWavDeleted = true,
-                )
-                throw cancellation
-            } catch (error: UnsupportedPcmEncodingException) {
-                destinationFile.delete()
-                Mp3ImportTiming.recordFailure(
-                    stage = "decode_unsupported_pcm",
-                    error = error,
-                    partialWavDeleted = true,
-                )
-                mapDecodeException(error)
-            } catch (error: MediaCodec.CodecException) {
-                destinationFile.delete()
-                Mp3ImportTiming.recordFailure(
-                    stage = "decode_codec_error",
-                    error = error,
-                    partialWavDeleted = true,
-                )
-                mapDecodeException(error)
-            } catch (error: IOException) {
-                destinationFile.delete()
-                Mp3ImportTiming.recordFailure(
-                    stage = "decode_io_error",
-                    error = error,
-                    partialWavDeleted = true,
-                )
-                AudioImportResult.Failure.WriteFailed(
-                    error.message ?: error.javaClass.simpleName,
-                )
+                runDecodePipeline(pipeline, destinationFile)
             } finally {
                 pipeline.release()
             }
+        }
+
+    private suspend fun runDecodePipeline(
+        pipeline: MediaCodecDecodePipeline,
+        destinationFile: File,
+    ): AudioImportResult =
+        try {
+            when (val result = pipeline.decode()) {
+                is AudioImportResult.Failure -> {
+                    destinationFile.delete()
+                    Mp3ImportTiming.recordFailure(
+                        stage = "decode_${result.javaClass.simpleName}",
+                        error = null,
+                        partialWavDeleted = true,
+                    )
+                    result
+                }
+                is AudioImportResult.Success -> result
+            }
+        } catch (cancellation: CancellationException) {
+            destinationFile.delete()
+            Mp3ImportTiming.recordFailure(
+                stage = "decode_cancelled",
+                error = cancellation,
+                partialWavDeleted = true,
+            )
+            throw cancellation
+        } catch (error: UnsupportedPcmEncodingException) {
+            destinationFile.delete()
+            Mp3ImportTiming.recordFailure(
+                stage = "decode_unsupported_pcm",
+                error = error,
+                partialWavDeleted = true,
+            )
+            mapDecodeException(error)
+        } catch (error: MediaCodec.CodecException) {
+            destinationFile.delete()
+            Mp3ImportTiming.recordFailure(
+                stage = "decode_codec_error",
+                error = error,
+                partialWavDeleted = true,
+            )
+            mapDecodeException(error)
+        } catch (error: IOException) {
+            destinationFile.delete()
+            Mp3ImportTiming.recordFailure(
+                stage = "decode_io_error",
+                error = error,
+                partialWavDeleted = true,
+            )
+            AudioImportResult.Failure.WriteFailed(
+                error.message ?: error.javaClass.simpleName,
+            )
         }
 
     private fun mapDecodeException(error: Exception): AudioImportResult.Failure =

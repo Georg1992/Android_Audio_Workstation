@@ -16,6 +16,10 @@ internal data class TrackImportUiState(
  * Persisted [TrackEntity.importStatus] survives rotation; live decode progress lives here.
  */
 internal class ProjectImportUiCoordinator {
+    private companion object {
+        const val ImportProgressEpsilon = 0.01f
+    }
+
     private val importUiState = MutableStateFlow<Map<String, TrackImportUiState>>(emptyMap())
 
     val importUiByTrackId: StateFlow<Map<String, TrackImportUiState>> = importUiState.asStateFlow()
@@ -23,7 +27,7 @@ internal class ProjectImportUiCoordinator {
     fun setProgress(trackId: String, progress: Float) {
         importUiState.update { current ->
             val previous = current[trackId]
-            if (previous != null && kotlin.math.abs(previous.progress - progress) < 0.01f) {
+            if (previous != null && kotlin.math.abs(previous.progress - progress) < ImportProgressEpsilon) {
                 return@update current
             }
             current + (trackId to TrackImportUiState(progress = progress))
