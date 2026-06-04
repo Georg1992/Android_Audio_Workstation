@@ -8,14 +8,11 @@ import java.io.RandomAccessFile
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
-import kotlin.math.sqrt
 
 private const val DefaultWaveformPeakCount = 72
 private const val WavAudioFormatPcm = 1
 private const val WavAudioFormatFloat = 3
 private const val WavChunkReadFrames = 4096
-private const val WaveformPeakWeight = 0.35f
-private const val WaveformRmsWeight = 0.65f
 
 open class WavWaveformPeakExtractor(
     private val targetPeakCount: Int = DefaultWaveformPeakCount,
@@ -34,6 +31,12 @@ open class WavWaveformPeakExtractor(
             cache[fingerprint] = peaks
             peaks
         }
+
+    /** Returns cached peaks for [wavPath] without reading the file. */
+    fun peekCachedPeaks(wavPath: String): WaveformPeaks? {
+        val fingerprint = wavFileContentFingerprint(wavPath.trim()) ?: return null
+        return cache[fingerprint]
+    }
 
     private fun dropStaleCacheEntriesForPath(fingerprint: String) {
         val prefix = wavFilePathPrefix(fingerprint) + "|"
@@ -167,25 +170,6 @@ open class WavWaveformPeakExtractor(
         right: List<Float>,
     ): Pair<List<Float>, List<Float>> =
         normalizePeaks(left) to normalizePeaks(right)
-}
-
-private class WaveformBucketAccumulator {
-    private var peak = 0f
-    private var sumSquares = 0.0
-    private var sampleCount = 0
-
-    fun addSample(sample: Float) {
-        val absSample = abs(sample)
-        peak = max(peak, absSample)
-        sumSquares += (sample * sample).toDouble()
-        sampleCount += 1
-    }
-
-    fun visualAmplitude(): Float {
-        if (sampleCount == 0) return 0f
-        val rms = sqrt(sumSquares / sampleCount.toDouble()).toFloat().coerceIn(0f, 1f)
-        return (WaveformPeakWeight * peak + WaveformRmsWeight * rms).coerceIn(0f, 1f)
-    }
 }
 
 private data class WavInfo(

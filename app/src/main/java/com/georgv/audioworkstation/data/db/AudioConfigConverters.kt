@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.data.db
 
 import androidx.room.TypeConverter
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 
 class AudioConfigConverters {
@@ -17,4 +18,10 @@ class AudioConfigConverters {
 
     @TypeConverter
     fun toSyncStatus(value: String): SyncStatus = SyncStatus.valueOf(value)
+
+    @TypeConverter
+    fun fromTrackImportStatus(value: TrackImportStatus): String = value.name
+
+    @TypeConverter
+    fun toTrackImportStatus(value: String): TrackImportStatus = TrackImportStatus.valueOf(value)
 }

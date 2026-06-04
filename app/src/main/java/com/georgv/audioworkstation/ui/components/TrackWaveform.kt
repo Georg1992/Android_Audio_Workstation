@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -247,4 +248,32 @@ private fun WaveformCanvas(
             )
         }
     }
+}
+
+@Composable
+fun ImportingWaveform(
+    @Suppress("UNUSED_PARAMETER") progress: Float,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        ImportWaveformSkeleton(modifier = Modifier.fillMaxSize())
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawRect(color = AppColors.Bg.copy(alpha = 0.35f))
+        }
+    }
+}
+
+@Composable
+private fun ImportWaveformSkeleton(modifier: Modifier = Modifier) {
+    val skeletonPeaks =
+        remember {
+            List(36) { index ->
+                ((index % 5) + 3) / 12f
+            }
+        }
+    TrackWaveform(
+        peaks = WaveformPeaks(amplitudes = skeletonPeaks),
+        horizontalInsetFraction = 0f,
+        modifier = modifier,
+    )
 }

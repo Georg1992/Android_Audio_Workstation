@@ -39,8 +39,9 @@ fun buildProjectTimelineProjection(
     playheadPositionMs: Long,
     extendVisibleTimelineForAllLoopedPlayback: Boolean,
     extendVisibleTimelineForRecording: Boolean,
+    importProgressByTrackId: Map<String, Float> = emptyMap(),
 ): ProjectTimelineProjection {
-    val persistedClips = projectTimelineClips(tracks, waveformStatesByTrackId)
+    val persistedClips = projectTimelineClips(tracks, waveformStatesByTrackId, importProgressByTrackId)
     val recordingClip =
         activeRecording?.let { recording ->
             activeRecordingTimelineClip(

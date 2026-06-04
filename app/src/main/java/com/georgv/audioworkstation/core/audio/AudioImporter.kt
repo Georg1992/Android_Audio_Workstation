@@ -11,9 +11,9 @@ import java.io.InputStream
  *  - Writing a file at [destinationPath] that conforms to [target] (same sample rate, bit depth,
  *    and channel layout) so the native playback engine can play it with no further work.
  *
- * The MVP implementation only accepts PCM WAV that already matches the target format.
- * A future implementation can swap in transparent decode + resample (e.g. via MediaCodec)
- * without touching callers.
+ * The default [DelegatingAudioImporter] accepts PCM WAV that already matches the target format
+ * and compressed audio (MP3, M4A/AAC, etc.) decoded via MediaCodec into project-ready PCM WAV.
+ * Additional formats can be added behind [AudioImporter] without touching callers.
  */
 interface AudioImporter {
     suspend fun import(
@@ -69,5 +69,9 @@ sealed class AudioImportResult {
         data class SampleRateMismatch(val expected: Int, val actual: Int) : Failure()
         data class BitDepthMismatch(val expected: Int, val actual: Int) : Failure()
         data class WriteFailed(val reason: String) : Failure()
+        data object NoAudioTrack : Failure()
+        data object DecoderInitFailed : Failure()
+        data object UnsupportedCodec : Failure()
+        data object CorruptedMedia : Failure()
     }
 }

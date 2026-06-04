@@ -129,6 +129,12 @@ fun ProjectScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
             val source = ContentResolverAudioImportSource(context.contentResolver, uri)
             vm.importAudio(projectId, source, resolveDisplayName(context, uri))
         }
@@ -323,7 +329,7 @@ fun ProjectScreen(
                 Spacer(Modifier.weight(1f))
 
                 ImportAudioButton(
-                    enabled = state.recordingTrackId == null && !state.isRecordingStartup,
+                    enabled = state.recordingTrackId == null && !state.isRecordingStartup && !state.isImportInProgress,
                     onClick = { importAudioLauncher.launch(IMPORT_AUDIO_MIME_TYPES) },
                     inputLocked = reorderActive
                 )
@@ -336,5 +342,7 @@ private val IMPORT_AUDIO_MIME_TYPES = arrayOf(
     "audio/wav",
     "audio/x-wav",
     "audio/vnd.wave",
-    "audio/wave"
+    "audio/wave",
+    "audio/mpeg",
+    "audio/mp3",
 )

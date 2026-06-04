@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.core.track
 
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
 /** Minimum selectable loop region length on the timeline (ms). */
@@ -9,7 +10,21 @@ fun TrackEntity.sourceDurationMs(): Long = duration?.coerceAtLeast(0L) ?: 0L
 
 /** Existing on-disk audio that can be shown on the timeline (including punch-record targets). */
 fun TrackEntity.hasPersistedPlayableAudio(): Boolean =
-    wavFilePath.isNotBlank() && sourceDurationMs() > 0L
+    importStatus == TrackImportStatus.READY &&
+        wavFilePath.isNotBlank() &&
+        sourceDurationMs() > 0L
+
+/** Timeline-visible clip including in-flight or failed compressed imports. */
+fun TrackEntity.hasTimelineClip(): Boolean {
+    val durationMs = duration?.takeIf { it > 0L } ?: return false
+    return when (importStatus) {
+        TrackImportStatus.READY ->
+            wavFilePath.isNotBlank() && !(isRecording && !hasPersistedPlayableAudio())
+        TrackImportStatus.IMPORTING,
+        TrackImportStatus.FAILED,
+        -> true
+    }
+}
 
 /** Overlay/drag display bounds: preview while dragging, hold commit until props match, else persisted. */
 fun loopRegionDisplayBoundsMs(

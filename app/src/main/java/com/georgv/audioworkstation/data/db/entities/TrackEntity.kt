@@ -5,6 +5,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 
 @Entity(
     tableName = "tracks",
@@ -39,6 +40,7 @@ data class TrackEntity(
     /** Track-local loop region end (ms from WAV start); null = full [duration]. */
     val loopEndMs: Long? = null,
     val isImported: Boolean = false,
+    val importStatus: TrackImportStatus = TrackImportStatus.READY,
     val position: Int = 0,
     /** Timeline position where this clip begins on the project base ruler (ms). */
     val timelineStartOffsetMs: Long = 0L,

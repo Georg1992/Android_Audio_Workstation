@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,14 +36,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -95,7 +105,7 @@ fun TrackCard(
      */
     trackSlotHeight: Dp? = null,
     trackId: String? = null,
-    onReorderDragStart: ((positionInRoot: Offset) -> Unit)? = null,
+    onReorderDragStart: ((positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit)? = null,
     onReorderDragMove: ((positionInRoot: Offset) -> Unit)? = null,
     onReorderDragEnd: (() -> Unit)? = null,
     /** When true, card tap, menu, and fader do not respond. */
@@ -110,12 +120,30 @@ fun TrackCard(
     onMenuOpen: () -> Unit = {},
     onMenuDismiss: () -> Unit = {},
 ) {
+    val importStatus = timelineClip?.importStatus ?: TrackImportStatus.READY
+    val isImporting = importStatus == TrackImportStatus.IMPORTING
+    val isImportFailed = importStatus == TrackImportStatus.FAILED
+    val importProgress =
+        when (val waveformState = timelineClip?.waveformState) {
+            is WaveformState.Importing -> waveformState.progress
+            else -> timelineClip?.importProgress ?: 0f
+        }
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
-    val bg = when {
-        isRecording -> AppColors.Red
-        isSelected -> AppColors.Green
-        else -> AppColors.SurfacePanel
-    }
+    val selectionAllowed = !isImporting
+    val showSelected = isSelected && selectionAllowed
+    val bg =
+        when {
+            isRecording -> AppColors.Red
+            showSelected -> AppColors.Green
+            else -> AppColors.SurfacePanel
+        }
+    val borderColor =
+        when {
+            isImporting -> AppColors.Cyan
+            isImportFailed -> AppColors.Red
+            else -> AppColors.Line
+        }
+    val borderWidth = if (isImporting || isImportFailed) 2.dp else Dimens.Stroke
 
     var isRenaming by remember(trackId) { mutableStateOf(false) }
     var renameFieldValue by remember(trackId, title) { mutableStateOf(TextFieldValue(title)) }
@@ -157,7 +185,14 @@ fun TrackCard(
 
     val isolateTimelineTouch = isLoop && timelineClip != null && !dragPreview
     val cardSelectionClickEnabled =
-        !interactionBlocked && !isRenaming && !dragPreview
+        selectionAllowed && !interactionBlocked && !isRenaming && !dragPreview
+    val cardSelectionOnRoot =
+        cardSelectionClickEnabled && !isolateTimelineTouch
+    val reorderActiveOnCard =
+        reorderGestureEnabled &&
+            !blockReorderDrag &&
+            !isImporting &&
+            !isImportFailed
     val cardSelectionInteractionSource = remember { MutableInteractionSource() }
     val onCardSelectionClick = {
         if (isMenuOpen) {
@@ -181,10 +216,20 @@ fun TrackCard(
                 )
                 .clip(cardShape)
                 .background(bg)
-                .border(Dimens.Stroke, AppColors.Line, cardShape)
+                .border(borderWidth, borderColor, cardShape)
                 .consumeAllPointers(enabled = reorderGestureEnabled && blockReorderDrag)
                 .then(
-                    if (!reorderGestureEnabled && !dragPreview && !isolateTimelineTouch) {
+                    if (reorderActiveOnCard) {
+                        Modifier.trackCardLongPressReorderGesture(
+                            enabled = true,
+                            blockReorderDrag = false,
+                            tapEnabled = cardSelectionOnRoot,
+                            onTap = onCardSelectionClick,
+                            onReorderDragStart = onReorderDragStart,
+                            onReorderDragMove = onReorderDragMove,
+                            onReorderDragEnd = onReorderDragEnd,
+                        )
+                    } else if (!dragPreview && cardSelectionOnRoot) {
                         Modifier.clickable(
                             interactionSource = cardSelectionInteractionSource,
                             indication = null,
@@ -193,7 +238,7 @@ fun TrackCard(
                         )
                     } else {
                         Modifier
-                    }
+                    },
                 )
     ) {
         Row(
@@ -216,20 +261,22 @@ fun TrackCard(
         ) {
             // LEFT
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .then(
-                        if (trackSlotHeight != null) {
-                            Modifier.fillMaxHeight()
-                        } else {
-                            Modifier
-                        }
-                    )
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .then(
+                            if (trackSlotHeight != null) {
+                                Modifier.fillMaxHeight()
+                            } else {
+                                Modifier
+                            },
+                        ),
             ) {
                 Row(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .alpha(if (isImporting) 0.72f else 1f)
                             .then(
                                 if (isolateTimelineTouch && cardSelectionClickEnabled) {
                                     Modifier.clickable(
@@ -287,8 +334,25 @@ fun TrackCard(
                             color = AppColors.Line,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
+                    }
+
+                    if (isImporting) {
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
+                        ImportStatusBadge(
+                            text = stringResource(R.string.import_status_importing),
+                            color = AppColors.Cyan,
+                            progress = importProgress,
+                        )
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
+                    } else if (isImportFailed) {
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
+                        ImportStatusBadge(
+                            text = stringResource(R.string.import_status_failed),
+                            color = AppColors.Red,
+                        )
+                        Spacer(Modifier.width(Dimens.IconGlowSpacing))
                     }
 
                     if (!isRenaming) {
@@ -525,23 +589,6 @@ fun TrackCard(
                 )
             }
         }
-
-        if (reorderGestureEnabled && !blockReorderDrag) {
-            Box(
-                modifier =
-                    Modifier
-                        .matchParentSize()
-                        .trackCardLongPressReorderGesture(
-                            enabled = true,
-                            blockReorderDrag = false,
-                            tapEnabled = cardSelectionClickEnabled && !isolateTimelineTouch,
-                            onTap = onCardSelectionClick,
-                            onReorderDragStart = onReorderDragStart,
-                            onReorderDragMove = onReorderDragMove,
-                            onReorderDragEnd = onReorderDragEnd,
-                        ),
-            )
-        }
     }
 }
 
@@ -551,3 +598,76 @@ private fun trackMenuClickDisabled(
     trackActionsEnabled: Boolean,
     isRenaming: Boolean,
 ): Boolean = dragPreview || interactionBlocked || !trackActionsEnabled || isRenaming
+
+@Composable
+internal fun ImportStatusBadge(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    progress: Float? = null,
+) {
+    val shape = RoundedCornerShape(Dimens.SmallRadius)
+    val density = LocalDensity.current
+    val cornerRadiusPx = with(density) { Dimens.SmallRadius.toPx() }
+    val badgeHeight = Dimens.TrackHeaderButtonSize
+    val labelStyle =
+        TextStyle(
+            fontSize = 8.sp,
+            fontFamily = FontFamily.Monospace,
+        )
+    if (progress == null) {
+        Box(
+            modifier =
+                modifier
+                    .height(badgeHeight)
+                    .background(color.copy(alpha = 0.28f), shape)
+                    .border(Dimens.Stroke, color, shape)
+                    .padding(horizontal = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                color = AppColors.Line,
+                style = labelStyle,
+            )
+        }
+        return
+    }
+
+    val clampedProgress = progress.coerceIn(0f, 1f)
+    val percent = (clampedProgress * 100f).roundToInt()
+    val displayText = "$text $percent%"
+    val maxWidthLabel = "$text 100%"
+    Box(
+        modifier =
+            modifier
+                .height(badgeHeight)
+                .drawBehind {
+                    drawRoundRect(
+                        color = color.copy(alpha = 0.28f),
+                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                    )
+                    if (clampedProgress > 0f) {
+                        drawRoundRect(
+                            color = color,
+                            size = size.copy(width = size.width * clampedProgress),
+                            cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                        )
+                    }
+                }
+                .border(Dimens.Stroke, color, shape)
+                .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = maxWidthLabel,
+            style = labelStyle,
+            modifier = Modifier.alpha(0f),
+        )
+        Text(
+            text = displayText,
+            color = AppColors.Line,
+            style = labelStyle,
+        )
+    }
+}

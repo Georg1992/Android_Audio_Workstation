@@ -73,7 +73,7 @@
     <!-- Audio import failures -->
     <string name="import_failure_file_not_readable">Unable to read the selected file.</string>
     <string name="import_failure_invalid_wav">File is not a valid WAV.</string>
-    <string name="import_failure_unsupported_encoding">Only PCM WAV is supported right now.</string>
+    <string name="import_failure_unsupported_encoding">This audio format is not supported.</string>
     <string name="import_failure_unsupported_channels">Only mono or stereo audio is supported.</string>
     <string name="track_channel_mono">MONO</string>
     <string name="track_channel_stereo">STEREO</string>
@@ -81,6 +81,16 @@
     <string name="import_failure_sample_rate_mismatch">Sample rate %1$d Hz does not match project %2$d Hz.</string>
     <string name="import_failure_bit_depth_mismatch">Bit depth %1$d-bit does not match project %2$d-bit.</string>
     <string name="import_failure_write_failed">Failed to import audio: %1$s</string>
+    <string name="import_failure_no_audio_track">No audio track was found in the selected file.</string>
+    <string name="import_failure_decoder_init_failed">Could not start the audio decoder for this file.</string>
+    <string name="import_failure_unsupported_codec">This audio codec is not supported.</string>
+    <string name="import_failure_corrupted_media">The audio file appears to be corrupted or incomplete.</string>
+    <string name="waveform_generating">Generating…</string>
+    <string name="waveform_unavailable">No waveform</string>
+    <string name="waveform_no_audio">No audio</string>
+    <string name="import_clip_failed">Import failed</string>
+    <string name="import_status_importing">IMPORTING</string>
+    <string name="import_status_failed">IMPORT FAILED</string>
 
     <!-- Project / track flow errors -->
     <string name="error_microphone_permission_required">Microphone permission required.</string>

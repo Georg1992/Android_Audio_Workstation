@@ -224,3 +224,12 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         )
     }
 }
+
+/** Async compressed-audio import lifecycle persisted on the track row. */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN importStatus TEXT NOT NULL DEFAULT 'READY'",
+        )
+    }
+}

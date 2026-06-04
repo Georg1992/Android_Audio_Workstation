@@ -11,8 +11,8 @@ import java.io.InputStream
  * again to copy the audio frames), so each call must return a fresh independent stream.
  */
 class ContentResolverAudioImportSource(
-    private val resolver: ContentResolver,
-    private val uri: Uri
-) : AudioImportSource {
-    override fun open(): InputStream? = resolver.openInputStream(uri)
+    override val contentResolver: ContentResolver,
+    override val uri: Uri,
+) : UriBackedAudioImportSource {
+    override fun open(): InputStream? = contentResolver.openInputStream(uri)
 }

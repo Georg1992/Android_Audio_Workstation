@@ -42,7 +42,8 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
-import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
+import com.georgv.audioworkstation.core.track.hasTimelineClip
 import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMsForClipTimelineWindow
@@ -69,6 +70,8 @@ sealed interface WaveformState {
     data object Loading : WaveformState
     data class Ready(val peaks: WaveformPeaks) : WaveformState
     data object Failed : WaveformState
+    data class Importing(val progress: Float) : WaveformState
+    data object ImportFailed : WaveformState
 }
 
 data class TimelineClip(
@@ -88,6 +91,8 @@ data class TimelineClip(
     val effectiveStartMs: Long = 0L,
     /** Track-local active region end (ms from WAV start). */
     val effectiveEndMs: Long = 0L,
+    val importStatus: TrackImportStatus = TrackImportStatus.READY,
+    val importProgress: Float = 0f,
 )
 
 data class TimelineClipLayout(
@@ -113,11 +118,14 @@ fun timelineClipEffectiveTimelineEndMs(clip: TimelineClip): Long =
 fun projectTimelineClips(
     tracks: List<TrackEntity>,
     waveformStatesByTrackId: Map<String, WaveformState>,
+    importProgressByTrackId: Map<String, Float> = emptyMap(),
 ): List<TimelineClip> {
     val playableTracks = tracks.mapNotNull { track ->
+        if (!track.hasTimelineClip()) return@mapNotNull null
         val durationMs = track.duration?.takeIf { it > 0L } ?: return@mapNotNull null
-        if (track.wavFilePath.isBlank()) return@mapNotNull null
-        if (track.isRecording && !track.hasPersistedPlayableAudio()) return@mapNotNull null
+        if (track.isRecording && track.importStatus == TrackImportStatus.READY && track.wavFilePath.isBlank()) {
+            return@mapNotNull null
+        }
         val startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
         track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = durationMs.coerceAtLeast(0L))
     }
@@ -142,6 +150,8 @@ fun projectTimelineClips(
             loopEndMs = track.loopEndMs,
             effectiveStartMs = track.effectiveLoopStartMs(),
             effectiveEndMs = track.effectiveLoopEndMs(),
+            importStatus = track.importStatus,
+            importProgress = importProgressByTrackId[track.id] ?: 0f,
         )
     }
 }
@@ -295,7 +305,15 @@ fun TrackTimelineLane(
             .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
         val activeClip = clip ?: return@BoxWithConstraints
-        val layout = laneLayout ?: return@BoxWithConstraints
+        val layout = laneLayout
+        if (layout == null) {
+            ImportTimelineLaneFallback(
+                clip = activeClip,
+                recordingInputLevel = recordingInputLevel,
+                modifier = Modifier.fillMaxSize(),
+            )
+            return@BoxWithConstraints
+        }
         var loopRegionEditFocus by remember(activeClip.laneId) { mutableStateOf(false) }
         var laneViewportZoomed by remember(activeClip.laneId) { mutableStateOf(false) }
         val timelineScale =
@@ -384,18 +402,37 @@ fun TrackTimelineLane(
                             else -> false
                         }
                     val localPlayheadSourceMs = clipLocalPlayheadMs ?: sourcePlayheadMs
+                    val clipImporting = activeClip.importStatus == TrackImportStatus.IMPORTING
+                    val clipImportFailed = activeClip.importStatus == TrackImportStatus.FAILED
+                    val clipBorderColor =
+                        when {
+                            clipImporting -> AppColors.Cyan
+                            clipImportFailed -> AppColors.Red
+                            else -> Color.Transparent
+                        }
+                    val clipBorderWidth = if (clipImporting || clipImportFailed) 2.dp else 0.dp
                     Box(
                         modifier = Modifier
                             .offset(x = clipStart)
                             .width(clipWidth)
                             .fillMaxHeight()
                             .clip(shape)
-                            .background(AppColors.SurfacePanel)
+                            .background(
+                                if (clipImporting) {
+                                    AppColors.SurfacePanel.copy(alpha = 0.55f)
+                                } else if (clipImportFailed) {
+                                    AppColors.SurfacePanel.copy(alpha = 0.65f)
+                                } else {
+                                    AppColors.SurfacePanel
+                                },
+                            )
+                            .border(clipBorderWidth, clipBorderColor, shape)
                             .padding(top = Dimens.TightGap, start = 1.dp),
                     ) {
                         when (
                             timelineLaneWaveformMode(
                                 waveformState = activeClip.waveformState,
+                                importStatus = activeClip.importStatus,
                                 isActiveRecording = activeClip.isActiveRecording,
                                 recordingInputLevel = recordingInputLevel,
                             )
@@ -431,15 +468,25 @@ fun TrackTimelineLane(
                                     inputLevel = recordingInputLevel ?: 0f,
                                     modifier = Modifier.fillMaxSize(),
                                 )
+                            TimelineLaneWaveformMode.Importing -> {
+                                val importingState = activeClip.waveformState as? WaveformState.Importing
+                                ImportingWaveform(
+                                    progress = importingState?.progress ?: activeClip.importProgress,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                             TimelineLaneWaveformMode.Status ->
                                 when (activeClip.waveformState) {
                                     WaveformState.Loading ->
-                                        WaveformStatusText("Generating...")
+                                        WaveformStatusText(stringResource(R.string.waveform_generating))
                                     WaveformState.Failed ->
-                                        WaveformStatusText("No waveform")
+                                        WaveformStatusText(stringResource(R.string.waveform_unavailable))
+                                    WaveformState.ImportFailed ->
+                                        WaveformStatusText(stringResource(R.string.import_clip_failed))
                                     WaveformState.NoWaveform ->
-                                        WaveformStatusText("No audio")
+                                        WaveformStatusText(stringResource(R.string.waveform_no_audio))
                                     is WaveformState.Ready -> Unit
+                                    is WaveformState.Importing -> Unit
                                 }
                         }
                         if (showLocalPlayhead) {
@@ -613,6 +660,56 @@ private fun ClipMetadataArea(
                 text = "BASE",
                 style = labelStyle,
             )
+        }
+    }
+}
+
+@Composable
+private fun ImportTimelineLaneFallback(
+    clip: TimelineClip,
+    recordingInputLevel: Float?,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(Dimens.MediumRadius)
+    Box(
+        modifier =
+            modifier
+                .clip(shape)
+                .background(AppColors.SurfacePanel)
+                .border(
+                    width = 2.dp,
+                    color =
+                        when (clip.importStatus) {
+                            TrackImportStatus.IMPORTING -> AppColors.Cyan
+                            TrackImportStatus.FAILED -> AppColors.Red
+                            else -> AppColors.Line
+                        },
+                    shape = shape,
+                )
+                .padding(Dimens.TightGap),
+    ) {
+        when (
+            timelineLaneWaveformMode(
+                waveformState = clip.waveformState,
+                importStatus = clip.importStatus,
+                isActiveRecording = clip.isActiveRecording,
+                recordingInputLevel = recordingInputLevel,
+            )
+        ) {
+            TimelineLaneWaveformMode.Importing -> {
+                val importingState = clip.waveformState as? WaveformState.Importing
+                ImportingWaveform(
+                    progress = importingState?.progress ?: clip.importProgress,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            TimelineLaneWaveformMode.Status ->
+                when (clip.waveformState) {
+                    WaveformState.ImportFailed ->
+                        WaveformStatusText(stringResource(R.string.import_clip_failed))
+                    else -> WaveformStatusText(stringResource(R.string.waveform_generating))
+                }
+            else -> Unit
         }
     }
 }

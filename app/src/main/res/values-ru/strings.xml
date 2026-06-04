@@ -72,7 +72,7 @@
     <!-- Audio import failures -->
     <string name="import_failure_file_not_readable">Не удалось прочитать выбранный файл.</string>
     <string name="import_failure_invalid_wav">Файл не является корректным WAV.</string>
-    <string name="import_failure_unsupported_encoding">Поддерживается только PCM WAV.</string>
+    <string name="import_failure_unsupported_encoding">Этот аудиоформат не поддерживается.</string>
     <string name="import_failure_unsupported_channels">Поддерживается только моно или стерео.</string>
     <string name="track_channel_mono">MONO</string>
     <string name="track_channel_stereo">STEREO</string>
@@ -80,6 +80,10 @@
     <string name="import_failure_sample_rate_mismatch">Частота %1$d Гц не совпадает с %2$d Гц проекта.</string>
     <string name="import_failure_bit_depth_mismatch">Разрядность %1$d бит не совпадает с %2$d бит проекта.</string>
     <string name="import_failure_write_failed">Не удалось импортировать аудио: %1$s</string>
+    <string name="import_failure_no_audio_track">В выбранном файле не найдена аудиодорожка.</string>
+    <string name="import_failure_decoder_init_failed">Не удалось запустить декодер для этого файла.</string>
+    <string name="import_failure_unsupported_codec">Этот аудиокодек не поддерживается.</string>
+    <string name="import_failure_corrupted_media">Аудиофайл повреждён или неполный.</string>
 
     <!-- Project / track flow errors -->
     <string name="error_microphone_permission_required">Требуется доступ к микрофону.</string>

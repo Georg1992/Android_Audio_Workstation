@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.track.applyLoopRegionLeftHandleDrag
 import com.georgv.audioworkstation.core.track.applyLoopRegionMoveDrag
 import com.georgv.audioworkstation.core.track.applyLoopRegionRightHandleDrag
@@ -22,6 +23,7 @@ class TrackLoopRegionUiTest {
             TimelineLaneWaveformMode.LiveRecordingMeter,
             timelineLaneWaveformMode(
                 waveformState = WaveformState.Ready(WaveformPeaks.Placeholder),
+                importStatus = TrackImportStatus.READY,
                 isActiveRecording = true,
                 recordingInputLevel = 0.5f,
             ),
@@ -34,6 +36,7 @@ class TrackLoopRegionUiTest {
             TimelineLaneWaveformMode.LiveRecordingMeter,
             timelineLaneWaveformMode(
                 waveformState = WaveformState.NoWaveform,
+                importStatus = TrackImportStatus.READY,
                 isActiveRecording = true,
                 recordingInputLevel = 0.25f,
             ),
@@ -46,6 +49,7 @@ class TrackLoopRegionUiTest {
             TimelineLaneWaveformMode.LiveRecordingMeter,
             timelineLaneWaveformMode(
                 waveformState = WaveformState.NoWaveform,
+                importStatus = TrackImportStatus.READY,
                 isActiveRecording = true,
                 recordingInputLevel = null,
             ),
@@ -58,6 +62,7 @@ class TrackLoopRegionUiTest {
             TimelineLaneWaveformMode.PersistedPeaks,
             timelineLaneWaveformMode(
                 waveformState = WaveformState.Ready(WaveformPeaks.Placeholder),
+                importStatus = TrackImportStatus.READY,
                 isActiveRecording = false,
                 recordingInputLevel = null,
             ),
@@ -105,6 +110,7 @@ class TrackLoopRegionUiTest {
             TimelineLaneWaveformMode.LiveRecordingMeter,
             timelineLaneWaveformMode(
                 waveformState = clip.waveformState,
+                importStatus = TrackImportStatus.READY,
                 isActiveRecording = clip.isActiveRecording,
                 recordingInputLevel = 0.4f,
             ),

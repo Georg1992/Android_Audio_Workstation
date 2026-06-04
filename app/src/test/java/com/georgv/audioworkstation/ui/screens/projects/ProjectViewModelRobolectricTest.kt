@@ -18,6 +18,7 @@ import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -228,14 +229,13 @@ class ProjectViewModelRobolectricTest {
 
     private fun robolectricVm(
         repo: ProjectRepository,
-        audioImporter: AudioImporter = ThrowingAudioImporterForRobolectric(),
         audioFilePathProvider: AudioFilePathProvider = NullablePathAudioFileProvider(null),
     ): ProjectViewModel {
         val audio = NoOpAudioControllerForRobolectric()
         return ProjectViewModel(
             repo,
             audio,
-            ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider),
+            testProjectAudioImportCoordinator(repo, audioFilePathProvider),
             ProjectRecordingCoordinator(repo, audio, audioFilePathProvider, WavPunchSplicer()),
             WavWaveformPeakExtractor(),
             audioFilePathProvider,

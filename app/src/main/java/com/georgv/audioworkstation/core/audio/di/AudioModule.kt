@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.core.audio.di
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImporter
+import com.georgv.audioworkstation.core.audio.DelegatingAudioImporter
 import com.georgv.audioworkstation.core.audio.DefaultAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.DefaultProjectFileStore
 import com.georgv.audioworkstation.core.audio.NativeAudioController
@@ -31,7 +32,7 @@ abstract class AudioModule {
     @Binds
     @Singleton
     abstract fun bindAudioImporter(
-        importer: WavAudioImporter
+        importer: DelegatingAudioImporter
     ): AudioImporter
 
     @Binds
@@ -56,5 +57,9 @@ abstract class AudioModule {
         @Provides
         @Singleton
         fun provideWavWaveformPeakExtractor(): WavWaveformPeakExtractor = WavWaveformPeakExtractor()
+
+        @Provides
+        @Singleton
+        fun provideWavAudioImporter(): WavAudioImporter = WavAudioImporter()
     }
 }

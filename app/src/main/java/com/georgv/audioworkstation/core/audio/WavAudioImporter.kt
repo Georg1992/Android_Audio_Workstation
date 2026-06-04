@@ -1,13 +1,11 @@
 package com.georgv.audioworkstation.core.audio
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
@@ -20,14 +18,16 @@ import javax.inject.Singleton
  * using [android.media.MediaExtractor] + [android.media.MediaCodec] behind this same interface.
  */
 @Singleton
-class WavAudioImporter @Inject constructor() : AudioImporter {
+class WavAudioImporter(
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : AudioImporter {
 
     override suspend fun import(
         source: AudioImportSource,
         destinationPath: String,
         target: AudioImportTarget,
     ): AudioImportResult =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             val stream = openImportStream(source) ?: return@withContext AudioImportResult.Failure.FileNotReadable
             stream.use { input ->
                 importFromOpenStream(input, destinationPath, target)
@@ -96,25 +96,13 @@ class WavAudioImporter @Inject constructor() : AudioImporter {
     }
 
     private fun writeCanonicalWavHeader(output: java.io.OutputStream, header: ParsedWavHeader) {
-        val buffer = ByteBuffer.allocate(WAV_CANONICAL_FILE_HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-        val byteRate = header.sampleRate * header.numChannels * (header.bitsPerSample / BITS_PER_BYTE)
-        val blockAlign = header.numChannels * (header.bitsPerSample / BITS_PER_BYTE)
-
-        buffer.put(WavWriteTags.RIFF)
-        buffer.putInt(WavCanonicalHeaderSizeBytes + header.dataSizeBytes)
-        buffer.put(WavWriteTags.WAVE)
-        buffer.put(WavWriteTags.FMT)
-        buffer.putInt(WavFmtSubchunkPayloadSizeBytes)
-        buffer.putShort(PCM_FORMAT.toShort())
-        buffer.putShort(header.numChannels.toShort())
-        buffer.putInt(header.sampleRate)
-        buffer.putInt(byteRate)
-        buffer.putShort(blockAlign.toShort())
-        buffer.putShort(header.bitsPerSample.toShort())
-        buffer.put(WavWriteTags.DATA)
-        buffer.putInt(header.dataSizeBytes)
-
-        output.write(buffer.array())
+        WavHeaderWriter.writeHeader(
+            output = output,
+            numChannels = header.numChannels,
+            sampleRate = header.sampleRate,
+            bitsPerSample = header.bitsPerSample,
+            dataSizeBytes = header.dataSizeBytes,
+        )
     }
 
     private fun copyExactly(
@@ -138,15 +126,7 @@ class WavAudioImporter @Inject constructor() : AudioImporter {
         const val BITS_PER_BYTE = 8
         const val MS_PER_SECOND = 1000L
         const val COPY_BUFFER_BYTES = 64 * 1024
-        const val WAV_CANONICAL_FILE_HEADER_BYTES = 44
     }
-}
-
-private object WavWriteTags {
-    val RIFF = "RIFF".toByteArray(Charsets.US_ASCII)
-    val WAVE = "WAVE".toByteArray(Charsets.US_ASCII)
-    val FMT = "fmt ".toByteArray(Charsets.US_ASCII)
-    val DATA = "data".toByteArray(Charsets.US_ASCII)
 }
 
 private fun openImportStream(source: AudioImportSource): InputStream? =

@@ -18,7 +18,11 @@ import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
+import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
+import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.audio.wavImportSource
 import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -51,9 +55,14 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class ProjectViewModelTest {
 
     @get:Rule
@@ -1844,24 +1853,23 @@ class ProjectViewModelTest {
     @Test
     fun `importAudio persists imported track with suggested name and flag`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
-        val importer = FakeAudioImporter(
-            result = AudioImportResult.Success(
-                durationMs = 2_500L,
-                channelMode = ChannelMode.STEREO,
-                channelCount = 2,
-            )
-        )
-        val vm = createViewModel(dao, audioImporter = importer)
+        val provider = FakeAudioFilePathProvider(tempDir().absolutePath)
+        val vm = createViewModel(dao, audioFilePathProvider = provider)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
 
-        val source = AudioImportSource { null }
+        val stereoFrames = 110_250
+        val source =
+            wavImportSource(
+                samples = ShortArray(stereoFrames * 2) { 0 },
+                sampleRateHz = 44_100,
+                channelCount = 2,
+            )
         vm.importAudio(PROJECT_ID, source, suggestedName = "My Loop")
         advanceUntilIdle()
 
-        assertEquals(1, importer.importCalls)
         val imported = dao.observeTracks(PROJECT_ID).first().single()
         assertEquals("My Loop", imported.name)
         assertEquals(true, imported.isImported)
@@ -1875,19 +1883,10 @@ class ProjectViewModelTest {
     @Test
     fun `importAudio generates waveform peaks for imported wav`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
-        val importer = FakeAudioImporter(
-            result = AudioImportResult.Success(
-                durationMs = 1_000L,
-                channelMode = ChannelMode.MONO,
-                channelCount = 1,
-            ),
-            wavSamplesToWrite = shortArrayOf(0, 2_000, 8_000, 16_000, 24_000, 30_000)
-        )
         val provider = FakeAudioFilePathProvider(tempDir().absolutePath)
         val vm =
             createViewModel(
                 dao,
-                audioImporter = importer,
                 audioFilePathProvider = provider,
                 waveformPeakExtractor = WavWaveformPeakExtractor(ioDispatcher = mainDispatcherRule.dispatcher),
             )
@@ -1895,7 +1894,15 @@ class ProjectViewModelTest {
 
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
-        vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "Imported")
+        val source =
+            wavImportSource(
+                samples = ShortArray(4_410) { index -> (index * 7).toShort() },
+                sampleRateHz = 44_100,
+            )
+        vm.importAudio(PROJECT_ID, source, suggestedName = "Imported")
+        waitUntil {
+            vm.uiState.value.waveformStatesByTrackId.values.any { it is WaveformState.Ready }
+        }
         advanceUntilIdle()
 
         val imported = vm.uiState.value.tracks.single()
@@ -1909,14 +1916,13 @@ class ProjectViewModelTest {
     @Test
     fun `importAudio uses default take name when suggested name is blank`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
-        val importer = FakeAudioImporter()
-        val vm = createViewModel(dao, audioImporter = importer)
+        val vm = createViewModel(dao, audioFilePathProvider = FakeAudioFilePathProvider(tempDir().absolutePath))
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
 
-        vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "  ")
+        vm.importAudio(PROJECT_ID, wavImportSource(ShortArray(4_410) { 0 }), suggestedName = "  ")
         advanceUntilIdle()
 
         val imported = dao.observeTracks(PROJECT_ID).first().single()
@@ -1927,22 +1933,50 @@ class ProjectViewModelTest {
     @Test
     fun `importAudio surfaces failure message and does not insert track`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
-        val importer = FakeAudioImporter(
-            result = AudioImportResult.Failure.SampleRateMismatch(expected = 48_000, actual = 44_100)
-        )
-        val vm = createViewModel(dao, audioImporter = importer)
+        val vm = createViewModel(dao, audioFilePathProvider = FakeAudioFilePathProvider(tempDir().absolutePath))
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
         advanceUntilIdle()
 
-        vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "bad.wav")
+        vm.importAudio(
+            PROJECT_ID,
+            wavImportSource(ShortArray(4_410) { 0 }, sampleRateHz = 48_000),
+            suggestedName = "bad.wav",
+        )
         advanceUntilIdle()
 
         assertEquals(0, dao.observeTracks(PROJECT_ID).first().size)
         val message = vm.userMessages.first()
         assertEquals(R.string.import_failure_sample_rate_mismatch, message.resId)
-        assertEquals(listOf<Any>(44_100, 48_000), message.args)
+        assertEquals(listOf<Any>(48_000, 44_100), message.args)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `toggleSelect ignores importing track`() = runTest(mainDispatcherRule.dispatcher) {
+        val importingTrack =
+            track(
+                id = "importing",
+                position = 0,
+                wavFilePath = "importing.wav",
+                duration = 5_000L,
+            ).copy(importStatus = TrackImportStatus.IMPORTING)
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(importingTrack),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+
+        vm.toggleSelect("importing")
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.selectedTrackIds.contains("importing"))
         collectJob.cancel()
     }
 
@@ -1950,8 +1984,7 @@ class ProjectViewModelTest {
     fun `importAudio is blocked while recording`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val audioController = FakeAudioController()
-        val importer = FakeAudioImporter()
-        val vm = createViewModel(dao, audioController = audioController, audioImporter = importer)
+        val vm = createViewModel(dao, audioController = audioController)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         vm.bind(PROJECT_ID)
@@ -1959,10 +1992,10 @@ class ProjectViewModelTest {
         vm.onRecordPressed(PROJECT_ID)
         advanceUntilIdle()
 
-        vm.importAudio(PROJECT_ID, AudioImportSource { null }, suggestedName = "x")
+        vm.importAudio(PROJECT_ID, wavImportSource(ShortArray(100) { 0 }), suggestedName = "x")
         advanceUntilIdle()
 
-        assertEquals(0, importer.importCalls)
+        assertEquals(1, dao.observeTracks(PROJECT_ID).first().size)
         val message = vm.userMessages.first()
         assertEquals(R.string.error_stop_recording_to_import, message.resId)
         vm.onStopPressed()
@@ -1974,42 +2007,39 @@ class ProjectViewModelTest {
     fun `ProjectAudioImportCoordinator returns StorageUnavailable without importing`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val repo = ProjectRepository(dao, NoopProjectFileStore)
-        val importer = FakeAudioImporter()
         val coordinator =
-            ProjectAudioImportCoordinator(repo, importer, NullTrackOutputPathProvider)
+            testProjectAudioImportCoordinator(
+                repo,
+                audioFilePathProvider = NullTrackOutputPathProvider,
+                wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
+            )
         val outcome =
-            coordinator.run(
+            coordinator.prepare(
                 projectId = PROJECT_ID,
                 project = project(),
                 visibleTrackCount = 0,
-                source = AudioImportSource { null },
+                source = wavImportSource(ShortArray(100) { 0 }),
                 suggestedName = "x",
             )
         assertEquals(ProjectAudioImportOutcome.StorageUnavailable, outcome)
-        assertEquals(0, importer.importCalls)
     }
 
     @Test
     fun `ProjectAudioImportCoordinator maps success to ReadyToPersist`() = runTest(mainDispatcherRule.dispatcher) {
         val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
         val repo = ProjectRepository(dao, NoopProjectFileStore)
-        val importer =
-            FakeAudioImporter(
-                result =
-                    AudioImportResult.Success(
-                        durationMs = 100L,
-                        channelMode = ChannelMode.MONO,
-                        channelCount = 1,
-                    )
-            )
         val coordinator =
-            ProjectAudioImportCoordinator(repo, importer, FakeAudioFilePathProvider())
+            testProjectAudioImportCoordinator(
+                repo,
+                audioFilePathProvider = FakeAudioFilePathProvider(),
+                wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
+            )
         val outcome =
-            coordinator.run(
+            coordinator.prepare(
                 projectId = PROJECT_ID,
                 project = project(),
                 visibleTrackCount = 2,
-                source = AudioImportSource { null },
+                source = wavImportSource(ShortArray(4_410) { 0 }),
                 suggestedName = null,
             )
         assertTrue(outcome is ProjectAudioImportOutcome.ReadyToPersist)
@@ -2498,14 +2528,17 @@ class ProjectViewModelTest {
     private fun createViewModel(
         dao: FakeProjectDao,
         audioController: AudioController = FakeAudioController(),
-        audioImporter: AudioImporter = FakeAudioImporter(),
         audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider(),
         recordingStorageGuard: RecordingStorageGuard = permissiveRecordingStorageGuard(),
         waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
     ): ProjectViewModel {
         val repo = ProjectRepository(dao, NoopProjectFileStore)
         val audioImportCoordinator =
-            ProjectAudioImportCoordinator(repo, audioImporter, audioFilePathProvider)
+            testProjectAudioImportCoordinator(
+                repo,
+                audioFilePathProvider,
+                wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
+            )
         val recordingCoordinator =
             ProjectRecordingCoordinator(
                 repo,

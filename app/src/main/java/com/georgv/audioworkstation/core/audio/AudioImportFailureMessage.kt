@@ -23,4 +23,12 @@ fun AudioImportResult.Failure.toUiMessage(): UiMessage = when (this) {
         UiMessage(R.string.import_failure_bit_depth_mismatch, actual, expected)
     is AudioImportResult.Failure.WriteFailed ->
         UiMessage(R.string.import_failure_write_failed, reason)
+    AudioImportResult.Failure.NoAudioTrack ->
+        UiMessage(R.string.import_failure_no_audio_track)
+    AudioImportResult.Failure.DecoderInitFailed ->
+        UiMessage(R.string.import_failure_decoder_init_failed)
+    AudioImportResult.Failure.UnsupportedCodec ->
+        UiMessage(R.string.import_failure_unsupported_codec)
+    AudioImportResult.Failure.CorruptedMedia ->
+        UiMessage(R.string.import_failure_corrupted_media)
 }

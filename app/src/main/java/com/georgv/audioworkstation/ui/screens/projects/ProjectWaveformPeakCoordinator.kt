@@ -1,14 +1,20 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.wavFileContentFingerprint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Post-READY exact waveform extraction for playable tracks.
+ * Runs off the main thread; updates UI when peaks are ready.
+ */
 internal class ProjectWaveformPeakCoordinator(
     private val scope: CoroutineScope,
     private val waveformPeakExtractor: WavWaveformPeakExtractor,
@@ -17,8 +23,11 @@ internal class ProjectWaveformPeakCoordinator(
 ) {
     private val waveformPeakCacheKeysByTrackId = mutableMapOf<String, String>()
     private val waveformExtractionsInFlight = mutableSetOf<String>()
+    private val waveformExtractionJobsByTrackId = mutableMapOf<String, Job>()
 
     fun resetWhenProjectChanges() {
+        waveformExtractionJobsByTrackId.values.forEach { it.cancel() }
+        waveformExtractionJobsByTrackId.clear()
         waveformStatesByTrackId.value = emptyMap()
         waveformPeakCacheKeysByTrackId.clear()
         waveformExtractionsInFlight.clear()
@@ -31,7 +40,13 @@ internal class ProjectWaveformPeakCoordinator(
 
         currentStates.keys.retainAll(playableIds)
         waveformPeakCacheKeysByTrackId.keys.retainAll(playableIds)
+        waveformExtractionJobsByTrackId.keys.toList().forEach { trackId ->
+            if (trackId !in playableIds) {
+                waveformExtractionJobsByTrackId.remove(trackId)?.cancel()
+            }
+        }
         waveformExtractionsInFlight.retainAll(playableIds)
+        waveformExtractionJobsByTrackId.keys.retainAll(playableIds)
 
         playableTracks.forEach { track ->
             val cacheKey = trackWaveformCacheKey(track)
@@ -49,23 +64,49 @@ internal class ProjectWaveformPeakCoordinator(
             val cacheKey = trackWaveformCacheKey(track) ?: return@forEach
             if (waveformPeakCacheKeysByTrackId[track.id] == cacheKey) return@forEach
             if (!waveformExtractionsInFlight.add(track.id)) return@forEach
+
+            val cachedPeaks = waveformPeakExtractor.peekCachedPeaks(track.wavFilePath)
+            if (cachedPeaks != null) {
+                waveformPeakCacheKeysByTrackId[track.id] = cacheKey
+                waveformExtractionsInFlight.remove(track.id)
+                waveformStatesByTrackId.value =
+                    waveformStatesByTrackId.value + (track.id to WaveformState.Ready(cachedPeaks))
+                return@forEach
+            }
+
             waveformPeakCacheKeysByTrackId[track.id] = cacheKey
             waveformStatesByTrackId.value =
                 waveformStatesByTrackId.value + (track.id to WaveformState.Loading)
-            scope.launch {
-                val peaks = waveformPeakExtractor.extract(track.wavFilePath)
-                waveformExtractionsInFlight.remove(track.id)
-                if (tracksSnapshot().any { trackStillValidForWaveformCache(it, track, cacheKey) }) {
-                    val state =
-                        if (peaks == null) {
-                            WaveformState.Failed
-                        } else {
-                            WaveformState.Ready(peaks)
-                        }
-                    waveformStatesByTrackId.value = waveformStatesByTrackId.value + (track.id to state)
-                }
-            }
+            launchExtraction(track = track, cacheKey = cacheKey)
         }
+    }
+
+    private fun launchExtraction(track: TrackEntity, cacheKey: String) {
+        waveformExtractionJobsByTrackId[track.id]?.cancel()
+        waveformExtractionJobsByTrackId[track.id] =
+            scope.launch {
+                val (peaks, extractDurationMs) =
+                    Mp3ImportTiming.measureWallClock {
+                        waveformPeakExtractor.extract(track.wavFilePath)
+                    }
+                waveformExtractionsInFlight.remove(track.id)
+                waveformExtractionJobsByTrackId.remove(track.id)
+                if (!tracksSnapshot().any { trackStillValidForWaveformCache(it, track, cacheKey) }) {
+                    return@launch
+                }
+                Mp3ImportTiming.logPostReadyWaveformExtract(
+                    trackId = track.id,
+                    durationMs = extractDurationMs,
+                    success = peaks != null,
+                )
+                val state =
+                    if (peaks == null) {
+                        WaveformState.Failed
+                    } else {
+                        WaveformState.Ready(peaks)
+                    }
+                waveformStatesByTrackId.value = waveformStatesByTrackId.value + (track.id to state)
+            }
     }
 
     private fun trackStillValidForWaveformCache(

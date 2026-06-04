@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.TrackCard
@@ -126,7 +127,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
             gain = track.gain,
             onGainChange = { gain -> onGainChange(track.id, gain) },
             onGainCommit = { gain -> onGainCommit(track.id, gain) },
-            gainFaderEnabled = gainFaderEnabled,
+            gainFaderEnabled = gainFaderEnabled && track.importStatus == TrackImportStatus.READY,
             onGainDragStart = { onGainDragStart(track.id) },
             onGainDragEnd = { onGainDragEnd(track.id) },
             pan = track.pan,
@@ -140,7 +141,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
             recordTargetToggleEnabled = trackActionsEnabled,
             onToggleLoop = { onToggleLoop(track.id) },
             isLoop = track.isLoop,
-            loopToggleEnabled = trackActionsEnabled,
+            loopToggleEnabled = trackActionsEnabled && track.importStatus == TrackImportStatus.READY,
             loopRegionEditingEnabled =
                 loopRegionEditingEnabled(
                     playbackActive = playbackActive,
@@ -156,8 +157,8 @@ internal fun LazyItemScope.ProjectTrackListRow(
             blockReorderDrag =
                 (reorderActive && dragController.draggingKey != track.id) ||
                     dropSettleInProgress,
-            onReorderDragStart = { positionInRoot ->
-                val bounds = itemBoundsMap[track.id] ?: return@TrackCard
+            onReorderDragStart = { positionInRoot, cardBoundsInRoot ->
+                val bounds = itemBoundsMap[track.id] ?: cardBoundsInRoot
                 val offsetFromFinger = positionInRoot - Offset(bounds.left, bounds.top)
                 val fixedXInParentPx = bounds.left - listParentBoundsInRoot.left
                 dragController.start(
