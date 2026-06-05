@@ -52,7 +52,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -177,6 +178,7 @@ class ProjectViewModel @Inject constructor(
             waveformPeakExtractor = waveformPeakExtractor,
             waveformStatesByTrackId = waveformStatesByTrackId,
             tracksSnapshot = { uiState.value.tracks },
+            ioDispatcher = waveformPeakExtractor.ioDispatcher,
         )
 
     /**
@@ -381,7 +383,9 @@ class ProjectViewModel @Inject constructor(
                     optimisticTrackPans.value,
                 )
             }.collect { tracks ->
-                waveformPeaks.refreshPeakRequests(tracks)
+                if (waveformPeakRefreshEnabled) {
+                    waveformPeaks.refreshPeakRequests(tracks)
+                }
             }
         }
     }
@@ -529,6 +533,11 @@ class ProjectViewModel @Inject constructor(
 
     val sampleRateMismatchDialogState = sampleRateMismatchDialog.asStateFlow()
 
+    private val _destinationReady = MutableStateFlow(false)
+    /** True after [scheduleBind] completes for the current route; gates heavy workspace reveal. */
+    val destinationReady: StateFlow<Boolean> = _destinationReady.asStateFlow()
+    private var waveformPeakRefreshEnabled = false
+
     private var masterPeakPollJob: Job? = null
     private var masterOverloadWarningShownThisSession = false
 
@@ -621,10 +630,24 @@ class ProjectViewModel @Inject constructor(
         clearSampleRateMismatchPromptState()
         this.projectId.value = projectId
         if (projectChanged) {
-            recoverStaleImports(repo, projectId, importJobs)
+            withContext(Dispatchers.IO) {
+                recoverStaleImports(repo, projectId, importJobs)
+            }
         }
         awaitProjectTracksSynced(repo, projectTracks, projectId)
         tryStartRegistryPendingCompressedImport(projectId)
+        waveformPeakRefreshEnabled = true
+        waveformPeaks.refreshPeakRequests(currentVisibleTracks())
+    }
+
+    /** Starts [bind] off the composition critical path; exposes [destinationReady] when complete. */
+    fun scheduleBind(projectId: String) {
+        viewModelScope.launch {
+            _destinationReady.value = false
+            waveformPeakRefreshEnabled = false
+            bind(projectId)
+            _destinationReady.value = true
+        }
     }
 
     fun setPlayheadPositionMs(positionMs: Long, timelineBaseDurationMs: Long) {

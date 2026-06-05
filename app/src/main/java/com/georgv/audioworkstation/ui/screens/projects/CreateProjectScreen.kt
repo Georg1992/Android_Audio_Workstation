@@ -48,6 +48,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateProjectScreen(
@@ -61,13 +64,16 @@ fun CreateProjectScreen(
     val context = LocalContext.current
 
     LaunchedEffect(vm) {
-        vm.userMessages.collect { message ->
-            snackbarHostState.showSnackbar(message.resolve(context))
+        coroutineScope {
+            launch {
+                vm.userMessages.collect { message ->
+                    snackbarHostState.showSnackbar(message.resolve(context))
+                }
+            }
+            launch {
+                vm.createdProjects.collect(onProjectCreated)
+            }
         }
-    }
-
-    LaunchedEffect(vm) {
-        vm.createdProjects.collect(onProjectCreated)
     }
 
     ScreenScaffold(

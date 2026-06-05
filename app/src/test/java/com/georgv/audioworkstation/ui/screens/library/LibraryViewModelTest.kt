@@ -2,6 +2,8 @@ package com.georgv.audioworkstation.ui.screens.library
 
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
+import com.georgv.audioworkstation.core.ui.DataAvailability
+import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -10,7 +12,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -18,6 +24,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestWatcher
@@ -30,7 +38,19 @@ class LibraryViewModelTest {
     val mainDispatcherRule = LibraryMainDispatcherRule()
 
     @Test
-    fun `uiState exposes projects from repository`() = runTest {
+    fun `initial state is Pending before repository emits`() = runTest {
+        val dao = PendingEmitLibraryProjectDao(
+            projects = listOf(project("project-a", "Alpha", 1L)),
+        )
+        val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
+        val vm = LibraryViewModel(repo)
+
+        assertEquals(DataAvailability.Pending, vm.uiState.value.availability)
+        assertTrue(vm.uiState.value.isInitialLoad)
+    }
+
+    @Test
+    fun `state becomes Ready after projects emission`() = runTest {
         val newerProject = project(id = "project-b", name = "Beta", createdAt = 2L)
         val olderProject = project(id = "project-a", name = "Alpha", createdAt = 1L)
         val dao = FakeLibraryProjectDao(projects = listOf(olderProject, newerProject))
@@ -39,9 +59,46 @@ class LibraryViewModelTest {
 
         advanceUntilIdle()
 
-        assertEquals(listOf("project-b", "project-a"), vm.uiState.value.projects.map { it.id })
-        assertEquals(listOf("Beta", "Alpha"), vm.uiState.value.projects.map { it.name })
+        assertEquals(DataAvailability.Ready, vm.uiState.value.availability)
+        assertEquals(listOf("project-b", "project-a"), vm.uiState.value.content.projects.map { it.id })
+        assertEquals(listOf("Beta", "Alpha"), vm.uiState.value.content.projects.map { it.name })
         collectJob.cancel()
+    }
+
+    @Test
+    fun `empty projects after Ready is content empty not initial load`() = runTest {
+        val dao = FakeLibraryProjectDao(projects = emptyList())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore))
+        backgroundScope.launch { vm.uiState.collect { } }
+
+        advanceUntilIdle()
+
+        assertEquals(DataAvailability.Ready, vm.uiState.value.availability)
+        assertFalse(vm.uiState.value.isInitialLoad)
+        assertTrue(vm.uiState.value.isContentEmpty { it.projects.isEmpty() })
+    }
+
+    @Test
+    fun `cached projects show Ready immediately on new ViewModel`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Alpha", createdAt = 1L),
+                project(id = "project-b", name = "Beta", createdAt = 2L),
+            )
+        )
+        val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
+        runBlocking {
+            withContext(Dispatchers.Default) {
+                repo.projectsReady.first { it }
+            }
+        }
+
+        assertTrue(repo.projectsReady.value)
+
+        val vm = LibraryViewModel(repo)
+        assertEquals(DataAvailability.Ready, vm.uiState.value.availability)
+        assertEquals(2, vm.uiState.value.content.projects.size)
+        assertFalse(vm.uiState.value.isInitialLoad)
     }
 
     @Test
@@ -57,9 +114,10 @@ class LibraryViewModelTest {
 
         advanceUntilIdle()
         vm.deleteProject("project-b")
-        advanceUntilIdle()
+        val projects =
+            vm.uiState.dropWhile { it.content.projects.size != 1 }.first().content.projects.map { it.id }
 
-        assertEquals(listOf("project-a"), vm.uiState.value.projects.map { it.id })
+        assertEquals(listOf("project-a"), projects)
         collectJob.cancel()
     }
 
@@ -88,6 +146,17 @@ class LibraryViewModelTest {
 private object NoopLibraryProjectFileStore : ProjectFileStore {
     override suspend fun deleteTrackFile(track: TrackEntity) = Unit
     override suspend fun deleteProjectFolder(projectId: String) = Unit
+}
+
+private class PendingEmitLibraryProjectDao(
+    private val projects: List<ProjectEntity>,
+) : ProjectDao by FakeLibraryProjectDao(projects = emptyList()) {
+    override fun observeProjects(): Flow<List<ProjectEntity>> = flow {
+        emitGate.first { it }
+        emit(projects.sortedByDescending { it.createdAt })
+    }
+
+    private val emitGate = MutableStateFlow(false)
 }
 
 private class FakeLibraryProjectDao(
@@ -127,8 +196,10 @@ private class FakeLibraryProjectDao(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryMainDispatcherRule : TestWatcher() {
+    val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher()
+
     override fun starting(description: Description) {
-        Dispatchers.setMain(kotlinx.coroutines.test.StandardTestDispatcher())
+        Dispatchers.setMain(dispatcher)
     }
 
     override fun finished(description: Description) {

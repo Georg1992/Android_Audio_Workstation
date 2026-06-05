@@ -14,12 +14,15 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.components.LanguageSwitcher
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.tiles.MainTile
+import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 
@@ -31,14 +34,16 @@ fun MainMenuScreen(
     onOpenProject: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenCommunity: () -> Unit,
-    onOpenDevices: () -> Unit
+    onOpenDevices: () -> Unit,
 ) {
+    NavTransitionDiagnostics.MonitorDestinationLifecycle("main_menu")
+
     ScreenScaffold(
         title = stringResource(R.string.app_title),
         actions = {
             LanguageSwitcher(
                 currentTag = currentLanguageTag,
-                onSetLanguage = onSetLanguage
+                onSetLanguage = onSetLanguage,
             )
         }
     ) { padding ->

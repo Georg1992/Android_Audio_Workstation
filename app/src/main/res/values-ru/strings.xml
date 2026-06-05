@@ -22,6 +22,8 @@
 
     <string name="screen_create_project">Создать проект</string>
     <string name="screen_project">Проект</string>
+    <string name="project_opening">Открытие проекта…</string>
+    <string name="project_loading_tracks">Загрузка дорожек…</string>
     <string name="screen_library">Библиотека</string>
     <string name="screen_community">Сообщество</string>
     <string name="screen_devices">Устройства</string>
@@ -46,6 +48,7 @@
 
     <!-- Library screen -->
     <string name="library_empty_state">Проектов пока нет.</string>
+    <string name="library_loading_state">Загрузка проектов…</string>
     <string name="library_open_project_hint">Нажмите, чтобы открыть проект</string>
     <string name="library_untitled_project">Проект без названия</string>
     <string name="library_delete_project_title">Удалить проект?</string>

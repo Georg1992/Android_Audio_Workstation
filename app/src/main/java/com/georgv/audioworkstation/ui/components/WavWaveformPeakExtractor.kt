@@ -16,7 +16,7 @@ private const val WavChunkReadFrames = 4096
 
 open class WavWaveformPeakExtractor(
     private val targetPeakCount: Int = DefaultWaveformPeakCount,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    internal val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val cache = mutableMapOf<String, WaveformPeaks>()
 

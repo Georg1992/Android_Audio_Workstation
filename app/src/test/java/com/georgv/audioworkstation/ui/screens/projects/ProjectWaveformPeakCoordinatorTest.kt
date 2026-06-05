@@ -39,6 +39,7 @@ class ProjectWaveformPeakCoordinatorTest {
                     waveformPeakExtractor = extractor,
                     waveformStatesByTrackId = states,
                     tracksSnapshot = { tracksSnapshot },
+                    ioDispatcher = mainDispatcherRule.dispatcher,
                 )
             val track =
                 TrackEntity(
@@ -84,6 +85,7 @@ class ProjectWaveformPeakCoordinatorTest {
                     waveformPeakExtractor = extractor,
                     waveformStatesByTrackId = states,
                     tracksSnapshot = { tracksSnapshot },
+                    ioDispatcher = mainDispatcherRule.dispatcher,
                 )
             val track =
                 TrackEntity(

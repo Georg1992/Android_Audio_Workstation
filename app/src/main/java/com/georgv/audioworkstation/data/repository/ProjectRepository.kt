@@ -4,19 +4,47 @@ import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import com.georgv.audioworkstation.ui.screens.library.LibraryDiagnostics
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Singleton
 class ProjectRepository @Inject constructor(
     private val dao: ProjectDao,
-    private val fileStore: ProjectFileStore
+    private val fileStore: ProjectFileStore,
 ) {
+    private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val projectsFirstEmissionLogged = AtomicBoolean(false)
 
-    fun observeProjects(): Flow<List<ProjectEntity>> = dao.observeProjects()
+    /** Eagerly cached project list — revisiting Library gets last known data immediately. */
+    val projectsState: StateFlow<List<ProjectEntity>> =
+        dao.observeProjects()
+            .onEach { projects ->
+                if (projectsFirstEmissionLogged.compareAndSet(false, true)) {
+                    LibraryDiagnostics.logProjectsFirstEmission(projects.size)
+                }
+            }
+            .stateIn(cacheScope, SharingStarted.Eagerly, emptyList())
+
+    /** True after Room emits the first project list to [projectsState]. */
+    val projectsReady: StateFlow<Boolean> =
+        dao.observeProjects()
+            .map { true }
+            .stateIn(cacheScope, SharingStarted.Eagerly, false)
+
+    fun observeProjects(): Flow<List<ProjectEntity>> = projectsState
 
     fun observeProject(projectId: String): Flow<ProjectEntity?> = dao.observeProject(projectId)
 

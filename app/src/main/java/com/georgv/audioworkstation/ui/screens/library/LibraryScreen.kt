@@ -24,22 +24,29 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.georgv.audioworkstation.data.db.entities.ProjectEntity
-import androidx.compose.ui.platform.LocalContext
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.ui.ScreenState
+import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
+import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
+import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -51,8 +58,12 @@ fun LibraryScreen(
     onOpenProject: (String) -> Unit,
     vm: LibraryViewModel = hiltViewModel()
 ) {
+    NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
+
     val state by vm.uiState.collectAsStateWithLifecycle()
+
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var pendingDeleteProject by remember { mutableStateOf<ProjectEntity?>(null) }
 
@@ -75,37 +86,20 @@ fun LibraryScreen(
         ) {
             TopToolbarPanel()
 
-            if (state.projects.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(Dimens.ScreenContentPadding)
-                ) {
-                    Text(
-                        text = stringResource(R.string.library_empty_state),
-                        style = AppText.TileSubtitle,
-                        color = AppColors.Line
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(Dimens.ScreenContentPadding),
-                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
-                ) {
-                    items(state.projects, key = { it.id }) { project ->
-                        LibraryProjectRow(
-                            projectName = project.name?.takeIf { it.isNotBlank() }
-                                ?: stringResource(R.string.library_untitled_project),
-                            onClick = { onOpenProject(project.id) },
-                            onDeleteClick = { pendingDeleteProject = project }
-                        )
+            LibraryProjectContent(
+                state = state,
+                onOpenProject = { projectId ->
+                    scope.launch {
+                        vm.warmUpProject(projectId)
+                        delay(LIBRARY_PROJECT_OPEN_WARMUP_MS)
+                        onOpenProject(projectId)
                     }
-                }
-            }
+                },
+                onDeleteClick = { pendingDeleteProject = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
         }
 
         pendingDeleteProject?.let { project ->
@@ -159,6 +153,71 @@ fun LibraryScreen(
     }
 }
 
+@Composable
+private fun LibraryProjectContent(
+    state: ScreenState<LibraryContent>,
+    onOpenProject: (String) -> Unit,
+    onDeleteClick: (ProjectEntity) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LaunchedEffect(state.availability, state.content.projects.size) {
+        LibraryDiagnostics.logRendered(state)
+    }
+
+    when {
+        state.isInitialLoad -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(Dimens.ScreenContentPadding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.library_loading_state),
+                    style = AppText.TileSubtitle,
+                    color = AppColors.Line.copy(alpha = 0.65f),
+                )
+            }
+        }
+
+        state.isContentEmpty { it.projects.isEmpty() } -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(Dimens.ScreenContentPadding)
+            ) {
+                Text(
+                    text = stringResource(R.string.library_empty_state),
+                    style = AppText.TileSubtitle,
+                    color = AppColors.Line
+                )
+            }
+        }
+
+        else -> {
+            val projects = state.content.projects
+            LaunchedEffect(projects.size) {
+                NavTransitionDiagnostics.logHeavyContentRendered("library", projects.size)
+            }
+            LazyColumn(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(Dimens.ScreenContentPadding),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
+            ) {
+                items(projects, key = { it.id }) { project ->
+                    LibraryProjectRow(
+                        projectName = project.name?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.library_untitled_project),
+                        onClick = { onOpenProject(project.id) },
+                        onDeleteClick = { onDeleteClick(project) }
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LibraryProjectRow(
@@ -204,3 +263,6 @@ private fun LibraryProjectRow(
         }
     }
 }
+
+/** Brief warm-up before Library → Project so the tap ripple renders before navigation. */
+private const val LIBRARY_PROJECT_OPEN_WARMUP_MS = 70L

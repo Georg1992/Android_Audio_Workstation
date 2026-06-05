@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -24,7 +23,10 @@ fun AppNavHost(
     NavHost(
         navController = navController,
         startDestination = Routes.MAIN_MENU,
-        modifier = Modifier
+        enterTransition = { navForwardEnterTransition() },
+        exitTransition = { navForwardExitTransition() },
+        popEnterTransition = { navBackEnterTransition() },
+        popExitTransition = { navBackExitTransition() },
     ) {
         composable(Routes.MAIN_MENU) {
             MainMenuScreen(
@@ -55,7 +57,7 @@ fun AppNavHost(
         /**
          * Project editor/detail route — each navigation pushes a fresh destination so [ProjectScreen]
          * gets a new ViewModel instance; switching projects should go through navigation here, not by
-         * rebinding an existing VM. [ProjectViewModel.bind] is only for establishing that screen's initial
+         * rebinding an existing VM. [ProjectViewModel.scheduleBind] is only for establishing that screen's initial
          * project after composition (single binding per destination lifecycle).
          */
         composable(

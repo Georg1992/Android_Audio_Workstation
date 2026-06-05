@@ -26,6 +26,8 @@
 
     <string name="screen_create_project">创建项目</string>
     <string name="screen_project">项目</string>
+    <string name="project_opening">正在打开项目…</string>
+    <string name="project_loading_tracks">正在加载音轨…</string>
     <string name="screen_library">库</string>
     <string name="screen_community">社区</string>
     <string name="screen_devices">设备</string>
@@ -50,6 +52,7 @@
 
     <!-- Library screen -->
     <string name="library_empty_state">还没有项目。</string>
+    <string name="library_loading_state">正在加载项目…</string>
     <string name="library_open_project_hint">点击打开项目</string>
     <string name="library_untitled_project">未命名项目</string>
     <string name="library_delete_project_title">删除项目？</string>

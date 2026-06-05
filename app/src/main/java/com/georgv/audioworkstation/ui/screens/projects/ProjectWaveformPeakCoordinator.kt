@@ -7,19 +7,23 @@ import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.wavFileContentFingerprint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Post-READY exact waveform extraction for playable tracks.
- * Runs off the main thread; updates UI when peaks are ready.
+ * File fingerprinting and extraction run off the main thread; state updates use [scope].
  */
 internal class ProjectWaveformPeakCoordinator(
     private val scope: CoroutineScope,
     private val waveformPeakExtractor: WavWaveformPeakExtractor,
     private val waveformStatesByTrackId: MutableStateFlow<Map<String, WaveformState>>,
     private val tracksSnapshot: () -> List<TrackEntity>,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val waveformPeakCacheKeysByTrackId = mutableMapOf<String, String>()
     private val waveformExtractionsInFlight = mutableSetOf<String>()
@@ -34,6 +38,12 @@ internal class ProjectWaveformPeakCoordinator(
     }
 
     fun refreshPeakRequests(tracks: List<TrackEntity>) {
+        scope.launch {
+            applyRefreshPeakRequests(tracks)
+        }
+    }
+
+    private suspend fun applyRefreshPeakRequests(tracks: List<TrackEntity>) {
         val playableTracks = tracks.filter { it.hasPersistedPlayableAudio() }
         val playableIds = playableTracks.mapTo(mutableSetOf()) { it.id }
         val currentStates = waveformStatesByTrackId.value.toMutableMap()
@@ -65,7 +75,10 @@ internal class ProjectWaveformPeakCoordinator(
             if (waveformPeakCacheKeysByTrackId[track.id] == cacheKey) return@forEach
             if (!waveformExtractionsInFlight.add(track.id)) return@forEach
 
-            val cachedPeaks = waveformPeakExtractor.peekCachedPeaks(track.wavFilePath)
+            val cachedPeaks =
+                withContext(ioDispatcher) {
+                    waveformPeakExtractor.peekCachedPeaks(track.wavFilePath)
+                }
             if (cachedPeaks != null) {
                 waveformPeakCacheKeysByTrackId[track.id] = cacheKey
                 waveformExtractionsInFlight.remove(track.id)
@@ -86,8 +99,10 @@ internal class ProjectWaveformPeakCoordinator(
         waveformExtractionJobsByTrackId[track.id] =
             scope.launch {
                 val (peaks, extractDurationMs) =
-                    Mp3ImportTiming.measureWallClock {
-                        waveformPeakExtractor.extract(track.wavFilePath)
+                    withContext(ioDispatcher) {
+                        Mp3ImportTiming.measureWallClock {
+                            waveformPeakExtractor.extract(track.wavFilePath)
+                        }
                     }
                 waveformExtractionsInFlight.remove(track.id)
                 waveformExtractionJobsByTrackId.remove(track.id)
@@ -117,9 +132,14 @@ internal class ProjectWaveformPeakCoordinator(
         candidate.id == sourceTrack.id &&
             candidate.wavFilePath == sourceTrack.wavFilePath &&
             candidate.hasPersistedPlayableAudio() &&
-            trackWaveformCacheKey(candidate) == cacheKey
+            trackWaveformCacheKeyBlocking(candidate) == cacheKey
 
-    private fun trackWaveformCacheKey(track: TrackEntity): String? {
+    private suspend fun trackWaveformCacheKey(track: TrackEntity): String? =
+        withContext(ioDispatcher) {
+            trackWaveformCacheKeyBlocking(track)
+        }
+
+    private fun trackWaveformCacheKeyBlocking(track: TrackEntity): String? {
         val fingerprint = wavFileContentFingerprint(track.wavFilePath) ?: return null
         return "$fingerprint|${track.duration ?: 0L}"
     }
