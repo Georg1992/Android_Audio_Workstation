@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
@@ -29,7 +30,9 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 /** Menu rows only (no framed panel); embed in inline surface or DropdownMenu container. */
 @Composable
 fun TrackOverflowMenuBody(
+    isImporting: Boolean,
     onDelete: () -> Unit,
+    onCancelImport: () -> Unit,
     onRename: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -38,18 +41,33 @@ fun TrackOverflowMenuBody(
         modifier = modifier.wrapContentWidth(),
         verticalArrangement = Arrangement.spacedBy(Dimens.Stroke),
     ) {
-        TrackMenuRow(
-            text = stringResource(R.string.action_delete),
-            shape = itemShape,
-            icon = {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = null,
-                    tint = AppColors.Line
-                )
-            },
-            onClick = onDelete
-        )
+        if (isImporting) {
+            TrackMenuRow(
+                text = stringResource(R.string.action_cancel_import),
+                shape = itemShape,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = null,
+                        tint = AppColors.Line,
+                    )
+                },
+                onClick = onCancelImport,
+            )
+        } else {
+            TrackMenuRow(
+                text = stringResource(R.string.action_delete),
+                shape = itemShape,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = AppColors.Line,
+                    )
+                },
+                onClick = onDelete,
+            )
+        }
 
         TrackMenuRow(
             text = stringResource(R.string.action_rename),
@@ -58,23 +76,27 @@ fun TrackOverflowMenuBody(
                 Icon(
                     imageVector = Icons.Filled.Edit,
                     contentDescription = null,
-                    tint = AppColors.Line
+                    tint = AppColors.Line,
                 )
             },
-            onClick = onRename
+            onClick = onRename,
         )
     }
 }
 
 @Composable
 fun TrackOverflowMenu(
+    isImporting: Boolean,
     onDelete: () -> Unit,
+    onCancelImport: () -> Unit,
     onRename: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val menuShape = RoundedCornerShape(Dimens.TileRadius)
     TrackOverflowMenuBody(
+        isImporting = isImporting,
         onDelete = onDelete,
+        onCancelImport = onCancelImport,
         onRename = onRename,
         modifier =
             modifier
@@ -90,24 +112,25 @@ private fun TrackMenuRow(
     text: String,
     shape: RoundedCornerShape,
     icon: @Composable () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .wrapContentWidth()
-            .heightIn(min = Dimens.MenuRowMinHeight)
-            .clip(shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = Dimens.Gap, vertical = Dimens.SmallRadius),
+        modifier =
+            Modifier
+                .wrapContentWidth()
+                .heightIn(min = Dimens.MenuRowMinHeight)
+                .clip(shape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = Dimens.Gap, vertical = Dimens.SmallRadius),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End
+        horizontalArrangement = Arrangement.End,
     ) {
         icon()
         Spacer(Modifier.width(Dimens.PanelPadding))
         Text(
             text = text,
             color = AppColors.Line,
-            maxLines = 1
+            maxLines = 1,
         )
     }
 }

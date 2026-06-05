@@ -88,6 +88,7 @@ fun TrackCard(
     onPanCommit: ((Float) -> Unit)? = null,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onCancelImport: () -> Unit = onDelete,
     onRename: ((String) -> Unit)? = null,
     onToggleLoop: (() -> Unit)? = null,
     isLoop: Boolean = false,
@@ -376,7 +377,8 @@ fun TrackCard(
                                 recordTargetToggleEnabled &&
                                 trackActionsEnabled &&
                                 !interactionBlocked &&
-                                !isRenaming
+                                !isRenaming &&
+                                !isImporting
                         TrackActionButton(
                             active = isRecordTarget,
                             enabled = recordTargetInteractive,
@@ -487,9 +489,14 @@ fun TrackCard(
                         ) {
                             TrackOverflowMenuBody(
                                 modifier = Modifier.padding(Dimens.Stroke),
+                                isImporting = isImporting,
                                 onDelete = {
                                     onMenuDismiss()
                                     onDelete()
+                                },
+                                onCancelImport = {
+                                    onMenuDismiss()
+                                    onCancelImport()
                                 },
                                 onRename = {
                                     onMenuDismiss()

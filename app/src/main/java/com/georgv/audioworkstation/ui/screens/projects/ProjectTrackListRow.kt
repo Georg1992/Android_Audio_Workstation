@@ -73,6 +73,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
     selectedTrackIds: Set<String>,
     recordingTrackId: String?,
     recordTargetTrackId: String?,
+    importInProgress: Boolean,
     recordingInputLevel: Float,
     timelineClipsByTrackId: Map<String, TimelineClip>,
     timelineLaneLayoutDurationMs: Long,
@@ -94,6 +95,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
     onMenuDismiss: () -> Unit,
     onToggleSelect: (String) -> Unit,
     onDeleteTrack: (String) -> Unit,
+    onCancelImport: (String) -> Unit,
     onGainChange: (String, Float) -> Unit,
     onGainCommit: (String, Float) -> Unit,
     gainFaderEnabled: Boolean,
@@ -135,10 +137,14 @@ internal fun LazyItemScope.ProjectTrackListRow(
             onPanCommit = { pan -> onPanCommit(track.id, pan) },
             onClick = { onToggleSelect(track.id) },
             onDelete = { onDeleteTrack(track.id) },
+            onCancelImport = { onCancelImport(track.id) },
             onRename = { onRenameTrack(track.id, it) },
             onToggleRecordTarget = { onToggleRecordTarget(track.id) },
             isRecordTarget = recordTargetTrackId == track.id,
-            recordTargetToggleEnabled = trackActionsEnabled,
+            recordTargetToggleEnabled =
+                trackActionsEnabled &&
+                    !importInProgress &&
+                    track.importStatus == TrackImportStatus.READY,
             onToggleLoop = { onToggleLoop(track.id) },
             isLoop = track.isLoop,
             loopToggleEnabled = trackActionsEnabled && track.importStatus == TrackImportStatus.READY,

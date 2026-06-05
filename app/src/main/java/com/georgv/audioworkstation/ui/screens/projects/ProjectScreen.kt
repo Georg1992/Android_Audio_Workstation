@@ -70,9 +70,11 @@ fun ProjectScreen(
     projectId: String,
     quickRecord: Boolean,
     onBack: () -> Unit,
+    onOpenProject: (String) -> Unit = {},
     vm: ProjectViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val sampleRateMismatchDialog by vm.sampleRateMismatchDialogState.collectAsStateWithLifecycle()
     val dragController = remember { DragController() }
     var trackPagingSummary by remember(projectId) { mutableStateOf("1/1") }
     val context = LocalContext.current
@@ -161,6 +163,21 @@ fun ProjectScreen(
         vm.userMessages.collect { message ->
             topBarAlertState.show(coroutineScope, message.resolve(context))
         }
+    }
+
+    LaunchedEffect(vm) {
+        vm.openProjectRequests.collect { newProjectId ->
+            onOpenProject(newProjectId)
+        }
+    }
+
+    sampleRateMismatchDialog?.let { dialog ->
+        SampleRateMismatchImportDialog(
+            dialog = dialog,
+            onImportWithResampling = { vm.confirmImportWithResampling(projectId) },
+            onCreateProject = { vm.confirmCreateProjectForImport() },
+            onCancel = vm::cancelSampleRateMismatchImport,
+        )
     }
 
     LaunchedEffect(state.project?.name, isRenamingProject) {
@@ -282,6 +299,7 @@ fun ProjectScreen(
                 selectedTrackIds = state.selectedTrackIds,
                 recordingTrackId = state.recordingTrackId,
                 recordTargetTrackId = state.recordTargetTrackId,
+                importInProgress = state.isImportInProgress,
                 recordingInputLevel = state.recordingInputLevel,
                 timelineClipsByTrackId = state.timelineClipsByTrackId,
                 timelineLaneLayoutDurationMs = state.timelineLaneLayoutDurationMs,
@@ -291,6 +309,7 @@ fun ProjectScreen(
                 dragController = dragController,
                 onToggleSelect = vm::toggleSelect,
                 onDeleteTrack = vm::deleteTrack,
+                onCancelImport = vm::cancelImport,
                 onGainChange = vm::setTrackGain,
                 onGainCommit = vm::commitTrackGain,
                 onPanChange = vm::setTrackPan,
@@ -322,6 +341,7 @@ fun ProjectScreen(
                     onPlay = { vm.onPlayPressed() },
                     onStop = { vm.onStopPressed() },
                     onRecord = { startRecordingIfPermitted("New Project") },
+                    isRecordEnabled = !state.isImportInProgress,
                     inputLocked = reorderActive,
                     modifier = Modifier.fillMaxWidth(TransportPanelWidthFraction),
                 )

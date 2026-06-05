@@ -55,6 +55,9 @@ internal open class Mp3ImportTimingCore {
     private var sourceSampleRate = 0
     private var targetSampleRate = 0
     private var resamplingEnabled = false
+    private var mismatchDetected = false
+    private var sampleRateMismatchUserChoice: String? = null
+    private var newProjectSampleRate: Int? = null
     private var channelCount = 0
     private var durationMs = 0L
     private var estimatedFrameCount = 0L
@@ -87,6 +90,22 @@ internal open class Mp3ImportTimingCore {
     private var codecInputCapacityMax = 0
     private var codecInputCapacitySum = 0L
     private var codecInputCapacityCount = 0
+    private var safeMaxBatchBytes = CompressedImportDecodeConfig.SAFE_MAX_BATCH_BYTES
+    private var effectiveBatchMaxBytesMin = Int.MAX_VALUE
+    private var effectiveBatchMaxBytesMax = 0
+    private var effectiveBatchMaxBytesSum = 0L
+    private var effectiveBatchMaxBytesCount = 0
+    private var inputBufferFillRatioSum = 0.0
+    private var inputBufferFillRatioCount = 0
+    private var maxInputBufferFillRatio = 0.0
+    private var maxSamplesPerInputBuffer = 0
+    private var nearFullInputBuffers = 0
+    private var underfilledInputBuffers = 0
+    private var underfilledEndOfStream = 0
+    private var underfilledNextSampleWouldNotFit = 0
+    private var underfilledNonMonotonicTimestamp = 0
+    private var underfilledSafetyCapReached = 0
+    private var underfilledSingleSampleMode = 0
     private var timestampsMonotonic = true
     private var inputDiagnosticsLogged = false
 
@@ -112,6 +131,7 @@ internal open class Mp3ImportTimingCore {
         sourceSampleRate: Int,
         targetSampleRate: Int,
         resamplingEnabled: Boolean,
+        mismatchDetected: Boolean = resamplingEnabled,
         channelCount: Int,
         durationMs: Long,
         estimatedFrameCount: Long,
@@ -123,11 +143,28 @@ internal open class Mp3ImportTimingCore {
             this.sourceSampleRate = sourceSampleRate
             this.targetSampleRate = targetSampleRate
             this.resamplingEnabled = resamplingEnabled
+            this.mismatchDetected = mismatchDetected
             this.channelCount = channelCount
             this.durationMs = durationMs
             this.estimatedFrameCount = estimatedFrameCount
         }
         logMetadataOnce()
+    }
+
+    fun recordSampleRateMismatchChoice(
+        choice: String,
+        newProjectSampleRateHz: Int? = null,
+    ) {
+        synchronized(lock) {
+            if (!sessionActive) return
+            sampleRateMismatchUserChoice = choice
+            newProjectSampleRate = newProjectSampleRateHz
+        }
+        Log.i(
+            TAG,
+            "sample_rate_mismatch_choice userChoice=$choice " +
+                "newProjectSampleRate=${newProjectSampleRateHz ?: "n/a"}",
+        )
     }
 
     fun setDecoderName(name: String?) {
@@ -170,6 +207,9 @@ internal open class Mp3ImportTimingCore {
                 "mime=$mimeType " +
                 "batchingEnabled=$batchingEnabled " +
                 "formatMaxInputSize=${maxInputSize ?: "absent"} " +
+                "safeMaxBatchBytes=${CompressedImportDecodeConfig.safeMaxBatchBytes()} " +
+                "debugSafeMaxBatchBytesOverride=${CompressedImportDecodeConfig.debugSafeMaxBatchBytesOverride} " +
+                "debugUseCodecCapacityOnly=${CompressedImportDecodeConfig.DEBUG_USE_CODEC_CAPACITY_ONLY} " +
                 "batchingSafeForMime=${CompressedImportDecodeConfig.batchingEnabledFor(mimeType)}",
         )
     }
@@ -191,6 +231,22 @@ internal open class Mp3ImportTimingCore {
             codecInputCapacityMax = feeder.codecInputCapacityMax
             codecInputCapacitySum = feeder.codecInputCapacitySum
             codecInputCapacityCount = feeder.codecInputCapacityCount
+            safeMaxBatchBytes = feeder.safeMaxBatchBytes
+            effectiveBatchMaxBytesMin = feeder.effectiveBatchMaxBytesMin
+            effectiveBatchMaxBytesMax = feeder.effectiveBatchMaxBytesMax
+            effectiveBatchMaxBytesSum = feeder.effectiveBatchMaxBytesSum
+            effectiveBatchMaxBytesCount = feeder.effectiveBatchMaxBytesCount
+            inputBufferFillRatioSum = feeder.inputBufferFillRatioSum
+            inputBufferFillRatioCount = feeder.inputBufferFillRatioCount
+            maxInputBufferFillRatio = feeder.maxInputBufferFillRatio
+            maxSamplesPerInputBuffer = feeder.maxSamplesPerInputBuffer
+            nearFullInputBuffers = feeder.nearFullInputBuffers
+            underfilledInputBuffers = feeder.underfilledInputBuffers
+            underfilledEndOfStream = feeder.underfilledEndOfStream
+            underfilledNextSampleWouldNotFit = feeder.underfilledNextSampleWouldNotFit
+            underfilledNonMonotonicTimestamp = feeder.underfilledNonMonotonicTimestamp
+            underfilledSafetyCapReached = feeder.underfilledSafetyCapReached
+            underfilledSingleSampleMode = feeder.underfilledSingleSampleMode
             timestampsMonotonic = feeder.timestampsMonotonic
         }
     }
@@ -342,6 +398,7 @@ internal open class Mp3ImportTimingCore {
                     "mime=${mimeType ?: "unknown"} " +
                     "sourceRate=$sourceSampleRate " +
                     "targetRate=$targetSampleRate " +
+                    "mismatchDetected=$mismatchDetected " +
                     "resamplingEnabled=$resamplingEnabled " +
                     "channels=$channelCount " +
                     "durationMs=$durationMs " +
@@ -372,6 +429,18 @@ internal open class Mp3ImportTimingCore {
         logSummaryCompact(snapshot)
         logSummaryCounters(snapshot)
         logSummaryInput(snapshot)
+        logSampleRateMismatchChoice(snapshot)
+    }
+
+    private fun logSampleRateMismatchChoice(snapshot: SessionSnapshot) {
+        if (!snapshot.mismatchDetected && snapshot.sampleRateMismatchUserChoice == null) return
+        Log.i(
+            TAG,
+            "SUMMARY sample_rate_mismatch " +
+                "mismatchDetected=${snapshot.mismatchDetected} " +
+                "userChoice=${snapshot.sampleRateMismatchUserChoice ?: "pending"} " +
+                "newProjectSampleRate=${snapshot.newProjectSampleRate ?: "n/a"}",
+        )
     }
 
     private fun logSummaryCompact(snapshot: SessionSnapshot) {
@@ -420,11 +489,25 @@ internal open class Mp3ImportTimingCore {
             "SUMMARY input " +
                 "inputBatchingEnabled=${snapshot.inputBatchingEnabled} " +
                 "formatMaxInputSize=${snapshot.formatMaxInputSize ?: "absent"} " +
+                "safeMaxBatchBytes=${snapshot.safeMaxBatchBytes} " +
+                "effectiveBatchMaxBytesMin=${snapshot.effectiveBatchMaxBytesMin} " +
+                "effectiveBatchMaxBytesAvg=${snapshot.effectiveBatchMaxBytesAvg} " +
+                "effectiveBatchMaxBytesMax=${snapshot.effectiveBatchMaxBytesMax} " +
                 "inputSamplesRead=${snapshot.inputSamplesRead} " +
                 "inputBuffersQueued=${snapshot.inputBuffersQueued} " +
                 "avgSamplesPerInputBuffer=${snapshot.avgSamplesPerInputBuffer} " +
+                "maxSamplesPerInputBuffer=${snapshot.maxSamplesPerInputBuffer} " +
                 "avgInputBytesPerBuffer=${snapshot.avgInputBytesPerBuffer} " +
                 "maxInputBytesPerBuffer=${snapshot.maxInputBytesPerBuffer} " +
+                "inputBufferFillRatioAvg=${snapshot.inputBufferFillRatioAvg} " +
+                "inputBufferFillRatioMax=${snapshot.inputBufferFillRatioMaxFormatted} " +
+                "nearFullInputBuffers=${snapshot.nearFullInputBuffers} " +
+                "underfilledInputBuffers=${snapshot.underfilledInputBuffers} " +
+                "underfilledEndOfStream=${snapshot.underfilledEndOfStream} " +
+                "underfilledNextSampleWouldNotFit=${snapshot.underfilledNextSampleWouldNotFit} " +
+                "underfilledNonMonotonicTimestamp=${snapshot.underfilledNonMonotonicTimestamp} " +
+                "underfilledSafetyCapReached=${snapshot.underfilledSafetyCapReached} " +
+                "underfilledSingleSampleMode=${snapshot.underfilledSingleSampleMode} " +
                 "avgExtractorSampleBytes=${snapshot.avgExtractorSampleSize} " +
                 "minExtractorSampleBytes=${snapshot.minExtractorSampleSize} " +
                 "maxExtractorSampleBytes=${snapshot.maxExtractorSampleSize} " +
@@ -453,6 +536,9 @@ internal open class Mp3ImportTimingCore {
             sourceSampleRate = sourceSampleRate,
             targetSampleRate = targetSampleRate,
             resamplingEnabled = resamplingEnabled,
+            mismatchDetected = mismatchDetected,
+            sampleRateMismatchUserChoice = sampleRateMismatchUserChoice,
+            newProjectSampleRate = newProjectSampleRate,
             channelCount = channelCount,
             durationMs = durationMs,
             estimatedFrameCount = estimatedFrameCount,
@@ -480,6 +566,21 @@ internal open class Mp3ImportTimingCore {
             codecInputCapacityMin = if (codecInputCapacityCount > 0) codecInputCapacityMin else 0,
             codecInputCapacityAvg = averageOrZero(codecInputCapacitySum, codecInputCapacityCount),
             codecInputCapacityMax = codecInputCapacityMax,
+            safeMaxBatchBytes = safeMaxBatchBytes,
+            effectiveBatchMaxBytesMin = if (effectiveBatchMaxBytesCount > 0) effectiveBatchMaxBytesMin else 0,
+            effectiveBatchMaxBytesAvg = averageOrZero(effectiveBatchMaxBytesSum, effectiveBatchMaxBytesCount),
+            effectiveBatchMaxBytesMax = effectiveBatchMaxBytesMax,
+            maxSamplesPerInputBuffer = maxSamplesPerInputBuffer,
+            inputBufferFillRatioAvg = averageFillRatioOrZero(inputBufferFillRatioSum, inputBufferFillRatioCount),
+            inputBufferFillRatioMax = maxInputBufferFillRatio,
+            inputBufferFillRatioMaxFormatted = formatFillRatio(maxInputBufferFillRatio),
+            nearFullInputBuffers = nearFullInputBuffers,
+            underfilledInputBuffers = underfilledInputBuffers,
+            underfilledEndOfStream = underfilledEndOfStream,
+            underfilledNextSampleWouldNotFit = underfilledNextSampleWouldNotFit,
+            underfilledNonMonotonicTimestamp = underfilledNonMonotonicTimestamp,
+            underfilledSafetyCapReached = underfilledSafetyCapReached,
+            underfilledSingleSampleMode = underfilledSingleSampleMode,
             timestampsMonotonic = timestampsMonotonic,
             failureStage = failureStage,
             failureMessage = failureMessage,
@@ -507,6 +608,9 @@ internal open class Mp3ImportTimingCore {
         sourceSampleRate = 0
         targetSampleRate = 0
         resamplingEnabled = false
+        mismatchDetected = false
+        sampleRateMismatchUserChoice = null
+        newProjectSampleRate = null
         channelCount = 0
         durationMs = 0L
         estimatedFrameCount = 0L
@@ -537,6 +641,22 @@ internal open class Mp3ImportTimingCore {
         codecInputCapacityMax = 0
         codecInputCapacitySum = 0L
         codecInputCapacityCount = 0
+        safeMaxBatchBytes = CompressedImportDecodeConfig.SAFE_MAX_BATCH_BYTES
+        effectiveBatchMaxBytesMin = Int.MAX_VALUE
+        effectiveBatchMaxBytesMax = 0
+        effectiveBatchMaxBytesSum = 0L
+        effectiveBatchMaxBytesCount = 0
+        inputBufferFillRatioSum = 0.0
+        inputBufferFillRatioCount = 0
+        maxInputBufferFillRatio = 0.0
+        maxSamplesPerInputBuffer = 0
+        nearFullInputBuffers = 0
+        underfilledInputBuffers = 0
+        underfilledEndOfStream = 0
+        underfilledNextSampleWouldNotFit = 0
+        underfilledNonMonotonicTimestamp = 0
+        underfilledSafetyCapReached = 0
+        underfilledSingleSampleMode = 0
         timestampsMonotonic = true
         inputDiagnosticsLogged = false
         failureStage = null
@@ -555,6 +675,10 @@ internal open class Mp3ImportTimingCore {
             else -> "pcm_$encoding"
         }
 
+    private fun averageFillRatioOrZero(sum: Double, count: Int): String = formatFillRatio(if (count > 0) sum / count else 0.0)
+
+    private fun formatFillRatio(ratio: Double): String = String.format(java.util.Locale.US, "%.3f", ratio)
+
     private data class SessionSnapshot(
         val outcome: String,
         val sessionLabel: String,
@@ -566,6 +690,9 @@ internal open class Mp3ImportTimingCore {
         val sourceSampleRate: Int,
         val targetSampleRate: Int,
         val resamplingEnabled: Boolean,
+        val mismatchDetected: Boolean,
+        val sampleRateMismatchUserChoice: String?,
+        val newProjectSampleRate: Int?,
         val channelCount: Int,
         val durationMs: Long,
         val estimatedFrameCount: Long,
@@ -593,6 +720,21 @@ internal open class Mp3ImportTimingCore {
         val codecInputCapacityMin: Int,
         val codecInputCapacityAvg: Long,
         val codecInputCapacityMax: Int,
+        val safeMaxBatchBytes: Int,
+        val effectiveBatchMaxBytesMin: Int,
+        val effectiveBatchMaxBytesAvg: Long,
+        val effectiveBatchMaxBytesMax: Int,
+        val maxSamplesPerInputBuffer: Int,
+        val inputBufferFillRatioAvg: String,
+        val inputBufferFillRatioMax: Double,
+        val inputBufferFillRatioMaxFormatted: String,
+        val nearFullInputBuffers: Int,
+        val underfilledInputBuffers: Int,
+        val underfilledEndOfStream: Int,
+        val underfilledNextSampleWouldNotFit: Int,
+        val underfilledNonMonotonicTimestamp: Int,
+        val underfilledSafetyCapReached: Int,
+        val underfilledSingleSampleMode: Int,
         val timestampsMonotonic: Boolean,
         val failureStage: String?,
         val failureMessage: String?,

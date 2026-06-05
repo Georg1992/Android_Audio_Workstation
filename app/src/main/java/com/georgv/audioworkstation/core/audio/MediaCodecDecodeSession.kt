@@ -88,8 +88,7 @@ internal class MediaCodecDecodeSession(
                         sizeBytes = 0,
                         presentationTimeUs = 0L,
                         flags = MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                        compressedBytes = 0,
-                        samplesInBatch = 0,
+                        queuedStats = null,
                     )
                     inputDone = true
                     return true
@@ -101,8 +100,7 @@ internal class MediaCodecDecodeSession(
                         sizeBytes = fillResult.sizeBytes,
                         presentationTimeUs = fillResult.presentationTimeUs,
                         flags = 0,
-                        compressedBytes = fillResult.sizeBytes,
-                        samplesInBatch = fillResult.samplesInBatch,
+                        queuedStats = fillResult,
                     )
                     return false
                 }
@@ -118,16 +116,14 @@ internal class MediaCodecDecodeSession(
         sizeBytes: Int,
         presentationTimeUs: Long,
         flags: Int,
-        compressedBytes: Int,
-        samplesInBatch: Int,
+        queuedStats: MediaCodecCompressedInputFeeder.InputFillResult.Queued?,
     ) {
         val queueStartMs = SystemClock.elapsedRealtime()
         codec.queueInputBuffer(inputBufferIndex, offset, sizeBytes, presentationTimeUs, flags)
         Mp3ImportTiming.addStage("codec_queue_input_buffer", SystemClock.elapsedRealtime() - queueStartMs)
-        inputFeeder.recordInputBufferQueued(
-            sizeBytes = compressedBytes,
-            samplesInBatch = samplesInBatch,
-        )
+        if (queuedStats != null) {
+            inputFeeder.recordInputBufferQueued(queuedStats)
+        }
     }
 
     private fun drainAvailableOutput(

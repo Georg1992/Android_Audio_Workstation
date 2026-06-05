@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -76,6 +77,14 @@ private data class ProjectScreenSnapshot(
     val waveformStatesByTrackId: Map<String, WaveformState>,
     val isRecordingStartup: Boolean,
     val importProgressByTrackId: Map<String, Float> = emptyMap(),
+)
+
+data class SampleRateMismatchDialogState(
+    val sourceSampleRateHz: Int,
+    val projectSampleRateHz: Int,
+    val sourceSampleRateLabel: String,
+    val projectSampleRateLabel: String,
+    val createProjectSampleRateLabel: String,
 )
 
 data class ProjectUiState(
@@ -125,17 +134,30 @@ class ProjectViewModel @Inject constructor(
     private val repo: ProjectRepository,
     private val audioController: AudioController,
     private val audioImportCoordinator: ProjectAudioImportCoordinator,
+    private val pendingCompressedImportRegistry: PendingCompressedImportRegistry,
     private val recordingCoordinator: ProjectRecordingCoordinator,
     private val waveformPeakExtractor: WavWaveformPeakExtractor,
     private val audioFilePathProvider: AudioFilePathProvider,
     private val recordingStorageGuard: RecordingStorageGuard,
 ) : ViewModel() {
 
+    internal val importRepo: ProjectRepository
+        get() = repo
+    internal val importCoordinator: ProjectAudioImportCoordinator
+        get() = audioImportCoordinator
+    internal val pendingImportRegistry: PendingCompressedImportRegistry
+        get() = pendingCompressedImportRegistry
+
     private val projectId = MutableStateFlow<String?>(null)
 
-    private val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
-    private val recordTargetTrackId = MutableStateFlow<String?>(null)
+    internal val selectedTrackIds = MutableStateFlow<Set<String>>(emptySet())
+    internal val recordTargetTrackId = MutableStateFlow<String?>(null)
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
+    internal val importMessageChannel: Channel<UiMessage>
+        get() = messages
+    internal val openProjectRequestEvents = Channel<String>(capacity = Channel.BUFFERED)
+    internal val sampleRateMismatchDialog = MutableStateFlow<SampleRateMismatchDialogState?>(null)
+    internal var pendingCompressedImport: PendingCompressedImport? = null
     private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
     private val playheadPositionMs = MutableStateFlow(0L)
     private val masterPeakHoldLinear = MutableStateFlow(0f)
@@ -147,7 +169,9 @@ class ProjectViewModel @Inject constructor(
         )
     private val dbActions =
         ProjectDbActionRunner(logTag = TAG) { message -> emitMessage(message) }
-    private val waveformPeaks =
+    internal val importDbActions: ProjectDbActionRunner
+        get() = dbActions
+    internal val waveformPeaks =
         ProjectWaveformPeakCoordinator(
             scope = viewModelScope,
             waveformPeakExtractor = waveformPeakExtractor,
@@ -165,7 +189,7 @@ class ProjectViewModel @Inject constructor(
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
     private val optimisticTrackGains = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val optimisticTrackPans = MutableStateFlow<Map<String, Float>>(emptyMap())
-    private val recordingSession =
+    internal val recordingSession =
         RecordingSessionController(
             scope = viewModelScope,
             audioController = audioController,
@@ -180,8 +204,10 @@ class ProjectViewModel @Inject constructor(
     private var masterPeakPollEnabledForTests = true
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
-    private val importUiCoordinator = ProjectImportUiCoordinator()
-    private val importJobs = mutableMapOf<String, Job>()
+    internal val importUiCoordinator = ProjectImportUiCoordinator()
+    internal val importJobs = mutableMapOf<String, Job>()
+    internal val userCancelledImportTrackIds = mutableSetOf<String>()
+    internal val cancelImportSelectionRollback = mutableMapOf<String, Set<String>>()
 
     private val resolvedProject = projectId
         .flatMapLatest { id ->
@@ -292,9 +318,11 @@ class ProjectViewModel @Inject constructor(
             onRecordingStorageMonitorStop = {
                 recordingStorageMonitor.stop()
             },
+            isImportInProgress = { uiState.value.isImportInProgress },
         )
 
     val userMessages = messages.receiveAsFlow()
+    val openProjectRequests = openProjectRequestEvents.receiveAsFlow()
 
     init {
         viewModelScope.launch {
@@ -499,6 +527,8 @@ class ProjectViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
 
+    val sampleRateMismatchDialogState = sampleRateMismatchDialog.asStateFlow()
+
     private var masterPeakPollJob: Job? = null
     private var masterOverloadWarningShownThisSession = false
 
@@ -547,7 +577,7 @@ class ProjectViewModel @Inject constructor(
             extendVisibleTimelineForRecording = false,
         )
 
-    private fun currentVisibleTracks(): List<TrackEntity> =
+    internal fun currentVisibleTracks(): List<TrackEntity> =
         visibleTracksWithRecordingOptimistic(
             projectTracks.value,
             optimisticTracks.value,
@@ -588,11 +618,13 @@ class ProjectViewModel @Inject constructor(
             selectedTrackIds.value = emptySet()
             recordTargetTrackId.value = null
         }
+        clearSampleRateMismatchPromptState()
         this.projectId.value = projectId
         if (projectChanged) {
             recoverStaleImports(repo, projectId, importJobs)
         }
         awaitProjectTracksSynced(repo, projectTracks, projectId)
+        tryStartRegistryPendingCompressedImport(projectId)
     }
 
     fun setPlayheadPositionMs(positionMs: Long, timelineBaseDurationMs: Long) {
@@ -702,6 +734,36 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
+    fun cancelImport(trackId: String) {
+        val track = uiState.value.tracks.find { it.id == trackId } ?: return
+        if (track.importStatus != TrackImportStatus.IMPORTING) return
+
+        userCancelledImportTrackIds.add(trackId)
+        importUiCoordinator.clear(trackId)
+
+        val previousSelected = selectedTrackIds.value
+        cancelImportSelectionRollback[trackId] = previousSelected
+        selectedTrackIds.value = selectedTrackIds.value - trackId
+        if (recordTargetTrackId.value == trackId) {
+            recordTargetTrackId.value = null
+        }
+
+        val job = importJobs[trackId]
+        if (job?.isActive == true) {
+            job.cancel()
+            return
+        }
+
+        userCancelledImportTrackIds.remove(trackId)
+        viewModelScope.launch {
+            removeCancelledImportTrack(
+                trackId = trackId,
+                track = track,
+                destinationPath = track.wavFilePath,
+            )
+        }
+    }
+
     fun deleteTrack(trackId: String) {
         if (recordingSession.recordingTrackId.value == trackId) {
             emitMessage(R.string.error_stop_recording_to_delete_track)
@@ -713,6 +775,7 @@ class ProjectViewModel @Inject constructor(
         }
 
         val track = uiState.value.tracks.find { it.id == trackId } ?: return
+        if (track.importStatus == TrackImportStatus.IMPORTING) return
 
         val previousSelected = selectedTrackIds.value
         selectedTrackIds.value = selectedTrackIds.value - trackId
@@ -789,10 +852,12 @@ class ProjectViewModel @Inject constructor(
     fun toggleRecordTarget(trackId: String) {
         if (playbackSession.hasActivePlaybackSession()) return
         if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
+        if (uiState.value.isImportInProgress) return
         if (uiState.value.tracks.none { it.id == trackId }) return
         val selecting = recordTargetTrackId.value != trackId
         if (selecting) {
             val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
+            if (currentTrack.importStatus != TrackImportStatus.READY) return
             if (currentTrack.isLoop) {
                 viewModelScope.launch {
                     dbActions.run(R.string.error_loop_update_failed) {
@@ -932,109 +997,16 @@ class ProjectViewModel @Inject constructor(
                 return@launch
             }
             val currentProject = ensureProject(projectId, "New Project") ?: return@launch
-            val visibleTrackCount = uiState.value.tracks.size
-
-            when (
-                val outcome =
-                    audioImportCoordinator.prepare(
-                        projectId = projectId,
-                        project = currentProject,
-                        visibleTrackCount = visibleTrackCount,
-                        source = source,
-                        suggestedName = suggestedName,
-                    )
-            ) {
-                ProjectAudioImportOutcome.StorageUnavailable ->
-                    emitMessage(R.string.error_import_storage_unavailable)
-                is ProjectAudioImportOutcome.ImportRejected ->
-                    emitMessage(outcome.failure.toUiMessage())
-                is ProjectAudioImportOutcome.ReadyToPersist ->
-                    dbActions.run(R.string.error_save_imported_track_failed) {
-                        repo.upsertTracks(listOf(outcome.importedTrack))
-                    }
-                is ProjectAudioImportOutcome.ImportStarted -> {
-                    selectedTrackIds.value = selectedTrackIds.value - outcome.importingTrack.id
-                    importUiCoordinator.beginImport(outcome.importingTrack.id)
-                    Mp3ImportTiming.startStage("db_upsert_importing")
-                    dbActions.run(R.string.error_save_imported_track_failed) {
-                        repo.upsertTracks(listOf(outcome.importingTrack))
-                    }
-                    Mp3ImportTiming.stopStage("db_upsert_importing")
-                    launchBackgroundImport(outcome)
-                }
-            }
+            handleImportPrepareOutcome(
+                audioImportCoordinator.prepare(
+                    projectId = projectId,
+                    project = currentProject,
+                    visibleTrackCount = uiState.value.tracks.size,
+                    source = source,
+                    suggestedName = suggestedName,
+                ),
+            )
         }
-    }
-
-    private fun launchBackgroundImport(started: ProjectAudioImportOutcome.ImportStarted) {
-        val trackId = started.importingTrack.id
-        importJobs[trackId]?.cancel()
-        importJobs[trackId] =
-            viewModelScope.launch {
-                try {
-                    when (
-                        val outcome =
-                            audioImportCoordinator.executeBackgroundImport(
-                                importingTrack = started.importingTrack,
-                                session = started.session,
-                                onProgress = { update ->
-                                    importUiCoordinator.setProgress(
-                                        trackId = trackId,
-                                        progress = update.fraction,
-                                    )
-                                },
-                            )
-                    ) {
-                        is ProjectAudioImportOutcome.ReadyToPersist -> {
-                            Mp3ImportTiming.startStage("db_ready_update")
-                            dbActions.run(R.string.error_save_imported_track_failed) {
-                                repo.upsertTracks(listOf(outcome.importedTrack))
-                            }
-                            Mp3ImportTiming.stopStage("db_ready_update")
-                            importUiCoordinator.clear(trackId)
-                            Mp3ImportTiming.endSession("ready")
-                            waveformPeaks.refreshPeakRequests(
-                                currentVisibleTracks().map { track ->
-                                    if (track.id == outcome.importedTrack.id) {
-                                        outcome.importedTrack
-                                    } else {
-                                        track
-                                    }
-                                },
-                            )
-                        }
-                        is ProjectAudioImportOutcome.ImportRejected -> {
-                            File(started.session.destinationPath).delete()
-                            dbActions.run(R.string.error_save_imported_track_failed) {
-                                repo.upsertTracks(
-                                    listOf(started.importingTrack.copy(importStatus = TrackImportStatus.FAILED)),
-                                )
-                            }
-                            importUiCoordinator.clear(trackId)
-                            Mp3ImportTiming.endSession("failed")
-                            emitMessage(outcome.failure.toUiMessage())
-                        }
-                        else -> Unit
-                    }
-                } catch (cancel: CancellationException) {
-                    File(started.session.destinationPath).delete()
-                    Mp3ImportTiming.recordFailure(
-                        stage = "background_import_cancelled",
-                        error = cancel,
-                        partialWavDeleted = true,
-                    )
-                    dbActions.run(R.string.error_save_imported_track_failed) {
-                        repo.upsertTracks(
-                            listOf(started.importingTrack.copy(importStatus = TrackImportStatus.FAILED)),
-                        )
-                    }
-                    importUiCoordinator.clear(trackId)
-                    Mp3ImportTiming.endSession("cancelled")
-                    throw cancel
-                } finally {
-                    importJobs.remove(trackId)
-                }
-            }
     }
 
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
@@ -1134,7 +1106,7 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val TAG = "ProjectViewModel"
         const val MASTER_PEAK_HOLD_POLL_MS = 150L
     }

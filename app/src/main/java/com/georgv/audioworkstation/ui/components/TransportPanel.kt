@@ -56,6 +56,7 @@ fun TransportPanel(
     onPlay: () -> Unit,
     onStop: () -> Unit,
     onRecord: () -> Unit,
+    isRecordEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     inputLocked: Boolean = false
 ) {
@@ -121,7 +122,7 @@ fun TransportPanel(
         ) {
             TransportButton(
                 color = AppColors.Red,
-                enabled = !inputLocked,
+                enabled = isRecordEnabled && !inputLocked,
                 onClick = onRecord,
                 isActive = isRecording,
             ) {

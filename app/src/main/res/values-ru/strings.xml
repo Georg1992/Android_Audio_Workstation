@@ -41,6 +41,7 @@
     <string name="action_cancel">Отмена</string>
     <string name="action_create_project">Создать проект</string>
     <string name="action_delete">Удалить</string>
+    <string name="action_cancel_import">Отменить импорт</string>
     <string name="action_rename">Переименовать</string>
 
     <!-- Library screen -->
@@ -84,6 +85,11 @@
     <string name="import_failure_decoder_init_failed">Не удалось запустить декодер для этого файла.</string>
     <string name="import_failure_unsupported_codec">Этот аудиокодек не поддерживается.</string>
     <string name="import_failure_corrupted_media">Аудиофайл повреждён или неполный.</string>
+    <string name="import_sample_rate_mismatch_message">Файл использует %1$s, а текущий проект — %2$s.</string>
+    <string name="import_sample_rate_mismatch_resample_hint">Импорт в этот проект потребует ресемплинга и может занять больше времени.</string>
+    <string name="import_sample_rate_mismatch_resample">Импорт с ресемплингом</string>
+    <string name="import_sample_rate_mismatch_create_project">Создать проект %1$s</string>
+    <string name="error_import_unsupported_source_sample_rate">Частота этого файла не поддерживается для нового проекта.</string>
 
     <!-- Project / track flow errors -->
     <string name="error_microphone_permission_required">Требуется доступ к микрофону.</string>
@@ -91,6 +97,7 @@
     <string name="error_stop_recording_to_delete_track">Остановите запись перед удалением дорожки.</string>
     <string name="error_stop_playback_to_delete_track">Остановите воспроизведение перед удалением дорожки.</string>
     <string name="error_stop_recording_to_import">Остановите запись перед импортом.</string>
+    <string name="error_wait_for_import_before_recording">Дождитесь завершения импорта перед записью.</string>
     <string name="error_import_storage_unavailable">Не удалось подготовить хранилище для импорта.</string>
     <string name="error_stop_recording_to_record">Остановите запись перед началом новой.</string>
     <string name="error_recording_failed_to_start">Не удалось начать запись.</string>

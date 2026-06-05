@@ -71,7 +71,10 @@ fun AppNavHost(
             ProjectScreen(
                 projectId = projectId,
                 quickRecord = quickRecord,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenProject = { newProjectId ->
+                    navController.navigate("${Routes.PROJECT}/$newProjectId?quick=false")
+                },
             )
         }
 

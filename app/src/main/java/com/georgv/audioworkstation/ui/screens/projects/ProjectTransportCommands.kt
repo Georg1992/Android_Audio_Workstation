@@ -40,6 +40,7 @@ internal class ProjectTransportCommands(
     private val storagePrecheck: suspend (ProjectEntity) -> Boolean,
     private val onRecordingStorageMonitorStart: (String) -> Unit,
     private val onRecordingStorageMonitorStop: () -> Unit,
+    private val isImportInProgress: () -> Boolean,
 ) {
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
         if (recordingSession.hasActiveRecordingTake()) {
@@ -47,6 +48,10 @@ internal class ProjectTransportCommands(
             return
         }
         if (recordingSession.isStartupInFlight()) {
+            return
+        }
+        if (isImportInProgress()) {
+            emitMessage(R.string.error_wait_for_import_before_recording)
             return
         }
 

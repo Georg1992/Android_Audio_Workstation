@@ -1900,6 +1900,7 @@ class ProjectViewModelTest {
                 sampleRateHz = 44_100,
             )
         vm.importAudio(PROJECT_ID, source, suggestedName = "Imported")
+        advanceUntilIdle()
         waitUntil {
             vm.uiState.value.waveformStatesByTrackId.values.any { it is WaveformState.Ready }
         }
@@ -2000,6 +2001,78 @@ class ProjectViewModelTest {
         assertEquals(R.string.error_stop_recording_to_import, message.resId)
         vm.onStopPressed()
         runCurrent()
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onRecordPressed is blocked while import is active`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val audioController = FakeAudioController()
+        val vm = createViewModel(dao, audioController = audioController)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.registerActiveImportForTests(
+            ProjectRepository(dao, NoopProjectFileStore),
+            track(
+                id = "importing",
+                position = 0,
+                wavFilePath = "importing.wav",
+                duration = 5_000L,
+            ),
+        )
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.isImportInProgress)
+
+        vm.onRecordPressed(PROJECT_ID)
+        runCurrent()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertFalse(vm.uiState.value.isRecordingStartup)
+        assertNull(audioController.lastRecordingSpec)
+        assertEquals(R.string.error_wait_for_import_before_recording, vm.userMessages.first().resId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `toggleRecordTarget cannot enable on importing track`() = runTest(mainDispatcherRule.dispatcher) {
+        val readyTrack =
+            track(
+                id = "ready",
+                position = 0,
+                wavFilePath = "ready.wav",
+                duration = 5_000L,
+            )
+        val dao =
+            FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(readyTrack),
+            )
+        val vm = createViewModel(dao)
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.registerActiveImportForTests(
+            ProjectRepository(dao, NoopProjectFileStore),
+            track(
+                id = "importing",
+                position = 1,
+                wavFilePath = "importing.wav",
+                duration = 5_000L,
+            ),
+        )
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.isImportInProgress)
+
+        vm.toggleRecordTarget("importing")
+        runCurrent()
+        assertNull(vm.uiState.value.recordTargetTrackId)
+
+        vm.toggleRecordTarget("ready")
+        runCurrent()
+        assertNull(vm.uiState.value.recordTargetTrackId)
         collectJob.cancel()
     }
 
@@ -2160,6 +2233,7 @@ class ProjectViewModelTest {
         tempWav(shortArrayOf(0, 1_000, 12_000, 26_000))
             .copyTo(File(recordingTrack.wavFilePath), overwrite = true)
         vm.onStopPressed()
+        advanceUntilIdle()
         waitUntil { vm.uiState.value.waveformStatesByTrackId[recordingTrack.id] is WaveformState.Ready }
         advanceUntilIdle()
 
@@ -2550,6 +2624,7 @@ class ProjectViewModelTest {
             repo,
             audioController,
             audioImportCoordinator,
+            PendingCompressedImportRegistry(),
             recordingCoordinator,
             waveformPeakExtractor,
             audioFilePathProvider,

@@ -41,6 +41,7 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_create_project">Create Project</string>
     <string name="action_delete">Delete</string>
+    <string name="action_cancel_import">Cancel import</string>
     <string name="action_rename">Rename</string>
 
     <!-- Library screen -->
@@ -85,6 +86,11 @@
     <string name="import_failure_decoder_init_failed">Could not start the audio decoder for this file.</string>
     <string name="import_failure_unsupported_codec">This audio codec is not supported.</string>
     <string name="import_failure_corrupted_media">The audio file appears to be corrupted or incomplete.</string>
+    <string name="import_sample_rate_mismatch_message">This audio file uses %1$s, but the current project uses %2$s.</string>
+    <string name="import_sample_rate_mismatch_resample_hint">Importing into this project requires resampling and may take longer.</string>
+    <string name="import_sample_rate_mismatch_resample">Import with resampling</string>
+    <string name="import_sample_rate_mismatch_create_project">Create new %1$s project</string>
+    <string name="error_import_unsupported_source_sample_rate">This file\'s sample rate is not supported for a new project.</string>
     <string name="waveform_generating">Generating…</string>
     <string name="waveform_unavailable">No waveform</string>
     <string name="waveform_no_audio">No audio</string>
@@ -98,6 +104,7 @@
     <string name="error_stop_recording_to_delete_track">Stop recording before deleting this track.</string>
     <string name="error_stop_playback_to_delete_track">Stop playback before deleting this track.</string>
     <string name="error_stop_recording_to_import">Stop recording before importing.</string>
+    <string name="error_wait_for_import_before_recording">Wait until import finishes before recording.</string>
     <string name="error_import_storage_unavailable">Could not prepare storage for the imported track.</string>
     <string name="error_stop_recording_to_record">Stop recording before starting a new take.</string>
     <string name="error_recording_failed_to_start">Failed to start recording.</string>

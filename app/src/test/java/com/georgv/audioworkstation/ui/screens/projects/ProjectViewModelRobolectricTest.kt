@@ -236,6 +236,7 @@ class ProjectViewModelRobolectricTest {
             repo,
             audio,
             testProjectAudioImportCoordinator(repo, audioFilePathProvider),
+            PendingCompressedImportRegistry(),
             ProjectRecordingCoordinator(repo, audio, audioFilePathProvider, WavPunchSplicer()),
             WavWaveformPeakExtractor(),
             audioFilePathProvider,
