@@ -1,55 +1,37 @@
 package com.georgv.audioworkstation.data.repository
 
+import android.os.SystemClock
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
-import android.os.SystemClock
-import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
-import com.georgv.audioworkstation.ui.screens.library.LibraryDiagnostics
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 
 @Singleton
 class ProjectRepository @Inject constructor(
     private val dao: ProjectDao,
     private val fileStore: ProjectFileStore,
+    private val diagnostics: ProjectRepositoryDiagnostics = ProjectRepositoryDiagnostics.None,
 ) {
     private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val projectsFirstEmissionLogged = AtomicBoolean(false)
 
     /** Eagerly cached project list — revisiting Library gets last known data immediately. */
     val projectsState: StateFlow<List<ProjectEntity>> =
         dao.observeProjects()
             .onEach { projects ->
-                if (QuickRecordDiagnostics.loggingEnabled && QuickRecordDiagnostics.quickNavigationActive) {
-                    val emissionStartMs = SystemClock.uptimeMillis()
-                    QuickRecordDiagnostics.logStepStart(
-                        "ProjectRepository projects emission",
-                        detail = "count=${projects.size} duringQuickNav=true",
-                    )
-                    QuickRecordDiagnostics.logStepEnd(
-                        "ProjectRepository projects emission",
-                        emissionStartMs,
-                        detail = "count=${projects.size} thread=${QuickRecordDiagnostics.threadLabel()} " +
-                            "isMain=${QuickRecordDiagnostics.isMainThread()} duringQuickNav=true",
-                    )
-                }
-                if (projectsFirstEmissionLogged.compareAndSet(false, true)) {
-                    LibraryDiagnostics.logProjectsFirstEmission(projects.size)
-                }
+                diagnostics.onProjectsCachedEmission(projects.size)
             }
             .stateIn(cacheScope, SharingStarted.Eagerly, emptyList())
 
@@ -66,12 +48,7 @@ class ProjectRepository @Inject constructor(
     suspend fun projectExists(projectId: String): Boolean = dao.projectExists(projectId)
 
     suspend fun upsertProject(project: ProjectEntity) {
-        if (QuickRecordDiagnostics.isActiveFor(project.id)) {
-            val dbStartMs = SystemClock.uptimeMillis()
-            QuickRecordDiagnostics.logDbWriteStart("upsertProject", project.id)
-            dao.upsertProject(project)
-            QuickRecordDiagnostics.logDbWriteEnd("upsertProject", dbStartMs, project.id)
-        } else {
+        diagnostics.dbWriteWhenActive("upsertProject", project.id) {
             dao.upsertProject(project)
         }
     }
@@ -79,37 +56,18 @@ class ProjectRepository @Inject constructor(
     fun observeTracks(projectId: String): Flow<List<TrackEntity>> =
         dao.observeTracks(projectId)
             .onEach { tracks ->
-                if (QuickRecordDiagnostics.isActiveFor(projectId)) {
-                    QuickRecordDiagnostics.traceSection("QuickProjectTracksEmission", projectId) {
-                        QuickRecordDiagnostics.log(
-                            "ProjectRepository tracks emission",
-                            "projectId=$projectId count=${tracks.size} " +
-                                "thread=${QuickRecordDiagnostics.threadLabel()} " +
-                                "isMain=${QuickRecordDiagnostics.isMainThread()} duringQuickNav=true",
-                        )
-                    }
-                }
+                diagnostics.onTracksObserved(projectId, tracks.size)
             }
 
     suspend fun upsertTrack(track: TrackEntity) {
-        if (QuickRecordDiagnostics.isActiveFor(track.projectId)) {
-            val dbStartMs = SystemClock.uptimeMillis()
-            QuickRecordDiagnostics.logDbWriteStart("upsertTrack trackId=${track.id}", track.projectId)
-            dao.upsertTrack(track)
-            QuickRecordDiagnostics.logDbWriteEnd("upsertTrack trackId=${track.id}", dbStartMs, track.projectId)
-        } else {
+        diagnostics.dbWriteWhenActive("upsertTrack trackId=${track.id}", track.projectId) {
             dao.upsertTrack(track)
         }
     }
 
     suspend fun upsertTracks(tracks: List<TrackEntity>) {
         val projectId = tracks.firstOrNull()?.projectId
-        if (projectId != null && QuickRecordDiagnostics.isActiveFor(projectId)) {
-            val dbStartMs = SystemClock.uptimeMillis()
-            QuickRecordDiagnostics.logDbWriteStart("upsertTracks count=${tracks.size}", projectId)
-            dao.upsertTracks(tracks)
-            QuickRecordDiagnostics.logDbWriteEnd("upsertTracks count=${tracks.size}", dbStartMs, projectId)
-        } else {
+        diagnostics.dbWriteWhenActive("upsertTracks count=${tracks.size}", projectId) {
             dao.upsertTracks(tracks)
         }
     }
@@ -121,23 +79,18 @@ class ProjectRepository @Inject constructor(
      * Replaces the legacy "show error and return null" pattern in the ViewModels.
      */
     suspend fun ensureProject(projectId: String, defaultName: String): ProjectEntity =
-        QuickRecordDiagnostics.traceSection("QuickProjectCreate", projectId) {
+        diagnostics.traceQuickRecordSection("QuickProjectCreate", projectId) {
             val createStartMs = SystemClock.uptimeMillis()
-            QuickRecordDiagnostics.logStepStart("quick project creation", projectId)
+            diagnostics.logQuickRecordStepStart("quick project creation", projectId)
             if (!dao.projectExists(projectId)) {
-                val dbStartMs = SystemClock.uptimeMillis()
-                if (QuickRecordDiagnostics.isActiveFor(projectId)) {
-                    QuickRecordDiagnostics.logDbWriteStart("ensureProject", projectId)
-                }
-                dao.upsertProject(ProjectEntity(id = projectId, name = defaultName))
-                if (QuickRecordDiagnostics.isActiveFor(projectId)) {
-                    QuickRecordDiagnostics.logDbWriteEnd("ensureProject", dbStartMs, projectId)
+                diagnostics.dbWriteWhenActive("ensureProject", projectId) {
+                    dao.upsertProject(ProjectEntity(id = projectId, name = defaultName))
                 }
             }
             val project =
                 dao.observeProject(projectId).first()
                     ?: error("Project $projectId disappeared right after upsert.")
-            QuickRecordDiagnostics.logStepEnd(
+            diagnostics.logQuickRecordStepEnd(
                 "quick project creation",
                 createStartMs,
                 projectId,
@@ -180,12 +133,12 @@ class ProjectRepository @Inject constructor(
      * [upsertTracks].
      */
     suspend fun appendTrackToProject(projectId: String, name: String): TrackEntity =
-        QuickRecordDiagnostics.traceSection("QuickInitialTrackCreate", projectId) {
+        diagnostics.traceQuickRecordSection("QuickInitialTrackCreate", projectId) {
             val createStartMs = SystemClock.uptimeMillis()
-            QuickRecordDiagnostics.logStepStart("initial track creation", projectId)
+            diagnostics.logQuickRecordStepStart("initial track creation", projectId)
             val readStartMs = SystemClock.uptimeMillis()
             val existing = dao.observeTracks(projectId).first()
-            QuickRecordDiagnostics.logStepEnd(
+            diagnostics.logQuickRecordStepEnd(
                 "initial track read for allocation",
                 readStartMs,
                 projectId,
@@ -199,7 +152,7 @@ class ProjectRepository @Inject constructor(
                     name = name,
                     wavFilePath = "",
                 )
-            QuickRecordDiagnostics.logStepEnd(
+            diagnostics.logQuickRecordStepEnd(
                 "initial track creation",
                 createStartMs,
                 projectId,

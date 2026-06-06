@@ -1,6 +1,6 @@
 package com.georgv.audioworkstation.core.audio
 
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

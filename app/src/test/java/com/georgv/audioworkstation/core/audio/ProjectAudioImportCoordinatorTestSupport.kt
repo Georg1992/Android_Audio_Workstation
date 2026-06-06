@@ -17,8 +17,10 @@ internal fun testProjectAudioImportCoordinator(
 ): ProjectAudioImportCoordinator =
     ProjectAudioImportCoordinator(
         repo = repo,
-        wavAudioImporter = wavAudioImporter,
-        mediaCodecAudioImporter = MediaCodecAudioImporter(context),
+        audioImporter = DelegatingAudioImporter(
+            wavAudioImporter = wavAudioImporter,
+            mediaCodecAudioImporter = MediaCodecAudioImporter(context),
+        ),
         audioFilePathProvider = audioFilePathProvider,
         dispatchers = dispatchers,
         context = context,
@@ -33,7 +35,7 @@ internal fun wavImportSource(
         File.createTempFile("import-test", ".wav").apply {
             deleteOnExit()
         }
-    com.georgv.audioworkstation.ui.components.writeMonoPcm16Wav(
+    com.georgv.audioworkstation.core.audio.waveform.writeMonoPcm16Wav(
         file = file,
         samples = samples,
         channelCount = channelCount,

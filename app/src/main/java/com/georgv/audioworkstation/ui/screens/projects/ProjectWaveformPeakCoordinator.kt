@@ -4,8 +4,8 @@ import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.WaveformState
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
-import com.georgv.audioworkstation.ui.components.wavFileContentFingerprint
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.wavFileContentFingerprint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers

@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
+import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

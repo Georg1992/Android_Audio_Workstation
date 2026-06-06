@@ -49,6 +49,7 @@ import com.georgv.audioworkstation.core.track.hasTimelineClip
 import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMsForClipTimelineWindow
+import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.max

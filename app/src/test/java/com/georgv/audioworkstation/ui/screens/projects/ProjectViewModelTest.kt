@@ -2,6 +2,8 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.AudioEngineSession
+import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportResult
 import com.georgv.audioworkstation.core.audio.AudioImportSource
@@ -16,12 +18,12 @@ import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
-import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import com.georgv.audioworkstation.core.audio.wavImportSource
@@ -31,10 +33,10 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.ui.components.WaveformState
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
 import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
-import com.georgv.audioworkstation.ui.components.tempWav
+import com.georgv.audioworkstation.core.audio.waveform.tempWav
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -804,6 +807,35 @@ class ProjectViewModelTest {
         stopPlaybackFully(vm)
         collectJob.cancel()
     }
+
+    @Test
+    fun `setTrackGain does not invoke native synchronously from Main`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audioParam = StandardTestDispatcher(testScheduler)
+            val dispatchers = TestAppDispatchers.withSeparateAudioParam(mainDispatcherRule.dispatcher, audioParam)
+            val dao = FakeProjectDao(
+                projects = listOf(project()),
+                tracks = listOf(track(id = "a", position = 0, wavFilePath = "a.wav", gain = 100f)),
+            )
+            val audioController = FakeAudioController()
+            val vm = createViewModel(dao, audioController, testDispatchers = dispatchers)
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.toggleSelect("a")
+            advanceUntilIdle()
+            startPlayback(vm)
+
+            audioController.playbackLaneGainCalls.clear()
+            vm.setTrackGain("a", 25f)
+            assertTrue(audioController.playbackLaneGainCalls.isEmpty())
+
+            audioParam.scheduler.advanceUntilIdle()
+            assertEquals(listOf(0 to 0.25f), audioController.playbackLaneGainCalls)
+            stopPlaybackFully(vm)
+            collectJob.cancel()
+        }
 
     @Test
     fun `setTrackGain pushes live per-lane gain during multi-track playback`() =
@@ -2086,7 +2118,6 @@ class ProjectViewModelTest {
             testProjectAudioImportCoordinator(
                 repo,
                 audioFilePathProvider = NullTrackOutputPathProvider,
-                wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
             )
         val outcome =
             coordinator.prepare(
@@ -2107,7 +2138,6 @@ class ProjectViewModelTest {
             testProjectAudioImportCoordinator(
                 repo,
                 audioFilePathProvider = FakeAudioFilePathProvider(),
-                wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
             )
         val outcome =
             coordinator.prepare(
@@ -2607,6 +2637,7 @@ class ProjectViewModelTest {
         audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider(),
         recordingStorageGuard: RecordingStorageGuard = permissiveRecordingStorageGuard(),
         waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
+        testDispatchers: TestAppDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
     ): ProjectViewModel {
         val repo = ProjectRepository(dao, NoopProjectFileStore)
         val audioImportCoordinator =
@@ -2615,7 +2646,7 @@ class ProjectViewModelTest {
                 audioFilePathProvider,
                 wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
             )
-        val testDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+        val audioEngineSession = AudioEngineSession(testDispatchers)
         val recordingCoordinator =
             ProjectRecordingCoordinator(
                 repo,
@@ -2624,6 +2655,8 @@ class ProjectViewModelTest {
                 WavPunchSplicer(),
                 testDispatchers,
             )
+        val audioParameterQueue =
+            AudioParameterCommandQueue(audioController, testDispatchers, audioEngineSession)
         return ProjectViewModel(
             repo,
             audioController,
@@ -2635,6 +2668,8 @@ class ProjectViewModelTest {
             recordingStorageGuard,
             testDispatchers,
             AudioIoScope(testDispatchers),
+            audioEngineSession,
+            audioParameterQueue,
         ).also {
             it.setPlayheadNativePollEnabledForTests(false)
             it.setRecordingStorageMonitorEnabledForTests(false)

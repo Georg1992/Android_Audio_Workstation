@@ -11,11 +11,10 @@ import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.CompressedAudioMetadata
 import com.georgv.audioworkstation.core.audio.CompressedAudioMetadataReader
 import com.georgv.audioworkstation.core.audio.DetectedImportFormat
-import com.georgv.audioworkstation.core.audio.MediaCodecAudioImporter
+import com.georgv.audioworkstation.core.audio.DelegatingAudioImporter
 import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.UriBackedAudioImportSource
-import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.detectImportFormat
 import com.georgv.audioworkstation.core.audio.isSupportedProjectSampleRate
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
@@ -72,8 +71,7 @@ data class BackgroundImportSession(
  */
 class ProjectAudioImportCoordinator @Inject constructor(
     private val repo: ProjectRepository,
-    private val wavAudioImporter: WavAudioImporter,
-    private val mediaCodecAudioImporter: MediaCodecAudioImporter,
+    private val audioImporter: DelegatingAudioImporter,
     private val audioFilePathProvider: AudioFilePathProvider,
     private val dispatchers: AppDispatchers,
     @ApplicationContext private val context: Context,
@@ -162,7 +160,7 @@ class ProjectAudioImportCoordinator @Inject constructor(
     ): ProjectAudioImportOutcome =
         when (
             val result =
-                mediaCodecAudioImporter.importWithProgress(
+                audioImporter.importWithProgress(
                     source = session.source,
                     destinationPath = session.destinationPath,
                     target = session.target,
@@ -307,7 +305,7 @@ class ProjectAudioImportCoordinator @Inject constructor(
         suggestedName: String?,
         visibleTrackCount: Int,
     ): ProjectAudioImportOutcome =
-        when (val result = wavAudioImporter.import(source, destinationPath, target)) {
+        when (val result = audioImporter.import(source, destinationPath, target)) {
             is AudioImportResult.Success ->
                 ProjectAudioImportOutcome.ReadyToPersist(
                     buildImportedTrack(

@@ -156,8 +156,8 @@ internal suspend fun ProjectViewModel.persistAndLaunchBackgroundImport(
 
 internal fun ProjectViewModel.launchBackgroundImportJob(started: ProjectAudioImportOutcome.ImportStarted) {
     val trackId = started.importingTrack.id
-    importJobs[trackId]?.cancel()
-    importJobs[trackId] =
+    importSession.jobs[trackId]?.cancel()
+    importSession.jobs[trackId] =
         viewModelScope.launch {
             try {
                 when (
@@ -199,7 +199,7 @@ internal fun ProjectViewModel.launchBackgroundImportJob(started: ProjectAudioImp
                 handleBackgroundImportCancellation(started, trackId, cancel)
                 throw cancel
             } finally {
-                importJobs.remove(trackId)
+                importSession.jobs.remove(trackId)
             }
         }
 }

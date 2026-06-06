@@ -125,24 +125,29 @@ class PlaybackSessionController(
         selectedTrackIds: Set<String>,
         playableTracks: List<TrackEntity>,
     ) {
-        if (!_playbackSessionActive.value || !audioController.isPlaybackEngineRunning()) {
+        if (!_playbackSessionActive.value) {
             return
         }
-
-        val preparingSnapshot = _preparingTrackIds.value
-        for (trackId in preparingSnapshot) {
-            if (trackId !in selectedTrackIds) {
-                cancelHotJoinForTrack(trackId)
+        scope.launch(dispatchers.audioIo) {
+            if (!audioController.isPlaybackEngineRunning()) {
+                return@launch
             }
-        }
 
-        syncLaneAudibilityFromSelection(selectedTrackIds)
+            val preparingSnapshot = _preparingTrackIds.value
+            for (trackId in preparingSnapshot) {
+                if (trackId !in selectedTrackIds) {
+                    cancelHotJoinForTrack(trackId)
+                }
+            }
 
-        for (track in playableTracks) {
-            if (track.id !in selectedTrackIds) continue
-            if (trackLaneIndex(track.id) != null) continue
-            if (track.id in _preparingTrackIds.value) continue
-            startHotJoinForTrack(track, selectedTrackIds)
+            syncLaneAudibilityFromSelection(selectedTrackIds)
+
+            for (track in playableTracks) {
+                if (track.id !in selectedTrackIds) continue
+                if (trackLaneIndex(track.id) != null) continue
+                if (track.id in _preparingTrackIds.value) continue
+                startHotJoinForTrack(track, selectedTrackIds)
+            }
         }
     }
 

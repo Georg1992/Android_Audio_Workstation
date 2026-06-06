@@ -1,9 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.WaveformState
-import com.georgv.audioworkstation.ui.components.writeMonoPcm16Wav
+import com.georgv.audioworkstation.core.audio.waveform.writeMonoPcm16Wav
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle

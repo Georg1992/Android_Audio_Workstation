@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
 import com.georgv.audioworkstation.ui.theme.Dimens
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

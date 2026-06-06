@@ -11,7 +11,7 @@ import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.StatFsRecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import dagger.Binds
 import dagger.Module
 import dagger.Provides

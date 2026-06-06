@@ -18,7 +18,7 @@ import java.io.IOException
  * 3. PCM16 WAV streaming write
  *
  * Exact waveform peaks are intentionally **not** produced here; they run post-READY from the
- * finalized WAV via [com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor].
+ * finalized WAV via [com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor].
  */
 internal class MediaCodecDecodePipeline(
     private val context: Context,

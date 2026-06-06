@@ -9,6 +9,12 @@ object ThreadingDiagnostics {
 
     var loggingEnabled: Boolean = false
 
+    /**
+     * When true, [warnIfMainThreadNativeLifecycle] emits Log.w.
+     * Enable from dev/diagnostic entry points; off by default to avoid production noise.
+     */
+    var strictMainNativeLifecycleChecks: Boolean = false
+
     /** Caller thread immediately before/after [withAudioIo] / [withIo] dispatches work. */
     fun logCallerBoundary(operation: String, phase: String) {
         if (!loggingEnabled) return
@@ -50,6 +56,26 @@ object ThreadingDiagnostics {
             TAG,
             "poll loop dispatcher=$dispatcherLabel thread=${Thread.currentThread().name} " +
                 "isMain=${isMainThread()}",
+        )
+    }
+
+    fun logLiveParameterEnqueue(operation: String) {
+        if (!loggingEnabled) return
+        Log.d(
+            TAG,
+            "$operation enqueue thread=${Thread.currentThread().name} isMain=${isMainThread()}",
+        )
+    }
+
+    /**
+     * Engine/Oboe lifecycle JNI must not run on Main. Live gain/pan atomics use [AudioParameterCommandQueue]
+     * instead and are intentionally excluded from this check.
+     */
+    fun warnIfMainThreadNativeLifecycle(operation: String) {
+        if (!strictMainNativeLifecycleChecks || !isMainThread()) return
+        Log.w(
+            TAG,
+            "Native lifecycle call on Main thread: $operation — route through audioIo",
         )
     }
 

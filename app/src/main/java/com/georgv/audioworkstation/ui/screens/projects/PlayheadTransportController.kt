@@ -8,7 +8,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -180,17 +179,16 @@ class PlayheadTransportController(
         stopNativePoll()
         if (!nativePollEnabled) return
         pollJob =
-            scope.launch {
+            scope.launch(pollDispatcher) {
                 ThreadingDiagnostics.logPollLoop("default playhead")
                 while (isActive) {
                     when (_phase.value) {
                         TransportPlaybackPhase.Playing,
                         TransportPlaybackPhase.Recording,
-                        ->
-                            withContext(pollDispatcher) {
-                                applyNativeTransportPosition(readNativeTransportMs())
-                                delay(pollIntervalMs)
-                            }
+                        -> {
+                            applyNativeTransportPosition(readNativeTransportMs())
+                            delay(pollIntervalMs)
+                        }
                         else -> break
                     }
                 }

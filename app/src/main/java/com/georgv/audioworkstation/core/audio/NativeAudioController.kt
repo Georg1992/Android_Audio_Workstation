@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.core.audio
 
+import com.georgv.audioworkstation.core.coroutines.checkNotMainThreadForNativeLifecycle
 import com.georgv.audioworkstation.engine.NativeEngine
 import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import kotlinx.coroutines.CoroutineScope
@@ -35,17 +36,28 @@ class NativeAudioController @Inject constructor(
     private val _recordingInputLevel = MutableStateFlow(0f)
     override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
 
-    override fun readMasterPeakHoldLinear(): Float = nativeEngine.masterPeakHoldLinear()
+    override fun readMasterPeakHoldLinear(): Float {
+        checkNotMainThreadForNativeLifecycle("readMasterPeakHoldLinear")
+        return nativeEngine.masterPeakHoldLinear()
+    }
 
     override fun resetMasterPeakHold() {
+        checkNotMainThreadForNativeLifecycle("resetMasterPeakHold")
         nativeEngine.resetMasterPeakHold()
     }
 
-    override fun transportPositionMs(): Long = nativeEngine.transportPositionMs()
+    override fun transportPositionMs(): Long {
+        checkNotMainThreadForNativeLifecycle("transportPositionMs")
+        return nativeEngine.transportPositionMs()
+    }
 
-    override fun isPlaybackEngineRunning(): Boolean = nativeEngine.isPlaybackActive()
+    override fun isPlaybackEngineRunning(): Boolean {
+        checkNotMainThreadForNativeLifecycle("isPlaybackEngineRunning")
+        return nativeEngine.isPlaybackActive()
+    }
 
     override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
+        checkNotMainThreadForNativeLifecycle("startRecording")
         ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "entered")
         val resolvedPath =
             outputPath ?: audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId)
@@ -61,6 +73,7 @@ class NativeAudioController @Inject constructor(
     }
 
     override fun stopRecording(): Boolean {
+        checkNotMainThreadForNativeLifecycle("stopRecording")
         recordingLevelJob?.cancel()
         recordingLevelJob = null
         val ok = nativeEngine.stopRecording()
@@ -69,6 +82,7 @@ class NativeAudioController @Inject constructor(
     }
 
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
+        checkNotMainThreadForNativeLifecycle("startPlayback")
         val started = nativeEngine.startMultiPlayback(spec)
         if (started) monitorPlaybackCompletion()
         return started
@@ -83,12 +97,14 @@ class NativeAudioController @Inject constructor(
     }
 
     override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) {
+        checkNotMainThreadForNativeLifecycle("setArmedPlaybackLaneAudibility")
         audibleByLaneIndex.forEachIndexed { laneIndex, audible ->
             nativeEngine.setPlaybackLaneAudible(laneIndex, audible)
         }
     }
 
     override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
+        checkNotMainThreadForNativeLifecycle("setPlaybackLaneAudible")
         nativeEngine.setPlaybackLaneAudible(laneIndex, audible)
     }
 
@@ -101,8 +117,9 @@ class NativeAudioController @Inject constructor(
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
         pan: Float,
-    ): Int =
-        nativeEngine.beginHotJoinLane(
+    ): Int {
+        checkNotMainThreadForNativeLifecycle("beginHotJoinLane")
+        return nativeEngine.beginHotJoinLane(
             wavFilePath,
             gain,
             timelineClipStartMs,
@@ -112,15 +129,20 @@ class NativeAudioController @Inject constructor(
             loopSourceEndMs,
             pan,
         )
+    }
 
     override fun cancelHotJoinLane(laneIndex: Int) {
+        checkNotMainThreadForNativeLifecycle("cancelHotJoinLane")
         nativeEngine.cancelHotJoinLane(laneIndex)
     }
 
-    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
-        nativeEngine.playbackLaneLifecycle(laneIndex)
+    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle {
+        checkNotMainThreadForNativeLifecycle("playbackLaneLifecycle")
+        return nativeEngine.playbackLaneLifecycle(laneIndex)
+    }
 
     override fun stopPlayback(): Boolean {
+        checkNotMainThreadForNativeLifecycle("stopPlayback")
         monitorJob?.cancel()
         monitorJob = null
         val ok = nativeEngine.stopPlayback()
@@ -129,6 +151,7 @@ class NativeAudioController @Inject constructor(
     }
 
     override fun release() {
+        checkNotMainThreadForNativeLifecycle("release")
         monitorJob?.cancel()
         monitorJob = null
         recordingLevelJob?.cancel()

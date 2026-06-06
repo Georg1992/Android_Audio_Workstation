@@ -13,13 +13,13 @@ internal fun ProjectViewModel.registerActiveImportForTests(
     importingTrack: TrackEntity,
 ) {
     importUiCoordinator.beginImport(importingTrack.id)
-    importJobs[importingTrack.id]?.cancel()
-    importJobs[importingTrack.id] =
+    importSession.jobs[importingTrack.id]?.cancel()
+    importSession.jobs[importingTrack.id] =
         viewModelScope.launch {
             try {
                 awaitCancellation()
             } finally {
-                importJobs.remove(importingTrack.id)
+                importSession.jobs.remove(importingTrack.id)
             }
         }
     viewModelScope.launch {

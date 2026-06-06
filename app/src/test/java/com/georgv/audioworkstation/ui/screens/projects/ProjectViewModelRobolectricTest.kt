@@ -19,6 +19,8 @@ import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
+import com.georgv.audioworkstation.core.audio.AudioEngineSession
+import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
@@ -26,7 +28,7 @@ import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -235,6 +237,7 @@ class ProjectViewModelRobolectricTest {
     ): ProjectViewModel {
         val audio = NoOpAudioControllerForRobolectric()
         val testDispatchers = TestAppDispatchers()
+        val audioEngineSession = AudioEngineSession(testDispatchers)
         return ProjectViewModel(
             repo,
             audio,
@@ -250,6 +253,8 @@ class ProjectViewModelRobolectricTest {
             ),
             testDispatchers,
             AudioIoScope(testDispatchers),
+            audioEngineSession,
+            AudioParameterCommandQueue(audio, testDispatchers, audioEngineSession),
         )
     }
 

@@ -1,4 +1,4 @@
-package com.georgv.audioworkstation.ui.components
+package com.georgv.audioworkstation.core.audio.waveform
 
 import java.io.File
 

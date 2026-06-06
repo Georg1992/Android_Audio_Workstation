@@ -9,19 +9,19 @@ import com.georgv.audioworkstation.core.track.clampLoopRegionMs
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.AudioEngineSession
+import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportSource
 import com.georgv.audioworkstation.core.audio.GainRange
-import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
-import com.georgv.audioworkstation.core.audio.MasterPeakMeter
+import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
-import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
@@ -33,19 +33,12 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.WaveformState
-import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
-import com.georgv.audioworkstation.ui.components.ActiveRecordingTimelineClip
-import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
-import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
-import com.georgv.audioworkstation.ui.components.visibleTimelineDurationMs
-import com.georgv.audioworkstation.ui.components.projectTimelineClips
-import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
-import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
-import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -60,11 +53,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
-import kotlin.math.max
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,19 +64,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import javax.inject.Inject
-
-private data class ProjectScreenSnapshot(
-    val projectId: String?,
-    val project: ProjectEntity?,
-    val tracks: List<TrackEntity>,
-    val selectedTrackIds: Set<String>,
-    val sessionTrackIds: Set<String>,
-    val playbackSessionActive: Boolean,
-    val recordingTrackId: String?,
-    val waveformStatesByTrackId: Map<String, WaveformState>,
-    val isRecordingStartup: Boolean,
-    val importProgressByTrackId: Map<String, Float> = emptyMap(),
-)
 
 data class SampleRateMismatchDialogState(
     val sourceSampleRateHz: Int,
@@ -162,7 +138,11 @@ class ProjectViewModel @Inject constructor(
     private val recordingStorageGuard: RecordingStorageGuard,
     private val dispatchers: AppDispatchers,
     private val audioIoScope: AudioIoScope,
+    private val audioEngineSession: AudioEngineSession,
+    private val audioParameterQueue: AudioParameterCommandQueue,
 ) : ViewModel() {
+
+    private var engineSessionAcquired = false
 
     internal val appDispatchers: AppDispatchers
         get() = dispatchers
@@ -186,13 +166,20 @@ class ProjectViewModel @Inject constructor(
     internal var pendingCompressedImport: PendingCompressedImport? = null
     private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
     private val playheadPositionMs = MutableStateFlow(0L)
-    private val masterPeakHoldLinear = MutableStateFlow(0f)
     private val playheadTransport =
         PlayheadTransportController(
             scope = viewModelScope,
             playheadPositionMs = playheadPositionMs,
             nativeTransportPositionMs = { audioController.transportPositionMs() },
             pollDispatcher = dispatchers.default,
+        )
+    private val masterPeakController =
+        MasterPeakController(
+            scope = viewModelScope,
+            audioController = audioController,
+            dispatchers = dispatchers,
+            transportPhase = playheadTransport.phase,
+            onOverloadWarning = { emitMessage(R.string.warning_master_output_overloaded) },
         )
     private val dbActions =
         ProjectDbActionRunner(logTag = TAG) { message -> emitMessage(message) }
@@ -231,13 +218,10 @@ class ProjectViewModel @Inject constructor(
             dispatchers = dispatchers,
         )
     private var recordingStorageMonitorEnabledForTests = true
-    private var masterPeakPollEnabledForTests = true
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
     internal val importUiCoordinator = ProjectImportUiCoordinator()
-    internal val importJobs = mutableMapOf<String, Job>()
-    internal val userCancelledImportTrackIds = mutableSetOf<String>()
-    internal val cancelImportSelectionRollback = mutableMapOf<String, Set<String>>()
+    internal val importSession = ProjectImportSession()
 
     private val resolvedProject = projectId
         .flatMapLatest { id ->
@@ -267,7 +251,7 @@ class ProjectViewModel @Inject constructor(
                 )
             },
             onPlaybackCompleted = {
-                resetMasterPeakHoldDisplay()
+                masterPeakController.resetDisplayAndNativeHold()
                 playheadTransport.stopAndResetToZero()
                 viewModelScope.launch(dispatchers.audioIo) {
                     withAudioIo(dispatchers, "AudioController.stopPlayback completion") {
@@ -520,74 +504,16 @@ class ProjectViewModel @Inject constructor(
         combine(
             playheadPositionMs,
             audioController.recordingInputLevel,
-            masterPeakHoldLinear,
+            masterPeakController.peakHoldLinear,
             structuralUiState,
             playheadTransport.phase,
         ) { playheadMs, recordingLevel, peakHoldLinear, structural, transportPhase ->
-            val extendForAllLoopedPlayback =
-                shouldExtendVisibleTimelineForAllLoopedPlayback(
-                    playbackSessionActive = structural.playbackSessionActive,
-                    sessionTrackIds = structural.sessionTrackIds,
-                    tracks = structural.tracks,
-                )
-            val extendForRecording = transportPhase == TransportPlaybackPhase.Recording
-            val activeRecording =
-                activeRecordingTimelineClip(
-                    tracks = structural.tracks,
-                    recordingTrackId = structural.recordingTrackId,
-                    playheadMs = playheadMs,
-                )
-            val recordingTimelineProjection =
-                if (extendForRecording && activeRecording != null) {
-                    buildProjectTimelineProjection(
-                        tracks = structural.tracks,
-                        waveformStatesByTrackId = structural.waveformStatesByTrackId,
-                        activeRecording = activeRecording,
-                        playheadPositionMs = playheadMs,
-                        extendVisibleTimelineForAllLoopedPlayback = extendForAllLoopedPlayback,
-                        extendVisibleTimelineForRecording = true,
-                    )
-                } else {
-                    null
-                }
-            val visibleTimelineDurationMs =
-                recordingTimelineProjection?.visibleTimelineDurationMs
-                    ?: visibleTimelineDurationMs(
-                        baseTimelineDurationMs = structural.timelineBaseDurationMs,
-                        playheadPositionMs = playheadMs,
-                        activeRecording = activeRecording,
-                        extendForAllLoopedPlayback = extendForAllLoopedPlayback,
-                        extendForRecording = extendForRecording,
-                    )
-            val displayPlayheadMs =
-                when {
-                    transportPhase == TransportPlaybackPhase.Recording -> {
-                        playheadMs.coerceAtLeast(0L)
-                    }
-                    extendForAllLoopedPlayback &&
-                        transportPhase == TransportPlaybackPhase.Playing -> {
-                        playheadMs.coerceIn(0L, TimelineMaxDurationMs)
-                    }
-                    else -> {
-                        timelinePlayheadClampedPositionMs(playheadMs, visibleTimelineDurationMs)
-                    }
-                }
-            val showSessionMasterPeak =
-                transportPhase == TransportPlaybackPhase.Playing ||
-                    transportPhase == TransportPlaybackPhase.Paused
-            val masterMeter =
-                MasterPeakMeter.fromPeakHoldLinear(
-                    peakLinear = peakHoldLinear,
-                    isStopped = !showSessionMasterPeak,
-                )
-            ProjectRealtimeUiState(
-                playheadPositionMs = displayPlayheadMs,
-                recordingInputLevel = recordingLevel.coerceIn(0f, 1f),
-                timelineVisibleDurationMs = visibleTimelineDurationMs,
-                recordingTimelineClipsByTrackId = recordingTimelineProjection?.clipsByLaneId,
-                recordingTimelineLaneLayoutDurationMs = recordingTimelineProjection?.laneLayoutDurationMs,
-                masterPeakDbText = masterMeter.peakDbText,
-                masterPeakIndicatorLevel = masterMeter.indicatorLevel,
+            buildProjectRealtimeUiState(
+                playheadMs = playheadMs,
+                recordingLevel = recordingLevel,
+                peakHoldLinear = peakHoldLinear,
+                structural = structural,
+                transportPhase = transportPhase,
             )
         }
             .flowOn(dispatchers.default)
@@ -606,33 +532,7 @@ class ProjectViewModel @Inject constructor(
     val destinationReady: StateFlow<Boolean> = _destinationReady.asStateFlow()
     private var waveformPeakRefreshEnabled = false
 
-    private var masterPeakPollJob: Job? = null
-    private var masterOverloadWarningShownThisSession = false
-
     init {
-        viewModelScope.launch {
-            playheadTransport.phase.collect { phase ->
-                masterPeakPollJob?.cancel()
-                masterPeakPollJob = null
-                if (phase == TransportPlaybackPhase.Playing && masterPeakPollEnabledForTests) {
-                    masterPeakPollJob =
-                        viewModelScope.launch(dispatchers.default) {
-                            ThreadingDiagnostics.logPollLoop("default masterPeak")
-                            while (isActive) {
-                                val nativePeak = audioController.readMasterPeakHoldLinear()
-                                withContext(dispatchers.main) {
-                                    val updated = max(masterPeakHoldLinear.value, nativePeak)
-                                    if (updated != masterPeakHoldLinear.value) {
-                                        masterPeakHoldLinear.value = updated
-                                        maybeEmitMasterOverloadWarning(updated)
-                                    }
-                                }
-                                delay(MASTER_PEAK_HOLD_POLL_MS)
-                            }
-                        }
-                }
-            }
-        }
         viewModelScope.launch {
             structuralUiState
                 .map { it.timelineBaseDurationMs to it.transportPlaybackPhase }
@@ -659,43 +559,6 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
-    private fun timelineProjectionForTracks(
-        tracks: List<TrackEntity>,
-        waveformStates: Map<String, WaveformState>,
-        playheadMs: Long = playheadPositionMs.value,
-    ) =
-        buildProjectTimelineProjection(
-            tracks = tracks,
-            waveformStatesByTrackId = waveformStates,
-            activeRecording = null,
-            playheadPositionMs = playheadMs,
-            extendVisibleTimelineForAllLoopedPlayback = false,
-            extendVisibleTimelineForRecording = false,
-        )
-
-    private fun buildStructuralTimelineProjection(
-        screen: ProjectScreenSnapshot,
-    ): ProjectTimelineProjection {
-        val structuralRecording =
-            screen.recordingTrackId?.let { recordingId ->
-                val track = screen.tracks.find { it.id == recordingId } ?: return@let null
-                ActiveRecordingTimelineClip(
-                    trackId = recordingId,
-                    startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
-                    elapsedMs = 0L,
-                )
-            }
-        return buildProjectTimelineProjection(
-            tracks = screen.tracks,
-            waveformStatesByTrackId = screen.waveformStatesByTrackId,
-            activeRecording = structuralRecording,
-            playheadPositionMs = 0L,
-            extendVisibleTimelineForAllLoopedPlayback = false,
-            extendVisibleTimelineForRecording = false,
-            importProgressByTrackId = screen.importProgressByTrackId,
-        )
-    }
-
     internal fun currentVisibleTracks(): List<TrackEntity> =
         visibleTracksWithRecordingOptimistic(
             projectTracks.value,
@@ -720,14 +583,15 @@ class ProjectViewModel @Inject constructor(
      * navigate to a new `project/{projectId}` destination (new ViewModel), not repeatedly [bind] one VM.
      */
     suspend fun bind(projectId: String) {
+        ensureEngineSessionAcquired()
         val projectChanged = this.projectId.value != projectId
         if (projectChanged) {
             WaveformRecompositionDiagnostics.resetSession()
-            importJobs.values.forEach { it.cancel() }
-            importJobs.clear()
+            audioParameterQueue.clearPending()
+            importSession.cancelAllJobsAndClear()
             importUiCoordinator.resetWhenProjectChanges()
             transportController.resetPlaybackForProjectChange()
-            resetMasterPeakHoldDisplay()
+            masterPeakController.resetDisplayAndNativeHold()
             playheadSeek.resetWhenProjectChanges()
             optimisticTracks.value = null
             optimisticTrackGains.value = emptyMap()
@@ -742,7 +606,7 @@ class ProjectViewModel @Inject constructor(
         this.projectId.value = projectId
         if (projectChanged) {
             withIo(dispatchers, "recoverStaleImports") {
-                recoverStaleImports(repo, projectId, importJobs)
+                recoverStaleImports(repo, projectId, importSession.jobs)
             }
         }
         withIo(dispatchers, "bind awaitProjectTracksSynced") {
@@ -816,11 +680,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     internal fun setMasterPeakPollEnabledForTests(enabled: Boolean) {
-        masterPeakPollEnabledForTests = enabled
-        if (!enabled) {
-            masterPeakPollJob?.cancel()
-            masterPeakPollJob = null
-        }
+        masterPeakController.setPollEnabledForTests(enabled)
     }
 
     internal fun advancePlayheadNativeTransportForTests(positionMs: Long) {
@@ -891,23 +751,23 @@ class ProjectViewModel @Inject constructor(
         val track = uiState.value.tracks.find { it.id == trackId } ?: return
         if (track.importStatus != TrackImportStatus.IMPORTING) return
 
-        userCancelledImportTrackIds.add(trackId)
+        importSession.userCancelledTrackIds.add(trackId)
         importUiCoordinator.clear(trackId)
 
         val previousSelected = selectedTrackIds.value
-        cancelImportSelectionRollback[trackId] = previousSelected
+        importSession.cancelSelectionRollback[trackId] = previousSelected
         selectedTrackIds.value = selectedTrackIds.value - trackId
         if (recordTargetTrackId.value == trackId) {
             recordTargetTrackId.value = null
         }
 
-        val job = importJobs[trackId]
+        val job = importSession.jobs[trackId]
         if (job?.isActive == true) {
             job.cancel()
             return
         }
 
-        userCancelledImportTrackIds.remove(trackId)
+        importSession.userCancelledTrackIds.remove(trackId)
         viewModelScope.launch {
             removeCancelledImportTrack(
                 trackId = trackId,
@@ -1037,11 +897,12 @@ class ProjectViewModel @Inject constructor(
             return
         }
         optimisticTrackGains.value = optimisticTrackGains.value + (trackId to gain.coerceIn(GainRange.Min, GainRange.Max))
-        if (!playbackSession.hasActivePlaybackSession() || !audioController.isPlaybackEngineRunning()) {
+        if (!playbackSession.hasActivePlaybackSession()) {
             return
         }
         val laneIndex = playbackSession.livePlaybackLaneIndexForTrack(trackId) ?: return
-        audioController.setPlaybackLaneGain(laneIndex, GainRange.toUnit(gain))
+        ThreadingDiagnostics.logLiveParameterEnqueue("setTrackGain lane=$laneIndex")
+        audioParameterQueue.setLaneGain(laneIndex, GainRange.toUnit(gain))
     }
 
     /** Commit the latest gain value to the DB. Called when the user releases the fader. */
@@ -1071,11 +932,12 @@ class ProjectViewModel @Inject constructor(
             return
         }
         val clamped = PanRange.clamp(pan)
-        if (!playbackSession.hasActivePlaybackSession() || !audioController.isPlaybackEngineRunning()) {
+        if (!playbackSession.hasActivePlaybackSession()) {
             return
         }
         val laneIndex = playbackSession.livePlaybackLaneIndexForTrack(trackId) ?: return
-        audioController.setPlaybackLanePan(laneIndex, clamped)
+        ThreadingDiagnostics.logLiveParameterEnqueue("setTrackPan lane=$laneIndex")
+        audioParameterQueue.setLanePan(laneIndex, clamped)
     }
 
     fun commitTrackPan(trackId: String, pan: Float) {
@@ -1172,7 +1034,7 @@ class ProjectViewModel @Inject constructor(
 
     internal suspend fun performPlayPressed() {
         if (playheadTransport.phase.value == TransportPlaybackPhase.Idle) {
-            resetMasterPeakHoldDisplay()
+            masterPeakController.resetDisplayAndNativeHold()
         }
         transportCommands.performPlayPressed()
     }
@@ -1185,55 +1047,49 @@ class ProjectViewModel @Inject constructor(
     internal suspend fun performStopPressed() {
         transportCommands.performStopPressed()
         if (playheadTransport.phase.value == TransportPlaybackPhase.Idle) {
-            resetMasterPeakHoldDisplay()
+            masterPeakController.resetDisplayAndNativeHold()
         }
-    }
-
-    private fun resetMasterPeakHoldDisplay() {
-        audioController.resetMasterPeakHold()
-        masterPeakHoldLinear.value = 0f
-        masterOverloadWarningShownThisSession = false
     }
 
     fun onMasterPeakIndicatorClicked() {
-        audioController.resetMasterPeakHold()
-        masterPeakHoldLinear.value = 0f
-    }
-
-    private fun maybeEmitMasterOverloadWarning(peakLinear: Float) {
-        if (masterOverloadWarningShownThisSession) return
-        if (MasterPeakMeter.indicatorLevelForPeak(peakLinear, isStopped = false) !=
-            MasterPeakIndicatorLevel.Red
-        ) {
-            return
-        }
-        masterOverloadWarningShownThisSession = true
-        emitMessage(R.string.warning_master_output_overloaded)
+        masterPeakController.onIndicatorClicked()
     }
 
     internal suspend fun performStopRecordingForStorageExhaustion() {
         if (!recordingSession.hasActiveRecordingTake()) return
         recordingStorageMonitor.stop()
         transportController.stopAll()
-        resetMasterPeakHoldDisplay()
+        masterPeakController.resetDisplayAndNativeHold()
         playheadTransport.stopAndResetToZero()
         emitMessage(R.string.error_recording_stopped_storage)
     }
 
     override fun onCleared() {
         recordingStorageMonitor.stop()
+        if (!engineSessionAcquired) {
+            super.onCleared()
+            return
+        }
+        engineSessionAcquired = false
         audioIoScope.scope.launch {
             transportController.stopAll()
-            withAudioIo(dispatchers, "AudioController.release") {
-                audioController.release()
+            audioEngineSession.release {
+                withAudioIo(dispatchers, "AudioController.release") {
+                    audioController.release()
+                }
             }
             withContext(dispatchers.main) {
                 playheadTransport.stopAndResetToZero()
-                masterPeakHoldLinear.value = 0f
-                masterOverloadWarningShownThisSession = false
+                masterPeakController.clearDisplayOnTeardown()
             }
         }
         super.onCleared()
+    }
+
+    private suspend fun ensureEngineSessionAcquired() {
+        if (engineSessionAcquired) return
+        audioEngineSession.acquire()
+        engineSessionAcquired = true
     }
 
     private fun finalizeRecordingTrack(trackId: String) {
@@ -1270,18 +1126,5 @@ class ProjectViewModel @Inject constructor(
 
     internal companion object {
         const val TAG = "ProjectViewModel"
-        const val MASTER_PEAK_HOLD_POLL_MS = 150L
     }
 }
-
-private fun ProjectUiState.mergeRealtime(realtime: ProjectRealtimeUiState): ProjectUiState =
-    copy(
-        playheadPositionMs = realtime.playheadPositionMs,
-        recordingInputLevel = realtime.recordingInputLevel,
-        timelineVisibleDurationMs = realtime.timelineVisibleDurationMs,
-        timelineClipsByTrackId = realtime.recordingTimelineClipsByTrackId ?: timelineClipsByTrackId,
-        timelineLaneLayoutDurationMs =
-            realtime.recordingTimelineLaneLayoutDurationMs ?: timelineLaneLayoutDurationMs,
-        masterPeakDbText = realtime.masterPeakDbText,
-        masterPeakIndicatorLevel = realtime.masterPeakIndicatorLevel,
-    )

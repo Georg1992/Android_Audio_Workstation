@@ -4,7 +4,6 @@ import android.content.ContentResolver
 import android.net.Uri
 import com.georgv.audioworkstation.core.audio.CompressedAudioMetadata
 import com.georgv.audioworkstation.core.audio.UriBackedAudioImportSource
-import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import java.io.InputStream
@@ -48,7 +47,6 @@ class ProjectAudioImportCoordinatorSampleRateTest {
         val coordinator =
             testProjectAudioImportCoordinator(
                 repo,
-                wavAudioImporter = WavAudioImporter(),
             )
         val pending =
             PendingCompressedImport(

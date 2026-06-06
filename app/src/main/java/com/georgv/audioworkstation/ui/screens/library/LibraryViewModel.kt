@@ -20,12 +20,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: ProjectRepository
 ) : ViewModel() {
+
+    private val projectsFirstEmissionLogged = AtomicBoolean(false)
 
     val uiState: StateFlow<ScreenState<LibraryContent>> =
         repo.projectsState
@@ -35,7 +38,12 @@ class LibraryViewModel @Inject constructor(
                     content = LibraryContent(projects = projects),
                 )
             }
-            .onEach { LibraryDiagnostics.logStateEmitted(it) }
+            .onEach { state ->
+                if (projectsFirstEmissionLogged.compareAndSet(false, true)) {
+                    LibraryDiagnostics.logProjectsFirstEmission(state.content.projects.size)
+                }
+                LibraryDiagnostics.logStateEmitted(state)
+            }
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),

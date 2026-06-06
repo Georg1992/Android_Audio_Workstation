@@ -37,4 +37,45 @@ class DelegatingAudioImporter @Inject constructor(
             DetectedImportFormat.Unknown ->
                 AudioImportResult.Failure.UnsupportedEncoding
         }
+
+    suspend fun importWithProgress(
+        source: AudioImportSource,
+        destinationPath: String,
+        target: AudioImportTarget,
+        estimatedDurationMs: Long,
+        onProgress: (AudioImportProgressUpdate) -> Unit,
+    ): AudioImportResult =
+        when (detectImportFormat(source)) {
+            DetectedImportFormat.PcmWav -> {
+                val result =
+                    wavAudioImporter.import(
+                        source = source,
+                        destinationPath = destinationPath,
+                        target = target,
+                    )
+                if (result is AudioImportResult.Success) {
+                    onProgress(
+                        AudioImportProgressUpdate(
+                            fraction = 1f,
+                            decodedDurationMs = result.durationMs,
+                        ),
+                    )
+                }
+                result
+            }
+            DetectedImportFormat.CompressedAudio -> {
+                val uriSource =
+                    source as? UriBackedAudioImportSource
+                        ?: return AudioImportResult.Failure.UnsupportedEncoding
+                mediaCodecAudioImporter.importWithProgress(
+                    source = uriSource,
+                    destinationPath = destinationPath,
+                    target = target,
+                    estimatedDurationMs = estimatedDurationMs,
+                    onProgress = onProgress,
+                )
+            }
+            DetectedImportFormat.Unknown ->
+                AudioImportResult.Failure.UnsupportedEncoding
+        }
 }

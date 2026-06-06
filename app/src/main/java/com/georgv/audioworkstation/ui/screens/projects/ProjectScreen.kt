@@ -207,7 +207,16 @@ private fun ProjectScreenContent(
         minActiveState = Lifecycle.State.CREATED,
     )
     val navTransitionFinished = rememberProjectNavTransitionGate(projectId)
-    val quickInitialTrackReady = !quickRecord || state.tracks.isNotEmpty()
+    // Quick Record waits once for the first optimistic/recording track, then stays revealed even
+    // if the user later deletes every track (otherwise readyToReveal flips false and remounts the loader).
+    var quickInitialTrackGatePassed by remember(projectId) { mutableStateOf(!quickRecord) }
+    LaunchedEffect(state.tracks.isNotEmpty()) {
+        if (state.tracks.isNotEmpty()) {
+            quickInitialTrackGatePassed = true
+        }
+    }
+    val quickInitialTrackReady =
+        !quickRecord || quickInitialTrackGatePassed || state.tracks.isNotEmpty()
     val readyToReveal = navTransitionFinished && destinationReady && quickInitialTrackReady
 
     var workspaceMounted by remember(projectId) { mutableStateOf(false) }

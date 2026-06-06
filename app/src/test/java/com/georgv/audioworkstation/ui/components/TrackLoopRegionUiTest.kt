@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.components
 
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
+import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
 import com.georgv.audioworkstation.core.track.applyLoopRegionLeftHandleDrag
 import com.georgv.audioworkstation.core.track.applyLoopRegionMoveDrag
 import com.georgv.audioworkstation.core.track.applyLoopRegionRightHandleDrag

@@ -30,14 +30,14 @@ internal suspend fun ProjectViewModel.removeCancelledImportTrack(
         uiState.value.tracks
             .filter { it.id != trackId }
             .mapIndexed { index, remainingTrack -> remainingTrack.copy(position = index) }
-    val rollbackSelection = cancelImportSelectionRollback.remove(trackId)
+    val rollbackSelection = importSession.cancelSelectionRollback.remove(trackId)
     importDbActions.runWithRollback(
         errorResId = R.string.error_delete_track_failed,
         rollback = { rollbackSelection?.let { selectedTrackIds.value = it } },
     ) {
         importRepo.deleteTrack(track, remainingTracks)
     }
-    importJobs.remove(trackId)
+    importSession.jobs.remove(trackId)
 }
 
 internal suspend fun ProjectViewModel.handleBackgroundImportRejected(
@@ -63,7 +63,7 @@ internal suspend fun ProjectViewModel.handleBackgroundImportCancellation(
     trackId: String,
     cancel: CancellationException,
 ) {
-    val userCancelled = userCancelledImportTrackIds.remove(trackId)
+    val userCancelled = importSession.userCancelledTrackIds.remove(trackId)
     if (userCancelled) {
         removeCancelledImportTrack(
             trackId = trackId,
