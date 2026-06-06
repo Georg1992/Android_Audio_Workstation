@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ import com.georgv.audioworkstation.ui.layout.projectTrackLayoutSpec
 import com.georgv.audioworkstation.ui.layout.rememberLayoutEnvironment
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 
 private val PageSliceIncomingSlideTween =
@@ -89,13 +91,13 @@ fun ProjectTrackList(
     selectedTrackIds: Set<String>,
     recordingTrackId: String?,
     recordTargetTrackId: String?,
+    sessionTrackIds: Set<String>,
     importInProgress: Boolean,
-    recordingInputLevel: Float,
+    realtimeUiState: StateFlow<ProjectRealtimeUiState>,
     timelineClipsByTrackId: Map<String, TimelineClip>,
     timelineLaneLayoutDurationMs: Long,
-    timelineVisibleDurationMs: Long,
-    timelinePlayheadPositionMs: Long,
     playbackActive: Boolean,
+    showWaveforms: Boolean = true,
     dragController: DragController,
     onToggleSelect: (String) -> Unit,
     onDeleteTrack: (String) -> Unit,
@@ -121,6 +123,7 @@ fun ProjectTrackList(
     var listParentBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
     val itemBoundsMap = remember { mutableStateMapOf<String, Rect>() }
     var dropSettle by remember { mutableStateOf<DropSettleSnap?>(null) }
+    var suppressPlacementTrackId by remember { mutableStateOf<String?>(null) }
     var nextSettleUid by remember { mutableLongStateOf(1L) }
 
     var openOverflowMenuTrackId by remember { mutableStateOf<String?>(null) }
@@ -130,6 +133,14 @@ fun ProjectTrackList(
 
     LaunchedEffect(recordingTrackId) {
         if (recordingTrackId == null) lastRecordingPageJumpForId = null
+    }
+
+    LaunchedEffect(suppressPlacementTrackId) {
+        val trackId = suppressPlacementTrackId ?: return@LaunchedEffect
+        delay(DropSettleDurationMs + 32L)
+        if (suppressPlacementTrackId == trackId) {
+            suppressPlacementTrackId = null
+        }
     }
 
     val listInteractionLocked = dragController.isDragging || dropSettle != null
@@ -187,7 +198,10 @@ fun ProjectTrackList(
                     itemBoundsMap = itemBoundsMap,
                     trackLayout = trackLayout,
                     density = density,
-                    onSetDropSettle = { dropSettle = it },
+                    onSetDropSettle = { snap ->
+                        dropSettle = snap
+                        suppressPlacementTrackId = snap.trackId
+                    },
                     onAllocateSettleUid = { nextSettleUid++ },
                 )
 
@@ -351,20 +365,22 @@ fun ProjectTrackList(
                                 selectedTrackIds = selectedTrackIds,
                                 recordingTrackId = recordingTrackId,
                                 recordTargetTrackId = recordTargetTrackId,
+                                sessionTrackIds = sessionTrackIds,
                                 importInProgress = importInProgress,
-                                recordingInputLevel = recordingInputLevel,
+                                realtimeUiState = realtimeUiState,
                                 timelineClipsByTrackId = timelineClipsByTrackId,
                                 timelineLaneLayoutDurationMs = timelineLaneLayoutDurationMs,
-                                timelineVisibleDurationMs = timelineVisibleDurationMs,
-                                timelinePlayheadPositionMs = timelinePlayheadPositionMs,
                                 trackLayout = trackLayout,
                                 playbackActive = playbackActive,
+                                showWaveforms = showWaveforms,
                                 trackActionsEnabled = trackActionsEnabled,
                                 listInteractionLocked = listInteractionLocked,
                                 reorderActive = reorderActive,
                                 dragController = dragController,
                                 dropSettleInProgress = dropSettle != null,
                                 dropSettlingTrackId = dropSettle?.trackId,
+                                suppressRowPlacementAfterSettle =
+                                    suppressPlacementTrackId == track.id,
                                 itemBoundsMap = itemBoundsMap,
                                 listParentBoundsInRoot = listParentBoundsInRoot,
                                 incomingSlideSessionKey = incomingSession?.sessionKey,
@@ -400,7 +416,7 @@ fun ProjectTrackList(
                                 onToggleRecordTarget = onToggleRecordTarget,
                                 onToggleLoop = onToggleLoop,
                                 onUpdateTrackLoopRegion = onUpdateTrackLoopRegion,
-                                onReorderDragEnd = dragInteraction.completeDrop,
+                                ignoredOnReorderDragEnd = dragInteraction.completeDrop,
                                 onReorderDragStarted = dragInteraction.onReorderDragStarted,
                             )
                         }
@@ -486,7 +502,7 @@ fun ProjectTrackList(
                             }
                         }
                         TrackDragSettlingOverlay(
-                            modifier = Modifier.zIndex(1f),
+                            modifier = Modifier.zIndex(2f),
                             track = settleSnap.track,
                             isSelected = settleSnap.isSelected,
                             isRecording = settleSnap.isRecording,
@@ -505,7 +521,7 @@ fun ProjectTrackList(
                             }
                         if (draggedTrack != null) {
                             TrackDragOverlay(
-                                modifier = Modifier.zIndex(1f),
+                                modifier = Modifier.zIndex(2f),
                                 track = draggedTrack,
                                 isSelected =
                                     selectedTrackIds.contains(draggedTrack.id),

@@ -4,6 +4,7 @@ import com.georgv.audioworkstation.core.audio.RecordingPunchContext
 import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -12,11 +13,15 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectRecordingCoordinatorPunchTest {
+
+    @get:Rule
+    val mainDispatcherRule = ProjectViewModelMainDispatcherRule()
 
     private fun project() = ProjectEntity(id = "p", name = "P")
 
@@ -28,6 +33,7 @@ class ProjectRecordingCoordinatorPunchTest {
                 audioController = FakeAudioController(),
                 audioFilePathProvider = TempDirAudioFilePathProvider(),
                 wavPunchSplicer = WavPunchSplicer(),
+                dispatchers = TestAppDispatchers(),
             )
         val track =
             TrackEntity(
@@ -51,7 +57,8 @@ class ProjectRecordingCoordinatorPunchTest {
     }
 
     @Test
-    fun `beginRecording into existing track seeds native transport at global playhead`() = runTest {
+    fun `beginRecording into existing track seeds native transport at global playhead`() =
+        runTest(mainDispatcherRule.dispatcher) {
         val dir = File.createTempFile("coord-punch-transport", "").apply { delete(); mkdirs() }
         val existing =
             TrackEntity(
@@ -63,11 +70,13 @@ class ProjectRecordingCoordinatorPunchTest {
                 timelineStartOffsetMs = 0L,
             )
         val audio = FakeAudioController(startRecordingPath = File(dir, "rec.wav").absolutePath)
+        val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
         val coordinator =
             testProjectRecordingCoordinator(
                 repo = ProjectRepository(FakeProjectDao(), NoopProjectFileStore),
                 audio = audio,
                 paths = TempDirAudioFilePathProvider(dir),
+                dispatchers = dispatchers,
             )
 
         coordinator.beginRecording(
@@ -84,14 +93,17 @@ class ProjectRecordingCoordinatorPunchTest {
     }
 
     @Test
-    fun `beginRecording without record target still seeds native transport from new track offset`() = runTest {
+    fun `beginRecording without record target still seeds native transport from new track offset`() =
+        runTest(mainDispatcherRule.dispatcher) {
         val dir = File.createTempFile("coord-new-track-transport", "").apply { delete(); mkdirs() }
         val audio = FakeAudioController(startRecordingPath = File(dir, "rec.wav").absolutePath)
+        val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
         val coordinator =
             testProjectRecordingCoordinator(
                 repo = ProjectRepository(FakeProjectDao(), NoopProjectFileStore),
                 audio = audio,
                 paths = TempDirAudioFilePathProvider(dir),
+                dispatchers = dispatchers,
             )
 
         coordinator.beginRecording(
@@ -121,6 +133,7 @@ class ProjectRecordingCoordinatorPunchTest {
                 audioController = FakeAudioController(),
                 audioFilePathProvider = TempDirAudioFilePathProvider(dir),
                 wavPunchSplicer = WavPunchSplicer(),
+                dispatchers = TestAppDispatchers(),
             )
 
         val track =
@@ -168,6 +181,7 @@ class ProjectRecordingCoordinatorPunchTest {
                 audioController = FakeAudioController(),
                 audioFilePathProvider = TempDirAudioFilePathProvider(dir),
                 wavPunchSplicer = WavPunchSplicer(),
+                dispatchers = TestAppDispatchers(),
             )
 
         val track =

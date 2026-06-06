@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 class RecordingStorageMonitor(
     private val scope: CoroutineScope,
     private val guard: RecordingStorageGuard,
+    private val dispatchers: AppDispatchers,
     private val pollIntervalMs: Long = RecordingStorageGuard.MONITOR_POLL_INTERVAL_MS,
 ) {
     private var monitorJob: Job? = null
@@ -27,7 +29,7 @@ class RecordingStorageMonitor(
         stop()
         storageStopInFlight.set(false)
         monitorJob =
-            scope.launch {
+            scope.launch(dispatchers.io) {
                 while (isActive && isRecordingActive()) {
                     delay(pollIntervalMs)
                     if (!isRecordingActive()) break

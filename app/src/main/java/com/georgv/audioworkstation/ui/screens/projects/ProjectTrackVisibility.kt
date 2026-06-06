@@ -57,3 +57,13 @@ internal fun activeRecordingTimelineClip(
         elapsedMs = elapsedMs,
     )
 }
+
+/** Lanes that show a moving playhead overlay (recording take or active playback session). */
+internal fun trackLaneNeedsLivePlayhead(
+    trackId: String,
+    recordingTrackId: String?,
+    playbackSessionActive: Boolean,
+    sessionTrackIds: Set<String>,
+): Boolean =
+    trackId == recordingTrackId ||
+        (playbackSessionActive && trackId in sessionTrackIds)

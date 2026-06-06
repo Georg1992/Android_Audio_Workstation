@@ -4,6 +4,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -38,8 +39,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
 
             sut.executeRecordPressed(
                 projectId = PID,
@@ -66,8 +68,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController(startRecordingPath = null)
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
             var notified = false
 
             sut.executeRecordPressed(
@@ -97,8 +100,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
             var sawOptimisticBeforeEngineReturn = false
             audio.onEnterStartRecording = {
                 assertNotNull(sut.optimisticRecordingTrack.value)
@@ -132,8 +136,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
             lateinit var idAtPersistEntry: String
 
             sut.executeRecordPressed(
@@ -166,8 +171,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
 
             sut.executeRecordPressed(
                 projectId = PID,
@@ -193,8 +199,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
 
             sut.executeRecordPressed(
                 projectId = PID,
@@ -221,8 +228,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList(), failUpsertTrack = true)
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
             var notified = false
 
             sut.executeRecordPressed(
@@ -253,8 +261,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
             var notified = false
 
             sut.executeRecordPressed(
@@ -292,8 +301,9 @@ class RecordingSessionControllerTest {
             val dao = FakeProjectDao(projects = listOf(project()), tracks = listOf(existing))
             val audio = FakeAudioController()
             val repo = ProjectRepository(dao, NoopProjectFileStore)
-            val coord = testProjectRecordingCoordinator(repo, audio)
-            val sut = RecordingSessionController(this, audio, coord)
+            val dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+            val coord = testProjectRecordingCoordinator(repo, audio, dispatchers = dispatchers)
+            val sut = RecordingSessionController(this, audio, coord, dispatchers)
 
             sut.executeRecordPressed(
                 projectId = PID,

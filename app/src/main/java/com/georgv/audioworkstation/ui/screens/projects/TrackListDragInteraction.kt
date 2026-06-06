@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import android.os.SystemClock
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,8 +13,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -94,6 +96,7 @@ internal fun rememberTrackListDragInteraction(
     var neighborSwapCooldownUntilMs by remember { mutableLongStateOf(0L) }
     var lastNeighborSwapEvalUptimeMs by remember { mutableLongStateOf(0L) }
     var draggingGlobalIndex by remember { mutableIntStateOf(-1) }
+    var dropCompleting by remember { mutableStateOf(false) }
 
     val tracksSnap by rememberUpdatedState(tracks)
     val latestOnReorderTracks by rememberUpdatedState(onReorderTracks)
@@ -125,7 +128,9 @@ internal fun rememberTrackListDragInteraction(
     }
 
     val completeDrop: () -> Unit = completeDrop@{
+        if (dropCompleting) return@completeDrop
         val key = dragController.draggingKey ?: return@completeDrop
+        dropCompleting = true
         when (
             val plan =
                 planDropCompletion(
@@ -162,6 +167,7 @@ internal fun rememberTrackListDragInteraction(
             neighborSwapCooldownUntilMs = 0L
             lastNeighborSwapEvalUptimeMs = 0L
             draggingGlobalIndex = -1
+            dropCompleting = false
         }
     }
 
@@ -179,6 +185,8 @@ internal fun rememberTrackListDragInteraction(
             return@LaunchedEffect
         }
         var edgeHoldMachine = EdgeHoldMachineState()
+        var lastObservedPage = pagerState.currentPage.coerceAtLeast(0)
+        var lastPageEntrySwapKey: String? = null
         snapshotFlow {
             EdgeHoldSnapshot(
                 fingerYRoot = dragController.fingerY,
@@ -213,30 +221,77 @@ internal fun rememberTrackListDragInteraction(
                 )
             edgeHoldBanner = edgeHoldResult.banner
             edgeHoldMachine = edgeHoldResult.machine
-            edgeHoldResult.pageTransition?.let { transition ->
-                emitReorderAndRefreshDraggingIndex(transition.reordered)
-                pagerState.scrollToPage(transition.scrollToPage)
+            edgeHoldResult.pageScroll?.let { page ->
+                pagerState.scrollToPage(page)
             }
 
-            if (!dragController.isDragging) return@collect
+            if (!dragController.isDragging || dropCompleting) return@collect
+
             val nowNeighbor = SystemClock.uptimeMillis()
+            val currentPageIdx = pagerState.currentPage.coerceAtLeast(0)
+
+            if (
+                draggingKeySnap != null &&
+                globalIndex >= 0 &&
+                currentPageIdx != lastObservedPage
+            ) {
+                val fromPage = lastObservedPage
+                val pageEntryKey = "$fromPage>$currentPageIdx:$draggingKeySnap"
+                if (pageEntryKey != lastPageEntrySwapKey) {
+                    crossPageEnterSwapOrNull(
+                        tracks = tracksSnap,
+                        draggedIndex = globalIndex,
+                        fromPage = fromPage,
+                        targetPage = currentPageIdx,
+                        pageSize = pageSize,
+                    )?.let { pageEntryReordered ->
+                        if (emitReorderAndRefreshDraggingIndex(pageEntryReordered)) {
+                            lastPageEntrySwapKey = pageEntryKey
+                            neighborSwapCooldownUntilMs = nowNeighbor + ReorderSwapCooldownMs
+                        }
+                    }
+                }
+                lastObservedPage = currentPageIdx
+            }
+
             if (nowNeighbor < neighborSwapCooldownUntilMs) return@collect
             if (nowNeighbor - lastNeighborSwapEvalUptimeMs < NeighborSwapEvalMinIntervalMs) {
                 return@collect
             }
             lastNeighborSwapEvalUptimeMs = nowNeighbor
-            val currentPageIdx = pagerState.currentPage.coerceAtLeast(0)
             val start = pageStartIndex(currentPageIdx, pageSize)
             val end = pageEndExclusive(tracksSnap.size, currentPageIdx, pageSize)
-            val reordered =
-                neighborSwapOnPageOrNull(
-                    tracksSnap,
-                    dragController,
-                    start,
-                    end,
-                    itemBoundsMap,
-                    knownGlobalIndex = draggingGlobalIndex,
+            val edgeZone =
+                computeEdgeHoldCandidateZone(
+                    fingerYRoot = snap.fingerYRoot,
+                    listBounds = snap.listBounds,
+                    edgeBandPx = edgeBandPx,
+                    globalIndex = globalIndex,
+                    listSize = tracksSnap.size,
+                    currentPageIndex = currentPageIdx,
+                    pageSize = pageSize,
                 )
+            val reordered =
+                if (edgeZone == EdgeHoldZone.None) {
+                    crossPageBoundarySwapOrNull(
+                        tracksSnap,
+                        dragController,
+                        start,
+                        end,
+                        itemBoundsMap,
+                        knownGlobalIndex = draggingGlobalIndex,
+                    )
+                        ?: neighborSwapOnPageOrNull(
+                            tracksSnap,
+                            dragController,
+                            start,
+                            end,
+                            itemBoundsMap,
+                            knownGlobalIndex = draggingGlobalIndex,
+                        )
+                } else {
+                    null
+                }
                     ?: return@collect
             if (emitReorderAndRefreshDraggingIndex(reordered)) {
                 neighborSwapCooldownUntilMs = nowNeighbor + ReorderSwapCooldownMs
@@ -244,17 +299,30 @@ internal fun rememberTrackListDragInteraction(
         }
     }
 
+    val parentBoundsState = rememberUpdatedState(listParentBoundsInRoot)
+
+    // List-level finger tracking survives page-entry reorder: the ghost row's gesture is disposed
+    // when the dragged track moves to another VerticalPager page.
     val dragSurfaceModifier =
-        Modifier.pointerInput(Unit) {
-            awaitEachGesture {
-                do {
-                    val event = awaitPointerEvent()
-                    if (dragController.isDragging) {
-                        if (event.changes.none { it.pressed }) {
-                            latestCompleteDrop()
-                        }
+        Modifier.pointerInput(dragController.draggingKey) {
+            if (dragController.draggingKey == null) return@pointerInput
+            awaitPointerEventScope {
+                while (dragController.draggingKey != null) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.none { it.pressed }) {
+                        latestCompleteDrop()
+                        break
                     }
-                } while (event.changes.any { it.pressed })
+                    val bounds = parentBoundsState.value
+                    event.changes.firstOrNull { it.pressed && it.positionChanged() }?.let { change ->
+                        dragController.update(
+                            Offset(
+                                x = bounds.left + change.position.x,
+                                y = bounds.top + change.position.y,
+                            ),
+                        )
+                    }
+                }
             }
         }
 

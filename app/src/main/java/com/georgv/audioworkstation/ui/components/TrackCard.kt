@@ -86,6 +86,8 @@ fun TrackCard(
     pan: Float = 0f,
     onPanChange: ((Float) -> Unit)? = null,
     onPanCommit: ((Float) -> Unit)? = null,
+    /** When false, timeline lane is hidden (legacy staged mount; Project screen keeps this true). */
+    showWaveforms: Boolean = true,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onCancelImport: () -> Unit = onDelete,
@@ -108,7 +110,6 @@ fun TrackCard(
     trackId: String? = null,
     onReorderDragStart: ((positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit)? = null,
     onReorderDragMove: ((positionInRoot: Offset) -> Unit)? = null,
-    onReorderDragEnd: (() -> Unit)? = null,
     /** When true, card tap, menu, and fader do not respond. */
     interactionBlocked: Boolean = false,
     /** When true, card consumes touches but does not start a drag (other row is being dragged). */
@@ -157,8 +158,7 @@ fun TrackCard(
         !dragPreview &&
             trackId != null &&
             onReorderDragStart != null &&
-            onReorderDragMove != null &&
-            onReorderDragEnd != null
+            onReorderDragMove != null
     val showLoopChrome = dragPreview || onToggleLoop != null
     val showRecordTargetChrome = dragPreview || onToggleRecordTarget != null
 
@@ -228,7 +228,6 @@ fun TrackCard(
                             onTap = onCardSelectionClick,
                             onReorderDragStart = onReorderDragStart,
                             onReorderDragMove = onReorderDragMove,
-                            onReorderDragEnd = onReorderDragEnd,
                         )
                     } else if (!dragPreview && cardSelectionOnRoot) {
                         Modifier.clickable(
@@ -523,26 +522,28 @@ fun TrackCard(
                     } else {
                         Modifier.fillMaxWidth()
                     }
-                if (timelineClip == null) {
-                    if (isRecording) {
+                when {
+                    timelineClip != null && showWaveforms -> {
+                        TrackTimelineLane(
+                            clip = timelineClip,
+                            laneLayoutDurationMs = laneLayoutDurationMs,
+                            globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
+                            playheadPositionMs = timelinePlayheadPositionMs,
+                            recordingInputLevel = if (isRecording) recordingInputLevel else null,
+                            loopRegionEditingEnabled = loopRegionEditingEnabled,
+                            onLoopRegionCommit = onLoopRegionCommit,
+                            modifier = waveformModifier,
+                        )
+                    }
+                    isRecording -> {
                         RecordingWaveform(
                             inputLevel = recordingInputLevel,
                             modifier = waveformModifier,
                         )
-                    } else {
-                        TrackWaveform(modifier = waveformModifier)
                     }
-                } else {
-                    TrackTimelineLane(
-                        clip = timelineClip,
-                        laneLayoutDurationMs = laneLayoutDurationMs,
-                        globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
-                        playheadPositionMs = timelinePlayheadPositionMs,
-                        recordingInputLevel = if (isRecording) recordingInputLevel else null,
-                        loopRegionEditingEnabled = loopRegionEditingEnabled,
-                        onLoopRegionCommit = onLoopRegionCommit,
-                        modifier = waveformModifier,
-                    )
+                    else -> {
+                        WaveformEmptyPlaceholder(modifier = waveformModifier)
+                    }
                 }
             }
 
@@ -676,5 +677,30 @@ internal fun ImportStatusBadge(
             color = AppColors.Line,
             style = labelStyle,
         )
+    }
+}
+
+/** Lightweight empty waveform slot — no skeleton bars. */
+@Composable
+internal fun WaveformEmptyPlaceholder(
+    modifier: Modifier = Modifier,
+    statusText: String? = null,
+) {
+    Box(
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(Dimens.MediumRadius))
+                .background(AppColors.SurfacePanel),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = AppColors.Line.copy(alpha = 0.58f),
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(start = 6.dp, end = 6.dp),
+            )
+        }
     }
 }

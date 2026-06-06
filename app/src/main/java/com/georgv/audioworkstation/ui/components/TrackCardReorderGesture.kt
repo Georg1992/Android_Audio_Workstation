@@ -26,7 +26,7 @@ import androidx.compose.ui.platform.LocalView
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
 import kotlin.math.hypot
 
-internal const val TrackReorderLongPressMs = 2000L
+internal const val TrackReorderLongPressMs = 500L
 
 /** Movement above this cancels a pre-lift hold (does not cancel after lift). */
 private const val TrackReorderPreLiftSlopDp = 12f
@@ -34,6 +34,10 @@ private const val TrackReorderPreLiftSlopDp = 12f
 /**
  * Short tap ([onTap]) vs [TrackReorderLongPressMs] hold-to-lift reorder on non-interactive chrome.
  * Uses [PointerEventPass.Final]; ignores downs already consumed by buttons, fader, pan, etc.
+ * Drop is completed by the list drag surface; this modifier only lifts and moves.
+ *
+ * Lift timing uses [Handler.postDelayed] because [pointerInput] is a restricted coroutine scope
+ * (no [kotlinx.coroutines.delay]).
  */
 fun Modifier.trackCardLongPressReorderGesture(
     enabled: Boolean,
@@ -42,7 +46,6 @@ fun Modifier.trackCardLongPressReorderGesture(
     onTap: () -> Unit,
     onReorderDragStart: (positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit,
     onReorderDragMove: (positionInRoot: Offset) -> Unit,
-    onReorderDragEnd: () -> Unit,
 ): Modifier =
     composed {
         var cardCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -50,7 +53,6 @@ fun Modifier.trackCardLongPressReorderGesture(
         val latestOnTap by rememberUpdatedState(onTap)
         val latestOnStart by rememberUpdatedState(onReorderDragStart)
         val latestOnMove by rememberUpdatedState(onReorderDragMove)
-        val latestOnEnd by rememberUpdatedState(onReorderDragEnd)
         val view = LocalView.current
 
         this
@@ -73,7 +75,6 @@ fun Modifier.trackCardLongPressReorderGesture(
                                 onTap = latestOnTap,
                                 onStart = latestOnStart,
                                 onMove = latestOnMove,
-                                onEnd = latestOnEnd,
                             )
                         }
                     }
@@ -90,7 +91,6 @@ private suspend fun AwaitPointerEventScope.handleTrackCardLongPressGesture(
     onTap: () -> Unit,
     onStart: (positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit,
     onMove: (positionInRoot: Offset) -> Unit,
-    onEnd: () -> Unit,
 ) {
     val down =
         awaitFirstDown(
@@ -112,7 +112,6 @@ private suspend fun AwaitPointerEventScope.handleTrackCardLongPressGesture(
             onTap = onTap,
             onStart = onStart,
             onMove = onMove,
-            onEnd = onEnd,
         )
     val liftRunnable = Runnable { env.liftNow() }
     liftHandler.postDelayed(liftRunnable, TrackReorderLongPressMs)
@@ -136,7 +135,6 @@ private class TrackCardLongPressEnv(
     val onTap: () -> Unit,
     val onStart: (positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit,
     val onMove: (positionInRoot: Offset) -> Unit,
-    val onEnd: () -> Unit,
 ) {
     var lifted = false
     var lastLocal = startLocal
@@ -190,7 +188,6 @@ private suspend fun AwaitPointerEventScope.awaitPostLiftDrag(env: TrackCardLongP
         val change = event.changes.firstOrNull { it.id == env.pointerId } ?: break
 
         if (!change.pressed) {
-            env.onEnd()
             break
         }
 

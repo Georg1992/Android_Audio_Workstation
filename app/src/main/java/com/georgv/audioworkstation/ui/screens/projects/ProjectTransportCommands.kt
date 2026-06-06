@@ -4,10 +4,10 @@ import androidx.annotation.StringRes
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
-import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  */
 internal class ProjectTransportCommands(
     private val audioController: AudioController,
+    private val dispatchers: AppDispatchers,
     private val playheadPositionMs: MutableStateFlow<Long>,
     private val playheadTransport: PlayheadTransportController,
     private val playbackSession: PlaybackSessionController,
@@ -31,8 +32,8 @@ internal class ProjectTransportCommands(
     private val visibleTracks: () -> List<TrackEntity>,
     private val visibleTrackCount: () -> Int,
     private val recordTargetTrackId: () -> String?,
-    private val waveformStatesByTrackId: () -> Map<String, WaveformState>,
-    private val timelineProjectionForTracks: (List<TrackEntity>, Map<String, WaveformState>) -> ProjectTimelineProjection,
+    private val timelineVisibleDurationMs: () -> Long,
+    private val timelineBaseDurationMs: () -> Long,
     private val loadCurrentProject: suspend (String) -> ProjectEntity?,
     private val ensureProject: suspend (String, String) -> ProjectEntity?,
     private val persistRecordingRow: suspend (TrackEntity) -> Unit,
@@ -56,9 +57,8 @@ internal class ProjectTransportCommands(
         }
 
         val tracks = visibleTracks()
-        val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId())
         val timelineStartOffsetMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.visibleTimelineDurationMs)
+            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs())
 
         val overdubPlaybackTracks = selectedPlayableTracksForOverdub(tracks)
         val recordTargetTrack =
@@ -132,14 +132,12 @@ internal class ProjectTransportCommands(
         }
         val currentProjectId = projectId() ?: return
         val currentProject = loadCurrentProject(currentProjectId) ?: return
-        val tracks = visibleTracks()
-        val timeline = timelineProjectionForTracks(tracks, waveformStatesByTrackId())
         val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.visibleTimelineDurationMs)
+            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs())
         if (
             !playbackStartAllowedAtPlayhead(
                 startPositionMs = startPositionMs,
-                timelineBaseDurationMs = timeline.baseTimelineDurationMs,
+                timelineBaseDurationMs = timelineBaseDurationMs(),
                 tracks = selectedPlayableTracks,
             )
         ) {
@@ -156,7 +154,11 @@ internal class ProjectTransportCommands(
             return
         }
 
-        if (!audioController.startPlayback(playbackSpec)) {
+        val started =
+            withAudioIo(dispatchers, "AudioController.startPlayback") {
+                audioController.startPlayback(playbackSpec)
+            }
+        if (!started) {
             playheadTransport.abortPlaybackStart()
             emitMessage(R.string.error_playback_failed_to_start)
             return
@@ -227,7 +229,7 @@ internal class ProjectTransportCommands(
         )
     }
 
-    private fun abortCombinedRecordTransport() {
+    private suspend fun abortCombinedRecordTransport() {
         playAndRecordTransport.stop()
         playheadTransport.abortRecordingStart()
     }

@@ -2,14 +2,19 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
+import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Owns recording *transport/session* MutableStateFlows only: pending take id, startup guard, optimistic row.
@@ -21,6 +26,7 @@ class RecordingSessionController(
     private val scope: CoroutineScope,
     private val audioController: AudioController,
     private val recordingCoordinator: ProjectRecordingCoordinator,
+    private val dispatchers: AppDispatchers,
 ) {
     private val _recordingTrackId = MutableStateFlow<String?>(null)
     val recordingTrackId: StateFlow<String?> = _recordingTrackId.asStateFlow()
@@ -50,8 +56,8 @@ class RecordingSessionController(
         ensureProject: suspend (String, String) -> ProjectEntity?,
         visibleTrackCount: () -> Int,
         persistRecordingRow: suspend (TrackEntity) -> Unit,
-        notifyEngineStartFailed: () -> Unit,
-        notifyPersistFailed: () -> Unit,
+        notifyEngineStartFailed: suspend () -> Unit,
+        notifyPersistFailed: suspend () -> Unit,
         storagePrecheck: suspend (ProjectEntity) -> Boolean,
         notifyStorageStartBlocked: () -> Unit,
         recordTargetTrack: TrackEntity? = null,
@@ -89,26 +95,62 @@ class RecordingSessionController(
         ensureProject: suspend (String, String) -> ProjectEntity?,
         visibleTrackCount: () -> Int,
         persistRecordingRow: suspend (TrackEntity) -> Unit,
-        notifyEngineStartFailed: () -> Unit,
-        notifyPersistFailed: () -> Unit,
+        notifyEngineStartFailed: suspend () -> Unit,
+        notifyPersistFailed: suspend () -> Unit,
         storagePrecheck: suspend (ProjectEntity) -> Boolean,
         notifyStorageStartBlocked: () -> Unit,
         recordTargetTrack: TrackEntity? = null,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean,
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
+        val quickActive = QuickRecordDiagnostics.isActiveFor(projectId)
+        val sessionStartMs = android.os.SystemClock.uptimeMillis()
+        if (quickActive) {
+            QuickRecordDiagnostics.logStepStart("QuickRecordBootstrap recording session", projectId)
+        }
         try {
-            val currentProject = ensureProject(projectId, projectName) ?: run {
+            val ensureStartMs = android.os.SystemClock.uptimeMillis()
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepStart("ensureProject for recording", projectId)
+            }
+            val currentProject =
+                withIo(dispatchers, "ensureProject for recording") {
+                    ensureProject(projectId, projectName)
+                } ?: run {
+                if (quickActive) {
+                    QuickRecordDiagnostics.logStepEnd("ensureProject for recording", ensureStartMs, projectId, "failed")
+                }
                 _recordingStartup.value = false
                 return
             }
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepEnd("ensureProject for recording", ensureStartMs, projectId)
+            }
 
-            if (!storagePrecheck(currentProject)) {
+            val precheckStartMs = android.os.SystemClock.uptimeMillis()
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepStart("recording storage precheck", projectId)
+            }
+            val storageOk =
+                withIo(dispatchers, "recording storage precheck") {
+                    storagePrecheck(currentProject)
+                }
+            if (!storageOk) {
+                if (quickActive) {
+                    QuickRecordDiagnostics.logStepEnd("recording storage precheck", precheckStartMs, projectId, "blocked")
+                }
                 _recordingStartup.value = false
                 notifyStorageStartBlocked()
                 return
             }
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepEnd("recording storage precheck", precheckStartMs, projectId)
+            }
 
+            val allocateStartMs = android.os.SystemClock.uptimeMillis()
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepStart("allocate pending recording track", projectId)
+            }
             val preparedExistingTrack =
                 recordTargetTrack?.let { target ->
                     recordingCoordinator.prepareExistingTrackForRecording(
@@ -118,30 +160,60 @@ class RecordingSessionController(
                 }
 
             val pendingTrack =
-                preparedExistingTrack?.track
-                    ?: recordingCoordinator.allocatePendingRecordingTrack(
-                        projectId = projectId,
-                        visibleTrackCount = visibleTrackCount(),
-                        timelineStartOffsetMs = timelineStartOffsetMs,
-                    )
+                withIo(dispatchers, "allocate pending recording track") {
+                    preparedExistingTrack?.track
+                        ?: recordingCoordinator.allocatePendingRecordingTrack(
+                            projectId = projectId,
+                            visibleTrackCount = visibleTrackCount(),
+                            timelineStartOffsetMs = timelineStartOffsetMs,
+                        )
+                }
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepEnd(
+                    "allocate pending recording track",
+                    allocateStartMs,
+                    projectId,
+                    "trackId=${pendingTrack.id}",
+                )
+            }
 
             _optimisticRecordingTrack.value = pendingTrack.copy(isRecording = true)
             _recordingTrackId.value = pendingTrack.id
             _recordingStartup.value = false
 
+            val overdubStartMs = android.os.SystemClock.uptimeMillis()
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepStart("onPendingTrackAllocated", projectId)
+            }
             if (!onPendingTrackAllocated(pendingTrack)) {
+                if (quickActive) {
+                    QuickRecordDiagnostics.logStepEnd("onPendingTrackAllocated", overdubStartMs, projectId, "aborted")
+                }
                 _optimisticRecordingTrack.value = null
                 _recordingTrackId.value = null
                 _recordingStartup.value = false
                 return
             }
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepEnd("onPendingTrackAllocated", overdubStartMs, projectId)
+            }
 
+            val engineStartMs = android.os.SystemClock.uptimeMillis()
             val startOutcome =
-                recordingCoordinator.startEngineForAllocatedTrack(
-                    project = currentProject,
-                    pendingTrack = pendingTrack,
-                    punchRecording = preparedExistingTrack,
-                )
+                QuickRecordDiagnostics.traceSection("QuickRecordStartRecording", projectId) {
+                    if (quickActive) {
+                        QuickRecordDiagnostics.logStepStart("audio engine startRecording", projectId)
+                    }
+                    recordingCoordinator.startEngineForAllocatedTrack(
+                        project = currentProject,
+                        pendingTrack = pendingTrack,
+                        punchRecording = preparedExistingTrack,
+                    ).also {
+                        if (quickActive) {
+                            QuickRecordDiagnostics.logStepEnd("audio engine startRecording", engineStartMs, projectId)
+                        }
+                    }
+                }
 
             val newTrack =
                 when (startOutcome) {
@@ -162,13 +234,26 @@ class RecordingSessionController(
 
             onRecordingTransportReady(timelineStartOffsetMs)
 
+            val persistStartMs = android.os.SystemClock.uptimeMillis()
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepStart("persist recording row", projectId, "trackId=${newTrack.id}")
+            }
             try {
-                persistRecordingRow(newTrack)
+                withIo(dispatchers, "persist recording row") {
+                    persistRecordingRow(newTrack)
+                }
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
+                if (quickActive) {
+                    QuickRecordDiagnostics.logStepEnd("persist recording row", persistStartMs, projectId, "failed")
+                }
                 rollbackFailedRecordingPersist(notifyPersistFailed)
                 return
+            }
+            if (quickActive) {
+                QuickRecordDiagnostics.logStepEnd("persist recording row", persistStartMs, projectId, "trackId=${newTrack.id}")
+                QuickRecordDiagnostics.logStepEnd("QuickRecordBootstrap recording session", sessionStartMs, projectId)
             }
         } finally {
             if (_recordingTrackId.value == null && _recordingStartup.value) {
@@ -208,14 +293,18 @@ class RecordingSessionController(
         _punchRecordingContext.value = null
     }
 
-    private fun rollbackFailedRecordingPersist(notifyPersistFailed: () -> Unit) {
+    private suspend fun rollbackFailedRecordingPersist(notifyPersistFailed: suspend () -> Unit) {
         _optimisticRecordingTrack.value = null
         _recordingTrackId.value = null
         _recordingStartup.value = false
-        recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
+        withIo(dispatchers, "discard punch recording temp file") {
+            recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
+        }
         clearPunchRecordingContext()
-        audioController.stopRecording()
-        notifyPersistFailed()
+        withAudioIo(dispatchers, "AudioController.stopRecording rollback") {
+            audioController.stopRecording()
+        }
+        notifyPersistFailed.invoke()
     }
 
     /** Same-module unit tests: seed flows without running the full record pipeline. */

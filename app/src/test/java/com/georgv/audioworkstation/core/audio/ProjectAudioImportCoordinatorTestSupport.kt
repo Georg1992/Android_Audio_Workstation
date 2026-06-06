@@ -2,6 +2,8 @@ package com.georgv.audioworkstation.core.audio
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.ui.screens.projects.ProjectAudioImportCoordinator
 import java.io.File
@@ -11,12 +13,14 @@ internal fun testProjectAudioImportCoordinator(
     audioFilePathProvider: AudioFilePathProvider = TempDirAudioFilePathProvider(),
     context: Context = ApplicationProvider.getApplicationContext(),
     wavAudioImporter: WavAudioImporter = WavAudioImporter(),
+    dispatchers: AppDispatchers = TestAppDispatchers(),
 ): ProjectAudioImportCoordinator =
     ProjectAudioImportCoordinator(
         repo = repo,
         wavAudioImporter = wavAudioImporter,
         mediaCodecAudioImporter = MediaCodecAudioImporter(context),
         audioFilePathProvider = audioFilePathProvider,
+        dispatchers = dispatchers,
         context = context,
     )
 

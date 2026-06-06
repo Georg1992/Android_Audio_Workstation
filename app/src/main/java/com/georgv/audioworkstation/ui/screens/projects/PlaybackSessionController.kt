@@ -1,7 +1,10 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.audio.GainRange
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.audibleTrackIds
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -45,6 +49,7 @@ import kotlin.coroutines.coroutineContext
 class PlaybackSessionController(
     private val scope: CoroutineScope,
     private val audioController: AudioController,
+    private val dispatchers: AppDispatchers,
     private val loadCurrentProject: suspend (String) -> ProjectEntity?,
     private val currentProjectId: () -> String?,
     private val visibleTracks: () -> List<TrackEntity>,
@@ -154,16 +159,18 @@ class PlaybackSessionController(
         playbackMonitorJob = null
     }
 
-    fun stopEngineIfMarkedPlaying() {
+    suspend fun stopEngineIfMarkedPlaying() {
         if (_sessionTrackIds.value.isNotEmpty()) {
-            audioController.stopPlayback()
+            withAudioIo(dispatchers, "AudioController.stopPlayback") {
+                audioController.stopPlayback()
+            }
         }
     }
 
     /**
      * Transport Seek.1: stop native playback and completion monitor without clearing session lane maps.
      */
-    fun pauseEnginePreservingSession() {
+    suspend fun pauseEnginePreservingSession() {
         cancelCompletionMonitorForTransportStop()
         stopEngineIfMarkedPlaying()
     }
@@ -172,7 +179,7 @@ class PlaybackSessionController(
      * Seek.1: restart native playback at [spec.startPositionMs] and rebuild session maps from
      * [trackIdsInLaneOrder] (current selected playable set), not stale hot-join-only lane state.
      */
-    fun restartEngineFromPlayhead(
+    suspend fun restartEngineFromPlayhead(
         spec: MultiPlaybackSpec,
         trackIdsInLaneOrder: List<String>,
         selectedTrackIds: Set<String>,
@@ -185,7 +192,11 @@ class PlaybackSessionController(
         clearHotJoinState()
         refreshSessionLaneMappings(trackIdsInLaneOrder)
         _sessionTrackIds.value = trackIdsInLaneOrder.toSet()
-        if (!audioController.startPlayback(spec)) return false
+        val started =
+            withAudioIo(dispatchers, "AudioController.startPlayback seekRestart") {
+                audioController.startPlayback(spec)
+            }
+        if (!started) return false
         syncLaneAudibilityFromSelection(selectedTrackIds)
         startPlaybackMonitor(trackIdsInLaneOrder.toSet())
         return true
@@ -320,7 +331,8 @@ class PlaybackSessionController(
 
         hotJoinMonitorJobs[track.id]?.cancel()
         hotJoinMonitorJobs[track.id] =
-            scope.launch {
+            scope.launch(dispatchers.default) {
+                ThreadingDiagnostics.logPollLoop("default hotJoin")
                 try {
                     monitorHotJoinLaneUntilSettled(
                         trackId = track.id,
@@ -357,9 +369,11 @@ class PlaybackSessionController(
                         finishHotJoinMonitor(trackId)
                         return
                     }
-                    sessionLaneTrackIds[laneIndex] = trackId
-                    syncLaneAudibilityFromSelection(selectedTrackIds)
-                    finishHotJoinMonitor(trackId)
+                    withContext(dispatchers.main) {
+                        sessionLaneTrackIds[laneIndex] = trackId
+                        syncLaneAudibilityFromSelection(selectedTrackIds)
+                        finishHotJoinMonitor(trackId)
+                    }
                     return
                 }
             }

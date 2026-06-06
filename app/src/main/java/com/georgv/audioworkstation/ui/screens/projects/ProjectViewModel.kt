@@ -16,7 +16,12 @@ import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.core.audio.MasterPeakMeter
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.AudioIoScope
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
+import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
@@ -27,11 +32,16 @@ import com.georgv.audioworkstation.core.validation.validateName
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.ui.components.ActiveRecordingTimelineClip
+import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
+import com.georgv.audioworkstation.ui.components.visibleTimelineDurationMs
 import com.georgv.audioworkstation.ui.components.projectTimelineClips
 import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
 import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
@@ -48,11 +58,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlinx.coroutines.flow.map
@@ -74,7 +84,6 @@ private data class ProjectScreenSnapshot(
     val sessionTrackIds: Set<String>,
     val playbackSessionActive: Boolean,
     val recordingTrackId: String?,
-    val recordingInputLevel: Float,
     val waveformStatesByTrackId: Map<String, WaveformState>,
     val isRecordingStartup: Boolean,
     val importProgressByTrackId: Map<String, Float> = emptyMap(),
@@ -129,6 +138,17 @@ data class ProjectUiState(
         get() = transportPlaybackPhase == TransportPlaybackPhase.Playing
 }
 
+/** High-frequency transport/meter fields — kept out of [structuralUiState] to limit recomposition. */
+data class ProjectRealtimeUiState(
+    val playheadPositionMs: Long = 0L,
+    val recordingInputLevel: Float = 0f,
+    val timelineVisibleDurationMs: Long = TimelineMinimumBaseDurationMs,
+    val recordingTimelineClipsByTrackId: Map<String, TimelineClip>? = null,
+    val recordingTimelineLaneLayoutDurationMs: Long? = null,
+    val masterPeakDbText: String = "0 dB",
+    val masterPeakIndicatorLevel: MasterPeakIndicatorLevel = MasterPeakIndicatorLevel.Inactive,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ProjectViewModel @Inject constructor(
@@ -140,7 +160,12 @@ class ProjectViewModel @Inject constructor(
     private val waveformPeakExtractor: WavWaveformPeakExtractor,
     private val audioFilePathProvider: AudioFilePathProvider,
     private val recordingStorageGuard: RecordingStorageGuard,
+    private val dispatchers: AppDispatchers,
+    private val audioIoScope: AudioIoScope,
 ) : ViewModel() {
+
+    internal val appDispatchers: AppDispatchers
+        get() = dispatchers
 
     internal val importRepo: ProjectRepository
         get() = repo
@@ -167,6 +192,7 @@ class ProjectViewModel @Inject constructor(
             scope = viewModelScope,
             playheadPositionMs = playheadPositionMs,
             nativeTransportPositionMs = { audioController.transportPositionMs() },
+            pollDispatcher = dispatchers.default,
         )
     private val dbActions =
         ProjectDbActionRunner(logTag = TAG) { message -> emitMessage(message) }
@@ -177,7 +203,7 @@ class ProjectViewModel @Inject constructor(
             scope = viewModelScope,
             waveformPeakExtractor = waveformPeakExtractor,
             waveformStatesByTrackId = waveformStatesByTrackId,
-            tracksSnapshot = { uiState.value.tracks },
+            tracksSnapshot = { currentVisibleTracks() },
             ioDispatcher = waveformPeakExtractor.ioDispatcher,
         )
 
@@ -196,11 +222,13 @@ class ProjectViewModel @Inject constructor(
             scope = viewModelScope,
             audioController = audioController,
             recordingCoordinator = recordingCoordinator,
+            dispatchers = dispatchers,
         )
     private val recordingStorageMonitor =
         RecordingStorageMonitor(
             scope = viewModelScope,
             guard = recordingStorageGuard,
+            dispatchers = dispatchers,
         )
     private var recordingStorageMonitorEnabledForTests = true
     private var masterPeakPollEnabledForTests = true
@@ -226,6 +254,7 @@ class ProjectViewModel @Inject constructor(
         PlaybackSessionController(
             scope = viewModelScope,
             audioController = audioController,
+            dispatchers = dispatchers,
             loadCurrentProject = { pid -> loadCurrentProject(pid) },
             currentProjectId = { projectId.value },
             visibleTracks = {
@@ -238,9 +267,13 @@ class ProjectViewModel @Inject constructor(
                 )
             },
             onPlaybackCompleted = {
-                audioController.stopPlayback()
                 resetMasterPeakHoldDisplay()
                 playheadTransport.stopAndResetToZero()
+                viewModelScope.launch(dispatchers.audioIo) {
+                    withAudioIo(dispatchers, "AudioController.stopPlayback completion") {
+                        audioController.stopPlayback()
+                    }
+                }
             },
             suppressTransportOnPlaybackCompletion = { recordingSession.hasActiveRecordingTake() },
             onHotJoinFailed = { viewModelScope.launch { emitMessage(R.string.error_playback_failed_to_start) } },
@@ -250,12 +283,14 @@ class ProjectViewModel @Inject constructor(
         PlayAndRecordTransport(
             audioController = audioController,
             playbackSession = playbackSession,
+            dispatchers = dispatchers,
         )
 
     private val transportController = ProjectTransportController(
         audioController = audioController,
         playbackSession = playbackSession,
         recordingSession = recordingSession,
+        dispatchers = dispatchers,
         finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId -> finalizeRecordingTrack(trackId) },
     )
 
@@ -271,16 +306,14 @@ class ProjectViewModel @Inject constructor(
             selectedTrackIds = { selectedTrackIds.value },
             loadCurrentProject = { pid -> loadCurrentProject(pid) },
             selectedPlayableTracks = { selectedPlayableTracks() },
-            timelineTracksForPlayhead = { currentVisibleTracks() },
-            timelineProjection = { tracks, waveformStates ->
-                timelineProjectionForTracks(tracks, waveformStates)
-            },
-            waveformStatesByTrackId = { waveformStatesByTrackId.value },
+            timelineVisibleDurationMs = { realtimeUiState.value.timelineVisibleDurationMs },
+            timelineBaseDurationMs = { structuralUiState.value.timelineBaseDurationMs },
         )
 
     private val transportCommands =
         ProjectTransportCommands(
             audioController = audioController,
+            dispatchers = dispatchers,
             playheadPositionMs = playheadPositionMs,
             playheadTransport = playheadTransport,
             playbackSession = playbackSession,
@@ -291,12 +324,10 @@ class ProjectViewModel @Inject constructor(
             projectId = { projectId.value },
             selectedTrackIds = { selectedTrackIds.value },
             visibleTracks = { currentVisibleTracks() },
-            visibleTrackCount = { uiState.value.tracks.size },
+            visibleTrackCount = { structuralUiState.value.tracks.size },
             recordTargetTrackId = { recordTargetTrackId.value },
-            waveformStatesByTrackId = { waveformStatesByTrackId.value },
-            timelineProjectionForTracks = { tracks, waveformStates ->
-                timelineProjectionForTracks(tracks, waveformStates)
-            },
+            timelineVisibleDurationMs = { realtimeUiState.value.timelineVisibleDurationMs },
+            timelineBaseDurationMs = { structuralUiState.value.timelineBaseDurationMs },
             loadCurrentProject = { pid -> loadCurrentProject(pid) },
             ensureProject = { pid, name -> ensureProject(pid, name) },
             persistRecordingRow = { track -> repo.upsertTracks(listOf(track)) },
@@ -320,7 +351,7 @@ class ProjectViewModel @Inject constructor(
             onRecordingStorageMonitorStop = {
                 recordingStorageMonitor.stop()
             },
-            isImportInProgress = { uiState.value.isImportInProgress },
+            isImportInProgress = { structuralUiState.value.isImportInProgress },
         )
 
     val userMessages = messages.receiveAsFlow()
@@ -426,19 +457,20 @@ class ProjectViewModel @Inject constructor(
             combine(recordingSession.recordingTrackId, recordingSession.recordingStartup) { recordingId, startup ->
                 recordingId to startup
             },
-            combine(audioController.recordingInputLevel, waveformStatesByTrackId, importUiCoordinator.importUiByTrackId) {
-                    level,
-                    waveformStates,
-                    importUi,
-                ->
-                Triple(level, waveformStates, importUi)
+            combine(waveformStatesByTrackId, importUiCoordinator.importUiByTrackId) { waveformStates, importUi ->
+                waveformStates to importUi
             },
-        ) { pidProject, tracks, selPlay, recStartup, meterImport ->
+        ) { pidProject, tracks, selPlay, recStartup, waveformImport ->
             val (pid, proj) = pidProject
             val (selected, sessionTracks, sessionActive) = selPlay
             val (recording, startup) = recStartup
-            val (recordingInputLevel, waveformStates, importUi) = meterImport
+            val (waveformStates, importUi) = waveformImport
             val mergedWaveforms = importUiCoordinator.mergeWaveformStates(waveformStates, tracks)
+            WaveformRecompositionDiagnostics.logProjectScreenSnapshotEmission(
+                waveformStates = mergedWaveforms,
+                recordingInputLevel = 0f,
+                importUiSize = importUi.size,
+            )
             pid to ProjectScreenSnapshot(
                 projectId = pid,
                 project = proj,
@@ -447,45 +479,86 @@ class ProjectViewModel @Inject constructor(
                 sessionTrackIds = sessionTracks,
                 playbackSessionActive = sessionActive,
                 recordingTrackId = recording,
-                recordingInputLevel = recordingInputLevel.coerceIn(0f, 1f),
                 waveformStatesByTrackId = mergedWaveforms,
                 isRecordingStartup = startup,
                 importProgressByTrackId = importUi.mapValues { it.value.progress },
             )
         }
 
-    val uiState: StateFlow<ProjectUiState> =
+    val structuralUiState: StateFlow<ProjectUiState> =
         combine(
             projectScreenSnapshot,
-            playheadPositionMs,
             playheadTransport.phase,
             recordTargetTrackId,
-            masterPeakHoldLinear,
-        ) { snapshot, playheadMs, transportPhase, recordTargetId, peakHoldLinear ->
+        ) { snapshot, transportPhase, recordTargetId ->
             val (_, screen) = snapshot
-            val activeRecording =
-                activeRecordingTimelineClip(
-                    tracks = screen.tracks,
-                    recordingTrackId = screen.recordingTrackId,
-                    playheadMs = playheadMs,
-                )
+            val timeline = buildStructuralTimelineProjection(screen)
+            ProjectUiState(
+                projectId = screen.projectId,
+                project = screen.project,
+                tracks = screen.tracks,
+                selectedTrackIds = screen.selectedTrackIds,
+                sessionTrackIds = screen.sessionTrackIds,
+                playbackSessionActive = screen.playbackSessionActive,
+                recordingTrackId = screen.recordingTrackId,
+                waveformStatesByTrackId = screen.waveformStatesByTrackId,
+                timelineClipsByTrackId = timeline.clipsByLaneId,
+                timelineBaseDurationMs = timeline.baseTimelineDurationMs,
+                timelineLaneLayoutDurationMs = timeline.laneLayoutDurationMs,
+                timelineVisibleDurationMs = timeline.visibleTimelineDurationMs,
+                transportPlaybackPhase = transportPhase,
+                isRecordingStartup = screen.isRecordingStartup,
+                recordTargetTrackId = recordTargetId,
+                isImportInProgress = screen.tracks.any { it.importStatus == TrackImportStatus.IMPORTING },
+            )
+        }
+            .distinctUntilChanged()
+            .flowOn(dispatchers.default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
+
+    val realtimeUiState: StateFlow<ProjectRealtimeUiState> =
+        combine(
+            playheadPositionMs,
+            audioController.recordingInputLevel,
+            masterPeakHoldLinear,
+            structuralUiState,
+            playheadTransport.phase,
+        ) { playheadMs, recordingLevel, peakHoldLinear, structural, transportPhase ->
             val extendForAllLoopedPlayback =
                 shouldExtendVisibleTimelineForAllLoopedPlayback(
-                    playbackSessionActive = screen.playbackSessionActive,
-                    sessionTrackIds = screen.sessionTrackIds,
-                    tracks = screen.tracks,
+                    playbackSessionActive = structural.playbackSessionActive,
+                    sessionTrackIds = structural.sessionTrackIds,
+                    tracks = structural.tracks,
                 )
             val extendForRecording = transportPhase == TransportPlaybackPhase.Recording
-            val timeline =
-                buildProjectTimelineProjection(
-                    tracks = screen.tracks,
-                    waveformStatesByTrackId = screen.waveformStatesByTrackId,
-                    activeRecording = activeRecording,
-                    playheadPositionMs = playheadMs,
-                    extendVisibleTimelineForAllLoopedPlayback = extendForAllLoopedPlayback,
-                    extendVisibleTimelineForRecording = extendForRecording,
-                    importProgressByTrackId = screen.importProgressByTrackId,
+            val activeRecording =
+                activeRecordingTimelineClip(
+                    tracks = structural.tracks,
+                    recordingTrackId = structural.recordingTrackId,
+                    playheadMs = playheadMs,
                 )
+            val recordingTimelineProjection =
+                if (extendForRecording && activeRecording != null) {
+                    buildProjectTimelineProjection(
+                        tracks = structural.tracks,
+                        waveformStatesByTrackId = structural.waveformStatesByTrackId,
+                        activeRecording = activeRecording,
+                        playheadPositionMs = playheadMs,
+                        extendVisibleTimelineForAllLoopedPlayback = extendForAllLoopedPlayback,
+                        extendVisibleTimelineForRecording = true,
+                    )
+                } else {
+                    null
+                }
+            val visibleTimelineDurationMs =
+                recordingTimelineProjection?.visibleTimelineDurationMs
+                    ?: visibleTimelineDurationMs(
+                        baseTimelineDurationMs = structural.timelineBaseDurationMs,
+                        playheadPositionMs = playheadMs,
+                        activeRecording = activeRecording,
+                        extendForAllLoopedPlayback = extendForAllLoopedPlayback,
+                        extendForRecording = extendForRecording,
+                    )
             val displayPlayheadMs =
                 when {
                     transportPhase == TransportPlaybackPhase.Recording -> {
@@ -496,7 +569,7 @@ class ProjectViewModel @Inject constructor(
                         playheadMs.coerceIn(0L, TimelineMaxDurationMs)
                     }
                     else -> {
-                        timelinePlayheadClampedPositionMs(playheadMs, timeline.visibleTimelineDurationMs)
+                        timelinePlayheadClampedPositionMs(playheadMs, visibleTimelineDurationMs)
                     }
                 }
             val showSessionMasterPeak =
@@ -507,29 +580,24 @@ class ProjectViewModel @Inject constructor(
                     peakLinear = peakHoldLinear,
                     isStopped = !showSessionMasterPeak,
                 )
-            ProjectUiState(
-                projectId = screen.projectId,
-                project = screen.project,
-                tracks = screen.tracks,
-                selectedTrackIds = screen.selectedTrackIds,
-                sessionTrackIds = screen.sessionTrackIds,
-                playbackSessionActive = screen.playbackSessionActive,
-                recordingTrackId = screen.recordingTrackId,
-                recordingInputLevel = screen.recordingInputLevel,
-                waveformStatesByTrackId = screen.waveformStatesByTrackId,
-                timelineClipsByTrackId = timeline.clipsByLaneId,
-                timelineBaseDurationMs = timeline.baseTimelineDurationMs,
-                timelineLaneLayoutDurationMs = timeline.laneLayoutDurationMs,
-                timelineVisibleDurationMs = timeline.visibleTimelineDurationMs,
+            ProjectRealtimeUiState(
                 playheadPositionMs = displayPlayheadMs,
-                transportPlaybackPhase = transportPhase,
-                isRecordingStartup = screen.isRecordingStartup,
-                recordTargetTrackId = recordTargetId,
-                isImportInProgress = screen.tracks.any { it.importStatus == TrackImportStatus.IMPORTING },
+                recordingInputLevel = recordingLevel.coerceIn(0f, 1f),
+                timelineVisibleDurationMs = visibleTimelineDurationMs,
+                recordingTimelineClipsByTrackId = recordingTimelineProjection?.clipsByLaneId,
+                recordingTimelineLaneLayoutDurationMs = recordingTimelineProjection?.laneLayoutDurationMs,
                 masterPeakDbText = masterMeter.peakDbText,
                 masterPeakIndicatorLevel = masterMeter.indicatorLevel,
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
+        }
+            .flowOn(dispatchers.default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectRealtimeUiState())
+
+    val uiState: StateFlow<ProjectUiState> =
+        combine(structuralUiState, realtimeUiState) { structural, realtime ->
+            structural.mergeRealtime(realtime)
+        }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProjectUiState())
 
     val sampleRateMismatchDialogState = sampleRateMismatchDialog.asStateFlow()
 
@@ -548,13 +616,16 @@ class ProjectViewModel @Inject constructor(
                 masterPeakPollJob = null
                 if (phase == TransportPlaybackPhase.Playing && masterPeakPollEnabledForTests) {
                     masterPeakPollJob =
-                        viewModelScope.launch {
+                        viewModelScope.launch(dispatchers.default) {
+                            ThreadingDiagnostics.logPollLoop("default masterPeak")
                             while (isActive) {
                                 val nativePeak = audioController.readMasterPeakHoldLinear()
-                                val updated = max(masterPeakHoldLinear.value, nativePeak)
-                                if (updated != masterPeakHoldLinear.value) {
-                                    masterPeakHoldLinear.value = updated
-                                    maybeEmitMasterOverloadWarning(updated)
+                                withContext(dispatchers.main) {
+                                    val updated = max(masterPeakHoldLinear.value, nativePeak)
+                                    if (updated != masterPeakHoldLinear.value) {
+                                        masterPeakHoldLinear.value = updated
+                                        maybeEmitMasterOverloadWarning(updated)
+                                    }
                                 }
                                 delay(MASTER_PEAK_HOLD_POLL_MS)
                             }
@@ -563,12 +634,28 @@ class ProjectViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            uiState
+            structuralUiState
                 .map { it.timelineBaseDurationMs to it.transportPlaybackPhase }
                 .distinctUntilChanged()
                 .collect { (baseDurationMs, _) ->
                     playheadTransport.setTimelineBaseDurationMs(baseDurationMs)
                 }
+        }
+        if (WaveformRecompositionDiagnostics.loggingEnabled) {
+            viewModelScope.launch {
+                var previousStructural: ProjectUiState? = null
+                structuralUiState.collect { next ->
+                    WaveformRecompositionDiagnostics.logStructuralUiStateEmission(previousStructural, next)
+                    previousStructural = next
+                }
+            }
+            viewModelScope.launch {
+                var previousCombined: ProjectUiState? = null
+                uiState.collect { next ->
+                    WaveformRecompositionDiagnostics.logUiStateEmission(previousCombined, next)
+                    previousCombined = next
+                }
+            }
         }
     }
 
@@ -585,6 +672,29 @@ class ProjectViewModel @Inject constructor(
             extendVisibleTimelineForAllLoopedPlayback = false,
             extendVisibleTimelineForRecording = false,
         )
+
+    private fun buildStructuralTimelineProjection(
+        screen: ProjectScreenSnapshot,
+    ): ProjectTimelineProjection {
+        val structuralRecording =
+            screen.recordingTrackId?.let { recordingId ->
+                val track = screen.tracks.find { it.id == recordingId } ?: return@let null
+                ActiveRecordingTimelineClip(
+                    trackId = recordingId,
+                    startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
+                    elapsedMs = 0L,
+                )
+            }
+        return buildProjectTimelineProjection(
+            tracks = screen.tracks,
+            waveformStatesByTrackId = screen.waveformStatesByTrackId,
+            activeRecording = structuralRecording,
+            playheadPositionMs = 0L,
+            extendVisibleTimelineForAllLoopedPlayback = false,
+            extendVisibleTimelineForRecording = false,
+            importProgressByTrackId = screen.importProgressByTrackId,
+        )
+    }
 
     internal fun currentVisibleTracks(): List<TrackEntity> =
         visibleTracksWithRecordingOptimistic(
@@ -612,6 +722,7 @@ class ProjectViewModel @Inject constructor(
     suspend fun bind(projectId: String) {
         val projectChanged = this.projectId.value != projectId
         if (projectChanged) {
+            WaveformRecompositionDiagnostics.resetSession()
             importJobs.values.forEach { it.cancel() }
             importJobs.clear()
             importUiCoordinator.resetWhenProjectChanges()
@@ -630,11 +741,13 @@ class ProjectViewModel @Inject constructor(
         clearSampleRateMismatchPromptState()
         this.projectId.value = projectId
         if (projectChanged) {
-            withContext(Dispatchers.IO) {
+            withIo(dispatchers, "recoverStaleImports") {
                 recoverStaleImports(repo, projectId, importJobs)
             }
         }
-        awaitProjectTracksSynced(repo, projectTracks, projectId)
+        withIo(dispatchers, "bind awaitProjectTracksSynced") {
+            awaitProjectTracksSynced(repo, projectTracks, projectId)
+        }
         tryStartRegistryPendingCompressedImport(projectId)
         waveformPeakRefreshEnabled = true
         waveformPeaks.refreshPeakRequests(currentVisibleTracks())
@@ -645,7 +758,24 @@ class ProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _destinationReady.value = false
             waveformPeakRefreshEnabled = false
+            val bindStartMs = android.os.SystemClock.uptimeMillis()
+            if (QuickRecordDiagnostics.isActiveFor(projectId)) {
+                QuickRecordDiagnostics.logStepStart("ProjectViewModel scheduleBind", projectId)
+            }
             bind(projectId)
+            if (ProjectDiagnostics.loggingEnabled) {
+                ProjectDiagnostics.logBindFinished(
+                    projectId,
+                    android.os.SystemClock.uptimeMillis() - bindStartMs,
+                )
+            }
+            if (QuickRecordDiagnostics.isActiveFor(projectId)) {
+                QuickRecordDiagnostics.logStepEnd(
+                    "ProjectViewModel scheduleBind",
+                    bindStartMs,
+                    projectId,
+                )
+            }
             _destinationReady.value = true
         }
     }
@@ -1092,14 +1222,17 @@ class ProjectViewModel @Inject constructor(
 
     override fun onCleared() {
         recordingStorageMonitor.stop()
-        transportController.stopAll()
-        playheadTransport.stopAndResetToZero()
-        resetMasterPeakHoldDisplay()
-        // Release the persistent Oboe stream and streaming I/O thread once the
-        // project screen goes away. Without this we'd keep the audio device
-        // open for the lifetime of the process even after the user navigates
-        // out, which is wasteful on battery.
-        audioController.release()
+        audioIoScope.scope.launch {
+            transportController.stopAll()
+            withAudioIo(dispatchers, "AudioController.release") {
+                audioController.release()
+            }
+            withContext(dispatchers.main) {
+                playheadTransport.stopAndResetToZero()
+                masterPeakHoldLinear.value = 0f
+                masterOverloadWarningShownThisSession = false
+            }
+        }
         super.onCleared()
     }
 
@@ -1111,16 +1244,22 @@ class ProjectViewModel @Inject constructor(
                 val punchContext = recordingSession.punchRecordingContext()
                 try {
                     val finalizedTrack =
-                        recordingCoordinator.finalizeTrackAfterStop(
-                            currentTrack = currentTrack,
-                            punchContext = punchContext,
-                        )
+                        withIo(dispatchers, "WavPunchSplicer.splice") {
+                            recordingCoordinator.finalizeTrackAfterStop(
+                                currentTrack = currentTrack,
+                                punchContext = punchContext,
+                            )
+                        }
                     repo.upsertTrack(finalizedTrack)
                 } catch (cancel: CancellationException) {
-                    recordingCoordinator.discardPunchRecordingTempFile(punchContext)
+                    withIo(dispatchers, "discard punch temp file") {
+                        recordingCoordinator.discardPunchRecordingTempFile(punchContext)
+                    }
                     throw cancel
                 } catch (error: Exception) {
-                    recordingCoordinator.discardPunchRecordingTempFile(punchContext)
+                    withIo(dispatchers, "discard punch temp file") {
+                        recordingCoordinator.discardPunchRecordingTempFile(punchContext)
+                    }
                     throw error
                 } finally {
                     recordingSession.clearPunchRecordingContext()
@@ -1134,3 +1273,15 @@ class ProjectViewModel @Inject constructor(
         const val MASTER_PEAK_HOLD_POLL_MS = 150L
     }
 }
+
+private fun ProjectUiState.mergeRealtime(realtime: ProjectRealtimeUiState): ProjectUiState =
+    copy(
+        playheadPositionMs = realtime.playheadPositionMs,
+        recordingInputLevel = realtime.recordingInputLevel,
+        timelineVisibleDurationMs = realtime.timelineVisibleDurationMs,
+        timelineClipsByTrackId = realtime.recordingTimelineClipsByTrackId ?: timelineClipsByTrackId,
+        timelineLaneLayoutDurationMs =
+            realtime.recordingTimelineLaneLayoutDurationMs ?: timelineLaneLayoutDurationMs,
+        masterPeakDbText = realtime.masterPeakDbText,
+        masterPeakIndicatorLevel = realtime.masterPeakIndicatorLevel,
+    )

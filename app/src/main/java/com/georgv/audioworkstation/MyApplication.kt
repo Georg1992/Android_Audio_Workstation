@@ -3,6 +3,10 @@ package com.georgv.audioworkstation
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import com.georgv.audioworkstation.ui.components.TimelineGeometryDebug
+import com.georgv.audioworkstation.ui.diagnostics.ComposeTimingDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.screens.library.LibraryDiagnostics
 import com.georgv.audioworkstation.ui.screens.projects.ProjectDiagnostics
@@ -17,5 +21,9 @@ class MyApplication : Application() {
         NavTransitionDiagnostics.loggingEnabled = debuggable
         LibraryDiagnostics.loggingEnabled = debuggable
         ProjectDiagnostics.loggingEnabled = debuggable
+        ComposeTimingDiagnostics.loggingEnabled = debuggable
+        QuickRecordDiagnostics.loggingEnabled = debuggable
+        ThreadingDiagnostics.loggingEnabled = debuggable
+        WaveformRecompositionDiagnostics.loggingEnabled = debuggable
     }
 }

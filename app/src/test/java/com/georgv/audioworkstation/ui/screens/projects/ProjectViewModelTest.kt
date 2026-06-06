@@ -19,6 +19,8 @@ import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
+import com.georgv.audioworkstation.core.coroutines.AudioIoScope
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
@@ -2613,12 +2615,14 @@ class ProjectViewModelTest {
                 audioFilePathProvider,
                 wavAudioImporter = WavAudioImporter(mainDispatcherRule.dispatcher),
             )
+        val testDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
         val recordingCoordinator =
             ProjectRecordingCoordinator(
                 repo,
                 audioController,
                 audioFilePathProvider,
                 WavPunchSplicer(),
+                testDispatchers,
             )
         return ProjectViewModel(
             repo,
@@ -2629,6 +2633,8 @@ class ProjectViewModelTest {
             waveformPeakExtractor,
             audioFilePathProvider,
             recordingStorageGuard,
+            testDispatchers,
+            AudioIoScope(testDispatchers),
         ).also {
             it.setPlayheadNativePollEnabledForTests(false)
             it.setRecordingStorageMonitorEnabledForTests(false)

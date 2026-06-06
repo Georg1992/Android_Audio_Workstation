@@ -4,9 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,8 +24,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -52,6 +51,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ContentResolverAudioImportSource
@@ -66,6 +66,11 @@ import com.georgv.audioworkstation.ui.components.formatTimelineDuration
 import com.georgv.audioworkstation.ui.components.rememberTopBarAlertState
 import com.georgv.audioworkstation.ui.components.TopBarAlertState
 import com.georgv.audioworkstation.ui.drag.DragController
+import android.os.SystemClock
+import android.os.Trace
+import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
+import androidx.compose.runtime.SideEffect
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
@@ -78,10 +83,11 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * Project editor route. Loading is staged in three phases:
- * 1. [ProjectOpeningShell] — one frame without [ProjectViewModel] so notes animate during nav.
- * 2. Placeholder — [AppMusicLoadingPlaceholder] until bind + nav gate complete.
- * 3. Heavy workspace — fades in after placeholder dims out.
+ * Project editor route. Loading phases:
+ * 1. Lightweight shell + loader (one frame without [ProjectViewModel], then bind in background).
+ * 2. Loader animates until nav transition finishes and project data is ready.
+ * 3. Ready layout (chrome + tracks + waveform lanes) mounts with waveforms enabled immediately;
+ *    loader crossfades out over the real track list.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,34 +97,68 @@ fun ProjectScreen(
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit = {},
 ) {
-    SideEffect {
-        ProjectDiagnostics.logShellRenderedImmediately(projectId)
-    }
     NavTransitionDiagnostics.MonitorDestinationLifecycle("project")
 
-    var viewModelReady by remember(projectId) { mutableStateOf(false) }
+    if (quickRecord) {
+        DisposableEffect(projectId) {
+            QuickRecordDiagnostics.logMilestone("ProjectScreen quick=true", projectId)
+            onDispose {
+                QuickRecordDiagnostics.clearQuickNavigation(projectId, reason = "compose dispose")
+            }
+        }
+    }
+    var deferViewModel by remember(projectId) { mutableStateOf(true) }
+    var loggedOpeningShell by remember(projectId) { mutableStateOf(false) }
+
     LaunchedEffect(projectId) {
-        viewModelReady = false
+        deferViewModel = true
         withFrameNanos { }
-        viewModelReady = true
+        deferViewModel = false
     }
 
-    if (!viewModelReady) {
-        ProjectOpeningShell(onBack = onBack)
+    if (deferViewModel) {
+        LaunchedEffect(projectId) {
+            if (!loggedOpeningShell) {
+                loggedOpeningShell = true
+                ProjectDiagnostics.logShellRendered(projectId, phase = "openingShell")
+            }
+        }
+        ProjectLoadingScaffold(
+            message = stringResource(R.string.project_opening),
+            onBack = onBack,
+            onPlaceholderShown = {
+                ProjectDiagnostics.logLoadingPlaceholderRendered(projectId)
+            },
+        )
     } else {
         ProjectScreenContent(
             projectId = projectId,
             quickRecord = quickRecord,
             onBack = onBack,
             onOpenProject = onOpenProject,
+            onShellShown = {
+                ProjectDiagnostics.logShellRendered(projectId, phase = "content")
+            },
         )
     }
 }
 
-/** Lightweight shell shown for one frame before [hiltViewModel] construction. */
+/** Lightweight scaffold + loader — no ViewModel, tracks, or waveforms. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProjectOpeningShell(onBack: () -> Unit) {
+private fun ProjectLoadingScaffold(
+    message: String,
+    onBack: () -> Unit,
+    onPlaceholderShown: () -> Unit = {},
+) {
+    var loggedPlaceholder by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!loggedPlaceholder) {
+            loggedPlaceholder = true
+            onPlaceholderShown()
+        }
+    }
+
     ScreenScaffold(
         titleContent = {
             Text(
@@ -130,7 +170,7 @@ private fun ProjectOpeningShell(onBack: () -> Unit) {
         onBack = onBack,
     ) { padding ->
         AppMusicLoadingPlaceholder(
-            message = stringResource(R.string.project_opening),
+            message = message,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
@@ -145,23 +185,135 @@ private fun ProjectScreenContent(
     quickRecord: Boolean,
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit,
-    vm: ProjectViewModel = hiltViewModel(),
+    onShellShown: () -> Unit,
 ) {
-    val destinationReady by vm.destinationReady.collectAsStateWithLifecycle()
-    val transitionGateOpen = rememberProjectHeavyContentGate(projectId)
-    val readyToShowData = transitionGateOpen && destinationReady
-    var placeholderVisible by remember(projectId) { mutableStateOf(true) }
-    var showHeavyWorkspace by remember(projectId) { mutableStateOf(false) }
+    val vmResolveStartMs = remember(projectId) { SystemClock.uptimeMillis() }
+    val vm: ProjectViewModel = hiltViewModel()
+    val topBarAlertState = rememberTopBarAlertState()
 
-    LaunchedEffect(projectId, readyToShowData) {
-        if (!readyToShowData) {
-            placeholderVisible = true
-            showHeavyWorkspace = false
+    LaunchedEffect(projectId, quickRecord) {
+        if (!quickRecord) return@LaunchedEffect
+        QuickRecordDiagnostics.logMilestone(
+            "ProjectViewModel hiltViewModel resolved",
+            projectId,
+            "elapsedMs=${SystemClock.uptimeMillis() - vmResolveStartMs}",
+        )
+    }
+
+    val state by vm.uiState.collectAsStateWithLifecycle(
+        minActiveState = Lifecycle.State.CREATED,
+    )
+    val destinationReady by vm.destinationReady.collectAsStateWithLifecycle(
+        minActiveState = Lifecycle.State.CREATED,
+    )
+    val navTransitionFinished = rememberProjectNavTransitionGate(projectId)
+    val quickInitialTrackReady = !quickRecord || state.tracks.isNotEmpty()
+    val readyToReveal = navTransitionFinished && destinationReady && quickInitialTrackReady
+
+    var workspaceMounted by remember(projectId) { mutableStateOf(false) }
+    var showWaveforms by remember(projectId) { mutableStateOf(false) }
+    val loaderAlpha = remember(projectId) { Animatable(1f) }
+    var loggedShell by remember(projectId) { mutableStateOf(false) }
+    var loggedPlaceholder by remember(projectId) { mutableStateOf(false) }
+    var loggedDestinationReady by remember(projectId) { mutableStateOf(false) }
+    var loggedQuickWaiting by remember(projectId) { mutableStateOf(false) }
+    var loggedQuickInitialTrack by remember(projectId) { mutableStateOf(false) }
+    var loggedReadyToReveal by remember(projectId) { mutableStateOf(false) }
+
+    QuickRecordBootstrap(
+        projectId = projectId,
+        quickRecord = quickRecord,
+        destinationReady = destinationReady,
+        vm = vm,
+        state = state,
+        topBarAlertState = topBarAlertState,
+    )
+
+    LaunchedEffect(projectId) {
+        if (!loggedShell) {
+            loggedShell = true
+            onShellShown()
+        }
+        if (!loggedPlaceholder) {
+            loggedPlaceholder = true
+            ProjectDiagnostics.logLoadingPlaceholderRendered(projectId)
+        }
+        vm.scheduleBind(projectId)
+    }
+
+    LaunchedEffect(projectId, destinationReady) {
+        if (destinationReady && !loggedDestinationReady) {
+            loggedDestinationReady = true
+            ProjectDiagnostics.logDestinationReady(projectId)
+            if (quickRecord) {
+                QuickRecordDiagnostics.logMilestone(
+                    "ProjectScreen destinationReady changed true",
+                    projectId,
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(quickRecord, destinationReady, navTransitionFinished, state.tracks.size) {
+        if (!quickRecord) return@LaunchedEffect
+        val waitingForTrack =
+            destinationReady && navTransitionFinished && state.tracks.isEmpty()
+        if (waitingForTrack && !loggedQuickWaiting) {
+            loggedQuickWaiting = true
+            ProjectDiagnostics.logQuickProjectWaitingForInitialTrack(projectId)
+            QuickRecordDiagnostics.logMilestone(
+                "ProjectScreen waitingForInitialTrack start",
+                projectId,
+            )
+        }
+        if (state.tracks.isNotEmpty() && !loggedQuickInitialTrack) {
+            loggedQuickInitialTrack = true
+            ProjectDiagnostics.logQuickProjectInitialTrackReady(projectId, state.tracks.size)
+            QuickRecordDiagnostics.traceSection("QuickReadyToReveal", projectId) {
+                QuickRecordDiagnostics.logMilestone(
+                    "ProjectScreen initialTrackReady",
+                    projectId,
+                    "trackCount=${state.tracks.size}",
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(projectId, readyToReveal, quickRecord) {
+        if (quickRecord && readyToReveal && !loggedReadyToReveal) {
+            loggedReadyToReveal = true
+            QuickRecordDiagnostics.logMilestone(
+                "ProjectScreen readyToReveal changed true",
+                projectId,
+                "trackCount=${state.tracks.size}",
+            )
+            QuickRecordDiagnostics.clearQuickNavigation(projectId, reason = "readyToReveal")
+        }
+    }
+
+    LaunchedEffect(projectId, readyToReveal) {
+        if (!readyToReveal) {
+            workspaceMounted = false
+            showWaveforms = false
+            loaderAlpha.snapTo(1f)
             return@LaunchedEffect
         }
-        placeholderVisible = false
-        delay(PROJECT_PLACEHOLDER_DIM_OUT_MS)
-        showHeavyWorkspace = true
+        workspaceMounted = true
+        showWaveforms = true
+        loaderAlpha.snapTo(1f)
+        withFrameNanos { }
+        ProjectDiagnostics.logReadyLayoutMounted(
+            projectId,
+            trackCount = state.tracks.size,
+            showWaveforms = true,
+            quick = quickRecord,
+            navMaxGapMs = NavTransitionDiagnostics.peekMaxFrameGapMs(),
+        )
+        ProjectDiagnostics.logWaveformsEnabled(projectId, state.tracks.size)
+        ProjectDiagnostics.logLoadingFadeStarted(projectId)
+        loaderAlpha.animateTo(0f, tween(ProjectLoadingCrossfadeMs))
+        ProjectDiagnostics.logLoadingFadeFinished(projectId)
+        withFrameNanos { }
     }
 
     val openingMessage = stringResource(R.string.project_opening)
@@ -169,17 +321,11 @@ private fun ProjectScreenContent(
     val placeholderMessage =
         if (destinationReady) loadingTracksMessage else openingMessage
     var trackPagingSummary by remember(projectId) { mutableStateOf("1/1") }
-    val topBarAlertState = rememberTopBarAlertState()
-
-    LaunchedEffect(projectId) {
-        ProjectDiagnostics.logBindStarted(projectId)
-        vm.scheduleBind(projectId)
-    }
 
     ScreenScaffold(
-        topBarAlertMessage = if (showHeavyWorkspace) topBarAlertState.message else null,
+        topBarAlertMessage = if (workspaceMounted) topBarAlertState.message else null,
         titleContent = {
-            if (showHeavyWorkspace) {
+            if (workspaceMounted) {
                 ProjectScreenTitleBar(projectId = projectId, vm = vm)
             } else {
                 Text(
@@ -191,7 +337,7 @@ private fun ProjectScreenContent(
         },
         onBack = onBack,
         actions = {
-            if (showHeavyWorkspace) {
+            if (workspaceMounted) {
                 ProjectScreenTitleActions(trackPagingSummary = trackPagingSummary)
             }
         },
@@ -202,47 +348,139 @@ private fun ProjectScreenContent(
                 .background(AppColors.Bg)
                 .padding(padding),
         ) {
-            AnimatedVisibility(
-                visible = placeholderVisible,
-                exit = fadeOut(animationSpec = tween(PROJECT_PLACEHOLDER_DIM_OUT_MS.toInt())),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                AppMusicLoadingPlaceholder(
-                    message = placeholderMessage,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            AnimatedVisibility(
-                visible = showHeavyWorkspace,
-                enter = fadeIn(animationSpec = tween(PROJECT_HEAVY_CONTENT_FADE_IN_MS)),
-                modifier = Modifier.fillMaxSize(),
-            ) {
+            if (workspaceMounted) {
                 ProjectScreenHeavyLayer(
                     vm = vm,
                     projectId = projectId,
-                    quickRecord = quickRecord,
+                    showWaveforms = showWaveforms,
                     onOpenProject = onOpenProject,
                     topBarAlertState = topBarAlertState,
                     onTrackPagingSummaryChange = { trackPagingSummary = it },
+                )
+            }
+            if (loaderAlpha.value > 0f) {
+                AppMusicLoadingPlaceholder(
+                    message = placeholderMessage,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(loaderAlpha.value),
                 )
             }
         }
     }
 }
 
-/** Defers heavy workspace composition until after the nav slide window (visual only). */
+/** True after the 420ms nav slide window — loader stays visible until data is also ready. */
 @Composable
-private fun rememberProjectHeavyContentGate(projectId: String): Boolean {
+private fun rememberProjectNavTransitionGate(projectId: String): Boolean {
     var gateOpen by remember(projectId) { mutableStateOf(false) }
 
     LaunchedEffect(projectId) {
         gateOpen = false
-        delay(PROJECT_HEAVY_CONTENT_GATE_DELAY_MS)
+        delay(ProjectNavTransitionGateMs)
         gateOpen = true
-        ProjectDiagnostics.logContentGateOpened(projectId, PROJECT_HEAVY_CONTENT_GATE_DELAY_MS)
+        ProjectDiagnostics.logNavTransitionGateOpened(projectId, ProjectNavTransitionGateMs)
     }
 
     return gateOpen
+}
+
+/** Starts Quick Record while the loader is still visible — before workspace mount. */
+@Composable
+private fun QuickRecordBootstrap(
+    projectId: String,
+    quickRecord: Boolean,
+    destinationReady: Boolean,
+    vm: ProjectViewModel,
+    state: ProjectUiState,
+    topBarAlertState: TopBarAlertState,
+) {
+    if (!quickRecord) return
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var pendingRecordProjectName by remember(projectId) { mutableStateOf<String?>(null) }
+    var quickRecordStarted by remember(projectId) { mutableStateOf(false) }
+    var permissionCheckStartMs by remember(projectId) { mutableStateOf(0L) }
+    val microphonePermissionError = stringResource(R.string.error_microphone_permission_required)
+
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val pendingProjectName = pendingRecordProjectName
+        pendingRecordProjectName = null
+        QuickRecordDiagnostics.logStepEnd(
+            "QuickRecordBootstrap permission check",
+            permissionCheckStartMs,
+            projectId,
+            "granted=$granted",
+        )
+        if (granted && pendingProjectName != null) {
+            QuickRecordDiagnostics.logMilestone(
+                "QuickRecordBootstrap recording start requested",
+                projectId,
+                "via=permissionLauncher projectName=$pendingProjectName",
+            )
+            vm.onRecordPressed(projectId, pendingProjectName)
+        } else if (!granted) {
+            topBarAlertState.show(coroutineScope, microphonePermissionError)
+        }
+    }
+
+    LaunchedEffect(pendingRecordProjectName) {
+        if (pendingRecordProjectName != null) {
+            permissionCheckStartMs = SystemClock.uptimeMillis()
+            QuickRecordDiagnostics.logStepStart("QuickRecordBootstrap permission check", projectId)
+            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    LaunchedEffect(projectId, quickRecord, destinationReady) {
+        if (!quickRecord || !destinationReady || quickRecordStarted) return@LaunchedEffect
+        quickRecordStarted = true
+        val bootstrapStartMs = SystemClock.uptimeMillis()
+        Trace.beginSection("QuickRecordBootstrap")
+        QuickRecordDiagnostics.logStepStart("QuickRecordBootstrap", projectId)
+        val projectName = LocalDateTime.now()
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm"))
+            .let { "QuickRec_$it" }
+        if (state.isRecordingStartup) {
+            Trace.endSection()
+            return@LaunchedEffect
+        }
+        if (state.recordingTrackId != null) {
+            QuickRecordDiagnostics.logMilestone(
+                "QuickRecordBootstrap recording start requested",
+                projectId,
+                "via=existingRecording projectName=$projectName",
+            )
+            vm.onRecordPressed(projectId, projectName)
+        } else {
+            val permissionStartMs = SystemClock.uptimeMillis()
+            QuickRecordDiagnostics.logStepStart("QuickRecordBootstrap permission check", projectId)
+            val granted =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+            QuickRecordDiagnostics.logStepEnd(
+                "QuickRecordBootstrap permission check",
+                permissionStartMs,
+                projectId,
+                "granted=$granted",
+            )
+            if (granted) {
+                QuickRecordDiagnostics.logMilestone(
+                    "QuickRecordBootstrap recording start requested",
+                    projectId,
+                    "via=alreadyGranted projectName=$projectName",
+                )
+                vm.onRecordPressed(projectId, projectName)
+            } else {
+                pendingRecordProjectName = projectName
+            }
+        }
+        QuickRecordDiagnostics.logStepEnd("QuickRecordBootstrap", bootstrapStartMs, projectId)
+        Trace.endSection()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -347,12 +585,13 @@ private fun ProjectScreenTitleActions(trackPagingSummary: String) {
 private fun ProjectScreenHeavyLayer(
     vm: ProjectViewModel,
     projectId: String,
-    quickRecord: Boolean,
+    showWaveforms: Boolean,
     onOpenProject: (String) -> Unit,
     topBarAlertState: TopBarAlertState,
     onTrackPagingSummaryChange: (String) -> Unit,
 ) {
-    val state by vm.uiState.collectAsStateWithLifecycle()
+    val structuralState by vm.structuralUiState.collectAsStateWithLifecycle()
+    val realtimeState by vm.realtimeUiState.collectAsStateWithLifecycle()
     val sampleRateMismatchDialog by vm.sampleRateMismatchDialogState.collectAsStateWithLifecycle()
     val dragController = remember { DragController() }
     val context = LocalContext.current
@@ -389,8 +628,8 @@ private fun ProjectScreenHeavyLayer(
     }
 
     fun startRecordingIfPermitted(projectName: String) {
-        if (state.isRecordingStartup) return
-        if (state.recordingTrackId != null) {
+        if (structuralState.isRecordingStartup) return
+        if (structuralState.recordingTrackId != null) {
             vm.onRecordPressed(projectId, projectName)
         } else if (
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -400,14 +639,6 @@ private fun ProjectScreenHeavyLayer(
         } else {
             pendingRecordProjectName = projectName
         }
-    }
-
-    LaunchedEffect(projectId, quickRecord) {
-        if (!quickRecord) return@LaunchedEffect
-        val projectName = LocalDateTime.now()
-            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm"))
-            .let { "QuickRec_$it" }
-        startRecordingIfPermitted(projectName)
     }
 
     LaunchedEffect(pendingRecordProjectName) {
@@ -445,91 +676,42 @@ private fun ProjectScreenHeavyLayer(
         if (reorderActive) scrubbingPlayheadPositionMs = null
     }
 
-    ProjectHeavyWorkspace(
-            state = state,
-            projectId = projectId,
-            dragController = dragController,
-            scrubbingPlayheadPositionMs = scrubbingPlayheadPositionMs,
-            onScrubbingPlayheadPositionChange = { scrubbingPlayheadPositionMs = it },
-            onTrackPagingSummaryChange = onTrackPagingSummaryChange,
-            reorderActive = reorderActive,
-            onStartRecording = { startRecordingIfPermitted("New Project") },
-            onImportAudio = { importAudioLauncher.launch(IMPORT_AUDIO_MIME_TYPES) },
-            vm = vm,
-        )
-}
+    val playheadPositionMs = scrubbingPlayheadPositionMs ?: realtimeState.playheadPositionMs
 
-@Composable
-private fun ProjectHeavyWorkspace(
-    state: ProjectUiState,
-    projectId: String,
-    dragController: DragController,
-    scrubbingPlayheadPositionMs: Long?,
-    onScrubbingPlayheadPositionChange: (Long?) -> Unit,
-    onTrackPagingSummaryChange: (String) -> Unit,
-    reorderActive: Boolean,
-    onStartRecording: () -> Unit,
-    onImportAudio: () -> Unit,
-    vm: ProjectViewModel,
-) {
-    LaunchedEffect(projectId, state.tracks.size) {
-        ProjectDiagnostics.logHeavyWorkspaceRendered(projectId, state.tracks.size)
-    }
-
-    val playheadPositionMs = scrubbingPlayheadPositionMs ?: state.playheadPositionMs
     Column(modifier = Modifier.fillMaxSize()) {
         TimelinePlayheadScrubberPanel(
             playheadPositionMs = playheadPositionMs,
-            timelineDurationMs = state.timelineVisibleDurationMs,
-            masterPeakDbText = state.masterPeakDbText,
-            masterPeakIndicatorLevel = state.masterPeakIndicatorLevel,
+            timelineDurationMs = realtimeState.timelineVisibleDurationMs,
+            masterPeakDbText = realtimeState.masterPeakDbText,
+            masterPeakIndicatorLevel = realtimeState.masterPeakIndicatorLevel,
             onMasterPeakIndicatorClick = { vm.onMasterPeakIndicatorClicked() },
             onPlayheadScrubStarted = { vm.onPlayheadScrubStarted() },
             onPlayheadScrubCancelled = {
-                onScrubbingPlayheadPositionChange(null)
+                scrubbingPlayheadPositionMs = null
                 vm.onPlayheadScrubCancelled()
             },
             onPlayheadPositionPreview = { positionMs ->
-                onScrubbingPlayheadPositionChange(positionMs)
-                vm.onPlayheadScrubPreviewPosition(positionMs, state.timelineVisibleDurationMs)
+                scrubbingPlayheadPositionMs = positionMs
+                vm.onPlayheadScrubPreviewPosition(positionMs, realtimeState.timelineVisibleDurationMs)
             },
             onPlayheadPositionCommit = { positionMs ->
-                onScrubbingPlayheadPositionChange(null)
-                vm.onPlayheadScrubCommittedPosition(positionMs, state.timelineVisibleDurationMs)
+                scrubbingPlayheadPositionMs = null
+                vm.onPlayheadScrubCommittedPosition(positionMs, realtimeState.timelineVisibleDurationMs)
             },
             inputLocked =
                 reorderActive ||
-                state.recordingTrackId != null ||
-                state.isRecordingStartup,
+                structuralState.recordingTrackId != null ||
+                structuralState.isRecordingStartup,
         )
 
-        ProjectTrackList(
-            tracks = state.tracks,
-            selectedTrackIds = state.selectedTrackIds,
-            recordingTrackId = state.recordingTrackId,
-            recordTargetTrackId = state.recordTargetTrackId,
-            importInProgress = state.isImportInProgress,
-            recordingInputLevel = state.recordingInputLevel,
-            timelineClipsByTrackId = state.timelineClipsByTrackId,
-            timelineLaneLayoutDurationMs = state.timelineLaneLayoutDurationMs,
-            timelineVisibleDurationMs = state.timelineVisibleDurationMs,
-            timelinePlayheadPositionMs = playheadPositionMs,
-            playbackActive = state.playbackSessionActive,
+        ProjectHeavyWorkspace(
+            state = structuralState,
+            projectId = projectId,
+            showWaveforms = showWaveforms,
             dragController = dragController,
-            onToggleSelect = vm::toggleSelect,
-            onDeleteTrack = vm::deleteTrack,
-            onCancelImport = vm::cancelImport,
-            onGainChange = vm::setTrackGain,
-            onGainCommit = vm::commitTrackGain,
-            onPanChange = vm::setTrackPan,
-            onPanCommit = vm::commitTrackPan,
-            onRenameTrack = vm::renameTrack,
-            onToggleRecordTarget = vm::toggleRecordTarget,
-            onToggleLoop = vm::toggleTrackLoop,
-            onUpdateTrackLoopRegion = vm::updateTrackLoopRegion,
-            onReorderTracks = { vm.setTrackOrderSession(projectId, it) },
-            onPersistTrackOrder = { vm.persistTrackOrderToDb(projectId) },
+            realtimeUiState = vm.realtimeUiState,
             onTrackPagingSummaryChange = onTrackPagingSummaryChange,
+            vm = vm,
             modifier = Modifier.weight(1f),
         )
 
@@ -541,16 +723,16 @@ private fun ProjectHeavyWorkspace(
             horizontalArrangement = Arrangement.Start,
         ) {
             TransportPanel(
-                isRecording = state.recordingTrackId != null || state.isRecordingStartup,
-                isPlaying = state.isTransportPlaying,
-                isPlayEnabled = state.isPlayEnabled,
-                isStopEnabled = state.isStopEnabled,
-                stopButtonShowsPause = state.stopButtonShowsPause,
+                isRecording = structuralState.recordingTrackId != null || structuralState.isRecordingStartup,
+                isPlaying = structuralState.isTransportPlaying,
+                isPlayEnabled = structuralState.isPlayEnabled,
+                isStopEnabled = structuralState.isStopEnabled,
+                stopButtonShowsPause = structuralState.stopButtonShowsPause,
                 playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
                 onPlay = { vm.onPlayPressed() },
                 onStop = { vm.onStopPressed() },
-                onRecord = onStartRecording,
-                isRecordEnabled = !state.isImportInProgress,
+                onRecord = { startRecordingIfPermitted("New Project") },
+                isRecordEnabled = !structuralState.isImportInProgress,
                 inputLocked = reorderActive,
                 modifier = Modifier.fillMaxWidth(TransportPanelWidthFraction),
             )
@@ -558,12 +740,82 @@ private fun ProjectHeavyWorkspace(
             Spacer(Modifier.weight(1f))
 
             ImportAudioButton(
-                enabled = state.recordingTrackId == null && !state.isRecordingStartup && !state.isImportInProgress,
-                onClick = onImportAudio,
+                enabled =
+                    structuralState.recordingTrackId == null &&
+                    !structuralState.isRecordingStartup &&
+                    !structuralState.isImportInProgress,
+                onClick = { importAudioLauncher.launch(IMPORT_AUDIO_MIME_TYPES) },
                 inputLocked = reorderActive,
             )
         }
     }
+}
+
+@Composable
+private fun ProjectHeavyWorkspace(
+    state: ProjectUiState,
+    projectId: String,
+    showWaveforms: Boolean,
+    dragController: DragController,
+    realtimeUiState: kotlinx.coroutines.flow.StateFlow<ProjectRealtimeUiState>,
+    onTrackPagingSummaryChange: (String) -> Unit,
+    vm: ProjectViewModel,
+    modifier: Modifier = Modifier,
+) {
+    SideEffect {
+        WaveformRecompositionDiagnostics.logHeavyWorkspaceRecomposition(
+            projectId,
+            state.waveformStatesByTrackId,
+        )
+    }
+
+    LaunchedEffect(projectId, showWaveforms, state.tracks.size, state.waveformStatesByTrackId) {
+        WaveformRecompositionDiagnostics.logHeavyWorkspaceLaunchedEffect(
+            projectId = projectId,
+            trigger = "keys(projectId,showWaveforms,tracks.size,waveformStatesByTrackId)",
+            waveformStates = state.waveformStatesByTrackId,
+        )
+        ProjectDiagnostics.logHeavyWorkspaceRendered(
+            projectId,
+            state.tracks.size,
+            showWaveforms,
+        )
+        ProjectDiagnostics.logTrackWaveformStates(
+            projectId,
+            state.waveformStatesByTrackId,
+            state.tracks.map { it.id },
+        )
+    }
+
+    ProjectTrackList(
+        tracks = state.tracks,
+        selectedTrackIds = state.selectedTrackIds,
+        recordingTrackId = state.recordingTrackId,
+        recordTargetTrackId = state.recordTargetTrackId,
+        sessionTrackIds = state.sessionTrackIds,
+        importInProgress = state.isImportInProgress,
+        realtimeUiState = realtimeUiState,
+        timelineClipsByTrackId = state.timelineClipsByTrackId,
+        timelineLaneLayoutDurationMs = state.timelineLaneLayoutDurationMs,
+        playbackActive = state.playbackSessionActive,
+        showWaveforms = showWaveforms,
+        dragController = dragController,
+        onToggleSelect = vm::toggleSelect,
+        onDeleteTrack = vm::deleteTrack,
+        onCancelImport = vm::cancelImport,
+        onGainChange = vm::setTrackGain,
+        onGainCommit = vm::commitTrackGain,
+        onPanChange = vm::setTrackPan,
+        onPanCommit = vm::commitTrackPan,
+        onRenameTrack = vm::renameTrack,
+        onToggleRecordTarget = vm::toggleRecordTarget,
+        onToggleLoop = vm::toggleTrackLoop,
+        onUpdateTrackLoopRegion = vm::updateTrackLoopRegion,
+        onReorderTracks = { vm.setTrackOrderSession(projectId, it) },
+        onPersistTrackOrder = { vm.persistTrackOrderToDb(projectId) },
+        onTrackPagingSummaryChange = onTrackPagingSummaryChange,
+        modifier = modifier,
+    )
 }
 
 private val IMPORT_AUDIO_MIME_TYPES = arrayOf(
@@ -575,8 +827,8 @@ private val IMPORT_AUDIO_MIME_TYPES = arrayOf(
     "audio/mp3",
 )
 
-/** ~450ms after compose — just past the 420ms nav slide; visual gate only, VM bind is not delayed. */
-private const val PROJECT_HEAVY_CONTENT_GATE_DELAY_MS = 450L
+/** Just past the 420ms nav slide — loader stays until [destinationReady] as well. */
+private const val ProjectNavTransitionGateMs = 450L
 
-private const val PROJECT_PLACEHOLDER_DIM_OUT_MS = 120L
-private const val PROJECT_HEAVY_CONTENT_FADE_IN_MS = 150
+/** Fade loader out before mounting workspace. */
+private const val ProjectLoadingCrossfadeMs = 180

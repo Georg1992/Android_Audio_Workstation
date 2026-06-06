@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 
 /**
  * Post-READY exact waveform extraction for playable tracks.
@@ -32,7 +33,11 @@ internal class ProjectWaveformPeakCoordinator(
     fun resetWhenProjectChanges() {
         waveformExtractionJobsByTrackId.values.forEach { it.cancel() }
         waveformExtractionJobsByTrackId.clear()
-        waveformStatesByTrackId.value = emptyMap()
+        WaveformRecompositionDiagnostics.assignWaveformStates(
+            waveformStatesByTrackId,
+            source = "resetWhenProjectChanges",
+            next = emptyMap(),
+        )
         waveformPeakCacheKeysByTrackId.clear()
         waveformExtractionsInFlight.clear()
     }
@@ -67,7 +72,11 @@ internal class ProjectWaveformPeakCoordinator(
             }
         }
         if (currentStates != waveformStatesByTrackId.value) {
-            waveformStatesByTrackId.value = currentStates
+            WaveformRecompositionDiagnostics.assignWaveformStates(
+                waveformStatesByTrackId,
+                source = "applyRefreshPeakRequests/prune",
+                next = currentStates,
+            )
         }
 
         playableTracks.forEach { track ->
@@ -82,14 +91,20 @@ internal class ProjectWaveformPeakCoordinator(
             if (cachedPeaks != null) {
                 waveformPeakCacheKeysByTrackId[track.id] = cacheKey
                 waveformExtractionsInFlight.remove(track.id)
-                waveformStatesByTrackId.value =
-                    waveformStatesByTrackId.value + (track.id to WaveformState.Ready(cachedPeaks))
+                WaveformRecompositionDiagnostics.assignWaveformStates(
+                    waveformStatesByTrackId,
+                    source = "applyRefreshPeakRequests/cachedPeaks",
+                    next = waveformStatesByTrackId.value + (track.id to WaveformState.Ready(cachedPeaks)),
+                )
                 return@forEach
             }
 
             waveformPeakCacheKeysByTrackId[track.id] = cacheKey
-            waveformStatesByTrackId.value =
-                waveformStatesByTrackId.value + (track.id to WaveformState.Loading)
+            WaveformRecompositionDiagnostics.assignWaveformStates(
+                waveformStatesByTrackId,
+                source = "applyRefreshPeakRequests/startLoading",
+                next = waveformStatesByTrackId.value + (track.id to WaveformState.Loading),
+            )
             launchExtraction(track = track, cacheKey = cacheKey)
         }
     }
@@ -120,7 +135,14 @@ internal class ProjectWaveformPeakCoordinator(
                     } else {
                         WaveformState.Ready(peaks)
                     }
-                waveformStatesByTrackId.value = waveformStatesByTrackId.value + (track.id to state)
+                WaveformRecompositionDiagnostics.assignWaveformStates(
+                    waveformStatesByTrackId,
+                    source = "launchExtraction/complete",
+                    next = waveformStatesByTrackId.value + (track.id to state),
+                )
+                if (state is WaveformState.Ready) {
+                    WaveformRecompositionDiagnostics.logTrackBecameReady(track.id)
+                }
             }
     }
 

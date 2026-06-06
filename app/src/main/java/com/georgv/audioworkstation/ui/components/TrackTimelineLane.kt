@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -277,6 +279,30 @@ fun timelineRulerBoundaryLabels(
         )
 }
 
+/**
+ * Live recording lanes grow with [playheadPositionMs] without rebuilding the shared clips map.
+ */
+internal fun timelineClipAndLaneDurationForLayout(
+    clip: TimelineClip,
+    laneLayoutDurationMs: Long,
+    playheadPositionMs: Long,
+): Pair<TimelineClip, Long> {
+    if (!clip.isActiveRecording) {
+        return clip to laneLayoutDurationMs
+    }
+    val elapsedMs = (playheadPositionMs - clip.startOffsetMs).coerceAtLeast(0L)
+    val durationMs = layoutDurationMsForActiveRecording(elapsedMs)
+    val layoutClip =
+        clip.copy(
+            durationMs = durationMs,
+            formattedDuration = formatTimelineDuration(elapsedMs),
+        )
+    val laneEndMs = clip.startOffsetMs + durationMs
+    val effectiveLaneDurationMs =
+        max(laneLayoutDurationMs, laneEndMs).coerceAtLeast(TimelineMinimumBaseDurationMs)
+    return layoutClip to effectiveLaneDurationMs
+}
+
 @Composable
 fun TrackTimelineLane(
     clip: TimelineClip?,
@@ -291,9 +317,21 @@ fun TrackTimelineLane(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
+    val activeWaveformState = clip?.waveformState
+    SideEffect {
+        if (clip != null && activeWaveformState != null) {
+            WaveformRecompositionDiagnostics.logTrackTimelineLaneRecomposition(
+                trackId = clip.clipId,
+                waveformState = activeWaveformState,
+            )
+        }
+    }
     val density = LocalDensity.current
     val playheadLineWidthPx = with(density) { 1.dp.toPx() }
-    val laneLayout = clip?.let { timelineClipLayout(it, laneLayoutDurationMs) }
+    val (layoutClip, effectiveLaneLayoutDurationMs) =
+        clip?.let { timelineClipAndLaneDurationForLayout(it, laneLayoutDurationMs, playheadPositionMs) }
+            ?: (null to laneLayoutDurationMs)
+    val laneLayout = layoutClip?.let { timelineClipLayout(it, effectiveLaneLayoutDurationMs) }
     val editingEnabled = loopRegionEditingEnabled && onLoopRegionCommit != null
     BoxWithConstraints(
         modifier = modifier
@@ -304,7 +342,7 @@ fun TrackTimelineLane(
             .background(AppColors.Bg)
             .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
-        val activeClip = clip ?: return@BoxWithConstraints
+        val activeClip = layoutClip ?: return@BoxWithConstraints
         val layout = laneLayout
         if (layout == null) {
             ImportTimelineLaneFallback(
@@ -317,18 +355,18 @@ fun TrackTimelineLane(
         var loopRegionEditFocus by remember(activeClip.laneId) { mutableStateOf(false) }
         var laneViewportZoomed by remember(activeClip.laneId) { mutableStateOf(false) }
         val timelineScale =
-            remember(laneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
+            remember(effectiveLaneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
                 timelineLaneScaleForLoopEdit(
                     loopEditFocusActive = false,
-                    laneLayoutDurationMs = laneLayoutDurationMs,
+                    laneLayoutDurationMs = effectiveLaneLayoutDurationMs,
                     clip = activeClip,
                 )
             }
         val sourceFitScale =
-            remember(laneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
+            remember(effectiveLaneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
                 timelineLaneScaleForLoopEdit(
                     loopEditFocusActive = true,
-                    laneLayoutDurationMs = laneLayoutDurationMs,
+                    laneLayoutDurationMs = effectiveLaneLayoutDurationMs,
                     clip = activeClip,
                 )
             }
@@ -478,13 +516,18 @@ fun TrackTimelineLane(
                             TimelineLaneWaveformMode.Status ->
                                 when (activeClip.waveformState) {
                                     WaveformState.Loading ->
-                                        WaveformStatusText(stringResource(R.string.waveform_generating))
+                                        WaveformLanePlaceholder(
+                                            stringResource(R.string.waveform_generating),
+                                        )
                                     WaveformState.Failed ->
-                                        WaveformStatusText(stringResource(R.string.waveform_unavailable))
+                                        WaveformLanePlaceholder(
+                                            stringResource(R.string.waveform_unavailable),
+                                        )
                                     WaveformState.ImportFailed ->
-                                        WaveformStatusText(stringResource(R.string.import_clip_failed))
-                                    WaveformState.NoWaveform ->
-                                        WaveformStatusText(stringResource(R.string.waveform_no_audio))
+                                        WaveformLanePlaceholder(
+                                            stringResource(R.string.import_clip_failed),
+                                        )
+                                    WaveformState.NoWaveform -> WaveformLanePlaceholder()
                                     is WaveformState.Ready -> Unit
                                     is WaveformState.Importing -> Unit
                                 }
@@ -706,8 +749,10 @@ private fun ImportTimelineLaneFallback(
             TimelineLaneWaveformMode.Status ->
                 when (clip.waveformState) {
                     WaveformState.ImportFailed ->
-                        WaveformStatusText(stringResource(R.string.import_clip_failed))
-                    else -> WaveformStatusText(stringResource(R.string.waveform_generating))
+                        WaveformLanePlaceholder(stringResource(R.string.import_clip_failed))
+                    WaveformState.Loading ->
+                        WaveformLanePlaceholder(stringResource(R.string.waveform_generating))
+                    else -> WaveformLanePlaceholder()
                 }
             else -> Unit
         }
@@ -715,14 +760,16 @@ private fun ImportTimelineLaneFallback(
 }
 
 @Composable
-private fun BoxScope.WaveformStatusText(text: String) {
-    Text(
-        text = text,
-        color = AppColors.Line.copy(alpha = 0.58f),
-        fontSize = 9.sp,
-        fontFamily = FontFamily.Monospace,
-        modifier = Modifier
-            .align(Alignment.CenterStart)
-            .padding(start = 6.dp, end = 6.dp),
-    )
+private fun BoxScope.WaveformLanePlaceholder(statusText: String? = null) {
+    if (statusText != null) {
+        Text(
+            text = statusText,
+            color = AppColors.Line.copy(alpha = 0.58f),
+            fontSize = 9.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 6.dp, end = 6.dp),
+        )
+    }
 }

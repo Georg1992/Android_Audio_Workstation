@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.MasterOutputMeterState
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
@@ -65,6 +66,7 @@ class PlaybackSessionControllerTest {
             val sut = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
+                dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                 loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                 currentProjectId = { PROJECT_ID },
                 visibleTracks = { emptyList() },
@@ -95,6 +97,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -121,6 +124,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -142,6 +146,7 @@ class PlaybackSessionControllerTest {
         val sut = PlaybackSessionController(
             scope = this,
             audioController = audio,
+            dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
             loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
             currentProjectId = { PROJECT_ID },
             visibleTracks = { emptyList() },
@@ -158,6 +163,7 @@ class PlaybackSessionControllerTest {
         val sut = PlaybackSessionController(
             scope = this,
             audioController = audio,
+            dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
             loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
             currentProjectId = { PROJECT_ID },
             visibleTracks = { visible },
@@ -182,6 +188,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },
@@ -210,6 +217,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },
@@ -242,6 +250,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },
@@ -269,6 +278,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },
@@ -288,6 +298,7 @@ class PlaybackSessionControllerTest {
             val sut = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
+                dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                 loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                 currentProjectId = { PROJECT_ID },
                 visibleTracks = { visible },
@@ -315,6 +326,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },
@@ -341,6 +353,7 @@ class PlaybackSessionControllerTest {
             PlaybackSessionController(
                 scope = this,
                 audioController = audio,
+                dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                 loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                 currentProjectId = { PROJECT_ID },
                 visibleTracks = { listOf(track("a", loop = false)) },
@@ -360,6 +373,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -387,6 +401,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { listOf(track("a", loop = false)) },
@@ -418,6 +433,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -451,6 +467,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },
@@ -482,6 +499,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -510,6 +528,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -553,6 +572,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -585,6 +605,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -620,6 +641,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -660,6 +682,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -694,6 +717,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -723,6 +747,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -751,6 +776,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -773,6 +799,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { emptyList() },
@@ -795,6 +822,7 @@ class PlaybackSessionControllerTest {
                 PlaybackSessionController(
                     scope = this,
                     audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
                     loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
                     currentProjectId = { PROJECT_ID },
                     visibleTracks = { visible },

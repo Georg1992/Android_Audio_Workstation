@@ -19,6 +19,8 @@ import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
+import com.georgv.audioworkstation.core.coroutines.AudioIoScope
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.data.db.AppDatabase
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -232,12 +234,13 @@ class ProjectViewModelRobolectricTest {
         audioFilePathProvider: AudioFilePathProvider = NullablePathAudioFileProvider(null),
     ): ProjectViewModel {
         val audio = NoOpAudioControllerForRobolectric()
+        val testDispatchers = TestAppDispatchers()
         return ProjectViewModel(
             repo,
             audio,
             testProjectAudioImportCoordinator(repo, audioFilePathProvider),
             PendingCompressedImportRegistry(),
-            ProjectRecordingCoordinator(repo, audio, audioFilePathProvider, WavPunchSplicer()),
+            ProjectRecordingCoordinator(repo, audio, audioFilePathProvider, WavPunchSplicer(), testDispatchers),
             WavWaveformPeakExtractor(),
             audioFilePathProvider,
             RecordingStorageGuard(
@@ -245,6 +248,8 @@ class ProjectViewModelRobolectricTest {
                     override fun availableBytes(path: String): Long? = Long.MAX_VALUE
                 },
             ),
+            testDispatchers,
+            AudioIoScope(testDispatchers),
         )
     }
 

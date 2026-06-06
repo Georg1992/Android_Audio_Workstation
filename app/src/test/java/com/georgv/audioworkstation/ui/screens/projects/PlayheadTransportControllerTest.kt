@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -22,15 +23,19 @@ class PlayheadTransportControllerTest {
         playhead: MutableStateFlow<Long>,
         nativeMs: MutableStateFlow<Long> = MutableStateFlow(0L),
         pollIntervalMs: Long = 50L,
-    ): PlayheadTransportController =
-        PlayheadTransportController(
+        enableNativePoll: Boolean = false,
+    ): PlayheadTransportController {
+        val testDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
+        return PlayheadTransportController(
             scope = this,
             playheadPositionMs = playhead,
             nativeTransportPositionMs = { nativeMs.value },
+            pollDispatcher = testDispatchers.default,
             pollIntervalMs = pollIntervalMs,
         ).apply {
-            nativePollEnabled = false
+            nativePollEnabled = enableNativePoll
         }
+    }
 
     @Test
     fun `recording playhead follows native transport position`() =
@@ -68,13 +73,7 @@ class PlayheadTransportControllerTest {
     fun `native poll updates playhead during playback`() = runTest(mainDispatcherRule.dispatcher) {
         val playhead = MutableStateFlow(0L)
         val nativeMs = MutableStateFlow(0L)
-        val sut =
-            PlayheadTransportController(
-                scope = this,
-                playheadPositionMs = playhead,
-                nativeTransportPositionMs = { nativeMs.value },
-                pollIntervalMs = 50L,
-            )
+        val sut = playheadController(playhead, nativeMs, pollIntervalMs = 50L, enableNativePoll = true)
         sut.setTimelineBaseDurationMs(10_000L)
         sut.onPlaybackStarted(0L)
 
@@ -106,13 +105,7 @@ class PlayheadTransportControllerTest {
     fun `pause preserves playhead and stops native poll`() = runTest(mainDispatcherRule.dispatcher) {
         val playhead = MutableStateFlow(0L)
         val nativeMs = MutableStateFlow(0L)
-        val sut =
-            PlayheadTransportController(
-                scope = this,
-                playheadPositionMs = playhead,
-                nativeTransportPositionMs = { nativeMs.value },
-                pollIntervalMs = 50L,
-            )
+        val sut = playheadController(playhead, nativeMs, pollIntervalMs = 50L, enableNativePoll = true)
         sut.setTimelineBaseDurationMs(10_000L)
         sut.onPlaybackStarted(0L)
 
@@ -149,13 +142,7 @@ class PlayheadTransportControllerTest {
         runTest(mainDispatcherRule.dispatcher) {
             val playhead = MutableStateFlow(0L)
             val nativeMs = MutableStateFlow(5_000L)
-            val sut =
-                PlayheadTransportController(
-                    scope = this,
-                    playheadPositionMs = playhead,
-                    nativeTransportPositionMs = { nativeMs.value },
-                    pollIntervalMs = 50L,
-                )
+            val sut = playheadController(playhead, nativeMs, pollIntervalMs = 50L)
             sut.setTimelineBaseDurationMs(30_000L)
             sut.onPlaybackStarted(fromPositionMs = 5_000L)
 
@@ -171,13 +158,7 @@ class PlayheadTransportControllerTest {
         runTest(mainDispatcherRule.dispatcher) {
             val playhead = MutableStateFlow(0L)
             val nativeMs = MutableStateFlow(12_000L)
-            val sut =
-                PlayheadTransportController(
-                    scope = this,
-                    playheadPositionMs = playhead,
-                    nativeTransportPositionMs = { nativeMs.value },
-                    pollIntervalMs = 50L,
-                )
+            val sut = playheadController(playhead, nativeMs, pollIntervalMs = 50L)
             sut.onRecordingStarted(fromPositionMs = 12_000L)
 
             advanceTimeBy(500)
@@ -226,12 +207,7 @@ class PlayheadTransportControllerTest {
     fun `playback seek drag stops native poll and resumes on end`() = runTest(mainDispatcherRule.dispatcher) {
         val playhead = MutableStateFlow(0L)
         val nativeMs = MutableStateFlow(0L)
-        val sut =
-            PlayheadTransportController(
-                scope = this,
-                playheadPositionMs = playhead,
-                nativeTransportPositionMs = { nativeMs.value },
-            )
+        val sut = playheadController(playhead, nativeMs)
         sut.setTimelineBaseDurationMs(10_000L)
         sut.onPlaybackStarted(0L)
         nativeMs.value = 500L
@@ -258,12 +234,7 @@ class PlayheadTransportControllerTest {
     @Test
     fun `base duration change clamps stored playhead when not playing`() = runTest(mainDispatcherRule.dispatcher) {
         val playhead = MutableStateFlow(9_000L)
-        val sut =
-            PlayheadTransportController(
-                scope = this,
-                playheadPositionMs = playhead,
-                nativeTransportPositionMs = { 0L },
-            )
+        val sut = playheadController(playhead)
         sut.setTimelineBaseDurationMs(5_000L)
         assertEquals(5_000L, playhead.value)
     }
@@ -282,13 +253,7 @@ class PlayheadTransportControllerTest {
     @Test
     fun `repeated playback start replaces poll job without stacking`() = runTest(mainDispatcherRule.dispatcher) {
         val playhead = MutableStateFlow(0L)
-        val sut =
-            PlayheadTransportController(
-                scope = this,
-                playheadPositionMs = playhead,
-                nativeTransportPositionMs = { 0L },
-                pollIntervalMs = 50L,
-            )
+        val sut = playheadController(playhead, pollIntervalMs = 50L)
         sut.onPlaybackStarted(0L)
         sut.stopAndResetToZero()
         sut.onPlaybackStarted(0L)

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 
 internal data class TrackImportUiState(
     val progress: Float = 0f,
@@ -29,6 +30,9 @@ internal class ProjectImportUiCoordinator {
             val previous = current[trackId]
             if (previous != null && kotlin.math.abs(previous.progress - progress) < ImportProgressEpsilon) {
                 return@update current
+            }
+            if (WaveformRecompositionDiagnostics.loggingEnabled) {
+                WaveformRecompositionDiagnostics.logImportProgressEmission(trackId, progress)
             }
             current + (trackId to TrackImportUiState(progress = progress))
         }
@@ -57,7 +61,14 @@ internal class ProjectImportUiCoordinator {
                 track.importStatus == TrackImportStatus.IMPORTING ||
                     track.importStatus == TrackImportStatus.FAILED
             }
-        if (!hasImportTracks && importUiState.value.isEmpty()) return base
+        if (!hasImportTracks && importUiState.value.isEmpty()) {
+            WaveformRecompositionDiagnostics.logMergeWaveformStates(
+                base = base,
+                merged = base,
+                reason = "passthrough-no-import",
+            )
+            return base
+        }
         val merged = base.toMutableMap()
         tracks.forEach { track ->
             when (track.importStatus) {
@@ -73,6 +84,11 @@ internal class ProjectImportUiCoordinator {
                 TrackImportStatus.READY -> Unit
             }
         }
+        WaveformRecompositionDiagnostics.logMergeWaveformStates(
+            base = base,
+            merged = merged,
+            reason = "import-overlay",
+        )
         return merged
     }
 }

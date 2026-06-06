@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -46,6 +46,7 @@ import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
+import com.georgv.audioworkstation.ui.components.warmLoadingBoxAsset
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
@@ -61,10 +62,14 @@ fun LibraryScreen(
     NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
 
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        warmLoadingBoxAsset(context)
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     var pendingDeleteProject by remember { mutableStateOf<ProjectEntity?>(null) }
 
     LaunchedEffect(vm) {
@@ -91,7 +96,7 @@ fun LibraryScreen(
                 onOpenProject = { projectId ->
                     scope.launch {
                         vm.warmUpProject(projectId)
-                        delay(LIBRARY_PROJECT_OPEN_WARMUP_MS)
+                        delay(LibraryProjectOpenWarmupMs)
                         onOpenProject(projectId)
                     }
                 },
@@ -205,12 +210,12 @@ private fun LibraryProjectContent(
                     .padding(Dimens.ScreenContentPadding),
                 verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
             ) {
-                items(projects, key = { it.id }) { project ->
+                itemsIndexed(projects, key = { _, project -> project.id }) { _, project ->
                     LibraryProjectRow(
                         projectName = project.name?.takeIf { it.isNotBlank() }
                             ?: stringResource(R.string.library_untitled_project),
                         onClick = { onOpenProject(project.id) },
-                        onDeleteClick = { onDeleteClick(project) }
+                        onDeleteClick = { onDeleteClick(project) },
                     )
                 }
             }
@@ -223,7 +228,7 @@ private fun LibraryProjectContent(
 private fun LibraryProjectRow(
     projectName: String,
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(Dimens.TileRadius)
 
@@ -265,4 +270,4 @@ private fun LibraryProjectRow(
 }
 
 /** Brief warm-up before Library → Project so the tap ripple renders before navigation. */
-private const val LIBRARY_PROJECT_OPEN_WARMUP_MS = 70L
+private const val LibraryProjectOpenWarmupMs = 70L

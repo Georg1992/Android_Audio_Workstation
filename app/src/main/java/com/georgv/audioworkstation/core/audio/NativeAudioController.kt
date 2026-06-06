@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.engine.NativeEngine
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,12 +46,15 @@ class NativeAudioController @Inject constructor(
     override fun isPlaybackEngineRunning(): Boolean = nativeEngine.isPlaybackActive()
 
     override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
+        ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "entered")
         val resolvedPath =
             outputPath ?: audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId)
                 ?: return null
         val request = spec.toRecordingRequest(resolvedPath)
+        ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "beforeJni")
         return resolvedPath.takeIf {
             val started = nativeEngine.startRecording(request)
+            ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "afterJni")
             if (started) monitorRecordingInputLevel()
             started
         }

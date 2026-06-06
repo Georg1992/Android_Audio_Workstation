@@ -130,7 +130,7 @@ fun AppMusicLoadingPlaceholder(
         while (true) {
             val frameTimeNanos = withFrameNanos { it }
             val elapsedMs = (frameTimeNanos - startFrameNanos) / 1_000_000L
-            cycle = (elapsedMs % NOTE_CYCLE_MS).toFloat() / NOTE_CYCLE_MS.toFloat()
+            cycle = (elapsedMs % NoteCycleMs).toFloat() / NoteCycleMs.toFloat()
         }
     }
 
@@ -157,8 +157,8 @@ fun AppMusicLoadingPlaceholder(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val motionScale = size.minDimension * 0.94f
                 val spawnCenter = Offset(
-                    x = size.width * LOADING_BOX_OPENING_X_FRACTION,
-                    y = size.height * LOADING_BOX_OPENING_Y_FRACTION,
+                    x = size.width * LoadingBoxOpeningXFraction,
+                    y = size.height * LoadingBoxOpeningYFraction,
                 )
 
                 animatedNotes.forEachIndexed { index, spec ->
@@ -173,10 +173,10 @@ fun AppMusicLoadingPlaceholder(
                     val lateral = (spec.lateral * motion.lateralScale + motion.driftX * rise) * rise
                     val lift = spec.lift * spec.liftMultiplier * motion.liftScale
                     val noteCenter = Offset(
-                        x = spawnCenter.x + motion.spawnX * motionScale * NOTE_SPAWN_SPREAD +
-                            lateral * motionScale * NOTE_LATERAL_SPREAD,
-                        y = spawnCenter.y + motion.spawnY * motionScale * NOTE_SPAWN_SPREAD -
-                            lift * motionScale * NOTE_LIFT_SPREAD * rise + wobble,
+                        x = spawnCenter.x + motion.spawnX * motionScale * NoteSpawnSpread +
+                            lateral * motionScale * NoteLateralSpread,
+                        y = spawnCenter.y + motion.spawnY * motionScale * NoteSpawnSpread -
+                            lift * motionScale * NoteLiftSpread * rise + wobble,
                     )
                     drawMusicNote(
                         center = noteCenter,
@@ -204,12 +204,14 @@ private fun easeOut(t: Float): Float {
     return 1f - (1f - clamped) * (1f - clamped)
 }
 
-private const val NOTE_CYCLE_MS = 2_600L
-private const val LOADING_BOX_OPENING_X_FRACTION = 0.54f
-private const val LOADING_BOX_OPENING_Y_FRACTION = 0.33f
-private const val NOTE_SPAWN_SPREAD = 0.12f
-private const val NOTE_LATERAL_SPREAD = 0.42f
-private const val NOTE_LIFT_SPREAD = 0.38f
+private const val NoteCycleMs = 2_600L
+private const val LoadingBoxOpeningXFraction = 0.54f
+private const val LoadingBoxOpeningYFraction = 0.33f
+private const val NoteSpawnSpread = 0.12f
+private const val NoteLateralSpread = 0.42f
+private const val NoteLiftSpread = 0.38f
+private const val NoteStemHeadAttachFraction = 0.72f
+private const val NoteStemTopInsetFraction = 0.2f
 
 private object LoadingBoxPainterCache {
     @DrawableRes
@@ -217,6 +219,22 @@ private object LoadingBoxPainterCache {
 
     /** Process-wide decode cache — box bitmap is decoded off the main thread once. */
     var painter: Painter? = null
+}
+
+/** Pre-decodes [R.drawable.loading_box3] off the main thread (safe to call from any screen). */
+suspend fun warmLoadingBoxAsset(context: android.content.Context) {
+    val drawableId = R.drawable.loading_box3
+    if (LoadingBoxPainterCache.cachedDrawableId == drawableId &&
+        LoadingBoxPainterCache.painter != null
+    ) {
+        return
+    }
+    withContext(Dispatchers.Default) {
+        val bitmap = BitmapFactory.decodeResource(context.resources, drawableId) ?: return@withContext
+        val decoded = BitmapPainter(bitmap.asImageBitmap())
+        LoadingBoxPainterCache.cachedDrawableId = drawableId
+        LoadingBoxPainterCache.painter = decoded
+    }
 }
 
 @Composable
@@ -305,11 +323,11 @@ private fun DrawScope.drawMusicNote(
         }
 
         if (kind != MusicNoteKind.Whole) {
-            val stemX = headCenter.x + headRx * 0.72f
+            val stemX = headCenter.x + headRx * NoteStemHeadAttachFraction
             val stemTop = headCenter.y - headRy - stemLen
             drawLine(
                 color = outlineColor,
-                start = Offset(stemX, headCenter.y - headRy * 0.2f),
+                start = Offset(stemX, headCenter.y - headRy * NoteStemTopInsetFraction),
                 end = Offset(stemX, stemTop),
                 strokeWidth = outline,
             )

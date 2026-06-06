@@ -3,8 +3,6 @@ package com.georgv.audioworkstation.ui.screens.projects
 import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
-import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
@@ -24,9 +22,8 @@ internal class ProjectPlayheadSeekCoordinator(
     private val loadCurrentProject: suspend (String) -> ProjectEntity?,
     private val selectedPlayableTracks: () -> List<TrackEntity>,
     /** Full project timeline extent (all visible tracks), same as [ProjectTransportCommands.performPlayPressed]. */
-    private val timelineTracksForPlayhead: () -> List<TrackEntity>,
-    private val timelineProjection: (List<TrackEntity>, Map<String, WaveformState>) -> ProjectTimelineProjection,
-    private val waveformStatesByTrackId: () -> Map<String, WaveformState>,
+    private val timelineVisibleDurationMs: () -> Long,
+    private val timelineBaseDurationMs: () -> Long,
 ) {
     fun resetWhenProjectChanges() {
         playheadTransport.resetWhenProjectChanges()
@@ -42,7 +39,7 @@ internal class ProjectPlayheadSeekCoordinator(
         if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
         if (playheadTransport.phase.value != TransportPlaybackPhase.Playing) return
         playheadTransport.beginPlaybackSeekDrag()
-        transportController.pauseEnginePreservingSession()
+        scope.launch { transportController.pauseEnginePreservingSession() }
     }
 
     fun onPlayheadScrubPreviewPosition(positionMs: Long, timelineDurationMs: Long) {
@@ -87,14 +84,12 @@ internal class ProjectPlayheadSeekCoordinator(
         val currentProject = loadCurrentProject(currentProjectId) ?: return false
         val tracks = selectedPlayableTracks()
         if (tracks.isEmpty()) return false
-        val timeline =
-            timelineProjection(timelineTracksForPlayhead(), waveformStatesByTrackId())
         val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timeline.visibleTimelineDurationMs)
+            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs())
         if (
             !playbackStartAllowedAtPlayhead(
                 startPositionMs = startPositionMs,
-                timelineBaseDurationMs = timeline.baseTimelineDurationMs,
+                timelineBaseDurationMs = timelineBaseDurationMs(),
                 tracks = tracks,
             )
         ) {
@@ -124,6 +119,6 @@ internal class ProjectPlayheadSeekCoordinator(
         }
         if (playheadTransport.phase.value != TransportPlaybackPhase.Playing) return
         playheadTransport.enterPaused()
-        transportController.pausePlayback()
+        scope.launch { transportController.pausePlayback() }
     }
 }

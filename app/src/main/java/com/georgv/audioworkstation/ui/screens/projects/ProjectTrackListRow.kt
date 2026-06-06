@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
@@ -73,20 +76,21 @@ internal fun LazyItemScope.ProjectTrackListRow(
     selectedTrackIds: Set<String>,
     recordingTrackId: String?,
     recordTargetTrackId: String?,
+    sessionTrackIds: Set<String>,
     importInProgress: Boolean,
-    recordingInputLevel: Float,
+    realtimeUiState: StateFlow<ProjectRealtimeUiState>,
     timelineClipsByTrackId: Map<String, TimelineClip>,
     timelineLaneLayoutDurationMs: Long,
-    timelineVisibleDurationMs: Long,
-    timelinePlayheadPositionMs: Long,
     trackLayout: ProjectTrackLayoutSpec,
     playbackActive: Boolean,
+    showWaveforms: Boolean = true,
     trackActionsEnabled: Boolean,
     listInteractionLocked: Boolean,
     reorderActive: Boolean,
     dragController: DragController,
     dropSettleInProgress: Boolean,
     dropSettlingTrackId: String?,
+    suppressRowPlacementAfterSettle: Boolean,
     itemBoundsMap: MutableMap<String, Rect>,
     listParentBoundsInRoot: Rect,
     incomingSlideSessionKey: String?,
@@ -107,24 +111,32 @@ internal fun LazyItemScope.ProjectTrackListRow(
     onToggleRecordTarget: (String) -> Unit,
     onToggleLoop: (String) -> Unit,
     onUpdateTrackLoopRegion: (String, Long, Long) -> Unit,
-    onReorderDragEnd: () -> Unit,
+    ignoredOnReorderDragEnd: () -> Unit,
     onReorderDragStarted: (trackId: String) -> Unit,
 ) {
+    val needsLiveMeter = recordingTrackId == track.id
+    val needsLivePlayhead =
+        trackLaneNeedsLivePlayhead(
+            trackId = track.id,
+            recordingTrackId = recordingTrackId,
+            playbackSessionActive = playbackActive,
+            sessionTrackIds = sessionTrackIds,
+        )
+
     @Composable
-    fun RowTrackCard() {
+    fun RowTrackCard(
+        recordingInputLevel: Float,
+        timelinePlayheadPositionMs: Long,
+        globalPlayheadTimelineDurationMs: Long,
+    ) {
         TrackCard(
             title = track.name ?: "Track",
             isSelected = selectedTrackIds.contains(track.id),
             isRecording = recordingTrackId == track.id,
-            recordingInputLevel =
-                if (recordingTrackId == track.id) {
-                    recordingInputLevel
-                } else {
-                    0f
-                },
+            recordingInputLevel = recordingInputLevel,
             timelineClip = timelineClipsByTrackId[track.id],
             laneLayoutDurationMs = timelineLaneLayoutDurationMs,
-            globalPlayheadTimelineDurationMs = timelineVisibleDurationMs,
+            globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
             timelinePlayheadPositionMs = timelinePlayheadPositionMs,
             gain = track.gain,
             onGainChange = { gain -> onGainChange(track.id, gain) },
@@ -157,6 +169,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
                 onUpdateTrackLoopRegion(track.id, startMs, endMs)
             },
             trackActionsEnabled = trackActionsEnabled,
+            showWaveforms = showWaveforms,
             trackId = track.id,
             trackSlotHeight = trackLayout.trackSlotHeight,
             interactionBlocked = listInteractionLocked,
@@ -178,7 +191,6 @@ internal fun LazyItemScope.ProjectTrackListRow(
                 onReorderDragStarted(track.id)
             },
             onReorderDragMove = { positionInRoot -> dragController.update(positionInRoot) },
-            onReorderDragEnd = onReorderDragEnd,
             isMenuOpen = isMenuOpen,
             onMenuOpen = onMenuOpen,
             onMenuDismiss = onMenuDismiss,
@@ -188,6 +200,30 @@ internal fun LazyItemScope.ProjectTrackListRow(
     val isGhostRow =
         (reorderActive && dragController.draggingKey == track.id) ||
             dropSettlingTrackId == track.id
+
+    @Composable
+    fun RowTrackCardContent() {
+        if (needsLiveMeter || needsLivePlayhead) {
+            val realtime by realtimeUiState.collectAsStateWithLifecycle()
+            RowTrackCard(
+                recordingInputLevel = if (needsLiveMeter) realtime.recordingInputLevel else 0f,
+                timelinePlayheadPositionMs =
+                    if (needsLivePlayhead) realtime.playheadPositionMs else 0L,
+                globalPlayheadTimelineDurationMs =
+                    if (needsLivePlayhead) {
+                        realtime.timelineVisibleDurationMs
+                    } else {
+                        timelineLaneLayoutDurationMs
+                    },
+            )
+        } else {
+            RowTrackCard(
+                recordingInputLevel = 0f,
+                timelinePlayheadPositionMs = 0L,
+                globalPlayheadTimelineDurationMs = timelineLaneLayoutDurationMs,
+            )
+        }
+    }
 
     Box(
         modifier =
@@ -199,6 +235,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
                         when {
                             incomingSlideSessionKey != null -> null
                             isGhostRow -> null
+                            suppressRowPlacementAfterSettle -> null
                             else -> TrackRowPlacementSpec
                         },
                 )
@@ -220,10 +257,10 @@ internal fun LazyItemScope.ProjectTrackListRow(
                 spacingDp = trackLayout.listVerticalSpacing,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                RowTrackCard()
+                RowTrackCardContent()
             }
         } else {
-            RowTrackCard()
+            RowTrackCardContent()
         }
     }
 }

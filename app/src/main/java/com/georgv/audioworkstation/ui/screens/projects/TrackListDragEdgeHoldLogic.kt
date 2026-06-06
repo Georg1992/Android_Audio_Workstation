@@ -5,8 +5,6 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.layout.pageCount
 import com.georgv.audioworkstation.ui.layout.pageEndExclusive
 import com.georgv.audioworkstation.ui.layout.pageStartIndex
-import com.georgv.audioworkstation.ui.layout.swapAdjacentAtBoundaryDown
-import com.georgv.audioworkstation.ui.layout.swapAdjacentAtBoundaryUp
 
 internal enum class EdgeHoldZone {
     None,
@@ -56,11 +54,6 @@ internal fun edgeHoldProgressBanner(
     }
 }
 
-internal data class EdgeHoldPageTransition(
-    val reordered: List<TrackEntity>,
-    val scrollToPage: Int,
-)
-
 internal fun edgeHoldScrollToPage(
     armedZone: EdgeHoldZone,
     currentPageIndex: Int,
@@ -75,27 +68,6 @@ internal fun edgeHoldScrollToPage(
     }
 }
 
-internal fun edgeHoldPageTransitionIfReady(
-    armedZone: EdgeHoldZone,
-    tracks: List<TrackEntity>,
-    globalIndex: Int,
-    currentPageIndex: Int,
-    pageSize: Int,
-): EdgeHoldPageTransition? {
-    val reordered =
-        when (armedZone) {
-            EdgeHoldZone.Bottom -> swapAdjacentAtBoundaryDown(tracks, globalIndex)
-            EdgeHoldZone.Top -> swapAdjacentAtBoundaryUp(tracks, globalIndex)
-            EdgeHoldZone.None -> null
-        }
-    val scrollToPage = reordered?.let { edgeHoldScrollToPage(armedZone, currentPageIndex, it.size, pageSize) }
-    return if (reordered != null && scrollToPage != null) {
-        EdgeHoldPageTransition(reordered = reordered, scrollToPage = scrollToPage)
-    } else {
-        null
-    }
-}
-
 internal data class EdgeHoldMachineState(
     val armedZone: EdgeHoldZone = EdgeHoldZone.None,
     val zoneEnterUptimeMs: Long = 0L,
@@ -104,14 +76,15 @@ internal data class EdgeHoldMachineState(
 internal data class EdgeHoldCollectResult(
     val banner: EdgeHoldBanner,
     val machine: EdgeHoldMachineState,
-    val pageTransition: EdgeHoldPageTransition?,
+    /** Scroll preview only — track order changes when the finger moves into the target page. */
+    val pageScroll: Int? = null,
 )
 
 private fun edgeHoldInactiveCollectResult(): EdgeHoldCollectResult =
     EdgeHoldCollectResult(
         banner = EdgeHoldBanner.None,
         machine = EdgeHoldMachineState(),
-        pageTransition = null,
+        pageScroll = null,
     )
 
 private fun armEdgeHoldZone(
@@ -128,8 +101,7 @@ private fun armEdgeHoldZone(
 private fun advanceEdgeHoldForCandidate(
     machine: EdgeHoldMachineState,
     candidate: EdgeHoldZone,
-    tracks: List<TrackEntity>,
-    globalIndex: Int,
+    trackCount: Int,
     currentPageIndex: Int,
     pageSize: Int,
     nowUptimeMs: Long,
@@ -141,21 +113,20 @@ private fun advanceEdgeHoldForCandidate(
         return EdgeHoldCollectResult(
             banner = edgeHoldProgressBanner(armed.armedZone, heldMs, pageEdgeHoldMs),
             machine = armed,
-            pageTransition = null,
+            pageScroll = null,
         )
     }
-    val transition =
-        edgeHoldPageTransitionIfReady(
+    val scrollToPage =
+        edgeHoldScrollToPage(
             armedZone = armed.armedZone,
-            tracks = tracks,
-            globalIndex = globalIndex,
             currentPageIndex = currentPageIndex.coerceAtLeast(0),
+            trackCount = trackCount,
             pageSize = pageSize,
         )
     return EdgeHoldCollectResult(
         banner = EdgeHoldBanner.None,
         machine = EdgeHoldMachineState(zoneEnterUptimeMs = nowUptimeMs),
-        pageTransition = transition,
+        pageScroll = scrollToPage,
     )
 }
 
@@ -195,8 +166,7 @@ internal fun reduceEdgeHoldOnCollect(
             advanceEdgeHoldForCandidate(
                 machine = machine,
                 candidate = candidate,
-                tracks = tracks,
-                globalIndex = globalIndex,
+                trackCount = tracks.size,
                 currentPageIndex = pageIdx,
                 pageSize = pageSize,
                 nowUptimeMs = nowUptimeMs,

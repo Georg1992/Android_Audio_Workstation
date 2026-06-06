@@ -11,13 +11,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
 
 /** Full-screen horizontal slide duration. Enter and exit share this spec for synchronized motion. */
-const val NAV_TRANSITION_DURATION_MS = 420
+const val NavTransitionDurationMs = 420
 
 /** Debug label for [NavTransitionDiagnostics] — matches [LinearOutSlowInEasing]. */
-const val NAV_TRANSITION_EASING_NAME = "LinearOutSlowIn"
+const val NavTransitionEasingName = "LinearOutSlowIn"
 
 private val navSlideSpec = tween<IntOffset>(
-    durationMillis = NAV_TRANSITION_DURATION_MS,
+    durationMillis = NavTransitionDurationMs,
     easing = LinearOutSlowInEasing,
 )
 

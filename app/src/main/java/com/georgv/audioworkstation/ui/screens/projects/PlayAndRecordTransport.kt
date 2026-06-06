@@ -2,6 +2,8 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
@@ -13,12 +15,13 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 class PlayAndRecordTransport(
     private val audioController: AudioController,
     private val playbackSession: PlaybackSessionController,
+    private val dispatchers: AppDispatchers,
 ) {
     /**
      * @return true when overdub playback is not needed or native playback accepted the spec.
      * @return false when lanes were required but [AudioController.startPlayback] rejected them.
      */
-    fun startFromPlayhead(
+    suspend fun startFromPlayhead(
         project: ProjectEntity,
         selectedPlayableTracks: List<TrackEntity>,
         recordingTrackId: String,
@@ -37,14 +40,18 @@ class PlayAndRecordTransport(
                 startPositionMs = startPositionMs,
                 sessionTimelineEndMs = sessionTimelineEndMs,
             ) ?: return false
-        if (!audioController.startPlayback(spec)) {
+        val started =
+            withAudioIo(dispatchers, "AudioController.startPlayback overdub") {
+                audioController.startPlayback(spec)
+            }
+        if (!started) {
             return false
         }
         playbackSession.markPlayingAndStartCompletionMonitor(spec.lanes.map { it.trackId })
         return true
     }
 
-    fun stop() {
+    suspend fun stop() {
         playbackSession.cancelCompletionMonitorForTransportStop()
         playbackSession.stopEngineIfMarkedPlaying()
         playbackSession.clearPlayingTransportState()

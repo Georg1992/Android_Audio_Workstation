@@ -18,6 +18,8 @@ import com.georgv.audioworkstation.core.audio.UriBackedAudioImportSource
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.detectImportFormat
 import com.georgv.audioworkstation.core.audio.isSupportedProjectSampleRate
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.core.validation.NameValidationResult
 import com.georgv.audioworkstation.core.validation.validateName
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -73,6 +75,7 @@ class ProjectAudioImportCoordinator @Inject constructor(
     private val wavAudioImporter: WavAudioImporter,
     private val mediaCodecAudioImporter: MediaCodecAudioImporter,
     private val audioFilePathProvider: AudioFilePathProvider,
+    private val dispatchers: AppDispatchers,
     @ApplicationContext private val context: Context,
 ) {
 
@@ -83,18 +86,21 @@ class ProjectAudioImportCoordinator @Inject constructor(
         source: AudioImportSource,
         suggestedName: String?,
     ): ProjectAudioImportOutcome =
-        when (detectImportFormat(source)) {
-            DetectedImportFormat.PcmWav -> prepareWavImport(projectId, project, visibleTrackCount, source, suggestedName)
-            DetectedImportFormat.CompressedAudio ->
-                prepareCompressedImport(
-                    projectId = projectId,
-                    project = project,
-                    visibleTrackCount = visibleTrackCount,
-                    source = source,
-                    suggestedName = suggestedName,
-                )
-            DetectedImportFormat.Unknown ->
-                ProjectAudioImportOutcome.ImportRejected(AudioImportResult.Failure.UnsupportedEncoding)
+        withIo(dispatchers, "import prepare") {
+            when (detectImportFormat(source)) {
+                DetectedImportFormat.PcmWav ->
+                    prepareWavImport(projectId, project, visibleTrackCount, source, suggestedName)
+                DetectedImportFormat.CompressedAudio ->
+                    prepareCompressedImport(
+                        projectId = projectId,
+                        project = project,
+                        visibleTrackCount = visibleTrackCount,
+                        source = source,
+                        suggestedName = suggestedName,
+                    )
+                DetectedImportFormat.Unknown ->
+                    ProjectAudioImportOutcome.ImportRejected(AudioImportResult.Failure.UnsupportedEncoding)
+            }
         }
 
     suspend fun startCompressedImportFromPending(

@@ -6,8 +6,12 @@ import com.georgv.audioworkstation.core.audio.PreparedExistingTrackRecording
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.toRecordingSpec
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import java.io.File
 import javax.inject.Inject
@@ -34,6 +38,7 @@ class ProjectRecordingCoordinator @Inject constructor(
     private val audioController: AudioController,
     private val audioFilePathProvider: AudioFilePathProvider,
     private val wavPunchSplicer: WavPunchSplicer,
+    private val dispatchers: AppDispatchers,
 ) {
 
     /**
@@ -60,16 +65,34 @@ class ProjectRecordingCoordinator @Inject constructor(
         pendingTrack: TrackEntity,
         punchRecording: PreparedExistingTrackRecording? = null,
     ): RecordingStartOutcome {
-        val tempRecordingPath =
-            punchRecording?.let {
-                audioFilePathProvider.trackRecordingTempPath(project.id, pendingTrack.id)
+        val quickActive = QuickRecordDiagnostics.isActiveFor(project.id)
+        val pathStartMs = android.os.SystemClock.uptimeMillis()
+        if (quickActive) {
+            QuickRecordDiagnostics.logStepStart("recording file/path preparation", project.id)
+        }
+        val pathPrep =
+            withAudioIo(dispatchers, "recording file/path preparation") {
+                val tempRecordingPath =
+                    punchRecording?.let {
+                        audioFilePathProvider.trackRecordingTempPath(project.id, pendingTrack.id)
+                    }
+                val finalWavPath =
+                    punchRecording?.let {
+                        audioFilePathProvider.trackOutputPath(project.id, pendingTrack.id)
+                    }
+                tempRecordingPath?.let { File(it).delete() }
+                tempRecordingPath to finalWavPath
             }
-        val finalWavPath =
-            punchRecording?.let {
-                audioFilePathProvider.trackOutputPath(project.id, pendingTrack.id)
-            }
-
-        tempRecordingPath?.let { File(it).delete() }
+        val tempRecordingPath = pathPrep.first
+        val finalWavPath = pathPrep.second
+        if (quickActive) {
+            QuickRecordDiagnostics.logStepEnd(
+                "recording file/path preparation",
+                pathStartMs,
+                project.id,
+                "tempPath=$tempRecordingPath finalPath=$finalWavPath",
+            )
+        }
 
         val recordingSpec =
             punchRecording?.let { prepared ->
@@ -78,11 +101,34 @@ class ProjectRecordingCoordinator @Inject constructor(
                 )
             } ?: project.toRecordingSpec(pendingTrack)
 
+        val engineStartMs = android.os.SystemClock.uptimeMillis()
+        if (quickActive) {
+            QuickRecordDiagnostics.logStepStart("AudioController.startRecording", project.id)
+        }
         val outputPath =
-            audioController.startRecording(
-                recordingSpec,
-                outputPath = tempRecordingPath,
-            ) ?: return RecordingStartOutcome.EngineStartFailed
+            withAudioIo(dispatchers, "AudioController.startRecording") {
+                ThreadingDiagnostics.logWorkBoundary("AudioController.startRecording", phase = "beforeNativeCall")
+                val path =
+                    audioController.startRecording(
+                        recordingSpec,
+                        outputPath = tempRecordingPath,
+                    )
+                ThreadingDiagnostics.logWorkBoundary("AudioController.startRecording", phase = "afterNativeCall")
+                path
+            } ?: run {
+                if (quickActive) {
+                    QuickRecordDiagnostics.logStepEnd("AudioController.startRecording", engineStartMs, project.id, "failed")
+                }
+                return RecordingStartOutcome.EngineStartFailed
+            }
+        if (quickActive) {
+            QuickRecordDiagnostics.logStepEnd(
+                "AudioController.startRecording",
+                engineStartMs,
+                project.id,
+                "outputPath=$outputPath",
+            )
+        }
 
         val persistedWavPath = punchRecording?.track?.wavFilePath?.takeIf { it.isNotBlank() } ?: outputPath
         val newTrack =

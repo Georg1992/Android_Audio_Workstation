@@ -3,9 +3,12 @@ package com.georgv.audioworkstation.ui.screens.projects
 import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
+import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +34,7 @@ class PlayheadTransportController(
     private val scope: CoroutineScope,
     private val playheadPositionMs: MutableStateFlow<Long>,
     private val nativeTransportPositionMs: () -> Long,
+    private val pollDispatcher: CoroutineDispatcher,
     private val pollIntervalMs: Long = NATIVE_TRANSPORT_POLL_INTERVAL_MS,
 ) {
     private val _phase = MutableStateFlow(TransportPlaybackPhase.Idle)
@@ -154,8 +158,7 @@ class PlayheadTransportController(
     private fun readNativeTransportMs(): Long =
         (testNativePositionOverrideMs ?: nativeTransportPositionMs()).coerceAtLeast(0L)
 
-    private fun syncPlayheadFromNative() {
-        val raw = readNativeTransportMs()
+    private fun applyNativeTransportPosition(raw: Long) {
         val next =
             when (_phase.value) {
                 TransportPlaybackPhase.Recording -> raw.coerceAtLeast(0L)
@@ -169,19 +172,27 @@ class PlayheadTransportController(
         }
     }
 
+    private fun syncPlayheadFromNative() {
+        applyNativeTransportPosition(readNativeTransportMs())
+    }
+
     private fun startNativePoll() {
         stopNativePoll()
         if (!nativePollEnabled) return
         pollJob =
             scope.launch {
+                ThreadingDiagnostics.logPollLoop("default playhead")
                 while (isActive) {
                     when (_phase.value) {
                         TransportPlaybackPhase.Playing,
                         TransportPlaybackPhase.Recording,
-                        -> syncPlayheadFromNative()
+                        ->
+                            withContext(pollDispatcher) {
+                                applyNativeTransportPosition(readNativeTransportMs())
+                                delay(pollIntervalMs)
+                            }
                         else -> break
                     }
-                    delay(pollIntervalMs)
                 }
             }
     }

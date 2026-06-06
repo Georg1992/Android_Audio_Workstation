@@ -1,6 +1,8 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
 
 /**
  * Thin façade for coordinated transport teardown and playback reset when the bound project changes.
@@ -20,17 +22,26 @@ class ProjectTransportController(
     private val audioController: AudioController,
     private val playbackSession: PlaybackSessionController,
     private val recordingSession: RecordingSessionController,
+    private val dispatchers: AppDispatchers,
     private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String) -> Unit,
 ) {
 
     /** Full user / lifecycle transport stop — same sequencing as legacy [ProjectViewModel.performTransportStopSequence]. */
-    fun stopAll() {
+    suspend fun stopAll() {
         playbackSession.cancelCompletionMonitorForTransportStop()
 
         recordingSession.clearStartupFlagForTransportStop()
 
         val activeRecordingTrackId = recordingSession.activeRecordingTrackIdForTransport()
-        if (activeRecordingTrackId != null && audioController.stopRecording()) {
+        val recordingStopped =
+            withAudioIo(dispatchers, "AudioController.stopRecording") {
+                if (activeRecordingTrackId != null) {
+                    audioController.stopRecording()
+                } else {
+                    false
+                }
+            }
+        if (activeRecordingTrackId != null && recordingStopped) {
             finalizeRecordingTrackAfterSuccessfulEngineStop(activeRecordingTrackId)
         }
 
@@ -46,14 +57,14 @@ class ProjectTransportController(
     }
 
     /** Stops native playback and clears playing markers without touching recording. */
-    fun pausePlayback() {
+    suspend fun pausePlayback() {
         playbackSession.cancelCompletionMonitorForTransportStop()
         playbackSession.stopEngineIfMarkedPlaying()
         playbackSession.clearPlayingTransportState()
     }
 
     /** Transport Seek.1: pause audio only; session lane maps and selection stay armed. */
-    fun pauseEnginePreservingSession() {
+    suspend fun pauseEnginePreservingSession() {
         playbackSession.pauseEnginePreservingSession()
     }
 }

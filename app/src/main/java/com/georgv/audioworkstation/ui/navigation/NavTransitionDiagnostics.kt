@@ -28,6 +28,9 @@ object NavTransitionDiagnostics {
         return SystemClock.uptimeMillis() - lastTransitionEnterStartUptimeMs
     }
 
+    /** Largest inter-frame gap (ms) observed in the current/recent nav frame monitor window. */
+    fun peekMaxFrameGapMs(): Long = maxFrameGapMs
+
     private val frameCallback =
         object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
@@ -62,8 +65,8 @@ object NavTransitionDiagnostics {
         lastTransitionEnterStartUptimeMs = SystemClock.uptimeMillis()
         Log.d(
             TAG,
-            "transition enter start kind=$kind durationMs=$NAV_TRANSITION_DURATION_MS " +
-                "easing=$NAV_TRANSITION_EASING_NAME from=$fromRoute to=$toRoute",
+            "transition enter start kind=$kind durationMs=$NavTransitionDurationMs " +
+                "easing=$NavTransitionEasingName from=$fromRoute to=$toRoute",
         )
         startFrameMonitor()
         scheduleTransitionEnd(kind = kind, phase = "enter", fromRoute = fromRoute, toRoute = toRoute)
@@ -73,8 +76,8 @@ object NavTransitionDiagnostics {
         if (!loggingEnabled) return
         Log.d(
             TAG,
-            "transition exit start kind=$kind durationMs=$NAV_TRANSITION_DURATION_MS " +
-                "easing=$NAV_TRANSITION_EASING_NAME from=$fromRoute to=$toRoute",
+            "transition exit start kind=$kind durationMs=$NavTransitionDurationMs " +
+                "easing=$NavTransitionEasingName from=$fromRoute to=$toRoute",
         )
         scheduleTransitionEnd(kind = kind, phase = "exit", fromRoute = fromRoute, toRoute = toRoute)
     }
@@ -107,10 +110,10 @@ object NavTransitionDiagnostics {
             if (!loggingEnabled) return@postDelayed
             Log.d(
                 TAG,
-                "transition $phase end kind=$kind durationMs=$NAV_TRANSITION_DURATION_MS " +
-                    "easing=$NAV_TRANSITION_EASING_NAME from=$fromRoute to=$toRoute",
+                "transition $phase end kind=$kind durationMs=$NavTransitionDurationMs " +
+                    "easing=$NavTransitionEasingName from=$fromRoute to=$toRoute",
             )
-        }, NAV_TRANSITION_DURATION_MS.toLong())
+        }, NavTransitionDurationMs.toLong())
     }
 
     private fun startFrameMonitor() {

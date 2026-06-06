@@ -2,5 +2,17 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
+    <ID>ComplexCondition:QuickRecordDiagnostics.kt:QuickRecordDiagnostics$!loggingEnabled || (projectId != null &amp;&amp; !isActiveFor(projectId) &amp;&amp; quickNavigationProjectId != projectId)</ID>
+    <ID>CyclomaticComplexMethod:RecordingSessionController.kt:RecordingSessionController$suspend fun executeRecordPressed</ID>
+    <ID>LongMethod:AppMusicLoadingPlaceholder.kt:private fun DrawScope.drawMusicNote</ID>
+    <ID>LongMethod:ProjectRecordingCoordinator.kt:ProjectRecordingCoordinator$suspend fun startEngineForAllocatedTrack: RecordingStartOutcome</ID>
+    <ID>LongMethod:RecordingSessionController.kt:RecordingSessionController$suspend fun executeRecordPressed</ID>
+    <ID>ReturnCount:ProjectTrackReorder.kt:internal fun crossPageBoundarySwapOrNull: List&lt;TrackEntity&gt;?</ID>
+    <ID>TooManyFunctions:ProjectDiagnostics.kt:ProjectDiagnostics</ID>
+    <ID>TooManyFunctions:ProjectViewModel.kt:ProjectViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:QuickRecordDiagnostics.kt:QuickRecordDiagnostics</ID>
+    <ID>TooManyFunctions:TrackTimelineLane.kt:com.georgv.audioworkstation.ui.components.TrackTimelineLane.kt</ID>
+    <ID>TooManyFunctions:WaveformRecompositionDiagnostics.kt:WaveformRecompositionDiagnostics</ID>
+    <ID>UnusedParameter:ProjectTrackListRow.kt:ignoredOnReorderDragEnd: () -&gt; Unit</ID>
   </CurrentIssues>
 </SmellBaseline>

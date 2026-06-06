@@ -7,6 +7,7 @@ import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.TrackPlaybackLane
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -51,8 +52,10 @@ class ProjectTransportControllerTest {
     ): RecordingSessionController {
         val repo = ProjectRepository(FakeProjectDao(projects = listOf(project()), tracks = emptyList()), NoopProjectFileStore)
         val coordinator = testProjectRecordingCoordinator(repo, audio)
-        return RecordingSessionController(scope, audio, coordinator)
+        return RecordingSessionController(scope, audio, coordinator, testDispatchers())
     }
+
+    private fun testDispatchers(): TestAppDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)
 
     @Test
     fun `stopAll clears recording markers and stops recorder before playback engine when both active`() =
@@ -66,6 +69,7 @@ class ProjectTransportControllerTest {
             val playback = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
+                dispatchers = testDispatchers(),
                 loadCurrentProject = { if (it == PID) project() else null },
                 currentProjectId = { PID },
                 visibleTracks = { emptyList() },
@@ -86,6 +90,7 @@ class ProjectTransportControllerTest {
                 audioController = audio,
                 playbackSession = playback,
                 recordingSession = recordingSession,
+                dispatchers = testDispatchers(),
                 finalizeRecordingTrackAfterSuccessfulEngineStop = { finalizedIds += it },
             )
 
@@ -110,6 +115,7 @@ class ProjectTransportControllerTest {
             val playback = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
+                dispatchers = testDispatchers(),
                 loadCurrentProject = { if (it == PID) project() else null },
                 currentProjectId = { PID },
                 visibleTracks = { emptyList() },
@@ -129,6 +135,7 @@ class ProjectTransportControllerTest {
                 audioController = audio,
                 playbackSession = playback,
                 recordingSession = recordingSession,
+                dispatchers = testDispatchers(),
                 finalizeRecordingTrackAfterSuccessfulEngineStop = { error("finalize not expected") },
             )
 
@@ -145,6 +152,7 @@ class ProjectTransportControllerTest {
             val playback = PlaybackSessionController(
                 scope = this,
                 audioController = audio,
+                dispatchers = testDispatchers(),
                 loadCurrentProject = { project() },
                 currentProjectId = { PID },
                 visibleTracks = { emptyList() },
@@ -165,6 +173,7 @@ class ProjectTransportControllerTest {
                     audioController = audio,
                     playbackSession = playback,
                     recordingSession = recordingSession,
+                    dispatchers = testDispatchers(),
                     finalizeRecordingTrackAfterSuccessfulEngineStop = { },
                 )
             sut.resetPlaybackForProjectChange()

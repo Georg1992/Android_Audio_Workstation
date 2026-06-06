@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,7 +22,7 @@ class PlayAndRecordTransportTest {
     fun `startFromPlayhead skips playback when no overdub lanes`() = runTest(mainDispatcherRule.dispatcher) {
         val audio = FakeAudioController()
         val playback = playbackSession(this, audio)
-        val sut = PlayAndRecordTransport(audio, playback)
+        val sut = PlayAndRecordTransport(audio, playback, TestAppDispatchers.unified(mainDispatcherRule.dispatcher))
 
         assertTrue(
             sut.startFromPlayhead(
@@ -39,7 +40,7 @@ class PlayAndRecordTransportTest {
     fun `startFromPlayhead excludes recording track from playback lanes`() = runTest(mainDispatcherRule.dispatcher) {
         val audio = FakeAudioController()
         val playback = playbackSession(this, audio)
-        val sut = PlayAndRecordTransport(audio, playback)
+        val sut = PlayAndRecordTransport(audio, playback, TestAppDispatchers.unified(mainDispatcherRule.dispatcher))
         val backing =
             TrackEntity(id = "backing", projectId = "p", wavFilePath = "/backing.wav")
         val recordingRow =
@@ -67,7 +68,7 @@ class PlayAndRecordTransportTest {
     fun `stop clears playback session markers`() = runTest(mainDispatcherRule.dispatcher) {
         val audio = FakeAudioController()
         val playback = playbackSession(this, audio)
-        val sut = PlayAndRecordTransport(audio, playback)
+        val sut = PlayAndRecordTransport(audio, playback, TestAppDispatchers.unified(mainDispatcherRule.dispatcher))
         val track = TrackEntity(id = "a", projectId = "p", wavFilePath = "/a.wav")
 
         sut.startFromPlayhead(
@@ -89,6 +90,7 @@ class PlayAndRecordTransportTest {
         PlaybackSessionController(
             scope = scope,
             audioController = audio,
+            dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
             loadCurrentProject = { _ -> ProjectEntity(id = "p", name = "P") },
             currentProjectId = { "p" },
             visibleTracks = { emptyList() },

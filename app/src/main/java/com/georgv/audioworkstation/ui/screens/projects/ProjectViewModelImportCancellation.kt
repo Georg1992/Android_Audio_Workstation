@@ -4,6 +4,7 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.toUiMessage
+import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -15,7 +16,9 @@ internal suspend fun ProjectViewModel.removeCancelledImportTrack(
     error: Throwable? = null,
 ) {
     if (destinationPath.isNotBlank()) {
-        File(destinationPath).delete()
+        withIo(appDispatchers, "import cancel delete partial wav") {
+            File(destinationPath).delete()
+        }
     }
     Mp3ImportTiming.recordFailure(
         stage = "background_import_cancelled",
@@ -42,7 +45,9 @@ internal suspend fun ProjectViewModel.handleBackgroundImportRejected(
     trackId: String,
     outcome: ProjectAudioImportOutcome.ImportRejected,
 ) {
-    File(started.session.destinationPath).delete()
+    withIo(appDispatchers, "import reject delete partial wav") {
+        File(started.session.destinationPath).delete()
+    }
     importDbActions.run(R.string.error_save_imported_track_failed) {
         importRepo.upsertTracks(
             listOf(started.importingTrack.copy(importStatus = TrackImportStatus.FAILED)),
@@ -67,7 +72,9 @@ internal suspend fun ProjectViewModel.handleBackgroundImportCancellation(
             error = cancel,
         )
     } else {
-        File(started.session.destinationPath).delete()
+        withIo(appDispatchers, "import background cancel delete partial wav") {
+            File(started.session.destinationPath).delete()
+        }
         Mp3ImportTiming.recordFailure(
             stage = "background_import_cancelled",
             error = cancel,

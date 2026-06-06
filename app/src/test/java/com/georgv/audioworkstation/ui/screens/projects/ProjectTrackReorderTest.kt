@@ -291,6 +291,139 @@ class ProjectTrackReorderTest {
         )
     }
 
+    @Test
+    fun `crossPageBoundarySwapOrNull waits until finger crosses first row on target page`() {
+        val tracks =
+            listOf(
+                track(id = "1", position = 0),
+                track(id = "2", position = 1),
+                track(id = "3", position = 2),
+                track(id = "4", position = 3),
+                track(id = "5", position = 4),
+                track(id = "6", position = 5),
+            )
+        val listTop = 100f
+        val slotH = 50f
+        val gap = 10f
+        val stride = slotH + gap
+        val bounds =
+            tracks.mapIndexed { index, t ->
+                val top = listTop + index * stride
+                t.id to Rect(0f, top, 200f, top + slotH)
+            }.toMap()
+        val dragged = bounds.getValue("4")
+        val firstOnPage = bounds.getValue("5")
+        val dc = DragController()
+        val finger = Offset(10f, (dragged.top + dragged.bottom) / 2f)
+        dc.start(
+            key = "4",
+            startPos = finger,
+            offsetFromFingerToItemTopLeft = finger - Offset(dragged.left, dragged.top),
+            fixedXInParentPx = 0f,
+            overlayWidthPx = dragged.width,
+            overlayHeightPx = dragged.height,
+        )
+        val nextCenter = (firstOnPage.top + firstOnPage.bottom) / 2f
+        val threshold =
+            dragged.bottom + ReorderVisibleNeighborEarlyFraction * (nextCenter - dragged.bottom)
+        dc.update(Offset(10f, threshold - 5f))
+        assertNull(
+            crossPageBoundarySwapOrNull(
+                tracks,
+                dc,
+                pageStartGlobalIndex = 4,
+                pageEndExclusiveGlobal = 6,
+                boundsByTrackId = bounds,
+                knownGlobalIndex = 3,
+            ),
+        )
+        dc.update(Offset(10f, threshold + 5f))
+        val swapped =
+            crossPageBoundarySwapOrNull(
+                tracks,
+                dc,
+                pageStartGlobalIndex = 4,
+                pageEndExclusiveGlobal = 6,
+                boundsByTrackId = bounds,
+                knownGlobalIndex = 3,
+            )
+        assertEquals(listOf("1", "2", "3", "5", "4", "6"), swapped?.map { it.id })
+    }
+
+    @Test
+    fun `crossPageEnterSwapOrNull enters next page`() {
+        val tracks = letterTracks("A", "B", "C", "D", "E", "F")
+
+        val result =
+            crossPageEnterSwapOrNull(
+                tracks = tracks,
+                draggedIndex = 2,
+                fromPage = 0,
+                targetPage = 1,
+                pageSize = 3,
+            )
+
+        assertEquals(listOf("A", "B", "D", "C", "E", "F"), result?.map { it.id })
+    }
+
+    @Test
+    fun `crossPageEnterSwapOrNull enters previous page`() {
+        val tracks = letterTracks("A", "B", "D", "C", "E", "F")
+
+        val result =
+            crossPageEnterSwapOrNull(
+                tracks = tracks,
+                draggedIndex = 3,
+                fromPage = 1,
+                targetPage = 0,
+                pageSize = 3,
+            )
+
+        assertEquals(listOf("A", "B", "C", "D", "E", "F"), result?.map { it.id })
+    }
+
+    @Test
+    fun `crossPageEnterSwapOrNull returns null for non-adjacent page jump`() {
+        val tracks = letterTracks("A", "B", "C", "D", "E", "F", "G", "H", "I")
+
+        assertNull(
+            crossPageEnterSwapOrNull(
+                tracks = tracks,
+                draggedIndex = 2,
+                fromPage = 0,
+                targetPage = 2,
+                pageSize = 3,
+            ),
+        )
+    }
+
+    @Test
+    fun `crossPageEnterSwapOrNull returns null for invalid dragged index`() {
+        val tracks = letterTracks("A", "B", "C", "D", "E", "F")
+
+        assertNull(
+            crossPageEnterSwapOrNull(
+                tracks = tracks,
+                draggedIndex = -1,
+                fromPage = 0,
+                targetPage = 1,
+                pageSize = 3,
+            ),
+        )
+        assertNull(
+            crossPageEnterSwapOrNull(
+                tracks = tracks,
+                draggedIndex = tracks.size,
+                fromPage = 0,
+                targetPage = 1,
+                pageSize = 3,
+            ),
+        )
+    }
+
+    private fun letterTracks(vararg ids: String): List<TrackEntity> =
+        ids.mapIndexed { index, id -> track(id = id, position = index) }
+
     private fun testTracks(): List<TrackEntity> = listOf(
         track(id = "1", position = 0),
         track(id = "2", position = 1),

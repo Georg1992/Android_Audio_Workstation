@@ -10,6 +10,7 @@ import com.georgv.audioworkstation.ui.screens.community.CommunityScreen
 import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
 import com.georgv.audioworkstation.ui.screens.mainmenu.MainMenuScreen
+import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
 import com.georgv.audioworkstation.ui.screens.projects.CreateProjectScreen
 import com.georgv.audioworkstation.ui.screens.projects.ProjectScreen
 import java.util.UUID
@@ -37,7 +38,10 @@ fun AppNavHost(
                 onOpenCommunity = { navController.navigateSingleTopTo(Routes.COMMUNITY) },
                 onOpenDevices = { navController.navigateSingleTopTo(Routes.DEVICES) },
                 onQuickRecord = {
+                    QuickRecordDiagnostics.markClickReceived()
                     val id = UUID.randomUUID().toString()
+                    QuickRecordDiagnostics.markProjectIdGenerated(id)
+                    QuickRecordDiagnostics.markNavigationRequested(id)
                     navController.navigate("${Routes.PROJECT}/$id?quick=true")
                 }
             )
