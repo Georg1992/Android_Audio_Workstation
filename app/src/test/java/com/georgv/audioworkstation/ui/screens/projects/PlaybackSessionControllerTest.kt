@@ -92,7 +92,11 @@ class PlaybackSessionControllerTest {
     @Test
     fun `deselect while preparing mutes pending lane before Kotlin map update`() =
         runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
+            val audio =
+                PlaybackSessionTestAudio(
+                    hotJoinLifecycleByLane =
+                        mapOf(1 to listOf(PlaybackLaneLifecycle.Preparing)),
+                )
             val sut =
                 PlaybackSessionController(
                     scope = this,
@@ -108,11 +112,14 @@ class PlaybackSessionControllerTest {
                 selectedTrackIds = setOf("a", "b"),
                 playableTracks = listOf(track("a", loop = false), trackB),
             )
+            runCurrent()
             sut.onSelectionChangedDuringPlayback(
                 selectedTrackIds = setOf("a"),
                 playableTracks = listOf(track("a", loop = false), trackB),
             )
+            runCurrent()
             assertEquals(listOf(1 to false), audio.playbackLaneAudibleCalls)
+            assertNull(sut.sessionLaneTrackIdsForTests()[1])
             sut.cancelCompletionMonitorForTransportStop()
         }
 
