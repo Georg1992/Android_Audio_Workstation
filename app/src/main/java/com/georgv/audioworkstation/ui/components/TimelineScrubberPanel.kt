@@ -35,9 +35,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
-import com.georgv.audioworkstation.ui.theme.AppText
-import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
+import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 private val ScrubberPanelShape = RoundedCornerShape(Dimens.TileRadius)
@@ -101,7 +101,7 @@ fun TimelinePlayheadScrubberPanel(
                     .align(Alignment.CenterEnd)
                     .width(utilityZoneWidth)
                     .fillMaxHeight()
-                    .alpha(if (inputLocked) Alphas.Disabled else 1f),
+                    .alpha(if (inputLocked) AppOpacity.disabled else 1f),
         ) {
             MasterOutputPeakIndicator(
                 peakDbText = masterPeakDbText,
@@ -186,7 +186,7 @@ private fun TimelineScrubberWaveformSlot(
         }
     val labelStyle =
         TextStyle(
-            color = AppColors.Line.copy(alpha = 0.88f),
+            color = AppColors.labelEmphasis,
             fontSize = 7.sp,
             fontFamily = FontFamily.Monospace,
             platformStyle = PlatformTextStyle(includeFontPadding = false),

@@ -28,7 +28,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -95,7 +94,7 @@ fun MainTile(
                                 Text(
                                     text = subtitle,
                                     style = AppText.TileSubtitle,
-                                    color = AppColors.Line.copy(alpha = Alphas.MutedIcon),
+                                    color = AppColors.iconMuted,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
@@ -132,7 +131,7 @@ fun MainTile(
                             Text(
                                 text = subtitle,
                                 style = AppText.TileSubtitle,
-                                color = AppColors.Line.copy(alpha = Alphas.MutedIcon),
+                                color = AppColors.iconMuted,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )

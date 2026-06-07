@@ -51,6 +51,7 @@ import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMsForClipTimelineWindow
 import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.max
 import kotlin.math.min
@@ -460,7 +461,7 @@ fun TrackTimelineLane(
                                 if (clipImporting) {
                                     AppColors.SurfacePanel.copy(alpha = 0.55f)
                                 } else if (clipImportFailed) {
-                                    AppColors.SurfacePanel.copy(alpha = 0.65f)
+                                    AppColors.SurfacePanel.copy(alpha = AppOpacity.muted)
                                 } else {
                                     AppColors.SurfacePanel
                                 },
@@ -765,7 +766,7 @@ private fun BoxScope.WaveformLanePlaceholder(statusText: String? = null) {
     if (statusText != null) {
         Text(
             text = statusText,
-            color = AppColors.Line.copy(alpha = 0.58f),
+            color = AppColors.textSecondary,
             fontSize = 9.sp,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier

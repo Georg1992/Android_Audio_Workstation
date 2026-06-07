@@ -27,9 +27,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
+
+private const val TrackActionBorderIdleAlpha = 0.22f
+private const val TrackActionBorderActiveAlpha = 0.52f
+private const val TrackActionBorderPressedAlpha = 0.38f
+private const val TrackActionIconIdleAlpha = 0.38f
+private const val TrackActionIconGlowIntensity = 0.42f
+private const val TrackActionPressedScale = 0.95f
 
 /**
  * Hardware-style track header button: flat surface, muted idle icon, accent + LED when armed.
@@ -48,7 +55,7 @@ fun TrackActionButton(
     activeBackgroundColor: Color? = null,
     activeBorderColor: Color? = null,
     activeIconColor: Color? = null,
-    idleIconColor: Color = AppColors.Line.copy(alpha = Alphas.TrackActionIconIdle),
+    idleIconColor: Color = AppColors.Line.copy(alpha = TrackActionIconIdleAlpha),
     showActiveGlow: Boolean = true,
     showActiveLed: Boolean = true,
     content: @Composable (iconTint: Color) -> Unit,
@@ -57,7 +64,7 @@ fun TrackActionButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) Alphas.TrackActionPressedScale else 1f,
+        targetValue = if (isPressed && enabled) TrackActionPressedScale else 1f,
         animationSpec =
             spring(
                 dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -76,9 +83,9 @@ fun TrackActionButton(
         borderColor
             ?: when {
                 active && activeBorderColor != null -> activeBorderColor
-                active -> AppColors.Line.copy(alpha = Alphas.TrackActionBorderActive)
-                isPressed && enabled -> AppColors.Line.copy(alpha = Alphas.TrackActionBorderPressed)
-                else -> AppColors.Line.copy(alpha = Alphas.TrackActionBorderIdle)
+                active -> AppColors.Line.copy(alpha = TrackActionBorderActiveAlpha)
+                isPressed && enabled -> AppColors.Line.copy(alpha = TrackActionBorderPressedAlpha)
+                else -> AppColors.Line.copy(alpha = TrackActionBorderIdleAlpha)
             }
     val iconTint =
         when {
@@ -95,7 +102,7 @@ fun TrackActionButton(
                     scaleX = pressScale
                     scaleY = pressScale
                 }
-                .alpha(if (enabled) 1f else Alphas.Disabled)
+                .alpha(if (enabled) 1f else AppOpacity.disabled)
                 .clip(shape)
                 .background(backgroundColor)
                 .border(Dimens.Stroke, resolvedBorderColor, shape)
@@ -114,7 +121,7 @@ fun TrackActionButton(
                         color = accentColor,
                         blurRadius = Dimens.TrackActionIconGlowBlur,
                         cornerRadius = Dimens.SmallRadius,
-                        intensity = Alphas.TrackActionIconGlow,
+                        intensity = TrackActionIconGlowIntensity,
                         layers = 6,
                     )
                 } else {

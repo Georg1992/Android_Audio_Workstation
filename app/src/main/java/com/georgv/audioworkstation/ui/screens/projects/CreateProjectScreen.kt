@@ -35,8 +35,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ProjectSampleRate
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
-import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 import androidx.compose.foundation.clickable
@@ -217,7 +217,7 @@ private fun SampleRateOption(
             .border(Dimens.Stroke, AppColors.Line, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.TileInnerPadding)
-            .alpha(if (enabled) 1f else Alphas.Disabled),
+            .alpha(if (enabled) 1f else AppOpacity.disabled),
         verticalArrangement = Arrangement.spacedBy(Dimens.TightGap),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -263,7 +263,7 @@ private fun CreateProjectActionButton(
                 text = text,
                 style = AppText.TileTitle,
                 color = AppColors.Line,
-                modifier = Modifier.alpha(if (enabled) 1f else Alphas.Disabled)
+                modifier = Modifier.alpha(if (enabled) 1f else AppOpacity.disabled)
             )
         }
     }

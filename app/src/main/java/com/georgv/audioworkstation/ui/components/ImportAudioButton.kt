@@ -17,8 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
-import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 @Composable
@@ -44,7 +44,7 @@ fun ImportAudioButton(
             enabled = enabled && !inputLocked,
             modifier = Modifier.size(Dimens.TransportButtonSize),
         ) {
-            Box(modifier = Modifier.alpha(if (enabled && !inputLocked) 1f else Alphas.Disabled)) {
+            Box(modifier = Modifier.alpha(if (enabled && !inputLocked) 1f else AppOpacity.disabled)) {
                 Icon(
                     imageVector = Icons.Filled.FileUpload,
                     contentDescription = stringResource(R.string.cd_import_audio),

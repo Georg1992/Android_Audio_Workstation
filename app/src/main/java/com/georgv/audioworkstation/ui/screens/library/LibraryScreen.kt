@@ -180,7 +180,7 @@ private fun LibraryProjectContent(
                 Text(
                     text = stringResource(R.string.library_loading_state),
                     style = AppText.TileSubtitle,
-                    color = AppColors.Line.copy(alpha = 0.65f),
+                    color = AppColors.iconMuted,
                 )
             }
         }
@@ -255,7 +255,7 @@ private fun LibraryProjectRow(
                 Text(
                     text = stringResource(R.string.library_open_project_hint),
                     style = AppText.TileSubtitle,
-                    color = AppColors.Line.copy(alpha = 0.65f)
+                    color = AppColors.iconMuted
                 )
             }
             IconButton(onClick = onDeleteClick) {

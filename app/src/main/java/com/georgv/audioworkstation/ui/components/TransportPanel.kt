@@ -40,8 +40,8 @@ import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
-import com.georgv.audioworkstation.ui.theme.Alphas
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
@@ -135,7 +135,7 @@ fun TransportPanel(
             }
             TransportPlayheadTimeDisplay(
                 label = playheadTimeLabel,
-                modifier = Modifier.alpha(if (inputLocked) Alphas.Disabled else 1f),
+                modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
             )
         }
     }
@@ -199,7 +199,7 @@ private fun TransportPlayheadTimeDisplay(
     ) {
         Text(
             text = label,
-            color = AppColors.Line.copy(alpha = 0.88f),
+            color = AppColors.labelEmphasis,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
             textAlign = TextAlign.Center,
@@ -238,7 +238,7 @@ private fun TransportButton(
             modifier = Modifier.size(Dimens.TransportButtonSize),
         ) {
             Box(
-                modifier = Modifier.alpha(if (enabled) 1f else Alphas.Disabled)
+                modifier = Modifier.alpha(if (enabled) 1f else AppOpacity.disabled)
             ) {
                 content()
             }

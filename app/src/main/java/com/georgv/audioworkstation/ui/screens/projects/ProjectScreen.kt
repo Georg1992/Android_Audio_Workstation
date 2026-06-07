@@ -75,7 +75,6 @@ import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
-import com.georgv.audioworkstation.ui.theme.TransportPanelWidthFraction
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
@@ -743,7 +742,7 @@ private fun ProjectScreenHeavyLayer(
                 onRecord = { startRecordingIfPermitted("New Project") },
                 isRecordEnabled = !structuralState.isImportInProgress,
                 inputLocked = reorderActive,
-                modifier = Modifier.fillMaxWidth(TransportPanelWidthFraction),
+                modifier = Modifier.fillMaxWidth(Dimens.TransportPanelWidthFraction),
             )
 
             Spacer(Modifier.weight(1f))

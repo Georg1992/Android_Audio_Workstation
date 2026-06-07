@@ -696,7 +696,7 @@ internal fun WaveformEmptyPlaceholder(
         statusText?.let { text ->
             Text(
                 text = text,
-                color = AppColors.Line.copy(alpha = 0.58f),
+                color = AppColors.textSecondary,
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier.padding(start = 6.dp, end = 6.dp),
