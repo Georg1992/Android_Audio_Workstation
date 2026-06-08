@@ -45,6 +45,15 @@
     <string name="action_delete">Delete</string>
     <string name="action_cancel_import">Cancel import</string>
     <string name="action_rename">Rename</string>
+    <string name="action_edit">Edit</string>
+
+    <!-- Track edit screen -->
+    <string name="screen_track_edit">Track Edit</string>
+    <string name="track_edit_timeline_position">Timeline position</string>
+    <string name="track_edit_input_fx">Input FX</string>
+    <string name="track_edit_output_fx">Output FX</string>
+    <string name="track_edit_coming_soon">Coming soon</string>
+    <string name="track_edit_track_missing">Track not found.</string>
 
     <!-- Library screen -->
     <string name="library_empty_state">No projects yet.</string>
@@ -53,6 +62,16 @@
     <string name="library_untitled_project">Untitled Project</string>
     <string name="library_delete_project_title">Delete project?</string>
     <string name="library_delete_project_message">This will permanently delete %1$s and all its tracks.</string>
+    <string name="library_no_mix_yet">No mix yet</string>
+    <string name="library_preview_mix_hint">Tap to preview mix</string>
+    <string name="library_preview_playing_hint">Tap to stop preview</string>
+    <string name="library_mixing_progress">Mixing…</string>
+    <string name="library_mixing_progress_percent">Mixing… %1$d%%</string>
+
+    <!-- Project mixdown -->
+    <string name="project_mixdown_confirm_title">Mix project?</string>
+    <string name="project_mixdown_confirm_message">This will render the current project mix to a WAV file.</string>
+    <string name="action_mix">Mix</string>
 
     <!-- Content descriptions (accessibility) -->
     <string name="cd_back">Back</string>
@@ -61,6 +80,8 @@
     <string name="cd_stop">Stop</string>
     <string name="cd_record">Record</string>
     <string name="cd_import_audio">Import audio</string>
+    <string name="cd_mixdown_project">Mix and export project</string>
+    <string name="cd_open_project">Open project</string>
     <string name="cd_loop_on">Loop on</string>
     <string name="cd_loop_off">Loop off</string>
     <string name="cd_record_target_on">Record target on</string>
@@ -124,10 +145,16 @@
     <string name="error_rename_project_failed">Failed to rename project.</string>
     <string name="error_rename_track_failed">Failed to rename track.</string>
     <string name="error_loop_update_failed">Failed to update loop setting.</string>
+    <string name="error_track_edit_save_failed">Failed to save track edits.</string>
     <string name="error_gain_update_failed">Failed to update track gain.</string>
     <string name="error_pan_update_failed">Failed to update track pan.</string>
     <string name="error_save_track_order_failed">Failed to save track order.</string>
     <string name="error_save_imported_track_failed">Failed to save imported track.</string>
     <string name="error_recording_metadata_failed">Failed to update recording metadata.</string>
     <string name="error_create_recording_track_failed">Failed to create recording track.</string>
+    <string name="error_mixdown_not_available">Mixdown is not available yet.</string>
+    <string name="error_mixdown_no_playable_tracks">Nothing to mix — add tracks with audio first.</string>
+    <string name="error_mixdown_unsupported_audio">Mixdown requires 16-bit mono or stereo WAV at the project sample rate.</string>
+    <string name="error_mixdown_failed">Mixdown failed.</string>
+    <string name="error_mix_preview_failed">Could not play mix preview.</string>
 </resources>

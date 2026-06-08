@@ -26,7 +26,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.core.track.trackLaneGlobalOverlayTimelineDurationMs
 import com.georgv.audioworkstation.ui.components.TimelineClip
+import com.georgv.audioworkstation.ui.components.timelineLaneLocalLayoutDurationMs
 import com.georgv.audioworkstation.ui.components.TrackCard
 import com.georgv.audioworkstation.ui.components.loopRegionEditingEnabled
 import com.georgv.audioworkstation.ui.drag.DragController
@@ -76,7 +79,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
     selectedTrackIds: Set<String>,
     recordingTrackId: String?,
     recordTargetTrackId: String?,
-    sessionTrackIds: Set<String>,
+    @Suppress("UNUSED_PARAMETER") sessionTrackIds: Set<String>,
     importInProgress: Boolean,
     realtimeUiState: StateFlow<ProjectRealtimeUiState>,
     timelineClipsByTrackId: Map<String, TimelineClip>,
@@ -111,16 +114,19 @@ internal fun LazyItemScope.ProjectTrackListRow(
     onToggleRecordTarget: (String) -> Unit,
     onToggleLoop: (String) -> Unit,
     onUpdateTrackLoopRegion: (String, Long, Long) -> Unit,
+    onEditTrack: (String) -> Unit,
     ignoredOnReorderDragEnd: () -> Unit,
     onReorderDragStarted: (trackId: String) -> Unit,
 ) {
     val needsLiveMeter = recordingTrackId == track.id
-    val needsLivePlayhead =
-        trackLaneNeedsLivePlayhead(
-            trackId = track.id,
-            recordingTrackId = recordingTrackId,
-            playbackSessionActive = playbackActive,
-            sessionTrackIds = sessionTrackIds,
+    val laneClip = timelineClipsByTrackId[track.id]
+    val localLaneLayoutDurationMs =
+        laneClip?.let { timelineLaneLocalLayoutDurationMs(it) }
+            ?: timelineLaneLayoutDurationMs
+    val showsGlobalPlayhead =
+        trackLaneShowsGlobalPlayhead(
+            showWaveforms = showWaveforms,
+            hasTimelineClip = laneClip != null,
         )
 
     @Composable
@@ -128,16 +134,20 @@ internal fun LazyItemScope.ProjectTrackListRow(
         recordingInputLevel: Float,
         timelinePlayheadPositionMs: Long,
         globalPlayheadTimelineDurationMs: Long,
+        globalMixScopeDurationMs: Long,
+        loopPlaybackActive: Boolean,
     ) {
         TrackCard(
             title = track.name ?: "Track",
             isSelected = selectedTrackIds.contains(track.id),
             isRecording = recordingTrackId == track.id,
             recordingInputLevel = recordingInputLevel,
-            timelineClip = timelineClipsByTrackId[track.id],
-            laneLayoutDurationMs = timelineLaneLayoutDurationMs,
+            timelineClip = laneClip,
+            laneLayoutDurationMs = localLaneLayoutDurationMs,
+            globalMixScopeDurationMs = globalMixScopeDurationMs,
             globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
             timelinePlayheadPositionMs = timelinePlayheadPositionMs,
+            loopPlaybackActive = loopPlaybackActive,
             gain = track.gain,
             onGainChange = { gain -> onGainChange(track.id, gain) },
             onGainCommit = { gain -> onGainCommit(track.id, gain) },
@@ -151,6 +161,8 @@ internal fun LazyItemScope.ProjectTrackListRow(
             onDelete = { onDeleteTrack(track.id) },
             onCancelImport = { onCancelImport(track.id) },
             onRename = { onRenameTrack(track.id, it) },
+            onEdit = { onEditTrack(track.id) },
+            editEnabled = trackActionsEnabled && track.hasPersistedPlayableAudio(),
             onToggleRecordTarget = { onToggleRecordTarget(track.id) },
             isRecordTarget = recordTargetTrackId == track.id,
             recordTargetToggleEnabled =
@@ -203,24 +215,36 @@ internal fun LazyItemScope.ProjectTrackListRow(
 
     @Composable
     fun RowTrackCardContent() {
-        if (needsLiveMeter || needsLivePlayhead) {
+        if (needsLiveMeter || showsGlobalPlayhead) {
             val realtime by realtimeUiState.collectAsStateWithLifecycle()
+            val loopPlaybackActive =
+                playbackActive &&
+                    track.isLoop &&
+                    track.id in selectedTrackIds
             RowTrackCard(
                 recordingInputLevel = if (needsLiveMeter) realtime.recordingInputLevel else 0f,
                 timelinePlayheadPositionMs =
-                    if (needsLivePlayhead) realtime.playheadPositionMs else 0L,
+                    if (showsGlobalPlayhead) realtime.playheadPositionMs else 0L,
                 globalPlayheadTimelineDurationMs =
-                    if (needsLivePlayhead) {
-                        realtime.timelineVisibleDurationMs
+                    if (showsGlobalPlayhead) {
+                        trackLaneGlobalOverlayTimelineDurationMs(
+                            laneLayoutDurationMs = localLaneLayoutDurationMs,
+                            rawPlayheadMs = realtime.playheadPositionMs,
+                            timelineVisibleDurationMs = realtime.timelineVisibleDurationMs,
+                        )
                     } else {
-                        timelineLaneLayoutDurationMs
+                        localLaneLayoutDurationMs
                     },
+                globalMixScopeDurationMs = timelineLaneLayoutDurationMs,
+                loopPlaybackActive = loopPlaybackActive,
             )
         } else {
             RowTrackCard(
                 recordingInputLevel = 0f,
                 timelinePlayheadPositionMs = 0L,
-                globalPlayheadTimelineDurationMs = timelineLaneLayoutDurationMs,
+                globalPlayheadTimelineDurationMs = localLaneLayoutDurationMs,
+                globalMixScopeDurationMs = timelineLaneLayoutDurationMs,
+                loopPlaybackActive = false,
             )
         }
     }

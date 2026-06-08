@@ -91,7 +91,7 @@ class ProjectTransportControllerTest {
                 playbackSession = playback,
                 recordingSession = recordingSession,
                 dispatchers = testDispatchers(),
-                finalizeRecordingTrackAfterSuccessfulEngineStop = { finalizedIds += it },
+                finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, _ -> finalizedIds += trackId },
             )
 
             sut.stopAll()
@@ -102,6 +102,43 @@ class ProjectTransportControllerTest {
             assertEquals(emptySet<String>(), playback.sessionTrackIds.value)
             assertEquals(listOf("a"), finalizedIds)
             assertEquals(listOf("stopRecording", "stopPlayback"), audio.engineStopJournal)
+        }
+
+    @Test
+    fun `stopAll passes first captured sample transport ms to finalize callback`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val audio =
+                FakeAudioController().apply {
+                    recordingFirstSampleTransportPositionMsValue = 187L
+                }
+            val recordingSession = recordingSessionSharingEngine(this, audio)
+            recordingSession.seedRecordingStateForTests("a", track("a"), startup = false)
+            var capturedFirstSample = Long.MIN_VALUE
+
+            val playback =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    dispatchers = testDispatchers(),
+                    loadCurrentProject = { if (it == PID) project() else null },
+                    currentProjectId = { PID },
+                    visibleTracks = { emptyList() },
+                )
+
+            val sut =
+                ProjectTransportController(
+                    audioController = audio,
+                    playbackSession = playback,
+                    recordingSession = recordingSession,
+                    dispatchers = testDispatchers(),
+                    finalizeRecordingTrackAfterSuccessfulEngineStop = { _, firstSampleMs ->
+                        capturedFirstSample = firstSampleMs
+                    },
+                )
+
+            sut.stopAll()
+
+            assertEquals(187L, capturedFirstSample)
         }
 
     @Test
@@ -136,7 +173,7 @@ class ProjectTransportControllerTest {
                 playbackSession = playback,
                 recordingSession = recordingSession,
                 dispatchers = testDispatchers(),
-                finalizeRecordingTrackAfterSuccessfulEngineStop = { error("finalize not expected") },
+                finalizeRecordingTrackAfterSuccessfulEngineStop = { _, _ -> error("finalize not expected") },
             )
 
             sut.stopAll()
@@ -174,7 +211,7 @@ class ProjectTransportControllerTest {
                     playbackSession = playback,
                     recordingSession = recordingSession,
                     dispatchers = testDispatchers(),
-                    finalizeRecordingTrackAfterSuccessfulEngineStop = { },
+                    finalizeRecordingTrackAfterSuccessfulEngineStop = { _, _ -> },
                 )
             sut.resetPlaybackForProjectChange()
             advanceUntilIdle()

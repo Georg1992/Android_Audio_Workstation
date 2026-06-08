@@ -39,6 +39,16 @@ private const val TrackReorderPreLiftSlopDp = 12f
  * Lift timing uses [Handler.postDelayed] because [pointerInput] is a restricted coroutine scope
  * (no [kotlinx.coroutines.delay]).
  */
+/** Loop-enabled lane waveform is interactive; long-press there must not lift for reorder. */
+internal fun trackReorderIgnoresDownInWaveform(
+    isLoopEnabled: Boolean,
+    downPositionInRoot: Offset,
+    laneWaveformBoundsInRoot: Rect?,
+): Boolean =
+    isLoopEnabled &&
+        laneWaveformBoundsInRoot != null &&
+        laneWaveformBoundsInRoot.contains(downPositionInRoot)
+
 fun Modifier.trackCardLongPressReorderGesture(
     enabled: Boolean,
     blockReorderDrag: Boolean,
@@ -46,6 +56,7 @@ fun Modifier.trackCardLongPressReorderGesture(
     onTap: () -> Unit,
     onReorderDragStart: (positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit,
     onReorderDragMove: (positionInRoot: Offset) -> Unit,
+    ignoreDownInRoot: (Offset) -> Boolean = { false },
 ): Modifier =
     composed {
         var cardCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -53,6 +64,7 @@ fun Modifier.trackCardLongPressReorderGesture(
         val latestOnTap by rememberUpdatedState(onTap)
         val latestOnStart by rememberUpdatedState(onReorderDragStart)
         val latestOnMove by rememberUpdatedState(onReorderDragMove)
+        val latestIgnoreDownInRoot by rememberUpdatedState(ignoreDownInRoot)
         val view = LocalView.current
 
         this
@@ -75,6 +87,7 @@ fun Modifier.trackCardLongPressReorderGesture(
                                 onTap = latestOnTap,
                                 onStart = latestOnStart,
                                 onMove = latestOnMove,
+                                ignoreDownInRoot = latestIgnoreDownInRoot,
                             )
                         }
                     }
@@ -91,6 +104,7 @@ private suspend fun AwaitPointerEventScope.handleTrackCardLongPressGesture(
     onTap: () -> Unit,
     onStart: (positionInRoot: Offset, cardBoundsInRoot: Rect) -> Unit,
     onMove: (positionInRoot: Offset) -> Unit,
+    ignoreDownInRoot: (Offset) -> Boolean,
 ) {
     val down =
         awaitFirstDown(
@@ -98,6 +112,11 @@ private suspend fun AwaitPointerEventScope.handleTrackCardLongPressGesture(
             pass = PointerEventPass.Final,
         )
     if (down.isConsumed) {
+        return
+    }
+
+    val downInRoot = latestCoords?.localToRoot(down.position)
+    if (downInRoot != null && ignoreDownInRoot(downInRoot)) {
         return
     }
 

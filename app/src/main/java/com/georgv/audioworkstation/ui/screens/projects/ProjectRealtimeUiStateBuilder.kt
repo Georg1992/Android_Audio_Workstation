@@ -1,7 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.MasterPeakMeter
-import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
+import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
@@ -17,7 +17,7 @@ internal fun buildProjectRealtimeUiState(
     val extendForAllLoopedPlayback =
         shouldExtendVisibleTimelineForAllLoopedPlayback(
             playbackSessionActive = structural.playbackSessionActive,
-            sessionTrackIds = structural.sessionTrackIds,
+            selectedTrackIds = structural.selectedTrackIds,
             tracks = structural.tracks,
         )
     val extendForRecording = transportPhase == TransportPlaybackPhase.Recording
@@ -32,6 +32,7 @@ internal fun buildProjectRealtimeUiState(
             buildProjectTimelineProjection(
                 tracks = structural.tracks,
                 waveformStatesByTrackId = structural.waveformStatesByTrackId,
+                selectedTrackIds = structural.selectedTrackIds,
                 activeRecording = activeRecording,
                 playheadPositionMs = playheadMs,
                 extendVisibleTimelineForAllLoopedPlayback = extendForAllLoopedPlayback,
@@ -40,7 +41,7 @@ internal fun buildProjectRealtimeUiState(
         } else {
             null
         }
-    val visibleTimelineDurationMs =
+    val timelineVisibleDurationMs =
         recordingTimelineProjection?.visibleTimelineDurationMs
             ?: visibleTimelineDurationMs(
                 baseTimelineDurationMs = structural.timelineBaseDurationMs,
@@ -49,18 +50,14 @@ internal fun buildProjectRealtimeUiState(
                 extendForAllLoopedPlayback = extendForAllLoopedPlayback,
                 extendForRecording = extendForRecording,
             )
-    val displayPlayheadMs =
-        when {
-            transportPhase == TransportPlaybackPhase.Recording -> {
-                playheadMs.coerceAtLeast(0L)
-            }
-            extendForAllLoopedPlayback &&
-                transportPhase == TransportPlaybackPhase.Playing -> {
-                playheadMs.coerceIn(0L, TimelineMaxDurationMs)
-            }
-            else -> {
-                timelinePlayheadClampedPositionMs(playheadMs, visibleTimelineDurationMs)
-            }
+    val globalPlayheadPositionMs =
+        when (transportPhase) {
+            TransportPlaybackPhase.Recording -> playheadMs.coerceAtLeast(0L)
+            else ->
+                timelinePlayheadClampedPositionMs(
+                    playheadMs,
+                    timelineVisibleDurationMs.coerceAtLeast(TimelineMinimumBaseDurationMs),
+                )
         }
     val showSessionMasterPeak =
         transportPhase == TransportPlaybackPhase.Playing ||
@@ -71,9 +68,10 @@ internal fun buildProjectRealtimeUiState(
             isStopped = !showSessionMasterPeak,
         )
     return ProjectRealtimeUiState(
-        playheadPositionMs = displayPlayheadMs,
+        playheadPositionMs = playheadMs.coerceAtLeast(0L),
+        globalPlayheadPositionMs = globalPlayheadPositionMs,
         recordingInputLevel = recordingLevel.coerceIn(0f, 1f),
-        timelineVisibleDurationMs = visibleTimelineDurationMs,
+        timelineVisibleDurationMs = timelineVisibleDurationMs,
         recordingTimelineClipsByTrackId = recordingTimelineProjection?.clipsByLaneId,
         recordingTimelineLaneLayoutDurationMs = recordingTimelineProjection?.laneLayoutDurationMs,
         masterPeakDbText = masterMeter.peakDbText,

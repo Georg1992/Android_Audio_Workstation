@@ -60,90 +60,22 @@ class PlaybackSessionControllerTest {
     }
 
     @Test
-    fun `onSelectionChangedDuringPlayback maps selection to armed lanes without restarting playback`() =
+    fun `onSelectionChangedDuringPlayback is deprecated no-op while session active`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = PlaybackSessionTestAudio()
-            val sut = PlaybackSessionController(
-                scope = this,
-                audioController = audio,
-                dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                currentProjectId = { PROJECT_ID },
-                visibleTracks = { emptyList() },
-            )
+            val sut =
+                PlaybackSessionController(
+                    scope = this,
+                    audioController = audio,
+                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
+                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
+                    currentProjectId = { PROJECT_ID },
+                    visibleTracks = { emptyList() },
+                )
             armPlaybackMonitor(audio, sut)
-            assertEquals("a", sut.sessionLaneTrackIdsForTests()[0])
-
-            sut.onSelectionChangedDuringPlayback(emptySet(), emptyList())
+            sut.onSelectionChangedDuringPlayback(setOf("a", "b"), emptyList())
             advanceUntilIdle()
             assertEquals(1, audio.startPlaybackCalls)
-            val muted = audio.lastArmedLaneAudibility
-            requireNotNull(muted)
-            assertFalse(muted[0])
-
-            sut.onSelectionChangedDuringPlayback(setOf("a"), emptyList())
-            advanceUntilIdle()
-            val restored = audio.lastArmedLaneAudibility
-            requireNotNull(restored)
-            assertTrue(restored[0])
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `deselect while preparing mutes pending lane before Kotlin map update`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Preparing)),
-                )
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB = track("b", loop = false, wav = "b.wav")
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            runCurrent()
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            runCurrent()
-            assertEquals(listOf(1 to false), audio.playbackLaneAudibleCalls)
-            assertNull(sut.sessionLaneTrackIdsForTests()[1])
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `onSelectionChangedDuringPlayback begins hot join for newly selected track`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB = track("b", loop = false, wav = "b.wav")
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-            assertEquals(1, audio.beginHotJoinCalls)
             sut.cancelCompletionMonitorForTransportStop()
         }
 
@@ -429,77 +361,7 @@ class PlaybackSessionControllerTest {
         }
 
     @Test
-    fun `hot join monitor does not update lane map after session epoch advances`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Preparing, PlaybackLaneLifecycle.Active)),
-                )
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB = track("b", loop = false, wav = "b.wav")
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            runCurrent()
-            sut.advancePlaybackSessionEpochForTests()
-            advanceTimeBy(HOT_JOIN_POLL_MS)
-            advanceUntilIdle()
-
-            assertNull(sut.sessionLaneTrackIdsForTests()[1])
-            assertEquals(0, sut.hotJoinMonitorCountForTests())
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `native stop clears hot join state for loop session without restart`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
-                )
-            val visible = listOf(track("a", loop = true))
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { visible },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB = track("b", loop = false, wav = "b.wav")
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = true), trackB),
-            )
-            advanceUntilIdle()
-            assertEquals("b", sut.sessionLaneTrackIdsForTests()[1])
-
-            audio.finishPlaybackPulse()
-            advanceUntilIdle()
-
-            assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
-            assertTrue(sut.sessionLaneTrackIdsForTests().all { it == null })
-            assertEquals(1, audio.startPlaybackCalls)
-            assertEquals(0, sut.hotJoinMonitorCountForTests())
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `clearPlayingTransportState clears lane maps and hot join monitors`() =
+    fun `clearPlayingTransportState clears lane maps`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = PlaybackSessionTestAudio()
             val sut =
@@ -512,18 +374,11 @@ class PlaybackSessionControllerTest {
                     visibleTracks = { emptyList() },
                 )
             armPlaybackMonitor(audio, sut)
-            val trackB = track("b", loop = false, wav = "b.wav")
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
             sut.clearPlayingTransportState()
             advanceUntilIdle()
 
             assertTrue(sut.sessionLaneTrackIdsForTests().all { it == null })
             assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
-            assertEquals(0, sut.hotJoinMonitorCountForTests())
             assertFalse(sut.hasActivePlaybackSession())
         }
 
@@ -568,259 +423,6 @@ class PlaybackSessionControllerTest {
         }
 
     @Test
-    fun `sessionTrackIds excludes hot joined only track`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
-                )
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB = track("b", loop = false, wav = "b.wav")
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-
-            assertEquals(setOf("a"), sut.sessionTrackIds.value)
-            assertEquals("b", sut.sessionLaneTrackIdsForTests()[1])
-            assertEquals(setOf("a", "b"), sut.currentAudibleTrackIds(setOf("a", "b")))
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `hot join passes timeline clip metadata from track entity`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
-                ).apply {
-                    transportPositionMsValue = 12_000L
-                }
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB =
-                track("b", loop = false, wav = "b.wav").copy(
-                    timelineStartOffsetMs = 10_000L,
-                    duration = 5_000L,
-                )
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-
-            assertEquals(10_000L, audio.lastHotJoinClipStartMs)
-            assertEquals(5_000L, audio.lastHotJoinClipDurationMs)
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `hot join forwards loop metadata for loop track`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
-                ).apply {
-                    transportPositionMsValue = 35_000L
-                }
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB =
-                track("b", loop = true, wav = "b.wav").copy(
-                    timelineStartOffsetMs = 30_000L,
-                    duration = 20_000L,
-                    loopStartMs = 0L,
-                    loopEndMs = 5_000L,
-                )
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-
-            assertEquals(1, audio.beginHotJoinCalls)
-            assertEquals(30_000L, audio.lastHotJoinClipStartMs)
-            assertTrue(audio.lastHotJoinLoopEnabled)
-            assertEquals(0L, audio.lastHotJoinLoopSourceStartMs)
-            assertEquals(5_000L, audio.lastHotJoinLoopSourceEndMs)
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `hot join still starts for loop track before clip start`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
-                ).apply {
-                    transportPositionMsValue = 10_000L
-                }
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB =
-                track("b", loop = true, wav = "b.wav").copy(
-                    timelineStartOffsetMs = 30_000L,
-                    duration = 20_000L,
-                )
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-
-            assertEquals(1, audio.beginHotJoinCalls)
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `hot join starts before clip start for silent pre clip region`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio =
-                PlaybackSessionTestAudio(
-                    hotJoinLifecycleByLane =
-                        mapOf(1 to listOf(PlaybackLaneLifecycle.Active)),
-                ).apply {
-                    transportPositionMsValue = 3_000L
-                }
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB =
-                track("b", loop = false, wav = "b.wav").copy(
-                    timelineStartOffsetMs = 10_000L,
-                    duration = 5_000L,
-                )
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-
-            assertEquals(1, audio.beginHotJoinCalls)
-            assertEquals(10_000L, audio.lastHotJoinClipStartMs)
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `hot join not started when transport is past clip end`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio().apply { transportPositionMsValue = 20_000L }
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            val trackB =
-                track("b", loop = false, wav = "b.wav").copy(
-                    timelineStartOffsetMs = 10_000L,
-                    duration = 5_000L,
-                )
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), trackB),
-            )
-            advanceUntilIdle()
-
-            assertEquals(0, audio.beginHotJoinCalls)
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `wouldLeaveNoSessionLaneSelected blocks last session lane deselect`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            sut.markPlayingAndStartCompletionMonitor(listOf("a"))
-            advanceUntilIdle()
-
-            assertTrue(sut.wouldLeaveNoSessionLaneSelected(setOf("a"), "a"))
-            assertTrue(sut.wouldLeaveNoSessionLaneSelected(setOf("a", "b"), "a"))
-            assertFalse(sut.wouldLeaveNoSessionLaneSelected(setOf("a", "b"), "b"))
-
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `deselected loaded lane remains in sessionLaneTrackIds`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            sut.onSelectionChangedDuringPlayback(emptySet(), emptyList())
-            advanceUntilIdle()
-
-            assertEquals("a", sut.sessionLaneTrackIdsForTests()[0])
-            assertEquals(emptySet<String>(), sut.currentAudibleTrackIds(emptySet()))
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
     fun `teardown clears sessionTrackIds and sessionLaneTrackIds`() =
         runTest(mainDispatcherRule.dispatcher) {
             val audio = PlaybackSessionTestAudio()
@@ -845,7 +447,6 @@ class PlaybackSessionControllerTest {
 
     private companion object {
         const val PROJECT_ID = "playback-session-project"
-        private const val HOT_JOIN_POLL_MS = 5L
     }
 }
 

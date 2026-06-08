@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -34,6 +35,8 @@ fun TrackOverflowMenuBody(
     onDelete: () -> Unit,
     onCancelImport: () -> Unit,
     onRename: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    editEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val itemShape = RoundedCornerShape(Dimens.MediumRadius)
@@ -69,6 +72,21 @@ fun TrackOverflowMenuBody(
             )
         }
 
+        if (editEnabled && onEdit != null) {
+            TrackMenuRow(
+                text = stringResource(R.string.action_edit),
+                shape = itemShape,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCut,
+                        contentDescription = null,
+                        tint = AppColors.Line,
+                    )
+                },
+                onClick = onEdit,
+            )
+        }
+
         TrackMenuRow(
             text = stringResource(R.string.action_rename),
             shape = itemShape,
@@ -90,6 +108,8 @@ fun TrackOverflowMenu(
     onDelete: () -> Unit,
     onCancelImport: () -> Unit,
     onRename: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    editEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val menuShape = RoundedCornerShape(Dimens.TileRadius)
@@ -98,6 +118,8 @@ fun TrackOverflowMenu(
         onDelete = onDelete,
         onCancelImport = onCancelImport,
         onRename = onRename,
+        onEdit = onEdit,
+        editEnabled = editEnabled,
         modifier =
             modifier
                 .wrapContentWidth()

@@ -180,5 +180,34 @@ TEST_F(AudioEngineTransportRecordingTest, RecordingOnlyAdvancesTransportWithCapt
     EXPECT_GE(afterCapture, startFrame);
 }
 
+TEST_F(AudioEngineTransportRecordingTest,
+       PlayAndRecordFirstSampleTransportMatchesTransportAtCapture) {
+    ASSERT_TRUE(engine.setPlaybackSource(wavPath, 1.0f, 0L));
+
+    std::vector<float> buffer(4'800 * 2, 0.0f);
+    engine.render(buffer.data(), 4'800, 2, 48'000);
+    const int64_t transportBeforeRecord = engine.transportFrame();
+    ASSERT_GT(transportBeforeRecord, 0);
+
+    if (!engine.startRecording(1, recordPath, 0L)) {
+        engine.stopPlayback();
+        GTEST_SKIP() << "No input audio device available for first-sample transport test.";
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    engine.stopRecording();
+
+    const int64_t firstSampleFrame = engine.recordingFirstSampleTransportFrame();
+    if (firstSampleFrame < 0) {
+        GTEST_SKIP() << "No input samples captured during play+record test.";
+    }
+    EXPECT_GE(firstSampleFrame, transportBeforeRecord);
+    EXPECT_EQ(firstSampleFrame, engine.recordingFirstSampleTransportFrame());
+    EXPECT_EQ((firstSampleFrame * 1000LL) / 48'000LL,
+              engine.recordingFirstSampleTransportPositionMs());
+
+    engine.stopPlayback();
+}
+
 } // namespace
 } // namespace dawengine

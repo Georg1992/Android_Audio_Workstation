@@ -10,6 +10,9 @@ import javax.inject.Singleton
 @Singleton
 class NativeEngine @Inject constructor() {
 
+    @Volatile
+    private var offlineMixdownProgressCallback: ((Float) -> Unit)? = null
+
     fun startRecording(request: RecordingRequest): Boolean =
         nativeStartRecording(
             sampleRate = request.sampleRate,
@@ -20,6 +23,9 @@ class NativeEngine @Inject constructor() {
         )
 
     fun stopRecording(): Boolean = nativeStopRecording()
+
+    fun recordingFirstSampleTransportPositionMs(): Long =
+        nativeGetRecordingFirstSampleTransportPositionMs()
 
     fun recordingInputLevel(): Float = nativeGetRecordingInputLevel().coerceIn(0f, 1f)
 
@@ -100,6 +106,43 @@ class NativeEngine @Inject constructor() {
 
     fun stopPlayback(): Boolean = nativeStopPlayback()
 
+    fun renderOfflineMixdown(
+        spec: MultiPlaybackSpec,
+        outputPath: String,
+        onProgress: (Float) -> Unit,
+    ): NativeMixdownStatus {
+        offlineMixdownProgressCallback = onProgress
+        return try {
+            val statusCode =
+                nativeRenderOfflineMixdown(
+                    sampleRate = spec.sampleRate,
+                    wavPaths = spec.lanes.map { it.wavFilePath }.toTypedArray(),
+                    gains = spec.lanes.map { it.gain }.toFloatArray(),
+                    startPositionMs = spec.startPositionMs,
+                    sessionTimelineEndMs = spec.sessionTimelineEndMs,
+                    laneClipStartMs = spec.lanes.map { it.timelineClipStartMs }.toLongArray(),
+                    laneClipDurationMs = spec.lanes.map { it.timelineClipDurationMs }.toLongArray(),
+                    laneLoopEnabled = spec.lanes.map { it.loopEnabled }.toBooleanArray(),
+                    laneLoopSourceStartMs = spec.lanes.map { it.loopSourceStartMs }.toLongArray(),
+                    laneLoopSourceEndMs = spec.lanes.map { it.loopSourceEndMs }.toLongArray(),
+                    lanePan = spec.lanes.map { it.pan }.toFloatArray(),
+                    outputPath = outputPath,
+                )
+            NativeMixdownStatus.fromCode(statusCode)
+        } finally {
+            offlineMixdownProgressCallback = null
+        }
+    }
+
+    fun cancelOfflineMixdown() {
+        nativeCancelOfflineMixdown()
+    }
+
+    /** Called from native mixdown progress on the audio IO thread. */
+    fun dispatchOfflineMixdownProgress(progress: Float) {
+        offlineMixdownProgressCallback?.invoke(progress.coerceIn(0f, 1f))
+    }
+
     /**
      * Tears down the streaming engine: joins the I/O thread, closes the WAV
      * source and the persistent Oboe output stream. Called when the project
@@ -119,6 +162,8 @@ class NativeEngine @Inject constructor() {
     ): Boolean
 
     private external fun nativeStopRecording(): Boolean
+
+    private external fun nativeGetRecordingFirstSampleTransportPositionMs(): Long
 
     private external fun nativeGetRecordingInputLevel(): Float
 
@@ -170,6 +215,23 @@ class NativeEngine @Inject constructor() {
     private external fun nativeGetTransportPositionMs(): Long
 
     private external fun nativeStopPlayback(): Boolean
+
+    private external fun nativeRenderOfflineMixdown(
+        sampleRate: Int,
+        wavPaths: Array<String>,
+        gains: FloatArray,
+        startPositionMs: Long,
+        sessionTimelineEndMs: Long,
+        laneClipStartMs: LongArray,
+        laneClipDurationMs: LongArray,
+        laneLoopEnabled: BooleanArray,
+        laneLoopSourceStartMs: LongArray,
+        laneLoopSourceEndMs: LongArray,
+        lanePan: FloatArray,
+        outputPath: String,
+    ): Int
+
+    private external fun nativeCancelOfflineMixdown()
 
     private external fun nativeReleaseEngine()
 

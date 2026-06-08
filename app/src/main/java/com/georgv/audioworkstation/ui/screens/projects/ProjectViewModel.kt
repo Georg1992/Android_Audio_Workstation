@@ -5,8 +5,11 @@ import com.georgv.audioworkstation.core.util.logWarning
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.track.activeMixScopeTrackIds
 import com.georgv.audioworkstation.core.track.clampLoopRegionMs
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.core.track.reconcileInScopeLoopRegions
+import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
 import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
@@ -116,8 +119,12 @@ data class ProjectUiState(
 
 /** High-frequency transport/meter fields — kept out of [structuralUiState] to limit recomposition. */
 data class ProjectRealtimeUiState(
+    /** Raw engine/global transport position (ms). */
     val playheadPositionMs: Long = 0L,
+    /** Global scrubber position on the project base timeline (clamped to [timelineVisibleDurationMs]). */
+    val globalPlayheadPositionMs: Long = 0L,
     val recordingInputLevel: Float = 0f,
+    /** Project base timeline span; extends past base while recording or during loop playback. */
     val timelineVisibleDurationMs: Long = TimelineMinimumBaseDurationMs,
     val recordingTimelineClipsByTrackId: Map<String, TimelineClip>? = null,
     val recordingTimelineLaneLayoutDurationMs: Long? = null,
@@ -275,8 +282,27 @@ class ProjectViewModel @Inject constructor(
         playbackSession = playbackSession,
         recordingSession = recordingSession,
         dispatchers = dispatchers,
-        finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId -> finalizeRecordingTrack(trackId) },
+        finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, firstSampleTransportPositionMs ->
+            finalizeRecordingTrack(trackId, firstSampleTransportPositionMs)
+        },
     )
+
+    private val scopePlaybackCoordinator =
+        ScopePlaybackCoordinator(
+            audioController = audioController,
+            dispatchers = dispatchers,
+            playheadPositionMs = playheadPositionMs,
+            playheadTransport = playheadTransport,
+            playbackSession = playbackSession,
+            transportController = transportController,
+            recordingSession = recordingSession,
+            playAndRecordTransport = playAndRecordTransport,
+            projectId = { projectId.value },
+            visibleTracks = { currentVisibleTracks() },
+            loadCurrentProject = { pid -> loadCurrentProject(pid) },
+            timelineVisibleDurationMs = { realtimeUiState.value.timelineVisibleDurationMs },
+            timelineBaseDurationMs = { structuralUiState.value.timelineBaseDurationMs },
+        )
 
     private val playheadSeek =
         ProjectPlayheadSeekCoordinator(
@@ -286,12 +312,9 @@ class ProjectViewModel @Inject constructor(
             playbackSession = playbackSession,
             transportController = transportController,
             recordingSession = recordingSession,
+            scopePlaybackCoordinator = scopePlaybackCoordinator,
             projectId = { projectId.value },
             selectedTrackIds = { selectedTrackIds.value },
-            loadCurrentProject = { pid -> loadCurrentProject(pid) },
-            selectedPlayableTracks = { selectedPlayableTracks() },
-            timelineVisibleDurationMs = { realtimeUiState.value.timelineVisibleDurationMs },
-            timelineBaseDurationMs = { structuralUiState.value.timelineBaseDurationMs },
         )
 
     private val transportCommands =
@@ -568,13 +591,8 @@ class ProjectViewModel @Inject constructor(
             optimisticTrackPans.value,
         )
 
-    private fun selectedPlayableTracks(): List<TrackEntity> {
-        val selected = selectedTrackIds.value
-        if (selected.isEmpty()) return emptyList()
-        return currentVisibleTracks()
-            .filter { it.id in selected }
-            .filter { it.hasPersistedPlayableAudio() }
-    }
+    private fun selectedPlayableTracks(): List<TrackEntity> =
+        activeMixScopePlayableTracks(currentVisibleTracks(), selectedTrackIds.value)
 
     /**
      * Wires repository/audio observation to [projectId] for this screen instance.
@@ -729,7 +747,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun renameProject(newName: String) {
-        val currentProject = uiState.value.project ?: return
+        val pid = projectId.value ?: return
         val normalizedName = when (val validation = validateName(newName)) {
             is NameValidationResult.Invalid -> {
                 emitMessage(validation.error.toProjectNameUiMessage())
@@ -737,12 +755,14 @@ class ProjectViewModel @Inject constructor(
             }
             is NameValidationResult.Valid -> validation.normalized
         }
-        if (normalizedName == (currentProject.name ?: "").trim()) return
-
-        val updatedProject = currentProject.copy(name = normalizedName)
         viewModelScope.launch {
             dbActions.run(R.string.error_rename_project_failed) {
-                repo.upsertProject(updatedProject)
+                val base =
+                    uiState.value.project?.takeIf { it.id == pid }
+                        ?: repo.observeProject(pid).first()
+                        ?: ProjectEntity(id = pid)
+                if (normalizedName == (base.name ?: "").trim()) return@run
+                repo.upsertProject(base.copy(name = normalizedName))
             }
         }
     }
@@ -992,16 +1012,43 @@ class ProjectViewModel @Inject constructor(
         if (track.importStatus != TrackImportStatus.READY) {
             return
         }
-        val cur = selectedTrackIds.value
-        if (playbackSession.wouldLeaveNoSessionLaneSelected(cur, trackId)) {
+        if (
+            recordingSession.hasActiveRecordingTake() &&
+            trackId == recordingSession.recordingTrackId.value
+        ) {
             return
         }
+        val cur = selectedTrackIds.value
         val next = if (cur.contains(trackId)) cur - trackId else cur + trackId
         selectedTrackIds.value = next
-        playbackSession.onSelectionChangedDuringPlayback(
-            selectedTrackIds = next,
-            playableTracks = currentVisibleTracks().filter { it.wavFilePath.isNotBlank() },
-        )
+        persistReconciledLoopRegionsForScope(next)
+        if (playbackSession.hasActivePlaybackSession()) {
+            viewModelScope.launch {
+                scopePlaybackCoordinator.onSelectionChangedDuringTransport(next)
+            }
+        }
+    }
+
+    private fun persistReconciledLoopRegionsForScope(selectedTrackIds: Set<String>) {
+        val scopeTrackIds =
+            activeMixScopeTrackIds(
+                selectedTrackIds = selectedTrackIds,
+                activeRecordingTrackId = recordingSession.recordingTrackId.value,
+            )
+        val reconciled = reconcileInScopeLoopRegions(currentVisibleTracks(), scopeTrackIds)
+        val updates =
+            reconciled.filter { updated ->
+                val current = currentVisibleTracks().find { it.id == updated.id } ?: return@filter false
+                updated.isLoop != current.isLoop ||
+                    updated.loopStartMs != current.loopStartMs ||
+                    updated.loopEndMs != current.loopEndMs
+            }
+        if (updates.isEmpty()) return
+        viewModelScope.launch {
+            dbActions.run(R.string.error_loop_update_failed) {
+                repo.updateTracks(updates)
+            }
+        }
     }
 
     fun importAudio(projectId: String, source: AudioImportSource, suggestedName: String?) {
@@ -1092,7 +1139,7 @@ class ProjectViewModel @Inject constructor(
         engineSessionAcquired = true
     }
 
-    private fun finalizeRecordingTrack(trackId: String) {
+    private fun finalizeRecordingTrack(trackId: String, firstSampleTransportPositionMs: Long) {
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
 
         viewModelScope.launch {
@@ -1104,6 +1151,7 @@ class ProjectViewModel @Inject constructor(
                             recordingCoordinator.finalizeTrackAfterStop(
                                 currentTrack = currentTrack,
                                 punchContext = punchContext,
+                                firstSampleTransportPositionMs = firstSampleTransportPositionMs,
                             )
                         }
                     repo.upsertTrack(finalizedTrack)

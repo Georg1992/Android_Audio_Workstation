@@ -120,8 +120,14 @@ private class FakeCreateProjectDao(
 ) : ProjectDao {
     private val projectsFlow = MutableStateFlow(projects.sortedByDescending { it.createdAt })
 
-    override suspend fun upsertProject(project: ProjectEntity) {
-        if (failUpsertProject) error("upsertProject failed")
+    override suspend fun insertProject(project: ProjectEntity) {
+        if (failUpsertProject) error("insertProject failed")
+        projectsFlow.value = (projectsFlow.value.filterNot { it.id == project.id } + project)
+            .sortedByDescending { it.createdAt }
+    }
+
+    override suspend fun updateProject(project: ProjectEntity) {
+        if (failUpsertProject) error("updateProject failed")
         projectsFlow.value = (projectsFlow.value.filterNot { it.id == project.id } + project)
             .sortedByDescending { it.createdAt }
     }

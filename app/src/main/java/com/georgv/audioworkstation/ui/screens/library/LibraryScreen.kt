@@ -14,10 +14,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -34,6 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -43,14 +46,16 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.ScreenState
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
-import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
 import com.georgv.audioworkstation.ui.components.warmLoadingBoxAsset
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
+import kotlin.math.roundToInt
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +75,7 @@ fun LibraryScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var pendingDeleteProject by remember { mutableStateOf<ProjectEntity?>(null) }
+    var pendingDeleteProject by remember { mutableStateOf<LibraryProjectItem?>(null) }
 
     LaunchedEffect(vm) {
         vm.userMessages.collect { message ->
@@ -93,6 +98,7 @@ fun LibraryScreen(
 
             LibraryProjectContent(
                 state = state,
+                onProjectCardBodyClick = vm::onProjectCardBodyClick,
                 onOpenProject = { projectId ->
                     scope.launch {
                         vm.warmUpProject(projectId)
@@ -107,7 +113,8 @@ fun LibraryScreen(
             )
         }
 
-        pendingDeleteProject?.let { project ->
+        pendingDeleteProject?.let { item ->
+            val project = item.project
             AlertDialog(
                 onDismissRequest = { pendingDeleteProject = null },
                 containerColor = AppColors.Bg,
@@ -161,8 +168,9 @@ fun LibraryScreen(
 @Composable
 private fun LibraryProjectContent(
     state: ScreenState<LibraryContent>,
+    onProjectCardBodyClick: (LibraryProjectItem) -> Unit,
     onOpenProject: (String) -> Unit,
-    onDeleteClick: (ProjectEntity) -> Unit,
+    onDeleteClick: (LibraryProjectItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(state.availability, state.content.projects.size) {
@@ -210,12 +218,12 @@ private fun LibraryProjectContent(
                     .padding(Dimens.ScreenContentPadding),
                 verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
             ) {
-                itemsIndexed(projects, key = { _, project -> project.id }) { _, project ->
+                itemsIndexed(projects, key = { _, item -> item.project.id }) { _, item ->
                     LibraryProjectRow(
-                        projectName = project.name?.takeIf { it.isNotBlank() }
-                            ?: stringResource(R.string.library_untitled_project),
-                        onClick = { onOpenProject(project.id) },
-                        onDeleteClick = { onDeleteClick(project) },
+                        item = item,
+                        onBodyClick = { onProjectCardBodyClick(item) },
+                        onOpenProjectClick = { onOpenProject(item.project.id) },
+                        onDeleteClick = { onDeleteClick(item) },
                     )
                 }
             }
@@ -226,14 +234,28 @@ private fun LibraryProjectContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LibraryProjectRow(
-    projectName: String,
-    onClick: () -> Unit,
+    item: LibraryProjectItem,
+    onBodyClick: () -> Unit,
+    onOpenProjectClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
+    val projectName =
+        item.project.name?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.library_untitled_project)
+    val mixdown = item.mixdown
+    val mixFileExists = mixdown.mixdownWavPath?.let { File(it).isFile } == true
+    val previewEnabled = mixdown.hasMixPreview && mixFileExists && !mixdown.isMixing
+    val subtitleResId =
+        libraryCardSubtitleResId(
+            mixdown = mixdown,
+            isCurrentlyPlaying = item.isPreviewPlaying,
+            mixFileExists = mixFileExists,
+        )
     val shape = RoundedCornerShape(Dimens.TileRadius)
 
     Surface(
-        onClick = onClick,
+        onClick = onBodyClick,
+        enabled = !mixdown.isMixing,
         shape = shape,
         color = AppColors.SurfacePanel,
         shadowElevation = Dimens.Stroke,
@@ -244,26 +266,65 @@ private fun LibraryProjectRow(
                 .fillMaxWidth()
                 .border(Dimens.Stroke, AppColors.Line, shape)
                 .padding(Dimens.TileInnerPadding),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
                 Text(
                     text = projectName,
                     style = AppText.TileTitle,
                     color = AppColors.Line
                 )
                 Text(
-                    text = stringResource(R.string.library_open_project_hint),
+                    text =
+                        if (mixdown.isMixing) {
+                            stringResource(
+                                R.string.library_mixing_progress_percent,
+                                (mixdown.progress * 100f).roundToInt(),
+                            )
+                        } else {
+                            stringResource(subtitleResId)
+                        },
                     style = AppText.TileSubtitle,
-                    color = AppColors.iconMuted
+                    color =
+                        if (previewEnabled || mixdown.isMixing) {
+                            AppColors.iconMuted
+                        } else {
+                            AppColors.iconMuted.copy(alpha = AppOpacity.disabled)
+                        },
+                    modifier = Modifier.alpha(if (previewEnabled || mixdown.isMixing) 1f else AppOpacity.disabled),
                 )
+                if (mixdown.isMixing) {
+                    LinearProgressIndicator(
+                        progress = { mixdown.progress.coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.Gap / 2),
+                        color = AppColors.Line,
+                        trackColor = AppColors.iconMuted.copy(alpha = 0.24f),
+                    )
+                }
             }
-            IconButton(onClick = onDeleteClick) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.action_delete),
-                    tint = AppColors.Red
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onOpenProjectClick) {
+                    Icon(
+                        imageVector = Icons.Filled.FolderOpen,
+                        contentDescription = stringResource(R.string.cd_open_project),
+                        tint = AppColors.Line,
+                    )
+                }
+                IconButton(onClick = onDeleteClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.action_delete),
+                        tint = AppColors.Red
+                    )
+                }
             }
         }
     }

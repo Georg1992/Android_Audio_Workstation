@@ -23,7 +23,7 @@ class ProjectTransportController(
     private val playbackSession: PlaybackSessionController,
     private val recordingSession: RecordingSessionController,
     private val dispatchers: AppDispatchers,
-    private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String) -> Unit,
+    private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String, Long) -> Unit,
 ) {
 
     /** Full user / lifecycle transport stop — same sequencing as legacy [ProjectViewModel.performTransportStopSequence]. */
@@ -41,8 +41,19 @@ class ProjectTransportController(
                     false
                 }
             }
+        val firstSampleTransportPositionMs =
+            if (activeRecordingTrackId != null && recordingStopped) {
+                withAudioIo(dispatchers, "AudioController.recordingFirstSampleTransportPositionMs") {
+                    audioController.recordingFirstSampleTransportPositionMs()
+                }
+            } else {
+                AudioController.RecordingFirstSampleTransportUnset
+            }
         if (activeRecordingTrackId != null && recordingStopped) {
-            finalizeRecordingTrackAfterSuccessfulEngineStop(activeRecordingTrackId)
+            finalizeRecordingTrackAfterSuccessfulEngineStop(
+                activeRecordingTrackId,
+                firstSampleTransportPositionMs,
+            )
         }
 
         playbackSession.stopEngineIfMarkedPlaying()

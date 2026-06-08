@@ -16,8 +16,21 @@ fun trackLocalPlayheadVisibleInClip(
     clipDurationMs: Long,
     loopEnabled: Boolean = false,
     limitToClipTimelineWindow: Boolean = false,
+    loopPlaybackActive: Boolean = false,
+    loopStartMs: Long = 0L,
+    loopEndMs: Long = 0L,
 ): Boolean {
     if (clipDurationMs <= 0L) return false
+    if (loopEnabled && loopPlaybackActive) {
+        val local =
+            loopPlaybackClipLocalSourceMs(
+                loopPlaybackPositionMs = globalPlayheadMs,
+                clipDurationMs = clipDurationMs,
+                loopStartMs = loopStartMs,
+                loopEndMs = loopEndMs,
+            )
+        return local in loopStartMs..clipDurationMs.coerceAtLeast(0L)
+    }
     val local = trackLocalTimelineMs(globalPlayheadMs, timelineStartOffsetMs)
     if (local < 0L) return false
     if (loopEnabled) return true
@@ -35,6 +48,7 @@ fun trackSourcePlayheadMsForClipTimelineWindow(
     loopEnabled: Boolean,
     loopStartMs: Long,
     loopEndMs: Long,
+    loopPlaybackActive: Boolean = false,
 ): Long? {
     if (
         !trackLocalPlayheadVisibleInClip(
@@ -43,6 +57,9 @@ fun trackSourcePlayheadMsForClipTimelineWindow(
             clipDurationMs = sourceDurationMs,
             loopEnabled = loopEnabled,
             limitToClipTimelineWindow = !loopEnabled,
+            loopPlaybackActive = loopPlaybackActive,
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
         )
     ) {
         return null
@@ -54,12 +71,13 @@ fun trackSourcePlayheadMsForClipTimelineWindow(
         loopEnabled = loopEnabled,
         loopStartMs = loopStartMs,
         loopEndMs = loopEndMs,
+        loopPlaybackActive = loopPlaybackActive,
     )
 }
 
 /**
- * Source-local playhead for waveform display and loop wrap semantics.
- * Non-loop: track-local timeline ms. Loop: wraps inside [loopStartMs, loopEndMs).
+ * Source-local playhead for waveform display.
+ * Non-loop: timeline-local ms clamped to clip. Loop playback: loop-projected source ms.
  */
 fun trackSourcePlayheadMs(
     globalPlayheadMs: Long,
@@ -68,10 +86,38 @@ fun trackSourcePlayheadMs(
     loopEnabled: Boolean,
     loopStartMs: Long,
     loopEndMs: Long,
+    loopPlaybackActive: Boolean = false,
 ): Long {
+    if (!loopEnabled) {
+        return clipLocalPlayheadMs(
+            globalPlayheadMs = globalPlayheadMs,
+            clipStartOffsetMs = timelineStartOffsetMs,
+            clipDurationMs = sourceDurationMs,
+        )
+    }
+    if (loopPlaybackActive) {
+        return loopPlaybackClipLocalSourceMs(
+            loopPlaybackPositionMs = globalPlayheadMs,
+            clipDurationMs = sourceDurationMs,
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
+        )
+    }
     val local = trackLocalTimelineMs(globalPlayheadMs, timelineStartOffsetMs)
-    if (!loopEnabled) return local.coerceIn(0L, sourceDurationMs.coerceAtLeast(0L))
-    if (local < 0L) return loopStartMs.coerceAtLeast(0L)
-    val loopLength = (loopEndMs - loopStartMs).coerceAtLeast(1L)
-    return loopStartMs + (local % loopLength)
+    if (local < 0L) {
+        return coerceValidLoopIdleSourcePlayheadMs(
+            sourceMs = loopStartMs,
+            loopStartMs = loopStartMs,
+            loopEndMs = loopEndMs,
+            sourceDurationMs = sourceDurationMs,
+        )
+    }
+    val loopLength = trackLoopLengthMs(loopStartMs, loopEndMs)
+    val wrapped = loopStartMs + (local % loopLength)
+    return coerceValidLoopIdleSourcePlayheadMs(
+        sourceMs = wrapped,
+        loopStartMs = loopStartMs,
+        loopEndMs = loopEndMs,
+        sourceDurationMs = sourceDurationMs,
+    )
 }

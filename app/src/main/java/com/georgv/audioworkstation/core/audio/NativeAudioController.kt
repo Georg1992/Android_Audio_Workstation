@@ -1,7 +1,10 @@
 package com.georgv.audioworkstation.core.audio
 
+import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.checkNotMainThreadForNativeLifecycle
+import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.engine.NativeEngine
+import com.georgv.audioworkstation.engine.NativeMixdownStatus
 import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +27,8 @@ import javax.inject.Singleton
 @Singleton
 class NativeAudioController @Inject constructor(
     private val nativeEngine: NativeEngine,
-    private val audioFilePathProvider: AudioFilePathProvider
+    private val audioFilePathProvider: AudioFilePathProvider,
+    private val dispatchers: AppDispatchers,
 ) : AudioController {
 
     private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -49,6 +53,11 @@ class NativeAudioController @Inject constructor(
     override fun transportPositionMs(): Long {
         checkNotMainThreadForNativeLifecycle("transportPositionMs")
         return nativeEngine.transportPositionMs()
+    }
+
+    override fun recordingFirstSampleTransportPositionMs(): Long {
+        checkNotMainThreadForNativeLifecycle("recordingFirstSampleTransportPositionMs")
+        return nativeEngine.recordingFirstSampleTransportPositionMs()
     }
 
     override fun isPlaybackEngineRunning(): Boolean {
@@ -159,6 +168,24 @@ class NativeAudioController @Inject constructor(
         _playbackState.value = false
         _recordingInputLevel.value = 0f
         nativeEngine.releaseEngine()
+    }
+
+    override suspend fun renderOfflineMixdown(
+        spec: MultiPlaybackSpec,
+        outputPath: String,
+        onProgress: (Float) -> Unit,
+    ): MixdownResult =
+        withAudioIo(dispatchers, "renderOfflineMixdown") {
+            checkNotMainThreadForNativeLifecycle("renderOfflineMixdown")
+            when (nativeEngine.renderOfflineMixdown(spec, outputPath, onProgress)) {
+                NativeMixdownStatus.Success -> MixdownResult.Success(outputPath)
+                NativeMixdownStatus.Cancelled -> MixdownResult.Cancelled
+                NativeMixdownStatus.Failed -> MixdownResult.Failed
+            }
+        }
+
+    override fun cancelOfflineMixdown() {
+        nativeEngine.cancelOfflineMixdown()
     }
 
     private companion object {

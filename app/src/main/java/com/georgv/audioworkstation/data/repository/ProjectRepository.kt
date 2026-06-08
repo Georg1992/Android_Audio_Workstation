@@ -49,7 +49,11 @@ class ProjectRepository @Inject constructor(
 
     suspend fun upsertProject(project: ProjectEntity) {
         diagnostics.dbWriteWhenActive("upsertProject", project.id) {
-            dao.upsertProject(project)
+            if (dao.projectExists(project.id)) {
+                dao.updateProject(project)
+            } else {
+                dao.insertProject(project)
+            }
         }
     }
 
@@ -84,7 +88,7 @@ class ProjectRepository @Inject constructor(
             diagnostics.logQuickRecordStepStart("quick project creation", projectId)
             if (!dao.projectExists(projectId)) {
                 diagnostics.dbWriteWhenActive("ensureProject", projectId) {
-                    dao.upsertProject(ProjectEntity(id = projectId, name = defaultName))
+                    dao.insertProject(ProjectEntity(id = projectId, name = defaultName))
                 }
             }
             val project =

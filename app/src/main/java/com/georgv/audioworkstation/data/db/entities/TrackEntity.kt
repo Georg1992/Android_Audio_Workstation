@@ -44,6 +44,10 @@ data class TrackEntity(
     val position: Int = 0,
     /** Timeline position where this clip begins on the project base ruler (ms). */
     val timelineStartOffsetMs: Long = 0L,
+    /** Non-destructive trim start within the source WAV (ms from file start). */
+    val trimStartMs: Long = 0L,
+    /** Non-destructive trim end within the source WAV; null = full [duration]. */
+    val trimEndMs: Long? = null,
 
     // Collaboration plumbing — see [ProjectEntity] for the same set of fields.
     // Tracks additionally carry [contentHash] because audio payload is the

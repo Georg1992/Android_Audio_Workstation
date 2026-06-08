@@ -1,6 +1,9 @@
+@file:Suppress("TooManyFunctions")
+
 package com.georgv.audioworkstation.ui.components
 
 import com.georgv.audioworkstation.core.track.pointerXToSourceMs
+import com.georgv.audioworkstation.core.track.loopPlaybackSourceMsToXInClip
 import kotlin.math.min
 
 /**
@@ -12,6 +15,8 @@ import kotlin.math.min
 enum class TimelineLaneScaleMode {
     Timeline,
     SourceFitWhileEditing,
+    /** Loop region fills the waveform container during loop playback. */
+    LoopPlayback,
 }
 
 data class TimelineLaneScale(
@@ -20,6 +25,10 @@ data class TimelineLaneScale(
     val laneLayoutDurationMs: Long,
     val clipStartOffsetMs: Long,
     val clipDurationMs: Long,
+    /** Source loop region start when [mode] is [TimelineLaneScaleMode.LoopPlayback]. */
+    val loopRegionStartMs: Long = 0L,
+    /** Source loop region end when [mode] is [TimelineLaneScaleMode.LoopPlayback]. */
+    val loopRegionEndMs: Long = 0L,
 )
 
 fun timelineLaneUsesSourceFit(
@@ -47,6 +56,25 @@ fun timelineLaneScaleForLoopEdit(
     )
 }
 
+/** Loop playback: map [loopStartMs, loopEndMs] to the full waveform container width. */
+fun timelineLaneScaleForLoopPlayback(
+    laneLayoutDurationMs: Long,
+    clip: TimelineClip,
+    loopStartMs: Long,
+    loopEndMs: Long,
+): TimelineLaneScale {
+    val loopLength = (loopEndMs - loopStartMs).coerceAtLeast(1L)
+    return TimelineLaneScale(
+        mode = TimelineLaneScaleMode.LoopPlayback,
+        sourceDurationMs = loopLength,
+        laneLayoutDurationMs = laneLayoutDurationMs.coerceAtLeast(1L),
+        clipStartOffsetMs = clip.startOffsetMs.coerceAtLeast(0L),
+        clipDurationMs = clip.durationMs.coerceAtLeast(1L),
+        loopRegionStartMs = loopStartMs.coerceAtLeast(0L),
+        loopRegionEndMs = loopEndMs.coerceAtLeast(loopStartMs + 1L),
+    )
+}
+
 /** Clip box start as a fraction of the lane waveform area width. */
 fun TimelineLaneScale.clipStartFractionOnWaveformArea(): Float =
     when (mode) {
@@ -54,7 +82,9 @@ fun TimelineLaneScale.clipStartFractionOnWaveformArea(): Float =
             (clipStartOffsetMs.toDouble() / laneLayoutDurationMs.toDouble())
                 .toFloat()
                 .coerceIn(0f, 1f)
-        TimelineLaneScaleMode.SourceFitWhileEditing -> 0f
+        TimelineLaneScaleMode.SourceFitWhileEditing,
+        TimelineLaneScaleMode.LoopPlayback,
+        -> 0f
     }
 
 /** Clip box width as a fraction of the lane waveform area width. */
@@ -68,7 +98,9 @@ fun TimelineLaneScale.clipWidthFractionOnWaveformArea(): Float =
                 .toFloat()
                 .coerceIn(0f, 1f)
         }
-        TimelineLaneScaleMode.SourceFitWhileEditing -> 1f
+        TimelineLaneScaleMode.SourceFitWhileEditing,
+        TimelineLaneScaleMode.LoopPlayback,
+        -> 1f
     }
 
 /** Source-local ms → x inside the clip box (clip width always spans 0..[sourceDurationMs]). */
@@ -104,12 +136,25 @@ fun sourceMsToPointerAreaX(
 ): Float {
     val clipStartPx = laneScale.waveformClipStartPx(waveformAreaWidthPx)
     val clipWidthPx = laneScale.waveformClipWidthPx(waveformAreaWidthPx)
-    return clipStartPx +
-        sourceMsToXInLaneClip(
-            sourceMs = sourceMs,
-            clipWidthPx = clipWidthPx,
-            sourceDurationMs = laneScale.sourceDurationMs,
-        )
+    return when (laneScale.mode) {
+        TimelineLaneScaleMode.LoopPlayback ->
+            clipStartPx +
+                com.georgv.audioworkstation.core.track.loopPlaybackSourceMsToXInClip(
+                    sourceMs = sourceMs,
+                    clipWidthPx = clipWidthPx,
+                    loopStartMs = laneScale.loopRegionStartMs,
+                    loopEndMs = laneScale.loopRegionEndMs,
+                )
+        TimelineLaneScaleMode.Timeline,
+        TimelineLaneScaleMode.SourceFitWhileEditing,
+        ->
+            clipStartPx +
+                sourceMsToXInLaneClip(
+                    sourceMs = sourceMs,
+                    clipWidthPx = clipWidthPx,
+                    sourceDurationMs = laneScale.sourceDurationMs,
+                )
+    }
 }
 
 /** Waveform-column x → source ms. */
@@ -132,6 +177,7 @@ fun TimelineLaneScale.rulerDurationMs(): Long =
     when (mode) {
         TimelineLaneScaleMode.Timeline -> laneLayoutDurationMs
         TimelineLaneScaleMode.SourceFitWhileEditing -> sourceDurationMs
+        TimelineLaneScaleMode.LoopPlayback -> sourceDurationMs
     }
 
 fun TimelineLaneScale.rulerClipEndFraction(): Float =
@@ -172,3 +218,23 @@ fun sourceFitRulerBoundaryLabels(
             alignToEnd = true,
         ),
     )
+
+/** Loop-playback lane ruler: 0 to loop region length (matches [TimelineLaneScaleMode.LoopPlayback] ticks). */
+fun loopPlaybackRulerBoundaryLabels(
+    loopStartMs: Long,
+    loopEndMs: Long,
+): List<TimelineRulerBoundaryLabel> {
+    val loopLengthMs = (loopEndMs - loopStartMs).coerceAtLeast(1L)
+    return listOf(
+        TimelineRulerBoundaryLabel(
+            text = formatTimelineDuration(0L),
+            fraction = 0f,
+            alignToEnd = false,
+        ),
+        TimelineRulerBoundaryLabel(
+            text = formatTimelineDuration(loopLengthMs),
+            fraction = 1f,
+            alignToEnd = true,
+        ),
+    )
+}

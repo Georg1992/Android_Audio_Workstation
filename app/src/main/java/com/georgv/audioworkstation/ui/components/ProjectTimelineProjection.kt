@@ -15,13 +15,14 @@ data class ProjectTimelineProjection(
     val clips: List<TimelineClip>,
     val clipsByLaneId: Map<String, TimelineClip>,
     /**
-     * Idle/base ruler length from persisted clip placement + full source duration only.
+     * Idle/base ruler length from **selected** persisted clips (plus recording rules below).
+     * Unselected lanes do not extend or mark the base track. Empty selection → 0 until tracks are selected.
      * Loop regions do not shrink or grow this value.
      */
     val baseTimelineDurationMs: Long,
     /**
-     * Lane clip layout duration: persisted base, or active recording extent when the project
-     * has no finalized clips yet (first take on an empty timeline).
+     * Global mix-scope layout extent (selected tracks). Per-lane waveforms use
+     * [timelineLaneLocalLayoutDurationMs] in the track list.
      */
     val laneLayoutDurationMs: Long,
     /**
@@ -35,6 +36,7 @@ data class ProjectTimelineProjection(
 fun buildProjectTimelineProjection(
     tracks: List<TrackEntity>,
     waveformStatesByTrackId: Map<String, WaveformState>,
+    selectedTrackIds: Set<String>,
     activeRecording: ActiveRecordingTimelineClip?,
     playheadPositionMs: Long,
     extendVisibleTimelineForAllLoopedPlayback: Boolean,
@@ -42,20 +44,28 @@ fun buildProjectTimelineProjection(
     importProgressByTrackId: Map<String, Float> = emptyMap(),
 ): ProjectTimelineProjection {
     val persistedClips = projectTimelineClips(tracks, waveformStatesByTrackId, importProgressByTrackId)
+    val scopeTrackIds =
+        timelineScopeTrackIds(
+            selectedTrackIds = selectedTrackIds,
+            activeRecordingTrackId = activeRecording?.trackId,
+        )
+    val scopedPersistedClips = timelineScopeClips(persistedClips, scopeTrackIds)
     val recordingClip =
         activeRecording?.let { recording ->
             activeRecordingTimelineClip(
                 recording = recording,
-                furthestEndMs = persistedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) },
+                furthestEndMs =
+                    scopedPersistedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) },
             )
         }
     val clips = timelineClipsWithActiveRecording(persistedClips, recordingClip)
+    val scopedClips = timelineScopeClips(clips, scopeTrackIds)
     val baseTimelineDurationMs =
-        timelineBaseDurationMsFromClips(persistedClips)
+        timelineBaseDurationMsFromClips(scopedPersistedClips)
     val laneLayoutDurationMs =
         timelineLaneLayoutDurationMs(
-            persistedClips = persistedClips,
-            mergedClips = clips,
+            persistedClips = scopedPersistedClips,
+            mergedClips = scopedClips,
         )
     val visibleTimelineDurationMs =
         visibleTimelineDurationMs(
@@ -65,12 +75,17 @@ fun buildProjectTimelineProjection(
             extendForAllLoopedPlayback = extendVisibleTimelineForAllLoopedPlayback,
             extendForRecording = extendVisibleTimelineForRecording,
         )
-    val furthestClipEndMs =
-        clips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
+    val furthestScopedClipEndMs =
+        scopedClips.maxOfOrNull { timelineClipEffectiveTimelineEndMs(it) } ?: 0L
     val clipsWithBase =
         clips.map { clip ->
             val endMs = timelineClipEffectiveTimelineEndMs(clip)
-            clip.copy(isTimelineBase = endMs == furthestClipEndMs && furthestClipEndMs > 0L)
+            clip.copy(
+                isTimelineBase =
+                    clip.laneId in scopeTrackIds &&
+                        endMs == furthestScopedClipEndMs &&
+                        furthestScopedClipEndMs > 0L,
+            )
         }
     return ProjectTimelineProjection(
         clips = clipsWithBase,
@@ -80,6 +95,27 @@ fun buildProjectTimelineProjection(
         visibleTimelineDurationMs = visibleTimelineDurationMs,
     )
 }
+
+/** Clips that participate in global base timeline / base-track semantics for the current selection. */
+fun timelineScopeClips(
+    clips: List<TimelineClip>,
+    scopeTrackIds: Set<String>,
+): List<TimelineClip> {
+    if (scopeTrackIds.isEmpty()) return emptyList()
+    return clips.filter { clip -> clip.laneId in scopeTrackIds }
+}
+
+/** Selected lanes plus the active recording row (when present) define global timeline scope. */
+fun timelineScopeTrackIds(
+    selectedTrackIds: Set<String>,
+    activeRecordingTrackId: String? = null,
+): Set<String> =
+    buildSet {
+        addAll(selectedTrackIds)
+        if (activeRecordingTrackId != null) {
+            add(activeRecordingTrackId)
+        }
+    }
 
 /** Base timeline from persisted clips only (no in-flight recording row, no playhead). */
 fun timelineBaseDurationMsFromClips(clips: List<TimelineClip>): Long {
@@ -129,16 +165,15 @@ fun visibleTimelineDurationMs(
 }
 
 /**
- * Extends the visible ruler while any looping lane is in the active playback session
- * (all-loop or mixed loop + one-shot).
+ * Extends the visible ruler while any looping lane in the **active mix scope** is playing.
  */
 fun shouldExtendVisibleTimelineForAllLoopedPlayback(
     playbackSessionActive: Boolean,
-    sessionTrackIds: Set<String>,
+    selectedTrackIds: Set<String>,
     tracks: List<TrackEntity>,
 ): Boolean {
-    if (!playbackSessionActive || sessionTrackIds.isEmpty()) return false
-    return tracks.any { it.id in sessionTrackIds && it.isLoop }
+    if (!playbackSessionActive || selectedTrackIds.isEmpty()) return false
+    return tracks.any { it.id in selectedTrackIds && it.isLoop }
 }
 
 /** Absolute session timeline end from persisted clips (no active recording row). */
@@ -147,6 +182,24 @@ fun sessionTimelineEndMsForTracks(tracks: List<TrackEntity>): Long {
         tracks.maxOfOrNull { track -> track.effectiveTimelineEndMs() } ?: 0L
     return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
 }
+
+/** Offline mixdown always renders from timeline 0:00. */
+const val MixdownTimelineStartMs = 0L
+
+/**
+ * Furthest idle timeline boundary for mixdown — matches selection-scoped
+ * [ProjectTimelineProjection.baseTimelineDurationMs].
+ */
+fun mixdownTimelineEndMs(
+    tracks: List<TrackEntity>,
+    selectedTrackIds: Set<String>,
+): Long =
+    timelineBaseDurationMsFromClips(
+        timelineScopeClips(
+            projectTimelineClips(tracks, emptyMap(), emptyMap()),
+            selectedTrackIds,
+        ),
+    )
 
 /**
  * Open-ended native playback when any selected lane loops (mixed or all-loop sessions).

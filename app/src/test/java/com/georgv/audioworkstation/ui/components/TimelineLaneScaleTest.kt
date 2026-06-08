@@ -291,6 +291,35 @@ class TimelineLaneScaleTest {
     }
 
     @Test
+    fun `loop playback ruler labels span local loop timeline`() {
+        val labels =
+            loopPlaybackRulerBoundaryLabels(
+                loopStartMs = 2_000L,
+                loopEndMs = 9_000L,
+            )
+
+        assertEquals("0:00", labels.first().text)
+        assertEquals(0f, labels.first().fraction, 0.0001f)
+        assertEquals("0:07", labels.last().text)
+        assertEquals(1f, labels.last().fraction, 0.0001f)
+    }
+
+    @Test
+    fun `loop playback ruler duration matches loop region length`() {
+        val scale =
+            timelineLaneScaleForLoopPlayback(
+                laneLayoutDurationMs = 30_000L,
+                clip = clip(durationMs = 20_000L, startOffsetMs = 10_000L),
+                loopStartMs = 2_000L,
+                loopEndMs = 9_000L,
+            )
+
+        assertEquals(7_000L, scale.rulerDurationMs())
+        assertEquals(0f, scale.clipStartFractionOnWaveformArea(), 0.0001f)
+        assertEquals(1f, scale.clipWidthFractionOnWaveformArea(), 0.0001f)
+    }
+
+    @Test
     fun `offset clip keeps timeline placement until edit focus`() {
         val scale =
             timelineLaneScaleForLoopEdit(

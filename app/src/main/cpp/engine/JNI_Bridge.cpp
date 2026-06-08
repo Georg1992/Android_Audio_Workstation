@@ -160,6 +160,14 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopRecording(JNIEnv 
     return g_engine && g_engine->stopRecording() ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetRecordingFirstSampleTransportPositionMs(
+        JNIEnv *,
+        jobject) {
+    return g_engine ? static_cast<jlong>(g_engine->recordingFirstSampleTransportPositionMs())
+                    : static_cast<jlong>(dawengine::AudioEngine::kRecordingFirstSampleTransportUnset);
+}
+
 extern "C" JNIEXPORT jfloat JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetRecordingInputLevel(JNIEnv *, jobject) {
     return g_engine ? g_engine->recordingInputLevel() : 0.0f;
@@ -396,5 +404,102 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeReleaseEngine(JNIEnv 
         // before dropping playback I/O — releasePlaybackResources must not run mid-record.
         g_engine->stopRecording();
         g_engine->releasePlaybackResources();
+    }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeRenderOfflineMixdown(
+        JNIEnv *env,
+        jobject thiz,
+        jint sampleRate,
+        jobjectArray wavPaths,
+        jfloatArray gainsArray,
+        jlong startPositionMs,
+        jlong sessionTimelineEndMs,
+        jlongArray laneClipStartMs,
+        jlongArray laneClipDurationMs,
+        jbooleanArray laneLoopEnabled,
+        jlongArray laneLoopSourceStartMs,
+        jlongArray laneLoopSourceEndMs,
+        jfloatArray lanePan,
+        jstring outputPathJ) {
+    auto *engine = EnsureEngine();
+    if (!engine || !env || !wavPaths || !gainsArray) {
+        return static_cast<jint>(dawengine::AudioEngine::OfflineMixdownStatus::Failed);
+    }
+
+    if (g_output && !g_output->pauseForSafeEngineMutation()) {
+        return static_cast<jint>(dawengine::AudioEngine::OfflineMixdownStatus::Failed);
+    }
+    if (engine->isPlaybackActive()) {
+        engine->stopPlayback();
+    }
+
+    const jsize pathCount = env->GetArrayLength(wavPaths);
+    const jsize gainCount = env->GetArrayLength(gainsArray);
+    if (pathCount <= 0 || pathCount != gainCount) {
+        return static_cast<jint>(dawengine::AudioEngine::OfflineMixdownStatus::Failed);
+    }
+
+    std::vector<std::string> paths;
+    paths.reserve(static_cast<std::size_t>(pathCount));
+    for (jsize i = 0; i < pathCount; ++i) {
+        auto pathObject = static_cast<jstring>(env->GetObjectArrayElement(wavPaths, i));
+        if (!pathObject) {
+            return static_cast<jint>(dawengine::AudioEngine::OfflineMixdownStatus::Failed);
+        }
+        paths.push_back(JStringToString(env, pathObject));
+        env->DeleteLocalRef(pathObject);
+    }
+
+    std::vector<float> gains(static_cast<std::size_t>(gainCount));
+    env->GetFloatArrayRegion(gainsArray, 0, gainCount, gains.data());
+    if (env->ExceptionCheck()) {
+        return static_cast<jint>(dawengine::AudioEngine::OfflineMixdownStatus::Failed);
+    }
+
+    std::vector<int64_t> clipStarts = JLongArrayToVector(env, laneClipStartMs, pathCount);
+    std::vector<int64_t> clipDurations = JLongArrayToVector(env, laneClipDurationMs, pathCount);
+    std::vector<uint8_t> loopEnabled = JBooleanArrayToVector(env, laneLoopEnabled, pathCount);
+    std::vector<int64_t> loopSourceStarts =
+        JLongArrayToVector(env, laneLoopSourceStartMs, pathCount);
+    std::vector<int64_t> loopSourceEnds =
+        JLongArrayToVector(env, laneLoopSourceEndMs, pathCount);
+    std::vector<float> pans = JFloatArrayToVector(env, lanePan, pathCount);
+    if (env->ExceptionCheck()) {
+        return static_cast<jint>(dawengine::AudioEngine::OfflineMixdownStatus::Failed);
+    }
+
+    const std::string outputPath = JStringToString(env, outputPathJ);
+    jclass clazz = env->GetObjectClass(thiz);
+    jmethodID progressMethod =
+        env->GetMethodID(clazz, "dispatchOfflineMixdownProgress", "(F)V");
+
+    const dawengine::AudioEngine::OfflineMixdownStatus status = engine->renderOfflineMixdown(
+        sampleRate,
+        paths,
+        gains,
+        static_cast<int64_t>(startPositionMs),
+        static_cast<int64_t>(sessionTimelineEndMs),
+        clipStarts,
+        clipDurations,
+        loopEnabled,
+        loopSourceStarts,
+        loopSourceEnds,
+        pans,
+        outputPath,
+        [&](const float progress) {
+            if (progressMethod != nullptr) {
+                env->CallVoidMethod(thiz, progressMethod, progress);
+            }
+        });
+
+    return static_cast<jint>(status);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeCancelOfflineMixdown(JNIEnv *, jobject) {
+    if (g_engine) {
+        g_engine->requestOfflineMixdownCancel();
     }
 }

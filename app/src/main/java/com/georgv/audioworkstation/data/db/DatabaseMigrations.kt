@@ -233,3 +233,15 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         )
     }
 }
+
+/** Non-destructive clip trim bounds (track-local ms). Existing rows default to full source. */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN trimStartMs INTEGER NOT NULL DEFAULT 0",
+        )
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN trimEndMs INTEGER",
+        )
+    }
+}

@@ -38,6 +38,7 @@ class MultiLoopPlaybackProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 22_000L,
                 extendVisibleTimelineForAllLoopedPlayback = true,
@@ -49,7 +50,7 @@ class MultiLoopPlaybackProjectionTest {
         assertTrue(
             shouldExtendVisibleTimelineForAllLoopedPlayback(
                 playbackSessionActive = true,
-                sessionTrackIds = setOf("a", "b"),
+                selectedTrackIds = setOf("a", "b"),
                 tracks = tracks,
             ),
         )

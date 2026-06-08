@@ -15,4 +15,7 @@ internal class TempDirAudioFilePathProvider(
 
     override fun trackRecordingTempPath(projectId: String, trackId: String): String =
         File(projectRecordingDirectory(projectId), "$trackId.recording.tmp.wav").absolutePath
+
+    override fun mixdownOutputPath(projectId: String): String =
+        File(projectRecordingDirectory(projectId), "mixdown.wav").absolutePath
 }

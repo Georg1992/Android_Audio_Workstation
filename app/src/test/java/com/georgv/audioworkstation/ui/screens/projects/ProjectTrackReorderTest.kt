@@ -3,9 +3,12 @@ package com.georgv.audioworkstation.ui.screens.projects
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.components.trackReorderIgnoresDownInWaveform
 import com.georgv.audioworkstation.ui.drag.DragController
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProjectTrackReorderTest {
@@ -437,4 +440,64 @@ class ProjectTrackReorderTest {
         name = "Track $id",
         position = position
     )
+
+    @Test
+    fun `reorder ignores long press inside loop lane waveform bounds`() {
+        val waveContainer = Rect(40f, 80f, 320f, 140f)
+        assertTrue(
+            trackReorderIgnoresDownInWaveform(
+                isLoopEnabled = true,
+                downPositionInRoot = Offset(200f, 110f),
+                laneWaveformBoundsInRoot = waveContainer,
+            ),
+        )
+    }
+
+    @Test
+    fun `reorder still allowed on track header when loop is enabled`() {
+        val waveContainer = Rect(40f, 80f, 320f, 140f)
+        assertFalse(
+            trackReorderIgnoresDownInWaveform(
+                isLoopEnabled = true,
+                downPositionInRoot = Offset(20f, 20f),
+                laneWaveformBoundsInRoot = waveContainer,
+            ),
+        )
+    }
+
+    @Test
+    fun `reorder still allowed on lane ruler when loop is enabled`() {
+        val waveContainer = Rect(40f, 80f, 320f, 140f)
+        assertFalse(
+            trackReorderIgnoresDownInWaveform(
+                isLoopEnabled = true,
+                downPositionInRoot = Offset(200f, 160f),
+                laneWaveformBoundsInRoot = waveContainer,
+            ),
+        )
+    }
+
+    @Test
+    fun `reorder still allowed on lane metadata when loop is enabled`() {
+        val waveContainer = Rect(40f, 80f, 280f, 140f)
+        assertFalse(
+            trackReorderIgnoresDownInWaveform(
+                isLoopEnabled = true,
+                downPositionInRoot = Offset(350f, 110f),
+                laneWaveformBoundsInRoot = waveContainer,
+            ),
+        )
+    }
+
+    @Test
+    fun `reorder ignores down in waveform only when loop is enabled`() {
+        val waveform = Rect(0f, 0f, 100f, 100f)
+        assertFalse(
+            trackReorderIgnoresDownInWaveform(
+                isLoopEnabled = false,
+                downPositionInRoot = Offset(50f, 50f),
+                laneWaveformBoundsInRoot = waveform,
+            ),
+        )
+    }
 }

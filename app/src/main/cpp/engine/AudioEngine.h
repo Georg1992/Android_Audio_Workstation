@@ -8,6 +8,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -40,6 +41,8 @@ class IAudioSource;
  */
 class AudioEngine {
 public:
+    static constexpr int64_t kRecordingFirstSampleTransportUnset = -1;
+
     AudioEngine();
     ~AudioEngine() noexcept;
 
@@ -59,6 +62,17 @@ public:
     float recordingInputLevel() const {
         return m_recordingInputLevel.load(std::memory_order_acquire);
     }
+
+    /**
+     * Transport frame when the first input sample was captured.
+     * [kRecordingFirstSampleTransportUnset] until the first non-empty read in [recordLoop].
+     */
+    int64_t recordingFirstSampleTransportFrame() const {
+        return m_recordingFirstSampleTransportFrame.load(std::memory_order_acquire);
+    }
+
+    /** [recordingFirstSampleTransportFrame] as ms; [kRecordingFirstSampleTransportUnset] when unset. */
+    int64_t recordingFirstSampleTransportPositionMs() const;
 
     /** Session maximum pre-soft-clip master peak (linear) for the current playback arm. */
     float masterPeakHoldLinear() const {
@@ -136,6 +150,55 @@ public:
     void releasePlaybackResources();
 
     void render(float *outputInterleaved, int32_t numFrames, int32_t channels, int32_t sampleRate);
+
+    enum class OfflineMixdownStatus : int {
+        Success = 0,
+        Failed = 1,
+        Cancelled = 2,
+    };
+
+    /** Requests in-flight [renderOfflineMixdown] to stop and discard partial output. */
+    void requestOfflineMixdownCancel();
+
+    /**
+     * Offline bounce using the same [renderBlock] mixer path as live Oboe playback.
+     * Caller must not invoke while live playback is active on the same engine instance.
+     */
+    OfflineMixdownStatus renderOfflineMixdown(
+        int32_t sampleRate,
+        const std::vector<std::string> &wavPaths,
+        const std::vector<float> &gains,
+        int64_t startPositionMs,
+        int64_t sessionTimelineEndMs,
+        const std::vector<int64_t> &laneClipStartMs,
+        const std::vector<int64_t> &laneClipDurationMs,
+        const std::vector<uint8_t> &laneLoopEnabled,
+        const std::vector<int64_t> &laneLoopSourceStartMs,
+        const std::vector<int64_t> &laneLoopSourceEndMs,
+        const std::vector<float> &lanePan,
+        const std::string &outputPath,
+        const std::function<void(float)> &progressCallback);
+
+private:
+    enum class RenderBlockInputMode {
+        RingBuffer,
+        DirectSource,
+    };
+
+    /**
+     * Shared stereo mix block used by live [render] and offline bounce.
+     * @return true when at least one lane contributed samples.
+     */
+    bool renderBlock(float *outputInterleaved,
+                     int32_t numFrames,
+                     int32_t outChannels,
+                     int64_t transportFrameAtBlock,
+                     RenderBlockInputMode inputMode,
+                     bool applyMasterSoftClip,
+                     bool playbackMutexAlreadyHeld = false,
+                     int32_t *outMinFramesReturned = nullptr);
+
+    void syncLaneSourcesForOfflineTransport(int64_t transportFrameAtBlock);
 
 private:
     static constexpr std::size_t kPlaybackLaneCount = 16;
@@ -257,6 +320,7 @@ private:
     std::shared_ptr<oboe::AudioStream> m_inputStream;
     std::thread m_recordThread;
     std::atomic<bool> m_isRecording{false};
+    std::atomic<int64_t> m_recordingFirstSampleTransportFrame{kRecordingFirstSampleTransportUnset};
     std::atomic<float> m_recordingInputLevel{0.0f};
     std::atomic<float> m_masterPeakHoldLinear{0.0f};
 
@@ -282,6 +346,7 @@ private:
 
     std::thread m_ioThread;
     std::atomic<bool> m_ioRunning{false};
+    std::atomic<bool> m_offlineMixdownCancelRequested{false};
 
     std::vector<float> m_renderScratch;
 };

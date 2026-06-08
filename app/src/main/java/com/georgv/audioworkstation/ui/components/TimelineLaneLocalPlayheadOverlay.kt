@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.zIndex
+import com.georgv.audioworkstation.core.track.loopPlaybackSourceMsToXInClip
 import com.georgv.audioworkstation.ui.theme.AppColors
 
 @Composable
@@ -13,6 +14,7 @@ internal fun TimelineLaneLocalPlayheadOverlay(
     sourcePlayheadMs: Long,
     sourceDurationMs: Long,
     playheadLineWidthPx: Float,
+    loopPlaybackProjection: TimelineLaneLocalPlayheadLoopProjection? = null,
     modifier: Modifier = Modifier,
 ) {
     Canvas(
@@ -23,11 +25,20 @@ internal fun TimelineLaneLocalPlayheadOverlay(
     ) {
         if (size.width <= 0f || size.height <= 0f) return@Canvas
         val x =
-            sourceMsToXInLaneClip(
-                sourceMs = sourcePlayheadMs,
-                clipWidthPx = size.width,
-                sourceDurationMs = sourceDurationMs,
-            )
+            if (loopPlaybackProjection != null) {
+                loopPlaybackSourceMsToXInClip(
+                    sourceMs = sourcePlayheadMs,
+                    clipWidthPx = size.width,
+                    loopStartMs = loopPlaybackProjection.loopStartMs,
+                    loopEndMs = loopPlaybackProjection.loopEndMs,
+                )
+            } else {
+                sourceMsToXInLaneClip(
+                    sourceMs = sourcePlayheadMs,
+                    clipWidthPx = size.width,
+                    sourceDurationMs = sourceDurationMs,
+                )
+            }
         drawLine(
             color = AppColors.Red,
             start = Offset(x, 0f),

@@ -313,6 +313,9 @@ private class NullablePathAudioFileProvider(
     override fun trackOutputPath(projectId: String, trackId: String): String? = path
 
     override fun trackRecordingTempPath(projectId: String, trackId: String): String? = path
+
+    override fun mixdownOutputPath(projectId: String): String? =
+        path?.let { "$it/mixdown.wav" }
 }
 
 private class NoOpProjectFileStoreForRobolectric : ProjectFileStore {

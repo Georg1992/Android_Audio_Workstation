@@ -8,6 +8,8 @@ import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
+import com.georgv.audioworkstation.core.track.playbackStartPositionMsForTracks
 import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
@@ -133,7 +135,11 @@ internal class ProjectTransportCommands(
         val currentProjectId = projectId() ?: return
         val currentProject = loadCurrentProject(currentProjectId) ?: return
         val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs())
+            playbackStartPositionMsForTracks(
+                scrubbedPlayheadMs = playheadPositionMs.value,
+                timelineVisibleDurationMs = timelineVisibleDurationMs(),
+                tracks = selectedPlayableTracks,
+            )
         if (
             !playbackStartAllowedAtPlayhead(
                 startPositionMs = startPositionMs,
@@ -163,6 +169,7 @@ internal class ProjectTransportCommands(
             emitMessage(R.string.error_playback_failed_to_start)
             return
         }
+        playheadPositionMs.value = startPositionMs
         playheadTransport.onPlaybackStarted(fromPositionMs = startPositionMs)
         playbackSession.markPlayingAndStartCompletionMonitor(
             playbackSpec.lanes.map { it.trackId },
@@ -193,21 +200,11 @@ internal class ProjectTransportCommands(
         }
     }
 
-    private fun selectedPlayableTracks(): List<TrackEntity> {
-        val selected = selectedTrackIds()
-        if (selected.isEmpty()) return emptyList()
-        return visibleTracks()
-            .filter { it.id in selected }
-            .filter { it.wavFilePath.isNotBlank() }
-    }
+    private fun selectedPlayableTracks(): List<TrackEntity> =
+        activeMixScopePlayableTracks(visibleTracks(), selectedTrackIds())
 
-    private fun selectedPlayableTracksForOverdub(tracks: List<TrackEntity>): List<TrackEntity> {
-        val selected = selectedTrackIds()
-        if (selected.isEmpty()) return emptyList()
-        return tracks
-            .filter { it.id in selected }
-            .filter { it.wavFilePath.isNotBlank() }
-    }
+    private fun selectedPlayableTracksForOverdub(tracks: List<TrackEntity>): List<TrackEntity> =
+        activeMixScopePlayableTracks(tracks, selectedTrackIds())
 
     private suspend fun startOverdubPlaybackForPendingTake(
         projectId: String,

@@ -38,6 +38,19 @@ class ProjectTrackVisibilityTest {
         assertEquals(1_000L, visible.single().timelineStartOffsetMs)
     }
 
+    @Test
+    fun `track lane shows global playhead when clip is visible`() {
+        assertTrue(trackLaneShowsGlobalPlayhead(showWaveforms = true, hasTimelineClip = true))
+        assertEquals(
+            false,
+            trackLaneShowsGlobalPlayhead(showWaveforms = false, hasTimelineClip = true),
+        )
+        assertEquals(
+            false,
+            trackLaneShowsGlobalPlayhead(showWaveforms = true, hasTimelineClip = false),
+        )
+    }
+
     private fun track(id: String, position: Int, duration: Long? = null) =
         TrackEntity(
             id = id,

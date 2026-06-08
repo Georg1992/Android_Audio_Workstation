@@ -1,14 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
-import com.georgv.audioworkstation.data.db.entities.ProjectEntity
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
-import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 
 internal class ProjectPlayheadSeekCoordinator(
     private val scope: CoroutineScope,
@@ -17,13 +12,9 @@ internal class ProjectPlayheadSeekCoordinator(
     private val playbackSession: PlaybackSessionController,
     private val transportController: ProjectTransportController,
     private val recordingSession: RecordingSessionController,
+    private val scopePlaybackCoordinator: ScopePlaybackCoordinator,
     private val projectId: () -> String?,
     private val selectedTrackIds: () -> Set<String>,
-    private val loadCurrentProject: suspend (String) -> ProjectEntity?,
-    private val selectedPlayableTracks: () -> List<TrackEntity>,
-    /** Full project timeline extent (all visible tracks), same as [ProjectTransportCommands.performPlayPressed]. */
-    private val timelineVisibleDurationMs: () -> Long,
-    private val timelineBaseDurationMs: () -> Long,
 ) {
     fun resetWhenProjectChanges() {
         playheadTransport.resetWhenProjectChanges()
@@ -80,37 +71,7 @@ internal class ProjectPlayheadSeekCoordinator(
     suspend fun restartPlaybackFromPlayheadAfterSeekDrag(): Boolean {
         if (!playbackSession.hasActivePlaybackSession()) return false
         if (selectedTrackIds().isEmpty()) return false
-        val currentProjectId = projectId() ?: return false
-        val currentProject = loadCurrentProject(currentProjectId) ?: return false
-        val tracks = selectedPlayableTracks()
-        if (tracks.isEmpty()) return false
-        val startPositionMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs())
-        if (
-            !playbackStartAllowedAtPlayhead(
-                startPositionMs = startPositionMs,
-                timelineBaseDurationMs = timelineBaseDurationMs(),
-                tracks = tracks,
-            )
-        ) {
-            return false
-        }
-        val playbackSpec =
-            currentProject.toMultiPlaybackSpec(tracks)?.copy(
-                startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForPlayback(tracks),
-            ) ?: return false
-        if (
-            !playbackSession.restartEngineFromPlayhead(
-                playbackSpec,
-                tracks.map { it.id },
-                selectedTrackIds(),
-            )
-        ) {
-            return false
-        }
-        playheadTransport.onPlaybackStarted(fromPositionMs = startPositionMs)
-        return true
+        return scopePlaybackCoordinator.rebuildPlaybackAtCurrentTransport(selectedTrackIds())
     }
 
     fun abortPlaybackSeekDragToPaused() {

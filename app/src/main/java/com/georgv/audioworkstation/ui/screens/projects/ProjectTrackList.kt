@@ -110,6 +110,7 @@ fun ProjectTrackList(
     onToggleRecordTarget: (String) -> Unit,
     onToggleLoop: (String) -> Unit,
     onUpdateTrackLoopRegion: (String, Long, Long) -> Unit,
+    onEditTrack: (String) -> Unit,
     onReorderTracks: (List<TrackEntity>) -> Unit,
     onPersistTrackOrder: () -> Unit,
     onTrackPagingSummaryChange: (String) -> Unit,
@@ -416,6 +417,7 @@ fun ProjectTrackList(
                                 onToggleRecordTarget = onToggleRecordTarget,
                                 onToggleLoop = onToggleLoop,
                                 onUpdateTrackLoopRegion = onUpdateTrackLoopRegion,
+                                onEditTrack = onEditTrack,
                                 ignoredOnReorderDragEnd = dragInteraction.completeDrop,
                                 onReorderDragStarted = dragInteraction.onReorderDragStarted,
                             )

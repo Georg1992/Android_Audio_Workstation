@@ -210,4 +210,81 @@ class ProjectRecordingCoordinatorPunchTest {
 
         assertEquals(23_000L, finalized.duration)
     }
+
+    @Test
+    fun `finalizeTrackAfterStop places new take at first captured sample transport ms`() {
+        val coordinator =
+            ProjectRecordingCoordinator(
+                repo = ProjectRepository(FakeProjectDao(), NoopProjectFileStore),
+                audioController = FakeAudioController(),
+                audioFilePathProvider = TempDirAudioFilePathProvider(),
+                wavPunchSplicer = WavPunchSplicer(),
+                dispatchers = TestAppDispatchers(),
+            )
+        val track =
+            TrackEntity(
+                id = "take",
+                projectId = "p",
+                position = 1,
+                wavFilePath = "take.wav",
+                timelineStartOffsetMs = 0L,
+                timeStampStart = 1L,
+                isRecording = true,
+            )
+
+        val finalized =
+            coordinator.finalizeTrackAfterStop(
+                currentTrack = track,
+                punchContext = null,
+                firstSampleTransportPositionMs = 187L,
+            )
+
+        assertEquals(187L, finalized.timelineStartOffsetMs)
+    }
+
+    @Test
+    fun `finalizeTrackAfterStop punch keeps existing clip timeline offset`() {
+        val dir = File.createTempFile("coord-punch-offset", "").apply { delete(); mkdirs() }
+        val original = File(dir, "track.wav")
+        val tempRecording = File(dir, "track.recording.tmp.wav")
+        writeConstantPcm16Wav(original, sampleValue = 1_000, frameCount = 1_000)
+        writeConstantPcm16Wav(tempRecording, sampleValue = 2_000, frameCount = 500)
+
+        val coordinator =
+            ProjectRecordingCoordinator(
+                repo = ProjectRepository(FakeProjectDao(), NoopProjectFileStore),
+                audioController = FakeAudioController(),
+                audioFilePathProvider = TempDirAudioFilePathProvider(dir),
+                wavPunchSplicer = WavPunchSplicer(),
+                dispatchers = TestAppDispatchers(),
+            )
+        val track =
+            TrackEntity(
+                id = "track",
+                projectId = "p",
+                position = 0,
+                wavFilePath = original.absolutePath,
+                duration = 20_000L,
+                timelineStartOffsetMs = 5_000L,
+                timeStampStart = 1L,
+                isRecording = true,
+            )
+
+        val finalized =
+            coordinator.finalizeTrackAfterStop(
+                currentTrack = track,
+                punchContext =
+                    RecordingPunchContext(
+                        originalWavPath = original.absolutePath,
+                        tempRecordingPath = tempRecording.absolutePath,
+                        finalWavPath = original.absolutePath,
+                        spliceStartInClipMs = 1_000L,
+                        sampleRateHz = 1_000,
+                        fileBitDepth = 16,
+                    ),
+                firstSampleTransportPositionMs = 5_200L,
+            )
+
+        assertEquals(5_000L, finalized.timelineStartOffsetMs)
+    }
 }

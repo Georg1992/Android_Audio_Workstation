@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,8 +76,10 @@ fun TrackCard(
     recordingInputLevel: Float = 0f,
     timelineClip: TimelineClip? = null,
     laneLayoutDurationMs: Long = TimelineMinimumBaseDurationMs,
+    globalMixScopeDurationMs: Long = laneLayoutDurationMs,
     globalPlayheadTimelineDurationMs: Long = TimelineMinimumBaseDurationMs,
     timelinePlayheadPositionMs: Long = 0L,
+    loopPlaybackActive: Boolean = false,
     gain: Float,
     onGainChange: ((Float) -> Unit)?,
     onGainCommit: ((Float) -> Unit)? = null,
@@ -92,6 +95,8 @@ fun TrackCard(
     onDelete: () -> Unit,
     onCancelImport: () -> Unit = onDelete,
     onRename: ((String) -> Unit)? = null,
+    onEdit: (() -> Unit)? = null,
+    editEnabled: Boolean = false,
     onToggleLoop: (() -> Unit)? = null,
     isLoop: Boolean = false,
     loopToggleEnabled: Boolean = true,
@@ -185,6 +190,14 @@ fun TrackCard(
     }
 
     val isolateTimelineTouch = isLoop && timelineClip != null && !dragPreview
+    var laneWaveformBoundsInRoot by remember(trackId) { mutableStateOf<Rect?>(null) }
+    val latestLaneWaveformBoundsInRoot by rememberUpdatedState(laneWaveformBoundsInRoot)
+    LaunchedEffect(isLoop) {
+        if (!isLoop) {
+            laneWaveformBoundsInRoot = null
+        }
+    }
+    val loopLatchedDuringPlayback = isLoop && loopPlaybackActive
     val cardSelectionClickEnabled =
         selectionAllowed && !interactionBlocked && !isRenaming && !dragPreview
     val cardSelectionOnRoot =
@@ -194,6 +207,8 @@ fun TrackCard(
             !blockReorderDrag &&
             !isImporting &&
             !isImportFailed
+    val isolateTimelineSelectionViaClickable =
+        isolateTimelineTouch && cardSelectionClickEnabled && !reorderActiveOnCard
     val cardSelectionInteractionSource = remember { MutableInteractionSource() }
     val onCardSelectionClick = {
         if (isMenuOpen) {
@@ -224,10 +239,17 @@ fun TrackCard(
                         Modifier.trackCardLongPressReorderGesture(
                             enabled = true,
                             blockReorderDrag = false,
-                            tapEnabled = cardSelectionOnRoot,
+                            tapEnabled = cardSelectionClickEnabled,
                             onTap = onCardSelectionClick,
                             onReorderDragStart = onReorderDragStart,
                             onReorderDragMove = onReorderDragMove,
+                            ignoreDownInRoot = { root ->
+                                trackReorderIgnoresDownInWaveform(
+                                    isLoopEnabled = isLoop,
+                                    downPositionInRoot = root,
+                                    laneWaveformBoundsInRoot = latestLaneWaveformBoundsInRoot,
+                                )
+                            },
                         )
                     } else if (!dragPreview && cardSelectionOnRoot) {
                         Modifier.clickable(
@@ -278,7 +300,7 @@ fun TrackCard(
                             .fillMaxWidth()
                             .alpha(if (isImporting) 0.72f else 1f)
                             .then(
-                                if (isolateTimelineTouch && cardSelectionClickEnabled) {
+                                if (isolateTimelineSelectionViaClickable) {
                                     Modifier.clickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
@@ -413,12 +435,13 @@ fun TrackCard(
                         TrackActionButton(
                             active = isLoop,
                             enabled = loopInteractive,
-                            accentColor = AppColors.Accent,
+                            preserveOpacityWhenDisabled = loopLatchedDuringPlayback,
+                            accentColor = AppColors.Green,
                             activeBackgroundColor = AppColors.LoopButtonActiveBackground,
                             activeBorderColor = AppColors.Line,
                             activeIconColor = AppColors.Line,
-                            showActiveGlow = false,
-                            showActiveLed = false,
+                            showActiveGlow = isLoop,
+                            showActiveLed = isLoop,
                             onClick = { toggleLoop?.invoke() },
                         ) { iconTint ->
                             Icon(
@@ -497,6 +520,16 @@ fun TrackCard(
                                     onMenuDismiss()
                                     onCancelImport()
                                 },
+                                onEdit =
+                                    if (editEnabled && onEdit != null) {
+                                        {
+                                            onMenuDismiss()
+                                            onEdit()
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                editEnabled = editEnabled,
                                 onRename = {
                                     onMenuDismiss()
                                     renameFieldValue =
@@ -528,10 +561,18 @@ fun TrackCard(
                             clip = timelineClip,
                             laneLayoutDurationMs = laneLayoutDurationMs,
                             globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
+                            globalMixScopeDurationMs = globalMixScopeDurationMs,
                             playheadPositionMs = timelinePlayheadPositionMs,
+                            loopPlaybackActive = loopPlaybackActive,
                             recordingInputLevel = if (isRecording) recordingInputLevel else null,
                             loopRegionEditingEnabled = loopRegionEditingEnabled,
                             onLoopRegionCommit = onLoopRegionCommit,
+                            onLoopWaveformContainerBoundsInRoot =
+                                if (isLoop) {
+                                    { bounds -> laneWaveformBoundsInRoot = bounds }
+                                } else {
+                                    null
+                                },
                             modifier = waveformModifier,
                         )
                     }
@@ -556,7 +597,7 @@ fun TrackCard(
                             .width(Dimens.FaderWidth)
                             .fillMaxHeight()
                             .then(
-                                if (isolateTimelineTouch && cardSelectionClickEnabled) {
+                                if (isolateTimelineSelectionViaClickable) {
                                     Modifier.clickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,

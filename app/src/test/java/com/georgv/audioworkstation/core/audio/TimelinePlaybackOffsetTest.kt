@@ -65,7 +65,7 @@ class TimelinePlaybackOffsetTest {
     }
 
     @Test
-    fun `loop clip at 30s playhead 0 is silent until clip then wraps loop region`() {
+    fun `loop clip at 30s playhead 0 is audible and starts at loop region`() {
         val track =
             TrackEntity(
                 id = "loop-late",
@@ -81,7 +81,7 @@ class TimelinePlaybackOffsetTest {
         val lane = spec.lanes.single()
 
         assertEquals(30_000L, lane.timelineClipStartMs)
-        assertFalse(
+        assertTrue(
             isLaneAudibleAtPlayhead(
                 playheadMs = 0L,
                 clipStartMs = lane.timelineClipStartMs,

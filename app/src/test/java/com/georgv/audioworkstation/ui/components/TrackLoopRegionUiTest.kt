@@ -90,6 +90,7 @@ class TrackLoopRegionUiTest {
                 tracks = tracks,
                 waveformStatesByTrackId =
                     mapOf("target" to WaveformState.Ready(WaveformPeaks.Placeholder)),
+                selectedTrackIds = setOf("target"),
                 activeRecording =
                     ActiveRecordingTimelineClip(
                         trackId = "target",
@@ -229,6 +230,7 @@ class TrackLoopRegionUiTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 25_000L,
                 extendVisibleTimelineForAllLoopedPlayback = true,

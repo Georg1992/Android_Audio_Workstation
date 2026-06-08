@@ -154,10 +154,10 @@ fun laneSourceReadOffsetMs(
     loopSourceStartMs: Long,
     loopSourceEndMs: Long,
 ): Long {
-    val clipOffset = (playheadMs - clipStartMs).coerceAtLeast(0L)
-    if (!loopEnabled) return clipOffset
+    if (!loopEnabled) return (playheadMs - clipStartMs).coerceAtLeast(0L)
     val loopLength = (loopSourceEndMs - loopSourceStartMs).coerceAtLeast(1L)
-    return loopSourceStartMs + (clipOffset % loopLength)
+    val loopPhaseMs = ((playheadMs % loopLength) + loopLength) % loopLength
+    return loopSourceStartMs + loopPhaseMs
 }
 
 fun isLaneAudibleAtPlayhead(
@@ -166,8 +166,8 @@ fun isLaneAudibleAtPlayhead(
     clipDurationMs: Long,
     loopEnabled: Boolean = false,
 ): Boolean {
-    if (playheadMs < clipStartMs) return false
     if (loopEnabled) return true
+    if (playheadMs < clipStartMs) return false
     if (clipDurationMs <= 0L) return true
     return playheadMs < clipStartMs + clipDurationMs
 }

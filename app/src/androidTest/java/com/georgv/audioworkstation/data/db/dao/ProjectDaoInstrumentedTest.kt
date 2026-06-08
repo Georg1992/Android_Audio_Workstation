@@ -38,7 +38,7 @@ class ProjectDaoInstrumentedTest {
     @Test
     fun deleteTrackAndUpdatePositions_renumbersMiddleRemoval(): Unit = runBlocking {
         val projectId = "p1"
-        dao.upsertProject(ProjectEntity(id = projectId, name = "P"))
+        dao.insertProject(ProjectEntity(id = projectId, name = "P"))
         val a = track("a", projectId, position = 0)
         val b = track("b", projectId, position = 1)
         val c = track("c", projectId, position = 2)
@@ -58,7 +58,7 @@ class ProjectDaoInstrumentedTest {
     @Test
     fun deleteProject_removesChildTracks_viaCascade(): Unit = runBlocking {
         val projectId = "p-cascade"
-        dao.upsertProject(ProjectEntity(id = projectId, name = "Cascade"))
+        dao.insertProject(ProjectEntity(id = projectId, name = "Cascade"))
         dao.upsertTracks(
             listOf(
                 track("t1", projectId, position = 0),
@@ -74,7 +74,7 @@ class ProjectDaoInstrumentedTest {
     @Test
     fun updateTracks_persistsReorderedPositions(): Unit = runBlocking {
         val projectId = "p-reorder"
-        dao.upsertProject(ProjectEntity(id = projectId, name = "R"))
+        dao.insertProject(ProjectEntity(id = projectId, name = "R"))
         val t0 = track("x", projectId, position = 0)
         val t1 = track("y", projectId, position = 1)
         val t2 = track("z", projectId, position = 2)
@@ -91,6 +91,34 @@ class ProjectDaoInstrumentedTest {
         val tracks = dao.observeTracks(projectId).first()
         assertEquals(listOf("y", "z", "x"), tracks.map { it.id })
         assertEquals(listOf(0, 1, 2), tracks.map { it.position })
+    }
+
+    @Test
+    fun updateProject_preservesChildTracks(): Unit = runBlocking {
+        val projectId = "p-rename"
+        val createdAt = 1_700_000_000_000L
+        dao.insertProject(
+            ProjectEntity(
+                id = projectId,
+                name = "Old Name",
+                createdAt = createdAt,
+                sampleRate = 48_000,
+            ),
+        )
+        dao.upsertTracks(
+            listOf(
+                track("t1", projectId, position = 0),
+                track("t2", projectId, position = 1),
+            ),
+        )
+
+        val existing = dao.observeProject(projectId).first()!!
+        dao.updateProject(existing.copy(name = "New Name"))
+
+        assertEquals("New Name", dao.observeProject(projectId).first()?.name)
+        assertEquals(createdAt, dao.observeProject(projectId).first()?.createdAt)
+        assertEquals(48_000, dao.observeProject(projectId).first()?.sampleRate)
+        assertEquals(listOf("t1", "t2"), dao.observeTracks(projectId).first().map { it.id })
     }
 
     private fun track(id: String, projectId: String, position: Int) = TrackEntity(

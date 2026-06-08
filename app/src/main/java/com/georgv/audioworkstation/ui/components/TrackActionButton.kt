@@ -58,6 +58,8 @@ fun TrackActionButton(
     idleIconColor: Color = AppColors.Line.copy(alpha = TrackActionIconIdleAlpha),
     showActiveGlow: Boolean = true,
     showActiveLed: Boolean = true,
+    /** Keep full opacity when [enabled] is false (latched/armed read-only states). */
+    preserveOpacityWhenDisabled: Boolean = false,
     content: @Composable (iconTint: Color) -> Unit,
 ) {
     val shape = RoundedCornerShape(Dimens.SmallRadius)
@@ -102,7 +104,7 @@ fun TrackActionButton(
                     scaleX = pressScale
                     scaleY = pressScale
                 }
-                .alpha(if (enabled) 1f else AppOpacity.disabled)
+                .alpha(if (enabled || preserveOpacityWhenDisabled) 1f else AppOpacity.disabled)
                 .clip(shape)
                 .background(backgroundColor)
                 .border(Dimens.Stroke, resolvedBorderColor, shape)

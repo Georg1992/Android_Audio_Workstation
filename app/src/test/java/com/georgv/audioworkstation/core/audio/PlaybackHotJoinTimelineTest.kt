@@ -38,15 +38,25 @@ class PlaybackHotJoinTimelineTest {
         )
 
     @Test
-    fun `example B loop at 30s transport 10s should hot join but not be audible yet`() {
+    fun `example B loop at 30s transport 10s hot joins and is audible at loop phase`() {
         val track = loopTrack(timelineStartOffsetMs = 30_000L)
         assertTrue(shouldHotJoinTrackAtTransport(track, transportMs = 10_000L))
-        assertFalse(
+        assertTrue(
             isLaneAudibleAtPlayhead(
                 playheadMs = 10_000L,
                 clipStartMs = 30_000L,
                 clipDurationMs = 20_000L,
                 loopEnabled = true,
+            ),
+        )
+        assertEquals(
+            0L,
+            laneSourceReadOffsetMs(
+                playheadMs = 10_000L,
+                clipStartMs = 30_000L,
+                loopEnabled = true,
+                loopSourceStartMs = 0L,
+                loopSourceEndMs = 5_000L,
             ),
         )
     }

@@ -45,6 +45,15 @@
     <string name="action_delete">Удалить</string>
     <string name="action_cancel_import">Отменить импорт</string>
     <string name="action_rename">Переименовать</string>
+    <string name="action_edit">Редактировать</string>
+
+    <!-- Track edit screen -->
+    <string name="screen_track_edit">Редактирование дорожки</string>
+    <string name="track_edit_timeline_position">Позиция на таймлайне</string>
+    <string name="track_edit_input_fx">Входные FX</string>
+    <string name="track_edit_output_fx">Выходные FX</string>
+    <string name="track_edit_coming_soon">Скоро</string>
+    <string name="track_edit_track_missing">Дорожка не найдена.</string>
 
     <!-- Library screen -->
     <string name="library_empty_state">Проектов пока нет.</string>
@@ -53,6 +62,15 @@
     <string name="library_untitled_project">Проект без названия</string>
     <string name="library_delete_project_title">Удалить проект?</string>
     <string name="library_delete_project_message">Это навсегда удалит %1$s и все его дорожки.</string>
+    <string name="library_no_mix_yet">Микса пока нет</string>
+    <string name="library_preview_mix_hint">Нажмите для прослушивания микса</string>
+    <string name="library_preview_playing_hint">Нажмите, чтобы остановить</string>
+    <string name="library_mixing_progress">Микширование…</string>
+    <string name="library_mixing_progress_percent">Микширование… %1$d%%</string>
+
+    <string name="project_mixdown_confirm_title">Смикшировать проект?</string>
+    <string name="project_mixdown_confirm_message">Текущий микс проекта будет сохранён в WAV-файл.</string>
+    <string name="action_mix">Микс</string>
 
     <!-- Content descriptions (accessibility) -->
     <string name="cd_back">Назад</string>
@@ -61,6 +79,8 @@
     <string name="cd_stop">Остановить</string>
     <string name="cd_record">Записать</string>
     <string name="cd_import_audio">Импорт аудио</string>
+    <string name="cd_mixdown_project">Микс и экспорт проекта</string>
+    <string name="cd_open_project">Открыть проект</string>
     <string name="cd_loop_on">Цикл включён</string>
     <string name="cd_loop_off">Цикл выключен</string>
     <string name="cd_record_target_on">Цель записи включена</string>
@@ -117,9 +137,15 @@
     <string name="error_rename_project_failed">Не удалось переименовать проект.</string>
     <string name="error_rename_track_failed">Не удалось переименовать дорожку.</string>
     <string name="error_loop_update_failed">Не удалось обновить настройку цикла.</string>
+    <string name="error_track_edit_save_failed">Не удалось сохранить изменения дорожки.</string>
     <string name="error_gain_update_failed">Не удалось обновить громкость дорожки.</string>
     <string name="error_save_track_order_failed">Не удалось сохранить порядок дорожек.</string>
     <string name="error_save_imported_track_failed">Не удалось сохранить импортированную дорожку.</string>
     <string name="error_recording_metadata_failed">Не удалось обновить метаданные записи.</string>
     <string name="error_create_recording_track_failed">Не удалось создать дорожку для записи.</string>
+    <string name="error_mixdown_not_available">Микширование пока недоступно.</string>
+    <string name="error_mixdown_no_playable_tracks">Нечего микшировать — сначала добавьте дорожки с аудио.</string>
+    <string name="error_mixdown_unsupported_audio">Микширование требует 16‑бит WAV (моно/стерео) с частотой проекта.</string>
+    <string name="error_mixdown_failed">Не удалось выполнить микширование.</string>
+    <string name="error_mix_preview_failed">Не удалось воспроизвести превью микса.</string>
 </resources>

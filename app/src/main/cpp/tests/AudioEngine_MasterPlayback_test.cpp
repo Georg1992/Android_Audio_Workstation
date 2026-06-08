@@ -660,32 +660,18 @@ TEST_F(AudioEngineMasterPlaybackTest, LoopLaneStartsFromLoopSourceStart) {
         std::vector<int64_t>{kLoopEndMs}));
 
     std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
-    float peakBeforeClip = 0.0f;
-    const int blocksBeforeClip =
-        static_cast<int>(kClipStartMs * kSampleRateHz / 1000 / kRenderFrames);
-    for (int block = 0; block < blocksBeforeClip + 2; ++block) {
-        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
-        if (engine.transportPositionMs() < kClipStartMs) {
-            peakBeforeClip =
-                std::max(peakBeforeClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
-        }
-    }
-    EXPECT_LT(peakBeforeClip, 0.01f);
-
-    float peakAfterClip = 0.0f;
+    float peakFromStart = 0.0f;
     for (int block = 0; block < 64; ++block) {
         engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
-        if (engine.transportPositionMs() >= kClipStartMs) {
-            peakAfterClip =
-                std::max(peakAfterClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
-        }
+        peakFromStart =
+            std::max(peakFromStart, PeakAbsInterleaved(buffer.data(), buffer.size()));
     }
-    EXPECT_GT(peakAfterClip, 0.05f);
+    EXPECT_GT(peakFromStart, 0.05f);
     engine.stopPlayback();
     std::remove(wav.c_str());
 }
 
-TEST_F(AudioEngineMasterPlaybackTest, LoopLaneSilentUntilThirtySecondTimelineStart) {
+TEST_F(AudioEngineMasterPlaybackTest, LoopLaneAudibleFromTransportZeroDespiteLateClipStart) {
     constexpr int32_t kSampleRateHz = 48'000;
     constexpr int32_t kRenderFrames = 256;
     constexpr int64_t kClipStartMs = 30'000L;
@@ -708,33 +694,19 @@ TEST_F(AudioEngineMasterPlaybackTest, LoopLaneSilentUntilThirtySecondTimelineSta
         std::vector<int64_t>{kLoopEndMs}));
 
     std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
-    float peakBeforeClip = 0.0f;
-    const int blocksBeforeClip =
-        static_cast<int>(kClipStartMs * kSampleRateHz / 1000 / kRenderFrames);
-    for (int block = 0; block < blocksBeforeClip + 2; ++block) {
-        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
-        if (engine.transportPositionMs() < kClipStartMs) {
-            peakBeforeClip =
-                std::max(peakBeforeClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
-        }
-    }
-    EXPECT_LT(peakBeforeClip, 0.01f);
-
-    float peakAfterClip = 0.0f;
+    float peakFromStart = 0.0f;
     for (int block = 0; block < 128; ++block) {
         engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
-        if (engine.transportPositionMs() >= kClipStartMs) {
-            peakAfterClip =
-                std::max(peakAfterClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
-        }
+        peakFromStart =
+            std::max(peakFromStart, PeakAbsInterleaved(buffer.data(), buffer.size()));
     }
-    EXPECT_GT(peakAfterClip, 0.05f);
+    EXPECT_GT(peakFromStart, 0.05f);
     EXPECT_TRUE(engine.isPlaybackActive());
     engine.stopPlayback();
     std::remove(wav.c_str());
 }
 
-TEST_F(AudioEngineMasterPlaybackTest, HotJoinLoopLaneSilentUntilThirtySecondTimelineStart) {
+TEST_F(AudioEngineMasterPlaybackTest, HotJoinLoopLaneAudibleBeforeTimelineClipStart) {
     constexpr int32_t kSampleRateHz = 48'000;
     constexpr int32_t kRenderFrames = 256;
     constexpr int64_t kClipStartMs = 30'000L;
@@ -770,27 +742,54 @@ TEST_F(AudioEngineMasterPlaybackTest, HotJoinLoopLaneSilentUntilThirtySecondTime
             PlaybackLaneLifecycle::Active) {
             continue;
         }
-        if (engine.transportPositionMs() < kClipStartMs) {
-            peakBeforeClip =
-                std::max(peakBeforeClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
-        }
+        peakBeforeClip =
+            std::max(peakBeforeClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
     }
     EXPECT_EQ(PlaybackLaneLifecycle::Active,
               engine.laneLifecycle(static_cast<std::size_t>(laneIndex)));
-    EXPECT_LT(peakBeforeClip, 0.01f);
-
-    float peakAfterClip = 0.0f;
-    for (int block = 0; block < 128; ++block) {
-        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
-        if (engine.transportPositionMs() >= kClipStartMs) {
-            peakAfterClip =
-                std::max(peakAfterClip, PeakAbsInterleaved(buffer.data(), buffer.size()));
-        }
-    }
-    EXPECT_GT(peakAfterClip, 0.05f);
+    EXPECT_GT(peakBeforeClip, 0.05f);
     engine.stopPlayback();
     std::remove(backingWav.c_str());
     std::remove(loopWav.c_str());
+}
+
+TEST_F(AudioEngineMasterPlaybackTest, TwoLoopLanesDifferentClipStartsAudibleFromTransportZero) {
+    constexpr int32_t kSampleRateHz = 48'000;
+    constexpr int32_t kRenderFrames = 256;
+    constexpr int64_t kLoopEndMs = 1'500L;
+
+    const std::string loopA = WriteTempMonoWavFilled(
+        "offset_loop_a.wav", kSampleRateHz, kSampleRateHz * 2, 12'000);
+    const std::string loopB = WriteTempMonoWavFilled(
+        "offset_loop_b.wav", kSampleRateHz, kSampleRateHz * 2, 18'000);
+    ASSERT_FALSE(loopA.empty());
+    ASSERT_FALSE(loopB.empty());
+
+    ASSERT_TRUE(engine.setPlaybackSources(
+        std::vector<std::string>{loopA, loopB},
+        std::vector<float>{1.0f, 1.0f},
+        0L,
+        0L,
+        std::vector<int64_t>{0L, 30'000L},
+        std::vector<int64_t>{kLoopEndMs, kLoopEndMs},
+        std::vector<uint8_t>{1, 1},
+        std::vector<int64_t>{0L, 0L},
+        std::vector<int64_t>{kLoopEndMs, kLoopEndMs}));
+
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(0));
+    EXPECT_EQ(PlaybackLaneLifecycle::Active, engine.laneLifecycle(1));
+
+    std::vector<float> buffer(static_cast<std::size_t>(kRenderFrames) * 2u, 0.0f);
+    float peak = 0.0f;
+    for (int block = 0; block < 64; ++block) {
+        engine.render(buffer.data(), kRenderFrames, 2, kSampleRateHz);
+        peak = std::max(peak, PeakAbsInterleaved(buffer.data(), buffer.size()));
+    }
+
+    EXPECT_GT(peak, 0.05f);
+    engine.stopPlayback();
+    std::remove(loopA.c_str());
+    std::remove(loopB.c_str());
 }
 
 TEST_F(AudioEngineMasterPlaybackTest, LoopLaneNeverPlaysBeyondLoopEndSourceRegion) {

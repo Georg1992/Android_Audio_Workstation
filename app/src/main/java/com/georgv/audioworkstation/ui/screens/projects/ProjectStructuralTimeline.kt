@@ -9,11 +9,13 @@ import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 internal fun timelineProjectionForTracks(
     tracks: List<TrackEntity>,
     waveformStates: Map<String, WaveformState>,
+    selectedTrackIds: Set<String> = tracks.map { it.id }.toSet(),
     playheadMs: Long = 0L,
 ): ProjectTimelineProjection =
     buildProjectTimelineProjection(
         tracks = tracks,
         waveformStatesByTrackId = waveformStates,
+        selectedTrackIds = selectedTrackIds,
         activeRecording = null,
         playheadPositionMs = playheadMs,
         extendVisibleTimelineForAllLoopedPlayback = false,
@@ -35,6 +37,7 @@ internal fun buildStructuralTimelineProjection(
     return buildProjectTimelineProjection(
         tracks = screen.tracks,
         waveformStatesByTrackId = screen.waveformStatesByTrackId,
+        selectedTrackIds = screen.selectedTrackIds,
         activeRecording = structuralRecording,
         playheadPositionMs = 0L,
         extendVisibleTimelineForAllLoopedPlayback = false,
@@ -45,7 +48,7 @@ internal fun buildStructuralTimelineProjection(
 
 internal fun ProjectUiState.mergeRealtime(realtime: ProjectRealtimeUiState): ProjectUiState =
     copy(
-        playheadPositionMs = realtime.playheadPositionMs,
+        playheadPositionMs = realtime.globalPlayheadPositionMs,
         recordingInputLevel = realtime.recordingInputLevel,
         timelineVisibleDurationMs = realtime.timelineVisibleDurationMs,
         timelineClipsByTrackId = realtime.recordingTimelineClipsByTrackId ?: timelineClipsByTrackId,

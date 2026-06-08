@@ -179,7 +179,7 @@ class TrackLoopPlayheadTest {
         assertTrue(
             shouldExtendVisibleTimelineForAllLoopedPlayback(
                 playbackSessionActive = true,
-                sessionTrackIds = setOf("one-shot", "loop"),
+                selectedTrackIds = setOf("one-shot", "loop"),
                 tracks = tracks,
             ),
         )
@@ -187,6 +187,7 @@ class TrackLoopPlayheadTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = playheadMs,
                 extendVisibleTimelineForAllLoopedPlayback = true,
@@ -344,6 +345,7 @@ class TrackLoopPlayheadTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 0L,
                 extendVisibleTimelineForAllLoopedPlayback = false,
@@ -441,7 +443,7 @@ class TrackLoopPlayheadTest {
     @Test
     fun `lane source read offset wraps for looped playback lane`() {
         assertEquals(
-            2_500L,
+            7_500L,
             laneSourceReadOffsetMs(
                 playheadMs = 5_500L,
                 clipStartMs = 5_000L,

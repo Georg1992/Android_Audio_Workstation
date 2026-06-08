@@ -1,7 +1,10 @@
 package com.georgv.audioworkstation.ui.components
 
+import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.components.timelineClipLayout
+import com.georgv.audioworkstation.ui.components.timelineLaneLocalLayoutDurationMs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -35,6 +38,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 25_000L,
                 extendVisibleTimelineForAllLoopedPlayback = false,
@@ -61,6 +65,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 25_000L,
                 extendVisibleTimelineForAllLoopedPlayback = true,
@@ -87,6 +92,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 25_000L,
                 extendVisibleTimelineForAllLoopedPlayback = true,
@@ -109,6 +115,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = emptyList(),
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = setOf("rec"),
                 activeRecording =
                     ActiveRecordingTimelineClip(
                         trackId = "rec",
@@ -137,6 +144,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = emptyList(),
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = setOf("rec"),
                 activeRecording =
                     ActiveRecordingTimelineClip(
                         trackId = "rec",
@@ -172,6 +180,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = setOf("existing", "rec"),
                 activeRecording =
                     ActiveRecordingTimelineClip(
                         trackId = "rec",
@@ -206,6 +215,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = setOf("a", "rec"),
                 activeRecording =
                     ActiveRecordingTimelineClip(
                         trackId = "rec",
@@ -245,6 +255,7 @@ class ProjectTimelineProjectionTest {
                 tracks = tracks,
                 waveformStatesByTrackId =
                     mapOf("target" to WaveformState.Ready(WaveformPeaks.Placeholder)),
+                selectedTrackIds = setOf("target"),
                 activeRecording =
                     ActiveRecordingTimelineClip(
                         trackId = "target",
@@ -282,6 +293,7 @@ class ProjectTimelineProjectionTest {
             buildProjectTimelineProjection(
                 tracks = tracks,
                 waveformStatesByTrackId = emptyMap(),
+                selectedTrackIds = tracks.map { it.id }.toSet(),
                 activeRecording = null,
                 playheadPositionMs = 25_000L,
                 extendVisibleTimelineForAllLoopedPlayback = true,
@@ -406,6 +418,102 @@ class ProjectTimelineProjectionTest {
     }
 
     @Test
+    fun `mixdown timeline end matches idle global ruler base duration`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "short",
+                    projectId = "p",
+                    wavFilePath = "short.wav",
+                    duration = 8_000L,
+                    importStatus = TrackImportStatus.READY,
+                ),
+                TrackEntity(
+                    id = "late",
+                    projectId = "p",
+                    wavFilePath = "late.wav",
+                    duration = 10_000L,
+                    timelineStartOffsetMs = 12_000L,
+                    importStatus = TrackImportStatus.READY,
+                ),
+            )
+        val projection = buildIdleProjection(tracks = tracks)
+
+        assertEquals(22_000L, projection.baseTimelineDurationMs)
+        assertEquals(projection.baseTimelineDurationMs, mixdownTimelineEndMs(tracks, tracks.map { it.id }.toSet()))
+        assertEquals(MixdownTimelineStartMs, 0L)
+    }
+
+    @Test
+    fun `base timeline and base track ignore unselected lanes`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "short",
+                    projectId = "p",
+                    wavFilePath = "short.wav",
+                    duration = 8_000L,
+                    importStatus = TrackImportStatus.READY,
+                ),
+                TrackEntity(
+                    id = "late",
+                    projectId = "p",
+                    wavFilePath = "late.wav",
+                    duration = 10_000L,
+                    timelineStartOffsetMs = 12_000L,
+                    importStatus = TrackImportStatus.READY,
+                ),
+            )
+        val projection =
+            buildIdleProjection(tracks = tracks, selectedTrackIds = setOf("short"))
+
+        assertEquals(8_000L, projection.baseTimelineDurationMs)
+        assertTrue(projection.clipsByLaneId["short"]!!.isTimelineBase)
+        assertFalse(projection.clipsByLaneId["late"]!!.isTimelineBase)
+        assertEquals(8_000L, mixdownTimelineEndMs(tracks, setOf("short")))
+        val lateClip = projection.clipsByLaneId["late"]!!
+        assertEquals(22_000L, timelineLaneLocalLayoutDurationMs(lateClip))
+        assertNotNull(timelineClipLayout(lateClip, timelineLaneLocalLayoutDurationMs(lateClip)))
+    }
+
+    @Test
+    fun `empty selection yields zero base timeline`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "a",
+                    projectId = "p",
+                    wavFilePath = "a.wav",
+                    duration = 10_000L,
+                    importStatus = TrackImportStatus.READY,
+                ),
+            )
+
+        val projection = buildIdleProjection(tracks = tracks, selectedTrackIds = emptySet())
+
+        assertEquals(0L, projection.baseTimelineDurationMs)
+        assertFalse(projection.clipsByLaneId["a"]!!.isTimelineBase)
+    }
+
+    @Test
+    fun `mixdown timeline end ignores loop region shrink`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "loop",
+                    projectId = "p",
+                    wavFilePath = "loop.wav",
+                    duration = 20_000L,
+                    isLoop = true,
+                    loopEndMs = 12_000L,
+                    importStatus = TrackImportStatus.READY,
+                ),
+            )
+
+        assertEquals(20_000L, mixdownTimelineEndMs(tracks, setOf("loop")))
+    }
+
+    @Test
     fun `shouldExtendVisibleTimelineForAllLoopedPlayback requires active loop session`() {
         val tracks =
             listOf(
@@ -416,21 +524,21 @@ class ProjectTimelineProjectionTest {
         assertTrue(
             shouldExtendVisibleTimelineForAllLoopedPlayback(
                 playbackSessionActive = true,
-                sessionTrackIds = setOf("a"),
+                selectedTrackIds = setOf("a"),
                 tracks = tracks,
             ),
         )
         assertTrue(
             shouldExtendVisibleTimelineForAllLoopedPlayback(
                 playbackSessionActive = true,
-                sessionTrackIds = setOf("a", "b"),
+                selectedTrackIds = setOf("a", "b"),
                 tracks = tracks,
             ),
         )
         assertFalse(
             shouldExtendVisibleTimelineForAllLoopedPlayback(
                 playbackSessionActive = true,
-                sessionTrackIds = setOf("b"),
+                selectedTrackIds = setOf("b"),
                 tracks = tracks,
             ),
         )
@@ -439,10 +547,12 @@ class ProjectTimelineProjectionTest {
     private fun buildIdleProjection(
         tracks: List<TrackEntity> = emptyList(),
         playheadPositionMs: Long = 0L,
+        selectedTrackIds: Set<String> = tracks.map { it.id }.toSet(),
     ): ProjectTimelineProjection =
         buildProjectTimelineProjection(
             tracks = tracks,
             waveformStatesByTrackId = emptyMap(),
+            selectedTrackIds = selectedTrackIds,
             activeRecording = null,
             playheadPositionMs = playheadPositionMs,
             extendVisibleTimelineForAllLoopedPlayback = false,

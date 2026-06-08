@@ -209,11 +209,19 @@ class ProjectRecordingCoordinator @Inject constructor(
     fun finalizeTrackAfterStop(
         currentTrack: TrackEntity,
         punchContext: RecordingPunchContext?,
+        firstSampleTransportPositionMs: Long = AudioController.RecordingFirstSampleTransportUnset,
     ): TrackEntity {
         val stopTimestamp = System.currentTimeMillis()
         if (punchContext == null) {
             val duration = max(0L, stopTimestamp - currentTrack.timeStampStart)
+            val timelineStartOffsetMs =
+                if (firstSampleTransportPositionMs >= 0L) {
+                    firstSampleTransportPositionMs
+                } else {
+                    currentTrack.timelineStartOffsetMs
+                }
             return currentTrack.copy(
+                timelineStartOffsetMs = timelineStartOffsetMs.coerceAtLeast(0L),
                 timeStampStop = stopTimestamp,
                 duration = duration,
                 isRecording = false,
@@ -238,8 +246,15 @@ class ProjectRecordingCoordinator @Inject constructor(
     }
 
     /** @see finalizeTrackAfterStop */
-    fun finalizedTrackAfterStop(currentTrack: TrackEntity): TrackEntity =
-        finalizeTrackAfterStop(currentTrack, punchContext = null)
+    fun finalizedTrackAfterStop(
+        currentTrack: TrackEntity,
+        firstSampleTransportPositionMs: Long = AudioController.RecordingFirstSampleTransportUnset,
+    ): TrackEntity =
+        finalizeTrackAfterStop(
+            currentTrack,
+            punchContext = null,
+            firstSampleTransportPositionMs = firstSampleTransportPositionMs,
+        )
 
     fun discardPunchRecordingTempFile(punchContext: RecordingPunchContext?) {
         val tempPath = punchContext?.tempRecordingPath ?: return

@@ -37,6 +37,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -46,6 +49,7 @@ import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.track.hasTimelineClip
+import com.georgv.audioworkstation.core.track.trackLoopPlaybackPositionMs
 import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMsForClipTimelineWindow
@@ -118,6 +122,13 @@ fun timelineClipEndMs(startOffsetMs: Long, durationMs: Long): Long {
 
 fun timelineClipEffectiveTimelineEndMs(clip: TimelineClip): Long =
     timelineClipEndMs(clip.startOffsetMs, clip.durationMs)
+
+/** Per-lane timeline width for waveform/ruler layout (full clip extent, not mix selection). */
+fun timelineLaneLocalLayoutDurationMs(clip: TimelineClip): Long {
+    val endMs = timelineClipEffectiveTimelineEndMs(clip)
+    if (endMs <= 0L) return 0L
+    return endMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
+}
 
 fun projectTimelineClips(
     tracks: List<TrackEntity>,
@@ -204,6 +215,50 @@ fun waveformPeaksForTimelineClip(
     return peaks.copy(amplitudes = peaks.amplitudes.take(visibleBars))
 }
 
+/** Slice [peaks] to the loop region so it can span the full waveform width during loop playback. */
+fun waveformPeaksForLoopPlaybackRegion(
+    peaks: WaveformPeaks,
+    loopStartMs: Long,
+    loopEndMs: Long,
+    clipDurationMs: Long,
+): WaveformPeaks {
+    if (clipDurationMs <= 0L) return peaks
+    val sourceDurationMs = peaks.sourceDurationMs.coerceAtLeast(clipDurationMs)
+    val startMs = loopStartMs.coerceIn(0L, clipDurationMs)
+    val endMs = loopEndMs.coerceIn(startMs + 1L, clipDurationMs)
+    val regionDurationMs = (endMs - startMs).coerceAtLeast(1L)
+
+    fun sliceRange(totalBars: Int): IntRange? {
+        if (totalBars <= 0) return null
+        val startBar =
+            ((totalBars.toLong() * startMs) / sourceDurationMs)
+                .toInt()
+                .coerceIn(0, totalBars - 1)
+        val endBarExclusive =
+            ((totalBars.toLong() * endMs + sourceDurationMs - 1L) / sourceDurationMs)
+                .toInt()
+                .coerceIn(startBar + 1, totalBars)
+        return startBar until endBarExclusive
+    }
+
+    if (peaks.isStereo) {
+        val left = peaks.leftAmplitudes.orEmpty()
+        val right = peaks.rightAmplitudes.orEmpty()
+        val range = sliceRange(minOf(left.size, right.size)) ?: return peaks
+        return peaks.copy(
+            leftAmplitudes = left.slice(range),
+            rightAmplitudes = right.slice(range),
+            sourceDurationMs = regionDurationMs,
+        )
+    }
+
+    val range = sliceRange(peaks.amplitudes.size) ?: return peaks
+    return peaks.copy(
+        amplitudes = peaks.amplitudes.slice(range),
+        sourceDurationMs = regionDurationMs,
+    )
+}
+
 fun timelineClipLayout(
     clip: TimelineClip,
     timelineBaseDurationMs: Long,
@@ -249,10 +304,11 @@ fun timelineClipEndTimeMs(
 fun timelineRulerBoundaryLabels(
     clip: TimelineClip,
     layout: TimelineClipLayout,
-    timelineBaseDurationMs: Long,
+    laneLayoutDurationMs: Long,
+    globalMixScopeDurationMs: Long = laneLayoutDurationMs,
 ): List<TimelineRulerBoundaryLabel> {
     val startMs = clip.startOffsetMs.coerceAtLeast(0L)
-    val clipEndMs = timelineClipEndTimeMs(clip, timelineBaseDurationMs)
+    val clipEndMs = timelineClipEndTimeMs(clip, laneLayoutDurationMs)
     val clipEndFraction = timelineClipEndFraction(layout)
 
     val labels =
@@ -273,10 +329,17 @@ fun timelineRulerBoundaryLabels(
         return labels
     }
 
+    if (globalMixScopeDurationMs <= 0L || globalMixScopeDurationMs >= laneLayoutDurationMs) {
+        return labels
+    }
+
     return labels +
         TimelineRulerBoundaryLabel(
-            text = formatTimelineDuration(timelineBaseDurationMs),
-            fraction = 1f,
+            text = formatTimelineDuration(globalMixScopeDurationMs),
+            fraction =
+                (globalMixScopeDurationMs.toDouble() / laneLayoutDurationMs.toDouble())
+                    .toFloat()
+                    .coerceIn(0f, 1f),
             alignToEnd = true,
         )
 }
@@ -308,14 +371,19 @@ internal fun timelineClipAndLaneDurationForLayout(
 @Composable
 fun TrackTimelineLane(
     clip: TimelineClip?,
-    /** Fixed lane layout from base timeline (not playback-expanded global duration). */
+    /** Lane-local layout width (full clip extent on the project timeline). */
     laneLayoutDurationMs: Long,
     /** Global project timeline for non-loop lane playhead alignment. */
     globalPlayheadTimelineDurationMs: Long,
+    /** Selection-scoped mix end for optional ruler marker on longer unselected lanes. */
+    globalMixScopeDurationMs: Long = laneLayoutDurationMs,
     playheadPositionMs: Long,
+    loopPlaybackActive: Boolean = false,
     recordingInputLevel: Float? = null,
     loopRegionEditingEnabled: Boolean = false,
     onLoopRegionCommit: ((loopStartMs: Long, loopEndMs: Long) -> Unit)? = null,
+    /** Loop waveform container bounds for reorder exclusion (wave area only, not ruler/metadata). */
+    onLoopWaveformContainerBoundsInRoot: ((Rect) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
@@ -364,6 +432,20 @@ fun TrackTimelineLane(
                     clip = activeClip,
                 )
             }
+        val loopPlaybackScale =
+            remember(
+                effectiveLaneLayoutDurationMs,
+                activeClip.laneId,
+                activeClip.effectiveStartMs,
+                activeClip.effectiveEndMs,
+            ) {
+                timelineLaneScaleForLoopPlayback(
+                    laneLayoutDurationMs = effectiveLaneLayoutDurationMs,
+                    clip = activeClip,
+                    loopStartMs = activeClip.effectiveStartMs,
+                    loopEndMs = activeClip.effectiveEndMs,
+                )
+            }
         val sourceFitScale =
             remember(effectiveLaneLayoutDurationMs, activeClip.laneId, activeClip.durationMs, activeClip.startOffsetMs) {
                 timelineLaneScaleForLoopEdit(
@@ -372,13 +454,24 @@ fun TrackTimelineLane(
                     clip = activeClip,
                 )
             }
-        val laneScale =
-            if (timelineLaneUsesSourceFit(laneViewportZoomed, loopRegionEditFocus)) {
-                sourceFitScale
+        val useLoopPlaybackProjection = activeClip.isLoop && loopPlaybackActive
+        val lanePlayheadMs =
+            if (useLoopPlaybackProjection) {
+                trackLoopPlaybackPositionMs(
+                    rawPlayheadMs = playheadPositionMs,
+                    loopStartMs = activeClip.effectiveStartMs,
+                    loopEndMs = activeClip.effectiveEndMs,
+                )
             } else {
-                timelineScale
+                playheadPositionMs
             }
-        val drawGlobalPlayheadInLane = !activeClip.isLoop && !laneViewportZoomed
+        val laneScale =
+            when {
+                useLoopPlaybackProjection -> loopPlaybackScale
+                timelineLaneUsesSourceFit(laneViewportZoomed, loopRegionEditFocus) -> sourceFitScale
+                else -> timelineScale
+            }
+        val drawGlobalPlayheadInLane = !activeClip.isLoop && !laneViewportZoomed && !useLoopPlaybackProjection
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -390,7 +483,18 @@ fun TrackTimelineLane(
                 BoxWithConstraints(
                     modifier = Modifier
                         .weight(TimelineWaveformHeightFraction)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .then(
+                            if (activeClip.isLoop && onLoopWaveformContainerBoundsInRoot != null) {
+                                Modifier.onGloballyPositioned { coordinates ->
+                                    onLoopWaveformContainerBoundsInRoot.invoke(
+                                        coordinates.boundsInRoot(),
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 ) {
                     val waveformAreaWidthPx = with(density) { maxWidth.toPx() }
                     var loopPreviewStartMs by remember(activeClip.laneId) {
@@ -409,32 +513,35 @@ fun TrackTimelineLane(
                             .coerceAtLeast(TimelineClipMinimumWidthDp.dp)
                     val sourcePlayheadMs =
                         trackSourcePlayheadMs(
-                            globalPlayheadMs = playheadPositionMs,
+                            globalPlayheadMs = lanePlayheadMs,
                             timelineStartOffsetMs = activeClip.startOffsetMs,
                             sourceDurationMs = activeClip.durationMs,
                             loopEnabled = activeClip.isLoop,
                             loopStartMs = activeClip.effectiveStartMs,
                             loopEndMs = activeClip.effectiveEndMs,
+                            loopPlaybackActive = useLoopPlaybackProjection,
                         )
                     val clipLocalPlayheadMs =
                         if (laneViewportZoomed) {
                             trackSourcePlayheadMsForClipTimelineWindow(
-                                globalPlayheadMs = playheadPositionMs,
+                                globalPlayheadMs = lanePlayheadMs,
                                 timelineStartOffsetMs = activeClip.startOffsetMs,
                                 sourceDurationMs = activeClip.durationMs,
                                 loopEnabled = activeClip.isLoop,
                                 loopStartMs = activeClip.effectiveStartMs,
                                 loopEndMs = activeClip.effectiveEndMs,
+                                loopPlaybackActive = useLoopPlaybackProjection,
                             )
                         } else {
                             null
                         }
                     val showLocalPlayhead =
                         when {
+                            useLoopPlaybackProjection -> true
                             laneViewportZoomed -> clipLocalPlayheadMs != null
                             activeClip.isLoop ->
                                 trackLocalPlayheadVisibleInClip(
-                                    globalPlayheadMs = playheadPositionMs,
+                                    globalPlayheadMs = lanePlayheadMs,
                                     timelineStartOffsetMs = activeClip.startOffsetMs,
                                     clipDurationMs = activeClip.durationMs,
                                     loopEnabled = true,
@@ -479,24 +586,35 @@ fun TrackTimelineLane(
                         ) {
                             TimelineLaneWaveformMode.PersistedPeaks -> {
                                 val peaks = (activeClip.waveformState as WaveformState.Ready).peaks
+                                val displayPeaks =
+                                    if (useLoopPlaybackProjection) {
+                                        waveformPeaksForLoopPlaybackRegion(
+                                            peaks = peaks,
+                                            loopStartMs = activeClip.effectiveStartMs,
+                                            loopEndMs = activeClip.effectiveEndMs,
+                                            clipDurationMs = activeClip.durationMs,
+                                        )
+                                    } else {
+                                        waveformPeaksForTimelineClip(
+                                            peaks = peaks,
+                                            clipDurationMs = activeClip.durationMs,
+                                        )
+                                    }
                                 val loopRegionStartFraction =
-                                    if (activeClip.isLoop && activeClip.durationMs > 0L) {
+                                    if (activeClip.isLoop && activeClip.durationMs > 0L && !useLoopPlaybackProjection) {
                                         loopPreviewStartMs.toFloat() / activeClip.durationMs.toFloat()
                                     } else {
                                         null
                                     }
                                 val loopRegionEndFraction =
-                                    if (activeClip.isLoop && activeClip.durationMs > 0L) {
+                                    if (activeClip.isLoop && activeClip.durationMs > 0L && !useLoopPlaybackProjection) {
                                         loopPreviewEndMs.toFloat() / activeClip.durationMs.toFloat()
                                     } else {
                                         null
                                     }
                                 TrackWaveform(
                                     peaks =
-                                        waveformPeaksForTimelineClip(
-                                            peaks = peaks,
-                                            clipDurationMs = activeClip.durationMs,
-                                        ),
+                                        displayPeaks,
                                     horizontalInsetFraction = 0f,
                                     loopRegionStartFraction = loopRegionStartFraction,
                                     loopRegionEndFraction = loopRegionEndFraction,
@@ -537,13 +655,28 @@ fun TrackTimelineLane(
                         if (showLocalPlayhead) {
                             TimelineLaneLocalPlayheadOverlay(
                                 sourcePlayheadMs = localPlayheadSourceMs,
-                                sourceDurationMs = activeClip.durationMs,
+                                sourceDurationMs =
+                                    if (useLoopPlaybackProjection) {
+                                        (activeClip.effectiveEndMs - activeClip.effectiveStartMs)
+                                            .coerceAtLeast(1L)
+                                    } else {
+                                        activeClip.durationMs
+                                    },
+                                loopPlaybackProjection =
+                                    if (useLoopPlaybackProjection) {
+                                        TimelineLaneLocalPlayheadLoopProjection(
+                                            loopStartMs = activeClip.effectiveStartMs,
+                                            loopEndMs = activeClip.effectiveEndMs,
+                                        )
+                                    } else {
+                                        null
+                                    },
                                 playheadLineWidthPx = playheadLineWidthPx,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
-                    if (activeClip.isLoop) {
+                    if (activeClip.isLoop && !useLoopPlaybackProjection) {
                         LoopRegionEditor(
                             sourceDurationMs = activeClip.durationMs,
                             loopStartMs = activeClip.effectiveStartMs,
@@ -574,24 +707,31 @@ fun TrackTimelineLane(
                     clipStartFraction = laneScale.clipStartFractionOnWaveformArea(),
                     clipEndFraction = laneScale.rulerClipEndFraction(),
                     boundaryLabels =
-                        if (laneScale.mode == TimelineLaneScaleMode.SourceFitWhileEditing) {
-                            sourceFitRulerBoundaryLabels(
-                                formattedTimelineStart =
-                                    formatTimelineDuration(activeClip.startOffsetMs),
-                                formattedTimelineEnd =
-                                    formatTimelineDuration(
-                                        timelineClipEndMs(
-                                            activeClip.startOffsetMs,
-                                            activeClip.durationMs,
+                        when (laneScale.mode) {
+                            TimelineLaneScaleMode.SourceFitWhileEditing ->
+                                sourceFitRulerBoundaryLabels(
+                                    formattedTimelineStart =
+                                        formatTimelineDuration(activeClip.startOffsetMs),
+                                    formattedTimelineEnd =
+                                        formatTimelineDuration(
+                                            timelineClipEndMs(
+                                                activeClip.startOffsetMs,
+                                                activeClip.durationMs,
+                                            ),
                                         ),
-                                    ),
-                            )
-                        } else {
-                            timelineRulerBoundaryLabels(
-                                clip = activeClip,
-                                layout = layout,
-                                timelineBaseDurationMs = laneLayoutDurationMs,
-                            )
+                                )
+                            TimelineLaneScaleMode.LoopPlayback ->
+                                loopPlaybackRulerBoundaryLabels(
+                                    loopStartMs = activeClip.effectiveStartMs,
+                                    loopEndMs = activeClip.effectiveEndMs,
+                                )
+                            TimelineLaneScaleMode.Timeline ->
+                                timelineRulerBoundaryLabels(
+                                    clip = activeClip,
+                                    layout = layout,
+                                    laneLayoutDurationMs = laneLayoutDurationMs,
+                                    globalMixScopeDurationMs = globalMixScopeDurationMs,
+                                )
                         },
                     modifier = Modifier
                         .weight(TimelineRulerHeightFraction)

@@ -13,6 +13,9 @@ interface AudioFilePathProvider {
 
     /** Temporary capture file for punch recording; must not overwrite the live track WAV. */
     fun trackRecordingTempPath(projectId: String, trackId: String): String?
+
+    /** Offline mixdown output for Library preview and export. */
+    fun mixdownOutputPath(projectId: String): String?
 }
 
 @Singleton
@@ -37,5 +40,10 @@ class DefaultAudioFilePathProvider @Inject constructor(
     override fun trackRecordingTempPath(projectId: String, trackId: String): String? {
         val projectDir = projectRecordingDirectory(projectId) ?: return null
         return File(projectDir, "$trackId.recording.tmp.wav").absolutePath
+    }
+
+    override fun mixdownOutputPath(projectId: String): String? {
+        val projectDir = projectRecordingDirectory(projectId) ?: return null
+        return File(projectDir, "mixdown.wav").absolutePath
     }
 }

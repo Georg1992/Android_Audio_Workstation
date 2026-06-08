@@ -73,7 +73,7 @@ class TrackLoopPlaybackSpecTest {
   }
 
   @Test
-  fun `looped track is silent at playhead before timeline clip start`() {
+  fun `looped track is audible at playhead zero regardless of timeline clip start`() {
     val track =
         TrackEntity(
             id = "loop",
@@ -88,7 +88,7 @@ class TrackLoopPlaybackSpecTest {
 
     val lane = project.toMultiPlaybackSpec(listOf(track))!!.lanes.single()
 
-    assertFalse(
+    assertTrue(
         isLaneAudibleAtPlayhead(
             playheadMs = 0L,
             clipStartMs = lane.timelineClipStartMs,
@@ -107,7 +107,7 @@ class TrackLoopPlaybackSpecTest {
   }
 
   @Test
-  fun `looped track lane source read offset wraps inside loop region`() {
+  fun `looped track lane source read offset uses global transport phase`() {
     val track =
         TrackEntity(
             id = "loop",
@@ -123,7 +123,7 @@ class TrackLoopPlaybackSpecTest {
     val lane = project.toMultiPlaybackSpec(listOf(track))!!.lanes.single()
 
     assertEquals(
-        4_000L,
+        2_000L,
         laneSourceReadOffsetMs(
             playheadMs = 7_000L,
             clipStartMs = lane.timelineClipStartMs,

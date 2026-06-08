@@ -149,12 +149,12 @@ class MediaCodecCompressedInputFeederTest {
             require(sampleSizes.size == sampleTimesUs.size)
         }
 
-        override fun readSampleData(byteBuf: ByteBuffer, offset: Int): Int {
+        override fun readSampleData(buffer: ByteBuffer, offset: Int): Int {
             if (index >= sizes.size) return -1
             val size = sizes[index]
-            byteBuf.position(offset)
-            byteBuf.limit(offset + size)
-            repeat(size) { byteBuf.put(offset + it, 0x5A.toByte()) }
+            buffer.position(offset)
+            buffer.limit(offset + size)
+            repeat(size) { buffer.put(offset + it, 0x5A.toByte()) }
             return size
         }
 

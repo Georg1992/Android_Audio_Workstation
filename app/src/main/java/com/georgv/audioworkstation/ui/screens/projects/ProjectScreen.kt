@@ -21,8 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -59,6 +62,7 @@ import com.georgv.audioworkstation.core.content.resolveDisplayName
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.AppMusicLoadingPlaceholder
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
+import com.georgv.audioworkstation.ui.components.MixdownAudioButton
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.TimelinePlayheadScrubberPanel
 import com.georgv.audioworkstation.ui.components.TransportPanel
@@ -68,9 +72,11 @@ import com.georgv.audioworkstation.ui.components.TopBarAlertState
 import com.georgv.audioworkstation.ui.drag.DragController
 import android.os.SystemClock
 import android.os.Trace
+import android.util.Log
 import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import androidx.compose.runtime.SideEffect
+import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
@@ -95,6 +101,8 @@ fun ProjectScreen(
     quickRecord: Boolean,
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit = {},
+    onConfirmMixdown: (String, Set<String>) -> Unit = { _, _ -> },
+    onEditTrack: (String) -> Unit = {},
 ) {
     NavTransitionDiagnostics.MonitorDestinationLifecycle("project")
 
@@ -135,6 +143,8 @@ fun ProjectScreen(
             quickRecord = quickRecord,
             onBack = onBack,
             onOpenProject = onOpenProject,
+            onConfirmMixdown = onConfirmMixdown,
+            onEditTrack = onEditTrack,
             onShellShown = {
                 ProjectDiagnostics.logShellRendered(projectId, phase = "content")
             },
@@ -184,6 +194,8 @@ private fun ProjectScreenContent(
     quickRecord: Boolean,
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit,
+    onConfirmMixdown: (String, Set<String>) -> Unit,
+    onEditTrack: (String) -> Unit,
     onShellShown: () -> Unit,
 ) {
     val vmResolveStartMs = remember(projectId) { SystemClock.uptimeMillis() }
@@ -362,6 +374,8 @@ private fun ProjectScreenContent(
                     projectId = projectId,
                     showWaveforms = showWaveforms,
                     onOpenProject = onOpenProject,
+                    onConfirmMixdown = onConfirmMixdown,
+                    onEditTrack = onEditTrack,
                     topBarAlertState = topBarAlertState,
                     onTrackPagingSummaryChange = { trackPagingSummary = it },
                 )
@@ -595,17 +609,24 @@ private fun ProjectScreenHeavyLayer(
     projectId: String,
     showWaveforms: Boolean,
     onOpenProject: (String) -> Unit,
+    onConfirmMixdown: (String, Set<String>) -> Unit,
+    onEditTrack: (String) -> Unit,
     topBarAlertState: TopBarAlertState,
     onTrackPagingSummaryChange: (String) -> Unit,
 ) {
     val structuralState by vm.structuralUiState.collectAsStateWithLifecycle()
     val realtimeState by vm.realtimeUiState.collectAsStateWithLifecycle()
     val sampleRateMismatchDialog by vm.sampleRateMismatchDialogState.collectAsStateWithLifecycle()
+    val mixdownVm: ProjectMixdownViewModel = hiltViewModel()
+    val mixdownByProjectId by mixdownVm.mixdownByProjectIdState.collectAsStateWithLifecycle()
+    val projectMixdown = mixdownByProjectId[projectId]
+    val isMixdownInProgress = projectMixdown?.isMixing == true
     val dragController = remember { DragController() }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var pendingRecordProjectName by remember(projectId) { mutableStateOf<String?>(null) }
     var scrubbingPlayheadPositionMs by remember { mutableStateOf<Long?>(null) }
+    var showMixdownDialog by remember(projectId) { mutableStateOf(false) }
 
     val microphonePermissionError = stringResource(R.string.error_microphone_permission_required)
     val recordPermissionLauncher = rememberLauncherForActivityResult(
@@ -679,12 +700,58 @@ private fun ProjectScreenHeavyLayer(
         )
     }
 
+    if (showMixdownDialog) {
+        AlertDialog(
+            onDismissRequest = { showMixdownDialog = false },
+            containerColor = AppColors.Bg,
+            tonalElevation = 0.dp,
+            title = {
+                Text(
+                    text = stringResource(R.string.project_mixdown_confirm_title),
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.project_mixdown_confirm_message),
+                    style = AppText.TileSubtitle,
+                    color = AppColors.Line,
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showMixdownDialog = false }) {
+                    Text(
+                        text = stringResource(R.string.action_cancel),
+                        style = AppText.TileSubtitle,
+                        color = AppColors.Line,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    Log.d(MixConfirmNavTag, "dialog_confirm_clicked")
+                    showMixdownDialog = false
+                    Log.d(MixConfirmNavTag, "calling_parent_callback")
+                    onConfirmMixdown(projectId, structuralState.selectedTrackIds)
+                }) {
+                    Text(
+                        text = stringResource(R.string.action_mix),
+                        style = AppText.TileSubtitle,
+                        color = AppColors.Line,
+                    )
+                }
+            },
+        )
+    }
+
     val reorderActive = dragController.isDragging
     LaunchedEffect(reorderActive) {
         if (reorderActive) scrubbingPlayheadPositionMs = null
     }
 
-    val playheadPositionMs = scrubbingPlayheadPositionMs ?: realtimeState.playheadPositionMs
+    val playheadPositionMs =
+        scrubbingPlayheadPositionMs ?: realtimeState.globalPlayheadPositionMs
 
     Column(modifier = Modifier.fillMaxSize()) {
         TimelinePlayheadScrubberPanel(
@@ -719,6 +786,7 @@ private fun ProjectScreenHeavyLayer(
             dragController = dragController,
             realtimeUiState = vm.realtimeUiState,
             onTrackPagingSummaryChange = onTrackPagingSummaryChange,
+            onEditTrack = onEditTrack,
             vm = vm,
             modifier = Modifier.weight(1f),
         )
@@ -751,8 +819,22 @@ private fun ProjectScreenHeavyLayer(
                 enabled =
                     structuralState.recordingTrackId == null &&
                     !structuralState.isRecordingStartup &&
-                    !structuralState.isImportInProgress,
+                    !structuralState.isImportInProgress &&
+                    !isMixdownInProgress,
                 onClick = { importAudioLauncher.launch(IMPORT_AUDIO_MIME_TYPES) },
+                inputLocked = reorderActive,
+            )
+
+            Spacer(Modifier.width(Dimens.Gap / 2))
+
+            MixdownAudioButton(
+                enabled =
+                    structuralState.isPlayEnabled &&
+                    structuralState.recordingTrackId == null &&
+                    !structuralState.isRecordingStartup &&
+                    !structuralState.isImportInProgress &&
+                    !isMixdownInProgress,
+                onClick = { showMixdownDialog = true },
                 inputLocked = reorderActive,
             )
         }
@@ -767,6 +849,7 @@ private fun ProjectHeavyWorkspace(
     dragController: DragController,
     realtimeUiState: kotlinx.coroutines.flow.StateFlow<ProjectRealtimeUiState>,
     onTrackPagingSummaryChange: (String) -> Unit,
+    onEditTrack: (String) -> Unit,
     vm: ProjectViewModel,
     modifier: Modifier = Modifier,
 ) {
@@ -819,6 +902,7 @@ private fun ProjectHeavyWorkspace(
         onToggleRecordTarget = vm::toggleRecordTarget,
         onToggleLoop = vm::toggleTrackLoop,
         onUpdateTrackLoopRegion = vm::updateTrackLoopRegion,
+        onEditTrack = onEditTrack,
         onReorderTracks = { vm.setTrackOrderSession(projectId, it) },
         onPersistTrackOrder = { vm.persistTrackOrderToDb(projectId) },
         onTrackPagingSummaryChange = onTrackPagingSummaryChange,
@@ -840,3 +924,5 @@ private const val ProjectNavTransitionGateMs = 450L
 
 /** Fade loader out before mounting workspace. */
 private const val ProjectLoadingCrossfadeMs = 180
+
+private const val MixConfirmNavTag = "MixConfirmNav"

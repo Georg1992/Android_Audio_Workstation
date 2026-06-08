@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.navigation
 
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 
 /**
@@ -13,6 +14,19 @@ fun NavHostController.navigateSingleTopTo(route: String) {
     navigate(route) {
         launchSingleTop = true
         restoreState = true
-        popUpTo(Routes.MAIN_MENU) { saveState = true }
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+    }
+}
+
+/** Leaves the project editor and opens Library (mixdown progress is shown on project cards). */
+fun NavHostController.navigateToLibraryFromEditor() {
+    navigate(Routes.LIBRARY) {
+        popUpTo(graph.startDestinationId) {
+            inclusive = false
+        }
+        launchSingleTop = true
+        restoreState = false
     }
 }

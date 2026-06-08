@@ -118,38 +118,13 @@ class PlaybackSessionController(
     }
 
     /**
-     * HJ.1 + HJ.2: live audibility, hot-join, and cancel-prepare while a playback session is active
-     * and the native engine is still playing.
+     * @deprecated Selection scope rebuild is handled by [ScopePlaybackCoordinator].
      */
+    @Deprecated("Use ScopePlaybackCoordinator.onSelectionChangedDuringTransport")
     fun onSelectionChangedDuringPlayback(
-        selectedTrackIds: Set<String>,
-        playableTracks: List<TrackEntity>,
-    ) {
-        if (!_playbackSessionActive.value) {
-            return
-        }
-        scope.launch(dispatchers.audioIo) {
-            if (!audioController.isPlaybackEngineRunning()) {
-                return@launch
-            }
-
-            val preparingSnapshot = _preparingTrackIds.value
-            for (trackId in preparingSnapshot) {
-                if (trackId !in selectedTrackIds) {
-                    cancelHotJoinForTrack(trackId)
-                }
-            }
-
-            syncLaneAudibilityFromSelection(selectedTrackIds)
-
-            for (track in playableTracks) {
-                if (track.id !in selectedTrackIds) continue
-                if (trackLaneIndex(track.id) != null) continue
-                if (track.id in _preparingTrackIds.value) continue
-                startHotJoinForTrack(track, selectedTrackIds)
-            }
-        }
-    }
+        @Suppress("UNUSED_PARAMETER") selectedTrackIds: Set<String>,
+        @Suppress("UNUSED_PARAMETER") playableTracks: List<TrackEntity>,
+    ) = Unit
 
     fun sessionLaneTrackIdsForTests(): Array<String?> = sessionLaneTrackIds.copyOf()
 
@@ -187,7 +162,7 @@ class PlaybackSessionController(
     suspend fun restartEngineFromPlayhead(
         spec: MultiPlaybackSpec,
         trackIdsInLaneOrder: List<String>,
-        selectedTrackIds: Set<String>,
+        @Suppress("UNUSED_PARAMETER") selectedTrackIds: Set<String>,
     ): Boolean {
         if (!_playbackSessionActive.value || trackIdsInLaneOrder.isEmpty()) return false
         cancelCompletionMonitorForTransportStop()
@@ -202,7 +177,6 @@ class PlaybackSessionController(
                 audioController.startPlayback(spec)
             }
         if (!started) return false
-        syncLaneAudibilityFromSelection(selectedTrackIds)
         startPlaybackMonitor(trackIdsInLaneOrder.toSet())
         return true
     }
@@ -301,8 +275,7 @@ class PlaybackSessionController(
 
     /**
      * HJ.2 hot-join: arms a lane from track clip bounds and loop region metadata.
-     * Timeline placement is enforced by native render/ioLoop — lane may commit before clip start
-     * but stays silent until transport reaches [TrackEntity.timelineStartOffsetMs].
+     * Loop lanes follow the shared global transport phase; timeline clip placement is UI-only.
      */
     private fun startHotJoinForTrack(track: TrackEntity, selectedTrackIds: Set<String>) {
         val wavPath = track.wavFilePath

@@ -9,4 +9,6 @@ object Routes {
     const val COMMUNITY = "community"
     const val DEVICES = "devices"
     const val LIBRARY = "library"
+    const val TRACK_EDIT = "track_edit"
+    const val TRACK_EDIT_WITH_IDS = "track_edit/{projectId}/{trackId}"
 }

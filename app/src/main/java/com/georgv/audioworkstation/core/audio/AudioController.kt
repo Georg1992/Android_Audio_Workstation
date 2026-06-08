@@ -1,9 +1,10 @@
+@file:Suppress("TooManyFunctions")
+
 package com.georgv.audioworkstation.core.audio
 
 import kotlinx.coroutines.flow.StateFlow
 
-interface AudioController {
-    /**
+interface AudioController {    /**
      * Reactive flag tracking whether the engine is currently producing playback audio.
      * Flips to `true` synchronously inside [startPlayback] when it succeeds and back to
      * `false` once the engine reports completion or [stopPlayback] is called.
@@ -25,8 +26,19 @@ interface AudioController {
     /** Absolute timeline position in ms from the native transport clock (Clock.2+). */
     fun transportPositionMs(): Long
 
+    /**
+     * Timeline ms when the first input sample was captured on the last recording session.
+     * [RecordingFirstSampleTransportUnset] until a non-empty capture occurred.
+     */
+    fun recordingFirstSampleTransportPositionMs(): Long = RecordingFirstSampleTransportUnset
+
     /** True when the native engine is actively playing (same signal as [playbackState] when in sync). */
     fun isPlaybackEngineRunning(): Boolean
+
+    companion object {
+        /** Sentinel from native when no input samples were captured. */
+        const val RecordingFirstSampleTransportUnset = -1L
+    }
 
     fun startRecording(spec: RecordingSpec, outputPath: String? = null): String?
     fun stopRecording(): Boolean
@@ -72,4 +84,16 @@ interface AudioController {
      * isn't kept awake in the background.
      */
     fun release()
+
+    /**
+     * Native offline bounce using the same mixer path as live playback.
+     * Runs on [com.georgv.audioworkstation.core.coroutines.AppDispatchers.audioIo].
+     */
+    suspend fun renderOfflineMixdown(
+        spec: MultiPlaybackSpec,
+        outputPath: String,
+        onProgress: (Float) -> Unit,
+    ): MixdownResult = MixdownResult.Failed
+
+    fun cancelOfflineMixdown() = Unit
 }

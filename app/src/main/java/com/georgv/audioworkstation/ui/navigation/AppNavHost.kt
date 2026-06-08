@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.navigation
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -11,8 +12,11 @@ import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
 import com.georgv.audioworkstation.ui.screens.mainmenu.MainMenuScreen
 import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
 import com.georgv.audioworkstation.ui.screens.projects.CreateProjectScreen
 import com.georgv.audioworkstation.ui.screens.projects.ProjectScreen
+import com.georgv.audioworkstation.ui.screens.projects.TrackEditScreen
 import java.util.UUID
 
 @Composable
@@ -73,6 +77,7 @@ fun AppNavHost(
         ) { entry ->
             val projectId = entry.arguments?.getString("projectId") ?: return@composable
             val quickRecord = entry.arguments?.getBoolean("quick") ?: false
+            val mixdownVm: ProjectMixdownViewModel = hiltViewModel()
 
             ProjectScreen(
                 projectId = projectId,
@@ -81,6 +86,40 @@ fun AppNavHost(
                 onOpenProject = { newProjectId ->
                     navController.navigate("${Routes.PROJECT}/$newProjectId?quick=false")
                 },
+                onConfirmMixdown = { confirmedProjectId, selectedTrackIds ->
+                    Log.d(MixConfirmNavTag, "confirm_received projectId=$confirmedProjectId")
+                    Log.d(
+                        MixConfirmNavTag,
+                        "selected_track_ids=${selectedTrackIds.joinToString(",")}",
+                    )
+                    Log.d(MixConfirmNavTag, "request_mixdown_called")
+                    mixdownVm.requestMixdown(confirmedProjectId, selectedTrackIds)
+                    Log.d(MixConfirmNavTag, "navigate_library_called")
+                    navController.navigateToLibraryFromEditor()
+                    Log.d(
+                        MixConfirmNavTag,
+                        "current_route_after_navigate=" +
+                            navController.currentBackStackEntry?.destination?.route,
+                    )
+                },
+                onEditTrack = { trackId ->
+                    navController.navigate("${Routes.TRACK_EDIT}/$projectId/$trackId")
+                },
+            )
+        }
+
+        composable(
+            route = Routes.TRACK_EDIT_WITH_IDS,
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.StringType },
+                navArgument("trackId") { type = NavType.StringType },
+            ),
+        ) { entry ->
+            val projectId = entry.arguments?.getString("projectId") ?: return@composable
+            val trackId = entry.arguments?.getString("trackId") ?: return@composable
+
+            TrackEditScreen(
+                onBack = { navController.popBackStack() },
             )
         }
 
@@ -102,3 +141,5 @@ fun AppNavHost(
         }
     }
 }
+
+private const val MixConfirmNavTag = "MixConfirmNav"
