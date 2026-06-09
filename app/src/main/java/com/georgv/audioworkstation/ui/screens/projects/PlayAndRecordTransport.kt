@@ -8,9 +8,12 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
 /**
- * Overdub playback around an active recording take: selected lanes only, same [startPositionMs] as
- * the recording offset, never includes the recording row. Playhead timing stays in
- * [PlayheadTransportController] Recording phase polls the same native transport clock as playback.
+ * Overdub playback around an active recording take: selected lanes only, never includes the
+ * recording row. Playhead timing stays in [PlayheadTransportController]; Recording phase polls
+ * the same native transport clock as playback.
+ *
+ * Initial overdub arm uses [AudioController.startOverdubRecordingSession] (deferred gate + capture
+ * anchor). Scope rebuild during recording uses [AudioController.rearmOverdubPlaybackDuringRecording].
  */
 class PlayAndRecordTransport(
     private val audioController: AudioController,
@@ -18,15 +21,16 @@ class PlayAndRecordTransport(
     private val dispatchers: AppDispatchers,
 ) {
     /**
-     * @return true when overdub playback is not needed or native playback accepted the spec.
-     * @return false when lanes were required but [AudioController.startPlayback] rejected them.
+     * Rebuild overdub backing during an active recording session at the current transport ms
+     * (e.g. scope change while recording) without resetting the overdub capture anchor.
      */
-    suspend fun startFromPlayhead(
+    suspend fun rebuildOverdubAtCurrentTransport(
         project: ProjectEntity,
         selectedPlayableTracks: List<TrackEntity>,
         recordingTrackId: String,
-        startPositionMs: Long,
+        transportMs: Long,
         sessionTimelineEndMs: Long,
+        @Suppress("UNUSED_PARAMETER") timelineVisibleDurationMs: Long,
     ): Boolean {
         val overdubLanes =
             selectedPlayableTracks
@@ -37,12 +41,12 @@ class PlayAndRecordTransport(
         }
         val spec =
             project.toMultiPlaybackSpec(overdubLanes)?.copy(
-                startPositionMs = startPositionMs,
+                startPositionMs = transportMs,
                 sessionTimelineEndMs = sessionTimelineEndMs,
             ) ?: return false
         val started =
-            withAudioIo(dispatchers, "AudioController.startPlayback overdub") {
-                audioController.startPlayback(spec)
+            withAudioIo(dispatchers, "AudioController.rearmOverdubPlaybackDuringRecording") {
+                audioController.rearmOverdubPlaybackDuringRecording(spec)
             }
         if (!started) {
             return false

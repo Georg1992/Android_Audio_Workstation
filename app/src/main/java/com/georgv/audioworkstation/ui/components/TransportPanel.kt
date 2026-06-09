@@ -145,7 +145,6 @@ fun TransportPanel(
 fun MasterOutputPeakIndicator(
     peakDbText: String,
     indicatorLevel: MasterPeakIndicatorLevel,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val lampColor =
@@ -156,12 +155,7 @@ fun MasterOutputPeakIndicator(
             MasterPeakIndicatorLevel.Inactive -> AppColors.Green.copy(alpha = 0.35f)
         }
     Column(
-        modifier =
-            modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Dimens.TightGap),
     ) {

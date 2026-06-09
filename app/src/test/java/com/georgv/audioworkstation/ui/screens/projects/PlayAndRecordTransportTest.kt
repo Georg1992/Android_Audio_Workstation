@@ -19,25 +19,26 @@ class PlayAndRecordTransportTest {
     val mainDispatcherRule = ProjectViewModelMainDispatcherRule()
 
     @Test
-    fun `startFromPlayhead skips playback when no overdub lanes`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `rebuild skips playback when no overdub lanes`() = runTest(mainDispatcherRule.dispatcher) {
         val audio = FakeAudioController()
         val playback = playbackSession(this, audio)
         val sut = PlayAndRecordTransport(audio, playback, TestAppDispatchers.unified(mainDispatcherRule.dispatcher))
 
         assertTrue(
-            sut.startFromPlayhead(
+            sut.rebuildOverdubAtCurrentTransport(
                 project = ProjectEntity(id = "p", name = "P"),
                 selectedPlayableTracks = emptyList(),
                 recordingTrackId = "rec",
-                startPositionMs = 0L,
+                transportMs = 0L,
                 sessionTimelineEndMs = 10_000L,
+                timelineVisibleDurationMs = 10_000L,
             ),
         )
-        assertEquals(0, audio.startPlaybackCalls)
+        assertEquals(0, audio.rearmOverdubPlaybackCalls)
     }
 
     @Test
-    fun `startFromPlayhead excludes recording track from playback lanes`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `rebuild excludes recording track from playback lanes`() = runTest(mainDispatcherRule.dispatcher) {
         val audio = FakeAudioController()
         val playback = playbackSession(this, audio)
         val sut = PlayAndRecordTransport(audio, playback, TestAppDispatchers.unified(mainDispatcherRule.dispatcher))
@@ -47,18 +48,19 @@ class PlayAndRecordTransportTest {
             TrackEntity(id = "rec", projectId = "p", wavFilePath = "/rec.wav")
 
         assertTrue(
-            sut.startFromPlayhead(
+            sut.rebuildOverdubAtCurrentTransport(
                 project = ProjectEntity(id = "p", name = "P"),
                 selectedPlayableTracks = listOf(backing, recordingRow),
                 recordingTrackId = "rec",
-                startPositionMs = 5_000L,
+                transportMs = 5_000L,
                 sessionTimelineEndMs = 30_000L,
+                timelineVisibleDurationMs = 30_000L,
             ),
         )
 
-        assertEquals(1, audio.startPlaybackCalls)
-        assertEquals(5_000L, audio.lastMultiPlaybackSpec?.startPositionMs)
-        assertEquals(listOf("backing"), audio.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+        assertEquals(1, audio.rearmOverdubPlaybackCalls)
+        assertEquals(5_000L, audio.lastRearmOverdubPlaybackSpec?.startPositionMs)
+        assertEquals(listOf("backing"), audio.lastRearmOverdubPlaybackSpec?.lanes?.map { it.trackId })
         assertEquals(setOf("backing"), playback.sessionTrackIds.value)
         sut.stop()
         advanceUntilIdle()
@@ -71,12 +73,13 @@ class PlayAndRecordTransportTest {
         val sut = PlayAndRecordTransport(audio, playback, TestAppDispatchers.unified(mainDispatcherRule.dispatcher))
         val track = TrackEntity(id = "a", projectId = "p", wavFilePath = "/a.wav")
 
-        sut.startFromPlayhead(
+        sut.rebuildOverdubAtCurrentTransport(
             project = ProjectEntity(id = "p", name = "P"),
             selectedPlayableTracks = listOf(track),
             recordingTrackId = "rec",
-            startPositionMs = 0L,
+            transportMs = 0L,
             sessionTimelineEndMs = 10_000L,
+            timelineVisibleDurationMs = 10_000L,
         )
         advanceUntilIdle()
         sut.stop()

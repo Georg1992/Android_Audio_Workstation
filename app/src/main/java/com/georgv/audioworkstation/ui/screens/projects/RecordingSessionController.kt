@@ -2,11 +2,17 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
+import com.georgv.audioworkstation.core.audio.capability.AudioCapabilityProfileResolver
+import com.georgv.audioworkstation.core.audio.RecordingLatencyCalibrationLog
+import com.georgv.audioworkstation.core.audio.isNormalOverdubRecording
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.coroutines.withIo
+import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
+import com.georgv.audioworkstation.core.track.recordingClipTimelineStartMs
 import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +33,7 @@ class RecordingSessionController(
     private val audioController: AudioController,
     private val recordingCoordinator: ProjectRecordingCoordinator,
     private val dispatchers: AppDispatchers,
+    private val capabilityProfileResolver: AudioCapabilityProfileResolver,
 ) {
     private val _recordingTrackId = MutableStateFlow<String?>(null)
     val recordingTrackId: StateFlow<String?> = _recordingTrackId.asStateFlow()
@@ -37,9 +44,15 @@ class RecordingSessionController(
     private val _optimisticRecordingTrack = MutableStateFlow<TrackEntity?>(null)
     val optimisticRecordingTrack: StateFlow<TrackEntity?> = _optimisticRecordingTrack.asStateFlow()
 
+    private val _recordingOutputWavPath = MutableStateFlow<String?>(null)
+
     private val _punchRecordingContext = MutableStateFlow<RecordingPunchContext?>(null)
 
+    private val _activeNormalOverdubContext = MutableStateFlow<ActiveNormalOverdubContext?>(null)
+
     fun punchRecordingContext(): RecordingPunchContext? = _punchRecordingContext.value
+
+    fun activeNormalOverdubContext(): ActiveNormalOverdubContext? = _activeNormalOverdubContext.value
 
     fun hasActiveRecordingTake(): Boolean = _recordingTrackId.value != null
 
@@ -61,6 +74,8 @@ class RecordingSessionController(
         storagePrecheck: suspend (ProjectEntity) -> Boolean,
         notifyStorageStartBlocked: () -> Unit,
         recordTargetTrack: TrackEntity? = null,
+        overdubPlaybackTracks: List<TrackEntity> = emptyList(),
+        overdubPlaybackStartMs: Long = timelineStartOffsetMs,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean = { true },
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
@@ -77,6 +92,8 @@ class RecordingSessionController(
                 storagePrecheck = storagePrecheck,
                 notifyStorageStartBlocked = notifyStorageStartBlocked,
                 recordTargetTrack = recordTargetTrack,
+                overdubPlaybackTracks = overdubPlaybackTracks,
+                overdubPlaybackStartMs = overdubPlaybackStartMs,
                 onPendingTrackAllocated = onPendingTrackAllocated,
                 onRecordingTransportReady = onRecordingTransportReady,
             )
@@ -100,6 +117,8 @@ class RecordingSessionController(
         storagePrecheck: suspend (ProjectEntity) -> Boolean,
         notifyStorageStartBlocked: () -> Unit,
         recordTargetTrack: TrackEntity? = null,
+        overdubPlaybackTracks: List<TrackEntity> = emptyList(),
+        overdubPlaybackStartMs: Long = timelineStartOffsetMs,
         onPendingTrackAllocated: suspend (TrackEntity) -> Boolean,
         onRecordingTransportReady: (Long) -> Unit = {},
     ) {
@@ -159,13 +178,19 @@ class RecordingSessionController(
                     )
                 }
 
+            val recordingTimelineStartOffsetMs =
+                recordingClipTimelineStartMs(
+                    playheadMs = timelineStartOffsetMs,
+                    overdubPlaybackStartMs = overdubPlaybackStartMs,
+                    hasOverdubBacking = overdubPlaybackTracks.isNotEmpty(),
+                )
             val pendingTrack =
                 withIo(dispatchers, "allocate pending recording track") {
                     preparedExistingTrack?.track
                         ?: recordingCoordinator.allocatePendingRecordingTrack(
                             projectId = projectId,
                             visibleTrackCount = visibleTrackCount(),
-                            timelineStartOffsetMs = timelineStartOffsetMs,
+                            timelineStartOffsetMs = recordingTimelineStartOffsetMs,
                         )
                 }
             if (quickActive) {
@@ -198,6 +223,59 @@ class RecordingSessionController(
                 QuickRecordDiagnostics.logStepEnd("onPendingTrackAllocated", overdubStartMs, projectId)
             }
 
+            val overdubLanes =
+                overdubPlaybackTracks
+                    .filter { it.id != pendingTrack.id }
+                    .filter { it.wavFilePath.isNotBlank() }
+            val overdubPlaybackSpec =
+                overdubLanes
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { lanes ->
+                        currentProject.toMultiPlaybackSpec(lanes)?.copy(
+                            startPositionMs = overdubPlaybackStartMs,
+                            sessionTimelineEndMs = sessionTimelineEndMsForPlayback(lanes),
+                        )
+                    }
+            if (overdubLanes.isNotEmpty() && overdubPlaybackSpec == null) {
+                _optimisticRecordingTrack.value = null
+                _recordingTrackId.value = null
+                _recordingStartup.value = false
+                notifyEngineStartFailed()
+                return
+            }
+
+            val isNormalOverdub =
+                isNormalOverdubRecording(
+                    overdubLaneCount = overdubLanes.size,
+                    anyLoopEnabledInBacking = overdubPlaybackSpec?.lanes?.any { it.loopEnabled } == true,
+                )
+            _activeNormalOverdubContext.value =
+                if (isNormalOverdub) {
+                    val backingTrack = overdubLanes.first()
+                    ActiveNormalOverdubContext(
+                        backingTrackId = backingTrack.id,
+                        backingWavPath = backingTrack.wavFilePath,
+                        backingTimelineStartOffsetMs = backingTrack.timelineStartOffsetMs,
+                        playbackStartMs = overdubPlaybackStartMs,
+                    )
+                } else {
+                    null
+                }
+            if (isNormalOverdub) {
+                val audioCapability =
+                    withIo(dispatchers, "resolve audio capability profile") {
+                        capabilityProfileResolver.resolve(currentProject.sampleRate)
+                    }
+                RecordingLatencyCalibrationLog.logNormalOverdubStart(audioCapability)
+                audioController.configureSessionTransportLatencies(
+                    inputLatencyMs =
+                        audioCapability.inputHalLatencyMs
+                            ?: audioCapability.inputCaptureDelayMs
+                            ?: 0.0,
+                    outputLatencyMs = audioCapability.outputLatencyMs ?: 0.0,
+                )
+            }
+
             val engineStartMs = android.os.SystemClock.uptimeMillis()
             val startOutcome =
                 QuickRecordDiagnostics.traceSection("QuickRecordStartRecording", projectId) {
@@ -208,6 +286,7 @@ class RecordingSessionController(
                         project = currentProject,
                         pendingTrack = pendingTrack,
                         punchRecording = preparedExistingTrack,
+                        overdubPlaybackSpec = overdubPlaybackSpec,
                     ).also {
                         if (quickActive) {
                             QuickRecordDiagnostics.logStepEnd("audio engine startRecording", engineStartMs, projectId)
@@ -231,8 +310,9 @@ class RecordingSessionController(
                 }
 
             _optimisticRecordingTrack.value = newTrack
+            _recordingOutputWavPath.value = newTrack.wavFilePath.takeIf { it.isNotBlank() }
 
-            onRecordingTransportReady(timelineStartOffsetMs)
+            onRecordingTransportReady(overdubPlaybackStartMs)
 
             val persistStartMs = android.os.SystemClock.uptimeMillis()
             if (quickActive) {
@@ -273,6 +353,8 @@ class RecordingSessionController(
         clearPunchRecordingContext()
         _recordingTrackId.value = null
         _optimisticRecordingTrack.value = null
+        _recordingOutputWavPath.value = null
+        _activeNormalOverdubContext.value = null
         _recordingStartup.value = false
     }
 
@@ -283,10 +365,17 @@ class RecordingSessionController(
 
     fun activeRecordingTrackIdForTransport(): String? = _recordingTrackId.value
 
+    /** Output WAV path for the active take — set when native capture starts, cleared on transport stop. */
+    fun activeRecordingWavPathForTransport(): String? =
+        _recordingOutputWavPath.value?.takeIf { it.isNotBlank() }
+            ?: _optimisticRecordingTrack.value?.wavFilePath?.takeIf { it.isNotBlank() }
+
     /** Transport stop steps 5–6 — clear recording row markers (after engine stops). */
     fun clearRecordingTransportMarkers() {
         _recordingTrackId.value = null
         _optimisticRecordingTrack.value = null
+        _recordingOutputWavPath.value = null
+        _activeNormalOverdubContext.value = null
     }
 
     fun clearPunchRecordingContext() {
@@ -296,6 +385,7 @@ class RecordingSessionController(
     private suspend fun rollbackFailedRecordingPersist(notifyPersistFailed: suspend () -> Unit) {
         _optimisticRecordingTrack.value = null
         _recordingTrackId.value = null
+        _recordingOutputWavPath.value = null
         _recordingStartup.value = false
         withIo(dispatchers, "discard punch recording temp file") {
             recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)

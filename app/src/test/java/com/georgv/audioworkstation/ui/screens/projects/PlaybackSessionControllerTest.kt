@@ -536,6 +536,7 @@ private class PlaybackSessionTestAudio(
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        sourceTrimStartMs: Long,
         pan: Float,
     ): Int {
         beginHotJoinCalls += 1

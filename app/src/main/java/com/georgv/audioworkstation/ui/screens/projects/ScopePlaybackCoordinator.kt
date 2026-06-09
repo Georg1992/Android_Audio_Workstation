@@ -150,7 +150,6 @@ internal class ScopePlaybackCoordinator(
                 recordingTrackId = recordingTrackId,
             )
         playbackSession.cancelCompletionMonitorForTransportStop()
-        playbackSession.pauseEnginePreservingSession()
         if (overdubTracks.isEmpty()) {
             playbackSession.clearPlayingTransportState()
             return
@@ -163,12 +162,13 @@ internal class ScopePlaybackCoordinator(
             return
         }
         val started =
-            playAndRecordTransport.startFromPlayhead(
+            playAndRecordTransport.rebuildOverdubAtCurrentTransport(
                 project = currentProject,
                 selectedPlayableTracks = overdubTracks,
                 recordingTrackId = recordingTrackId,
-                startPositionMs = transportMs,
+                transportMs = transportMs,
                 sessionTimelineEndMs = sessionEndMs,
+                timelineVisibleDurationMs = timelineVisibleDurationMs(),
             )
         if (!started) {
             playbackSession.clearPlayingTransportState()

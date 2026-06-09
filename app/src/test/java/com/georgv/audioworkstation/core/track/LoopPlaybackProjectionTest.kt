@@ -52,6 +52,34 @@ class LoopPlaybackProjectionTest {
     }
 
     @Test
+    fun `recording clip timeline start uses overdub arm when backing present`() {
+        assertEquals(
+            0L,
+            recordingClipTimelineStartMs(
+                playheadMs = 1_198L,
+                overdubPlaybackStartMs = 0L,
+                hasOverdubBacking = true,
+            ),
+        )
+        assertEquals(
+            1_198L,
+            recordingClipTimelineStartMs(
+                playheadMs = 1_198L,
+                overdubPlaybackStartMs = 0L,
+                hasOverdubBacking = false,
+            ),
+        )
+        assertEquals(
+            1_198L,
+            recordingClipTimelineStartMs(
+                playheadMs = 1_198L,
+                overdubPlaybackStartMs = null,
+                hasOverdubBacking = true,
+            ),
+        )
+    }
+
+    @Test
     fun `loop playback start always resets to zero`() {
         val tracks = listOf(loopTrack())
         assertEquals(

@@ -3,7 +3,7 @@ package com.georgv.audioworkstation.core.audio
 import java.io.File
 import java.io.RandomAccessFile
 
-internal data class WavPcmFileInfo(
+data class WavPcmFileInfo(
     val channelCount: Int,
     val sampleRateHz: Int,
     val bitsPerSample: Int,
@@ -27,7 +27,7 @@ internal data class WavPcmFileInfo(
             blockAlign == channelCount * 2
 }
 
-internal fun readWavPcmFileInfo(path: String): WavPcmFileInfo? {
+fun readWavPcmFileInfo(path: String): WavPcmFileInfo? {
     val file = File(path)
     if (!file.isFile) return null
     return runCatching {
@@ -111,12 +111,12 @@ private fun RandomAccessFile.readUInt32Le(): Long {
         ((b3.toLong() and 0xFF) shl 24)
 }
 
-internal fun msToFramePosition(ms: Long, sampleRateHz: Int): Long {
+fun msToFramePosition(ms: Long, sampleRateHz: Int): Long {
     if (ms <= 0L || sampleRateHz <= 0) return 0L
     return (ms * sampleRateHz.toLong()) / 1_000L
 }
 
-internal fun framePositionToMs(frames: Long, sampleRateHz: Int): Long {
+fun framePositionToMs(frames: Long, sampleRateHz: Int): Long {
     if (frames <= 0L || sampleRateHz <= 0) return 0L
     return (frames * 1_000L + sampleRateHz.toLong() - 1L) / sampleRateHz.toLong()
 }

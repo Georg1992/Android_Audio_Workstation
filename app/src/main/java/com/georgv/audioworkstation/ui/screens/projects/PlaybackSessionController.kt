@@ -296,6 +296,7 @@ class PlaybackSessionController(
                 loopEnabled = laneSpec.loopEnabled,
                 loopSourceStartMs = laneSpec.loopSourceStartMs,
                 loopSourceEndMs = laneSpec.loopSourceEndMs,
+                sourceTrimStartMs = laneSpec.sourceTrimStartMs,
                 pan = laneSpec.pan,
             )
         if (laneIndex < 0) {

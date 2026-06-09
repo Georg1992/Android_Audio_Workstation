@@ -12,6 +12,7 @@ import com.georgv.audioworkstation.core.track.reconcileInScopeLoopRegions
 import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
 import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
@@ -20,9 +21,11 @@ import com.georgv.audioworkstation.core.audio.GainRange
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
+import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
+import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
-import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
+import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
@@ -147,6 +150,8 @@ class ProjectViewModel @Inject constructor(
     private val audioIoScope: AudioIoScope,
     private val audioEngineSession: AudioEngineSession,
     private val audioParameterQueue: AudioParameterCommandQueue,
+    private val capabilityProfileResolver: com.georgv.audioworkstation.core.audio.capability.AudioCapabilityProfileResolver,
+    private val recordingSessionLatencyAudit: LiveOverdubLatencySessionRecorder,
 ) : ViewModel() {
 
     private var engineSessionAcquired = false
@@ -217,6 +222,7 @@ class ProjectViewModel @Inject constructor(
             audioController = audioController,
             recordingCoordinator = recordingCoordinator,
             dispatchers = dispatchers,
+            capabilityProfileResolver = capabilityProfileResolver,
         )
     private val recordingStorageMonitor =
         RecordingStorageMonitor(
@@ -282,8 +288,20 @@ class ProjectViewModel @Inject constructor(
         playbackSession = playbackSession,
         recordingSession = recordingSession,
         dispatchers = dispatchers,
-        finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, firstSampleTransportPositionMs ->
-            finalizeRecordingTrack(trackId, firstSampleTransportPositionMs)
+        finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, stopSnapshot ->
+            finalizeRecordingTrack(trackId, stopSnapshot)
+        },
+        onLiveOverdubSessionEnd = { capture ->
+            if (!LiveSessionProfiling.captureOnOverdubEnd) return@ProjectTransportController
+            viewModelScope.launch {
+                val sampleRateHz = uiState.value.project?.sampleRate ?: 44_100
+                withAudioIo(dispatchers, "RecordingSessionLatencyAudit.recordLiveOverdubSessionEnd") {
+                    recordingSessionLatencyAudit.recordLiveOverdubSessionEnd(
+                        sampleRateHz = sampleRateHz,
+                        capture = capture,
+                    )
+                }
+            }
         },
     )
 
@@ -1139,22 +1157,40 @@ class ProjectViewModel @Inject constructor(
         engineSessionAcquired = true
     }
 
-    private fun finalizeRecordingTrack(trackId: String, firstSampleTransportPositionMs: Long) {
+    private fun finalizeRecordingTrack(trackId: String, stopSnapshot: com.georgv.audioworkstation.core.audio.RecordingStopSnapshot) {
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
+        val punchContext = recordingSession.punchRecordingContext()
+        if (punchContext == null) {
+            viewModelScope.launch {
+                val finalizedTrack =
+                    recordingCoordinator.finalizeTrackAfterStop(
+                        currentTrack = currentTrack,
+                        punchContext = null,
+                        stopSnapshot = stopSnapshot,
+                    )
+                dbActions.run(R.string.error_recording_metadata_failed) {
+                    withIo(dispatchers, "persist finalized recording track") {
+                        repo.upsertTrack(finalizedTrack)
+                    }
+                }
+            }
+            return
+        }
 
         viewModelScope.launch {
             dbActions.run(R.string.error_recording_metadata_failed) {
-                val punchContext = recordingSession.punchRecordingContext()
                 try {
                     val finalizedTrack =
                         withIo(dispatchers, "WavPunchSplicer.splice") {
                             recordingCoordinator.finalizeTrackAfterStop(
                                 currentTrack = currentTrack,
                                 punchContext = punchContext,
-                                firstSampleTransportPositionMs = firstSampleTransportPositionMs,
+                                stopSnapshot = stopSnapshot,
                             )
                         }
-                    repo.upsertTrack(finalizedTrack)
+                    withIo(dispatchers, "persist finalized recording track") {
+                        repo.upsertTrack(finalizedTrack)
+                    }
                 } catch (cancel: CancellationException) {
                     withIo(dispatchers, "discard punch temp file") {
                         recordingCoordinator.discardPunchRecordingTempFile(punchContext)

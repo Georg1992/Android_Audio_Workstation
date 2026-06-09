@@ -10,6 +10,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
 import com.georgv.audioworkstation.core.track.playbackStartPositionMsForTracks
+import com.georgv.audioworkstation.core.track.recordingClipTimelineStartMs
 import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
@@ -65,9 +66,43 @@ internal class ProjectTransportCommands(
         val overdubPlaybackTracks = selectedPlayableTracksForOverdub(tracks)
         val recordTargetTrack =
             recordTargetTrackId()?.let { targetId -> tracks.find { it.id == targetId } }
+        val overdubPlaybackStartMs =
+            playbackStartPositionMsForTracks(
+                scrubbedPlayheadMs = timelineStartOffsetMs,
+                timelineVisibleDurationMs = timelineVisibleDurationMs(),
+                tracks = overdubPlaybackTracks,
+            )
+        val hasOverdubBacking = overdubPlaybackTracks.isNotEmpty()
+        val recordingTimelineStartOffsetMs =
+            recordingClipTimelineStartMs(
+                playheadMs = timelineStartOffsetMs,
+                overdubPlaybackStartMs = overdubPlaybackStartMs,
+                hasOverdubBacking = hasOverdubBacking,
+            )
+
+        if (hasOverdubBacking) {
+            playheadPositionMs.value = overdubPlaybackStartMs
+        }
 
         recordingSession.armRecordingStartup()
+        launchRecordPressed(
+            projectId = projectId,
+            projectName = projectName,
+            timelineStartOffsetMs = timelineStartOffsetMs,
+            recordTargetTrack = recordTargetTrack,
+            overdubPlaybackTracks = overdubPlaybackTracks,
+            overdubPlaybackStartMs = overdubPlaybackStartMs,
+        )
+    }
 
+    private fun launchRecordPressed(
+        projectId: String,
+        projectName: String,
+        timelineStartOffsetMs: Long,
+        recordTargetTrack: TrackEntity?,
+        overdubPlaybackTracks: List<TrackEntity>,
+        overdubPlaybackStartMs: Long,
+    ) {
         recordingSession.launchRecordPressed(
             projectId = projectId,
             projectName = projectName,
@@ -76,21 +111,15 @@ internal class ProjectTransportCommands(
             visibleTrackCount = visibleTrackCount,
             persistRecordingRow = persistRecordingRow,
             recordTargetTrack = recordTargetTrack,
+            overdubPlaybackTracks = overdubPlaybackTracks,
+            overdubPlaybackStartMs = overdubPlaybackStartMs,
             onPendingTrackAllocated = { pendingTrack ->
-                val overdubStarted =
-                    startOverdubPlaybackForPendingTake(
-                        projectId = projectId,
-                        pendingTrack = pendingTrack,
-                        timelineStartOffsetMs = timelineStartOffsetMs,
-                        sessionTimelineEndMs = sessionTimelineEndMsForPlayback(overdubPlaybackTracks),
-                        selectedPlayableTracks = overdubPlaybackTracks,
+                overdubPlaybackTracks.takeIf { it.isNotEmpty() }?.let { lanes ->
+                    playbackSession.markPlayingAndStartCompletionMonitor(
+                        lanes.map { it.id },
                     )
-                if (!overdubStarted) {
-                    abortCombinedRecordTransport()
-                    onRecordingStorageMonitorStop()
-                    emitMessage(R.string.error_playback_failed_to_start)
                 }
-                overdubStarted
+                true
             },
             notifyEngineStartFailed = {
                 abortCombinedRecordTransport()
@@ -205,26 +234,6 @@ internal class ProjectTransportCommands(
 
     private fun selectedPlayableTracksForOverdub(tracks: List<TrackEntity>): List<TrackEntity> =
         activeMixScopePlayableTracks(tracks, selectedTrackIds())
-
-    private suspend fun startOverdubPlaybackForPendingTake(
-        projectId: String,
-        pendingTrack: TrackEntity,
-        timelineStartOffsetMs: Long,
-        sessionTimelineEndMs: Long,
-        selectedPlayableTracks: List<TrackEntity>,
-    ): Boolean {
-        if (selectedPlayableTracks.isEmpty()) {
-            return true
-        }
-        val project = loadCurrentProject(projectId) ?: return false
-        return playAndRecordTransport.startFromPlayhead(
-            project = project,
-            selectedPlayableTracks = selectedPlayableTracks,
-            recordingTrackId = pendingTrack.id,
-            startPositionMs = timelineStartOffsetMs,
-            sessionTimelineEndMs = sessionTimelineEndMs,
-        )
-    }
 
     private suspend fun abortCombinedRecordTransport() {
         playAndRecordTransport.stop()

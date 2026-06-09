@@ -12,6 +12,14 @@ import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.StatFsRecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
+import com.georgv.audioworkstation.core.audio.AndroidAudioRouteKeySource
+import com.georgv.audioworkstation.core.audio.AudioRouteKeySource
+import com.georgv.audioworkstation.core.audio.capability.DeviceAudioCapabilityProfilePersistence
+import com.georgv.audioworkstation.core.audio.capability.DeviceAudioCapabilityProfileStore
+import com.georgv.audioworkstation.core.audio.capability.DeviceAudioIdentityProvider
+import com.georgv.audioworkstation.core.audio.capability.DeviceAudioIdentitySource
+import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
+import com.georgv.audioworkstation.core.audio.capability.RecordingSessionLatencyAudit
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -52,6 +60,30 @@ abstract class AudioModule {
     abstract fun bindRecordingStorageFsQuery(
         query: StatFsRecordingStorageFsQuery
     ): RecordingStorageFsQuery
+
+    @Binds
+    @Singleton
+    abstract fun bindAudioRouteKeySource(
+        source: AndroidAudioRouteKeySource,
+    ): AudioRouteKeySource
+
+    @Binds
+    @Singleton
+    abstract fun bindDeviceAudioCapabilityProfilePersistence(
+        store: DeviceAudioCapabilityProfileStore,
+    ): DeviceAudioCapabilityProfilePersistence
+
+    @Binds
+    @Singleton
+    abstract fun bindDeviceAudioIdentitySource(
+        provider: DeviceAudioIdentityProvider,
+    ): DeviceAudioIdentitySource
+
+    @Binds
+    @Singleton
+    abstract fun bindLiveOverdubLatencySessionRecorder(
+        audit: RecordingSessionLatencyAudit,
+    ): LiveOverdubLatencySessionRecorder
 
     companion object {
         @Provides

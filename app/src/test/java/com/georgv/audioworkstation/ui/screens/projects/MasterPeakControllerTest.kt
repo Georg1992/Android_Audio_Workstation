@@ -158,6 +158,7 @@ private class FakeMasterPeakAudioController : AudioController {
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        sourceTrimStartMs: Long,
         pan: Float,
     ): Int = -1
     override fun cancelHotJoinLane(laneIndex: Int) = Unit

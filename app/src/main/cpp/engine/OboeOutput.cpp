@@ -1,5 +1,9 @@
 #include "OboeOutput.h"
 #include "AudioEngine.h"
+#include "OboeTimestampDiagnostics.h"
+#include "AudioStreamConfigurationDiagnostics.h"
+#include "TransportClockAnchor.h"
+#include "TransportClockDiagnostics.h"
 
 #include <algorithm>
 
@@ -9,6 +13,9 @@ OboeOutput::OboeOutput(dawengine::AudioEngine *engine)
 OboeOutput::~OboeOutput() { release(); }
 
 bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
+    if (m_engine) {
+        m_engine->logPlaybackStartupMilestone("oboe_ensure_started_begin");
+    }
     // Already running with the right format — nothing to do. This is the hot
     // path for back-to-back plays of the same project: the stream stays open,
     // the engine just swaps the source.
@@ -16,6 +23,10 @@ bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
         m_openedSampleRate == sampleRate &&
         m_openedChannelCount == channelCount &&
         m_stream->getState() == oboe::StreamState::Started) {
+        captureStreamSnapshot();
+        if (m_engine) {
+            m_engine->logPlaybackStartupMilestone("oboe_stream_already_started");
+        }
         return true;
     }
 
@@ -25,7 +36,12 @@ bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
         m_openedSampleRate == sampleRate &&
         m_openedChannelCount == channelCount &&
         m_stream->getState() == oboe::StreamState::Paused) {
-        return m_stream->requestStart() == oboe::Result::OK;
+        const bool resumed = m_stream->requestStart() == oboe::Result::OK;
+        if (m_engine && resumed) {
+            oboe_timestamp_diag::resetOutputTimestampDiagnostics();
+            m_engine->logPlaybackStartupMilestone("oboe_stream_resumed_from_paused");
+        }
+        return resumed;
     }
 
     // Format change (rare — only happens if the user switches projects with a
@@ -33,6 +49,10 @@ bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
     // stream across format changes.
     if (m_stream) {
         release();
+    }
+
+    if (m_engine) {
+        m_engine->logPlaybackStartupMilestone("oboe_stream_open_begin");
     }
 
     auto builder = std::make_unique<oboe::AudioStreamBuilder>();
@@ -45,20 +65,65 @@ bool OboeOutput::ensureStarted(int32_t sampleRate, int32_t channelCount) {
     builder->setCallback(this);
 
     std::shared_ptr<oboe::AudioStream> stream;
-    if (builder->openStream(stream) != oboe::Result::OK || !stream) return false;
+    const oboe::Result openResult = builder->openStream(stream);
+    m_openRequest = {};
+    m_openRequest.audioApi = oboe::AudioApi::Unspecified;
+    m_openRequest.performanceMode = oboe::PerformanceMode::LowLatency;
+    m_openRequest.sharingMode = oboe::SharingMode::Shared;
+    m_openRequest.sampleRateHz = sampleRate;
+    m_openRequest.channelCount = channelCount;
+    audio_stream_config_diag::logOpenedStream(
+        "output",
+        m_openRequest,
+        stream ? stream.get() : nullptr,
+        openResult);
+    if (openResult != oboe::Result::OK || !stream) return false;
+    if (m_engine) {
+        m_engine->logPlaybackStartupMilestone("oboe_stream_open_done");
+    }
 
     if (stream->requestStart() != oboe::Result::OK) {
         stream->close();
         return false;
     }
+    oboe_timestamp_diag::resetOutputTimestampDiagnostics();
+    if (m_engine) {
+        m_engine->logPlaybackStartupMilestone("oboe_stream_request_start_done");
+    }
 
     m_stream = stream;
     m_openedSampleRate = sampleRate;
     m_openedChannelCount = channelCount;
+    captureStreamSnapshot();
     return true;
 }
 
+void OboeOutput::captureStreamSnapshot() {
+    dawengine::AudioEngine::OboeStreamSnapshot snapshot;
+    if (m_stream) {
+        snapshot.sampleRateHz = m_stream->getSampleRate();
+        snapshot.channelCount = m_stream->getChannelCount();
+        snapshot.framesPerBurst = m_stream->getFramesPerBurst();
+        snapshot.bufferCapacityInFrames = m_stream->getBufferCapacityInFrames();
+        snapshot.bufferSizeInFrames = m_stream->getBufferSizeInFrames();
+        snapshot.performanceMode = static_cast<int32_t>(m_stream->getPerformanceMode());
+        snapshot.sharingMode = static_cast<int32_t>(m_stream->getSharingMode());
+        snapshot.audioSessionId = static_cast<int32_t>(m_stream->getSessionId());
+    }
+    m_streamSnapshot = snapshot;
+    if (m_engine) {
+        m_engine->setOutputStreamForDiagnostics(m_stream);
+    }
+}
+
+dawengine::AudioEngine::OboeStreamSnapshot OboeOutput::outputStreamSnapshot() const {
+    return m_streamSnapshot;
+}
+
 void OboeOutput::release() {
+    if (m_engine) {
+        m_engine->setOutputStreamForDiagnostics(nullptr);
+    }
     if (m_stream) {
         m_stream->requestStop();
         constexpr int64_t kStepTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
@@ -85,11 +150,22 @@ void OboeOutput::release() {
 }
 
 bool OboeOutput::pauseForSafeEngineMutation() {
-    if (!m_stream) return true;
+    if (m_engine) {
+        m_engine->logPlaybackStartupMilestone("oboe_pause_before_arm_begin");
+    }
+    if (!m_stream) {
+        if (m_engine) {
+            m_engine->logPlaybackStartupMilestone("oboe_pause_before_arm_no_stream");
+        }
+        return true;
+    }
     oboe::StreamState currentState = m_stream->getState();
     if (currentState != oboe::StreamState::Started &&
         currentState != oboe::StreamState::Starting &&
         currentState != oboe::StreamState::Pausing) {
+        if (m_engine) {
+            m_engine->logPlaybackStartupMilestone("oboe_pause_before_arm_done");
+        }
         return true;
     }
 
@@ -101,10 +177,18 @@ bool OboeOutput::pauseForSafeEngineMutation() {
     constexpr int64_t kStepTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
     for (int guard = 0; guard < 100; ++guard) {
         currentState = m_stream->getState();
-        if (currentState == oboe::StreamState::Paused) return true;
+        if (currentState == oboe::StreamState::Paused) {
+            if (m_engine) {
+                m_engine->logPlaybackStartupMilestone("oboe_pause_before_arm_done");
+            }
+            return true;
+        }
         if (currentState != oboe::StreamState::Started &&
             currentState != oboe::StreamState::Starting &&
             currentState != oboe::StreamState::Pausing) {
+            if (m_engine) {
+                m_engine->logPlaybackStartupMilestone("oboe_pause_before_arm_done");
+            }
             return true;
         }
         oboe::StreamState nextState = oboe::StreamState::Unknown;
@@ -139,8 +223,40 @@ oboe::DataCallbackResult OboeOutput::onAudioReady(oboe::AudioStream *stream,
         return oboe::DataCallbackResult::Continue;
     }
 
+    const int64_t callbackStartNs = transport_clock::monotonicNowNs();
+
+    m_engine->logFirstOboeCallbackOnce();
+
+    m_lastCallbackFrames.store(numFrames, std::memory_order_release);
+
+    const int64_t callbackMonotonicNs = transport_clock::monotonicNowNs();
+    m_engine->refreshLiveOutputLatencyFromStream(stream);
+    const int64_t renderedTransportFrame = m_engine->transportFrame();
+    transport_clock_diag::maybeLogOutputClockCorrelation(
+        m_engine,
+        stream,
+        callbackMonotonicNs,
+        numFrames);
+
+    oboe_timestamp_diag::maybeLogOutputTimestamp(
+        stream,
+        renderedTransportFrame,
+        renderedTransportFrame,
+        numFrames);
+    audio_stream_config_diag::maybeLogOutputHardwareFloorOnce(
+        "production_playback",
+        m_openRequest,
+        stream);
+
     // Engine emits silence when no source is armed, so it's safe to leave the
     // stream running between plays.
+    const int64_t renderStartNs = transport_clock::monotonicNowNs();
     m_engine->render(out, numFrames, channels, stream->getSampleRate());
+    const int64_t renderEndNs = transport_clock::monotonicNowNs();
+    const int64_t callbackEndNs = renderEndNs;
+    m_engine->recordOutputCallbackCost(
+        numFrames,
+        (callbackEndNs - callbackStartNs) / 1000LL,
+        (renderEndNs - renderStartNs) / 1000LL);
     return oboe::DataCallbackResult::Continue;
 }

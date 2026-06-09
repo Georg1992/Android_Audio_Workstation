@@ -19,7 +19,6 @@ import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectRecordingCoordinatorPunchTest {
-
     @get:Rule
     val mainDispatcherRule = ProjectViewModelMainDispatcherRule()
 
@@ -236,10 +235,16 @@ class ProjectRecordingCoordinatorPunchTest {
             coordinator.finalizeTrackAfterStop(
                 currentTrack = track,
                 punchContext = null,
-                firstSampleTransportPositionMs = 187L,
+                stopSnapshot =
+                    com.georgv.audioworkstation.core.audio.RecordingStopSnapshot(
+                        firstSampleTransportPositionMs = 187L,
+                        capturedFrameCount = 8_268L,
+                        capturedDurationMs = 187L,
+                    ),
             )
 
         assertEquals(187L, finalized.timelineStartOffsetMs)
+        assertEquals(187L, finalized.duration)
     }
 
     @Test
@@ -282,7 +287,12 @@ class ProjectRecordingCoordinatorPunchTest {
                         sampleRateHz = 1_000,
                         fileBitDepth = 16,
                     ),
-                firstSampleTransportPositionMs = 5_200L,
+                stopSnapshot =
+                    com.georgv.audioworkstation.core.audio.RecordingStopSnapshot(
+                        firstSampleTransportPositionMs = 5_200L,
+                        capturedFrameCount = 0L,
+                        capturedDurationMs = 0L,
+                    ),
             )
 
         assertEquals(5_000L, finalized.timelineStartOffsetMs)

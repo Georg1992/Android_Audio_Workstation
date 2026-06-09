@@ -37,6 +37,21 @@ fun trackLoopPlaybackPositionMs(
     return ((rawPlayheadMs % loopLength) + loopLength) % loopLength
 }
 
+/**
+ * Timeline offset for a new recording clip at REC press.
+ * Overdub backing uses engine arm position; record-only uses the scrubbed playhead.
+ */
+fun recordingClipTimelineStartMs(
+    playheadMs: Long,
+    overdubPlaybackStartMs: Long?,
+    hasOverdubBacking: Boolean,
+): Long =
+    if (hasOverdubBacking && overdubPlaybackStartMs != null) {
+        overdubPlaybackStartMs
+    } else {
+        playheadMs
+    }
+
 /** Loop playback always starts at 0 on the global loop timeline, not the scrubbed project position. */
 fun playbackStartPositionMsForTracks(
     scrubbedPlayheadMs: Long,

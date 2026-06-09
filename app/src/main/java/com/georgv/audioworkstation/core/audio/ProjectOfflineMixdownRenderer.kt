@@ -1,10 +1,11 @@
 package com.georgv.audioworkstation.core.audio
 
+import com.georgv.audioworkstation.core.track.playbackStartPositionMsForTracks
 import com.georgv.audioworkstation.core.track.selectedPlayableTracks
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.MixdownTimelineStartMs
 import com.georgv.audioworkstation.ui.components.mixdownTimelineEndMs
+import com.georgv.audioworkstation.ui.diagnostics.TransportFrameDiagnostics
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,11 +43,18 @@ class ProjectOfflineMixdownRenderer @Inject constructor(
             ?: return OfflineMixdownResult.WriteFailed
 
         val sessionEndMs = mixdownTimelineEndMs(tracks, selectedTrackIds)
+        val startPositionMs =
+            playbackStartPositionMsForTracks(
+                scrubbedPlayheadMs = 0L,
+                timelineVisibleDurationMs = sessionEndMs,
+                tracks = mixTracks,
+            )
         val spec =
             baseSpec.copy(
-                startPositionMs = MixdownTimelineStartMs,
+                startPositionMs = startPositionMs,
                 sessionTimelineEndMs = sessionEndMs,
             )
+        TransportFrameDiagnostics.logPlaybackArm(spec, transportStartFrame = -1L, transportFrame = -1L)
 
         return when (
             val result =

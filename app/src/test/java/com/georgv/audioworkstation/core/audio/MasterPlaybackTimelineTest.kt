@@ -8,21 +8,21 @@ class MasterPlaybackTimelineTest {
 
     @Test
     fun `transport frame to ms matches native integer division at 48kHz`() {
-        assertEquals(0L, transportFrameToMs(0L, 48_000))
-        assertEquals(30_000L, transportFrameToMs(1_440_000L, 48_000))
-        assertEquals(31_000L, transportFrameToMs(1_488_000L, 48_000))
+        assertEquals(0L, AudioTimelineMapper.transportFrameToMs(0L, 48_000))
+        assertEquals(30_000L, AudioTimelineMapper.transportFrameToMs(1_440_000L, 48_000))
+        assertEquals(31_000L, AudioTimelineMapper.transportFrameToMs(1_488_000L, 48_000))
     }
 
     @Test
     fun `transport frame to ms returns zero for invalid sample rate`() {
-        assertEquals(0L, transportFrameToMs(1000L, 0))
-        assertEquals(0L, transportFrameToMs(1000L, -1))
+        assertEquals(0L, AudioTimelineMapper.transportFrameToMs(1000L, 0))
+        assertEquals(0L, AudioTimelineMapper.transportFrameToMs(1000L, -1))
     }
 
     @Test
     fun `start offset example thirty seconds at forty four one kHz`() {
         val sampleRate = 44_100
         val startFrame = (sampleRate.toLong() * 30_000L) / 1000L
-        assertEquals(30_000L, transportFrameToMs(startFrame, sampleRate))
+        assertEquals(30_000L, AudioTimelineMapper.transportFrameToMs(startFrame, sampleRate))
     }
 }

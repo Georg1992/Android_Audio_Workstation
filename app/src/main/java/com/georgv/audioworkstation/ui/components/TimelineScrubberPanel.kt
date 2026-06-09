@@ -3,6 +3,8 @@ package com.georgv.audioworkstation.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -101,12 +104,13 @@ fun TimelinePlayheadScrubberPanel(
                     .align(Alignment.CenterEnd)
                     .width(utilityZoneWidth)
                     .fillMaxHeight()
+                    .zIndex(1f)
                     .alpha(if (inputLocked) AppOpacity.disabled else 1f),
+            onClick = onMasterPeakIndicatorClick,
         ) {
             MasterOutputPeakIndicator(
                 peakDbText = masterPeakDbText,
                 indicatorLevel = masterPeakIndicatorLevel,
-                onClick = onMasterPeakIndicatorClick,
             )
         }
     }
@@ -119,9 +123,17 @@ fun TimelinePlayheadScrubberPanel(
 @Composable
 private fun TimelinePlayheadUtilityStrip(
     modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Box(modifier = modifier) {
+    Box(
+        modifier =
+            modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+    ) {
         Box(
             modifier =
                 Modifier

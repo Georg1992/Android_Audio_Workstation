@@ -2,11 +2,11 @@
 
 #include <oboe/Oboe.h>
 #include <cstdint>
+#include <atomic>
 #include <memory>
 
-namespace dawengine {
-class AudioEngine;
-}
+#include "AudioEngine.h"
+#include "AudioStreamConfigurationDiagnostics.h"
 
 /**
  * Persistent Oboe output stream.
@@ -44,6 +44,16 @@ public:
      */
     bool pauseForSafeEngineMutation();
 
+    dawengine::AudioEngine::OboeStreamSnapshot outputStreamSnapshot() const;
+
+    int32_t lastCallbackFrames() const {
+        return m_lastCallbackFrames.load(std::memory_order_acquire);
+    }
+
+    std::shared_ptr<oboe::AudioStream> streamForDiagnostics() const {
+        return m_stream;
+    }
+
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream,
                                           void *audioData,
                                           int32_t numFrames) override;
@@ -53,4 +63,11 @@ private:
     std::shared_ptr<oboe::AudioStream> m_stream;
     int32_t m_openedSampleRate = 0;
     int32_t m_openedChannelCount = 0;
+
+    void captureStreamSnapshot();
+
+    dawengine::AudioEngine::OboeStreamSnapshot m_streamSnapshot{};
+    audio_stream_config_diag::StreamOpenRequest m_openRequest{};
+
+    std::atomic<int32_t> m_lastCallbackFrames{0};
 };

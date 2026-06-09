@@ -1,6 +1,8 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
+import com.georgv.audioworkstation.core.audio.capability.testAudioCapabilityProfileResolver
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
@@ -1443,8 +1445,9 @@ class ProjectViewModelTest {
             advanceUntilIdle()
 
             assertNotNull(vm.uiState.value.recordingTrackId)
-            assertEquals(2, audioController.startPlaybackCalls)
-            assertEquals(listOf("extra"), audioController.lastMultiPlaybackSpec?.lanes?.map { it.trackId })
+            assertEquals(1, audioController.startPlaybackCalls)
+            assertEquals(1, audioController.rearmOverdubPlaybackCalls)
+            assertEquals(listOf("extra"), audioController.lastRearmOverdubPlaybackSpec?.lanes?.map { it.trackId })
             collectJob.cancel()
         }
 
@@ -1673,7 +1676,7 @@ class ProjectViewModelTest {
         assertNull(vm.uiState.value.recordingTrackId)
         assertEquals(TransportPlaybackPhase.Idle, vm.uiState.value.transportPlaybackPhase)
         assertEquals(0L, vm.uiState.value.playheadPositionMs)
-        assertEquals(R.string.error_playback_failed_to_start, vm.userMessages.first().resId)
+        assertEquals(R.string.error_recording_failed_to_start, vm.userMessages.first().resId)
         assertEquals(0, audioController.stopRecordingCalls)
         collectJob.cancel()
     }
@@ -1699,7 +1702,7 @@ class ProjectViewModelTest {
 
         assertNull(vm.uiState.value.recordingTrackId)
         assertEquals(emptySet<String>(), vm.uiState.value.sessionTrackIds)
-        assertEquals(1, audioController.startPlaybackCalls)
+        assertEquals(0, audioController.startPlaybackCalls)
         assertEquals(1, audioController.stopPlaybackCalls)
         assertEquals(R.string.error_recording_failed_to_start, vm.userMessages.first().resId)
         collectJob.cancel()
@@ -2766,6 +2769,8 @@ class ProjectViewModelTest {
             AudioIoScope(testDispatchers),
             audioEngineSession,
             audioParameterQueue,
+            capabilityProfileResolver = testAudioCapabilityProfileResolver(),
+            recordingSessionLatencyAudit = LiveOverdubLatencySessionRecorder { _, _ -> },
         ).also {
             it.setPlayheadNativePollEnabledForTests(false)
             it.setRecordingStorageMonitorEnabledForTests(false)
@@ -3968,8 +3973,12 @@ internal class FakeAudioController(
 ) : AudioController {
     var startPlaybackCalls = 0
         private set
+    var rearmOverdubPlaybackCalls = 0
+        private set
     val playbackLaneGainCalls = mutableListOf<Pair<Int, Float>>()
     var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
+        private set
+    var lastRearmOverdubPlaybackSpec: MultiPlaybackSpec? = null
         private set
     var lastRecordingSpec: RecordingSpec? = null
         private set
@@ -3990,11 +3999,34 @@ internal class FakeAudioController(
 
     var transportPositionMsValue: Long = 0L
     var recordingFirstSampleTransportPositionMsValue: Long = AudioController.RecordingFirstSampleTransportUnset
+    var recordingCapturedFrameCountValue: Long = 0L
+    var recordingCapturedDurationMsValue: Long = 0L
+    var lastOverdubPlaybackSpec: MultiPlaybackSpec? = null
+        private set
 
     override fun transportPositionMs(): Long = transportPositionMsValue
 
     override fun recordingFirstSampleTransportPositionMs(): Long =
         recordingFirstSampleTransportPositionMsValue
+
+    override fun recordingCapturedFrameCount(): Long = recordingCapturedFrameCountValue
+
+    override fun recordingCapturedDurationMs(): Long = recordingCapturedDurationMsValue
+
+    override fun startOverdubRecordingSession(
+        playbackSpec: MultiPlaybackSpec,
+        recordingSpec: RecordingSpec,
+        outputPath: String,
+    ): String? {
+        onEnterStartRecording?.invoke()
+        lastRecordingSpec = recordingSpec
+        lastOverdubPlaybackSpec = playbackSpec
+        transportPositionMsValue = playbackSpec.startPositionMs
+        if (startRecordingPath == null) return null
+        val started = startPlayback(playbackSpec)
+        if (!started) return null
+        return outputPath
+    }
 
     override fun isPlaybackEngineRunning(): Boolean = _playbackState.value
 
@@ -4031,12 +4063,26 @@ internal class FakeAudioController(
         if (recordingFirstSampleTransportPositionMsValue < 0L && lastRecordingSpec != null) {
             recordingFirstSampleTransportPositionMsValue = lastRecordingSpec!!.timelineStartOffsetMs
         }
+        if (recordingCapturedDurationMsValue <= 0L && recordingCapturedFrameCountValue <= 0L) {
+            recordingCapturedDurationMsValue =
+                (recordingFirstSampleTransportPositionMsValue + 1_000L).coerceAtLeast(0L)
+        }
         return stopRecordingResult
     }
 
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
         startPlaybackCalls += 1
         lastMultiPlaybackSpec = spec
+        transportPositionMsValue = spec.startPositionMs
+        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
+        val playing = permitted && startPlaybackResult
+        _playbackState.value = playing
+        return playing
+    }
+
+    override fun rearmOverdubPlaybackDuringRecording(spec: MultiPlaybackSpec): Boolean {
+        rearmOverdubPlaybackCalls += 1
+        lastRearmOverdubPlaybackSpec = spec
         transportPositionMsValue = spec.startPositionMs
         val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
         val playing = permitted && startPlaybackResult
@@ -4097,6 +4143,7 @@ internal class FakeAudioController(
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        sourceTrimStartMs: Long,
         pan: Float,
     ): Int {
         beginHotJoinCalls += 1

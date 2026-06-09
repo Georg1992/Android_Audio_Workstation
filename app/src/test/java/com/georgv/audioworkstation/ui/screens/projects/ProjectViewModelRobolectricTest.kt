@@ -5,6 +5,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.audio.capability.testAudioCapabilityProfileResolver
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportResult
@@ -22,6 +23,7 @@ import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
+import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.data.db.AppDatabase
@@ -255,6 +257,8 @@ class ProjectViewModelRobolectricTest {
             AudioIoScope(testDispatchers),
             audioEngineSession,
             AudioParameterCommandQueue(audio, testDispatchers, audioEngineSession),
+            capabilityProfileResolver = testAudioCapabilityProfileResolver(),
+            recordingSessionLatencyAudit = LiveOverdubLatencySessionRecorder { _, _ -> },
         )
     }
 
@@ -294,6 +298,7 @@ private class NoOpAudioControllerForRobolectric : AudioController {
         loopEnabled: Boolean,
         loopSourceStartMs: Long,
         loopSourceEndMs: Long,
+        sourceTrimStartMs: Long,
         pan: Float,
     ): Int = -1
     override fun cancelHotJoinLane(laneIndex: Int) = Unit

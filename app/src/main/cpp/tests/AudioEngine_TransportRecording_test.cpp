@@ -150,34 +150,37 @@ TEST_F(AudioEngineTransportRecordingTest, StopPlaybackResetsTransportWhenNotReco
     EXPECT_EQ(0, engine.transportStartFrame());
 }
 
-TEST_F(AudioEngineTransportRecordingTest, RecordLoopDoesNotAdvanceTransportWhilePlaybackActive) {
+TEST_F(AudioEngineTransportRecordingTest,
+       TransportAdvancesWithMonotonicAnchorWhileRecordingDuringPlayback) {
     ASSERT_TRUE(engine.setPlaybackSource(wavPath, 1.0f, 0L));
 
     if (!engine.startRecording(1, recordPath, 0L)) {
         engine.stopPlayback();
-        GTEST_SKIP() << "No input audio device available for dual-writer guard test.";
+        GTEST_SKIP() << "No input audio device available for anchor transport test.";
     }
 
     const int64_t transportBefore = engine.transportFrame();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    EXPECT_EQ(transportBefore, engine.transportFrame());
+    EXPECT_GT(engine.transportFrame(), transportBefore);
 
     engine.stopRecording();
     engine.stopPlayback();
 }
 
-TEST_F(AudioEngineTransportRecordingTest, RecordingOnlyAdvancesTransportWithCapturedFrames) {
+TEST_F(AudioEngineTransportRecordingTest, RecordingOnlyAdvancesTransportWithMonotonicAnchor) {
     if (!engine.startRecording(1, recordPath, 0L)) {
         GTEST_SKIP() << "No input audio device available for recording advance test.";
     }
 
     const int64_t startFrame = engine.transportFrame();
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    const int64_t afterCapture = engine.transportFrame();
+    const int64_t afterElapsed = engine.transportFrame();
 
     engine.stopRecording();
 
-    EXPECT_GE(afterCapture, startFrame);
+    EXPECT_GT(afterElapsed, startFrame);
+    const int64_t expectedMinAdvance = (48'000LL * 200LL) / 1000LL;
+    EXPECT_GE(afterElapsed - startFrame, expectedMinAdvance);
 }
 
 TEST_F(AudioEngineTransportRecordingTest,

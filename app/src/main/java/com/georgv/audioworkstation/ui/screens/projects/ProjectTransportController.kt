@@ -1,6 +1,10 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
+import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
+import com.georgv.audioworkstation.core.audio.latency.LiveSessionLatencySnapshot
+import com.georgv.audioworkstation.ui.diagnostics.TransportFrameDiagnostics
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 
@@ -23,7 +27,8 @@ class ProjectTransportController(
     private val playbackSession: PlaybackSessionController,
     private val recordingSession: RecordingSessionController,
     private val dispatchers: AppDispatchers,
-    private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String, Long) -> Unit,
+    private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String, RecordingStopSnapshot) -> Unit,
+    private val onLiveOverdubSessionEnd: suspend (LiveSessionLatencySnapshot) -> Unit = { _ -> },
 ) {
 
     /** Full user / lifecycle transport stop — same sequencing as legacy [ProjectViewModel.performTransportStopSequence]. */
@@ -33,6 +38,18 @@ class ProjectTransportController(
         recordingSession.clearStartupFlagForTransportStop()
 
         val activeRecordingTrackId = recordingSession.activeRecordingTrackIdForTransport()
+        val liveOverdubSession = recordingSession.activeNormalOverdubContext() != null
+        val liveSessionCapture =
+            if (activeRecordingTrackId != null &&
+                liveOverdubSession &&
+                LiveSessionProfiling.captureOnOverdubEnd
+            ) {
+                withAudioIo(dispatchers, "AudioController.captureLiveSessionLatencySnapshot") {
+                    audioController.captureLiveSessionLatencySnapshot()
+                }
+            } else {
+                null
+            }
         val recordingStopped =
             withAudioIo(dispatchers, "AudioController.stopRecording") {
                 if (activeRecordingTrackId != null) {
@@ -41,19 +58,28 @@ class ProjectTransportController(
                     false
                 }
             }
-        val firstSampleTransportPositionMs =
+        val stopSnapshot =
             if (activeRecordingTrackId != null && recordingStopped) {
-                withAudioIo(dispatchers, "AudioController.recordingFirstSampleTransportPositionMs") {
-                    audioController.recordingFirstSampleTransportPositionMs()
+                withAudioIo(dispatchers, "AudioController.readRecordingStopSnapshot") {
+                    audioController.readRecordingStopSnapshot()
+                }.also { snapshot ->
+                    TransportFrameDiagnostics.logRecordingStop(snapshot)
                 }
             } else {
-                AudioController.RecordingFirstSampleTransportUnset
+                RecordingStopSnapshot(
+                    firstSampleTransportPositionMs = AudioController.RecordingFirstSampleTransportUnset,
+                    capturedFrameCount = 0L,
+                    capturedDurationMs = 0L,
+                )
             }
         if (activeRecordingTrackId != null && recordingStopped) {
             finalizeRecordingTrackAfterSuccessfulEngineStop(
                 activeRecordingTrackId,
-                firstSampleTransportPositionMs,
+                stopSnapshot,
             )
+            if (liveSessionCapture != null) {
+                onLiveOverdubSessionEnd(liveSessionCapture)
+            }
         }
 
         playbackSession.stopEngineIfMarkedPlaying()

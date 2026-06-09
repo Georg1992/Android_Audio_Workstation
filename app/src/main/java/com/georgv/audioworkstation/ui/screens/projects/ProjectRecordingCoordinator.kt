@@ -2,8 +2,11 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
+import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PreparedExistingTrackRecording
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
+import com.georgv.audioworkstation.core.audio.RecordingSpec
+import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
@@ -64,6 +67,7 @@ class ProjectRecordingCoordinator @Inject constructor(
         project: ProjectEntity,
         pendingTrack: TrackEntity,
         punchRecording: PreparedExistingTrackRecording? = null,
+        overdubPlaybackSpec: MultiPlaybackSpec? = null,
     ): RecordingStartOutcome {
         val quickActive = QuickRecordDiagnostics.isActiveFor(project.id)
         val pathStartMs = android.os.SystemClock.uptimeMillis()
@@ -107,14 +111,13 @@ class ProjectRecordingCoordinator @Inject constructor(
         }
         val outputPath =
             withAudioIo(dispatchers, "AudioController.startRecording") {
-                ThreadingDiagnostics.logWorkBoundary("AudioController.startRecording", phase = "beforeNativeCall")
-                val path =
-                    audioController.startRecording(
-                        recordingSpec,
-                        outputPath = tempRecordingPath,
-                    )
-                ThreadingDiagnostics.logWorkBoundary("AudioController.startRecording", phase = "afterNativeCall")
-                path
+                startNativeCapture(
+                    project = project,
+                    pendingTrack = pendingTrack,
+                    recordingSpec = recordingSpec,
+                    tempRecordingPath = tempRecordingPath,
+                    overdubPlaybackSpec = overdubPlaybackSpec,
+                )
             } ?: run {
                 if (quickActive) {
                     QuickRecordDiagnostics.logStepEnd("AudioController.startRecording", engineStartMs, project.id, "failed")
@@ -152,6 +155,35 @@ class ProjectRecordingCoordinator @Inject constructor(
             newTrack = newTrack,
             punchContext = punchContext,
         )
+    }
+
+    private fun startNativeCapture(
+        project: ProjectEntity,
+        pendingTrack: TrackEntity,
+        recordingSpec: RecordingSpec,
+        tempRecordingPath: String?,
+        overdubPlaybackSpec: MultiPlaybackSpec?,
+    ): String? {
+        ThreadingDiagnostics.logWorkBoundary("AudioController.startRecording", phase = "beforeNativeCall")
+        val resolvedOutputPath =
+            tempRecordingPath
+                ?: audioFilePathProvider.trackOutputPath(project.id, pendingTrack.id)
+        val path =
+            if (overdubPlaybackSpec != null) {
+                val capturePath = resolvedOutputPath ?: return null
+                audioController.startOverdubRecordingSession(
+                    playbackSpec = overdubPlaybackSpec,
+                    recordingSpec = recordingSpec,
+                    outputPath = capturePath,
+                )
+            } else {
+                audioController.startRecording(
+                    recordingSpec,
+                    outputPath = tempRecordingPath,
+                )
+            }
+        ThreadingDiagnostics.logWorkBoundary("AudioController.startRecording", phase = "afterNativeCall")
+        return path
     }
 
     /**
@@ -205,23 +237,37 @@ class ProjectRecordingCoordinator @Inject constructor(
     /**
      * Row to persist after a successful [AudioController.stopRecording].
      * Punch recordings splice temp audio into the live track WAV on success.
+     *
+     * Capture placement: [RecordingStopSnapshot.firstSampleTransportPositionMs] comes from native
+     * estimated capture transport (HAL input latency corrected). Kotlin does not apply timeline
+     * compensation — it persists that stamp as [TrackEntity.timelineStartOffsetMs].
      */
     fun finalizeTrackAfterStop(
         currentTrack: TrackEntity,
         punchContext: RecordingPunchContext?,
-        firstSampleTransportPositionMs: Long = AudioController.RecordingFirstSampleTransportUnset,
+        stopSnapshot: RecordingStopSnapshot = RecordingStopSnapshot(
+            firstSampleTransportPositionMs = AudioController.RecordingFirstSampleTransportUnset,
+            capturedFrameCount = 0L,
+            capturedDurationMs = 0L,
+        ),
     ): TrackEntity {
         val stopTimestamp = System.currentTimeMillis()
         if (punchContext == null) {
-            val duration = max(0L, stopTimestamp - currentTrack.timeStampStart)
+            val duration =
+                if (stopSnapshot.capturedDurationMs > 0L) {
+                    stopSnapshot.capturedDurationMs
+                } else {
+                    max(0L, stopTimestamp - currentTrack.timeStampStart)
+                }
             val timelineStartOffsetMs =
-                if (firstSampleTransportPositionMs >= 0L) {
-                    firstSampleTransportPositionMs
+                if (stopSnapshot.firstSampleTransportPositionMs >= 0L) {
+                    stopSnapshot.firstSampleTransportPositionMs
                 } else {
                     currentTrack.timelineStartOffsetMs
                 }
             return currentTrack.copy(
                 timelineStartOffsetMs = timelineStartOffsetMs.coerceAtLeast(0L),
+                trimStartMs = currentTrack.trimStartMs.coerceAtLeast(0L),
                 timeStampStop = stopTimestamp,
                 duration = duration,
                 isRecording = false,
@@ -248,12 +294,16 @@ class ProjectRecordingCoordinator @Inject constructor(
     /** @see finalizeTrackAfterStop */
     fun finalizedTrackAfterStop(
         currentTrack: TrackEntity,
-        firstSampleTransportPositionMs: Long = AudioController.RecordingFirstSampleTransportUnset,
+        stopSnapshot: RecordingStopSnapshot = RecordingStopSnapshot(
+            firstSampleTransportPositionMs = AudioController.RecordingFirstSampleTransportUnset,
+            capturedFrameCount = 0L,
+            capturedDurationMs = 0L,
+        ),
     ): TrackEntity =
         finalizeTrackAfterStop(
             currentTrack,
             punchContext = null,
-            firstSampleTransportPositionMs = firstSampleTransportPositionMs,
+            stopSnapshot = stopSnapshot,
         )
 
     fun discardPunchRecordingTempFile(punchContext: RecordingPunchContext?) {

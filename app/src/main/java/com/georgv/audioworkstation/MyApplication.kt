@@ -2,6 +2,7 @@ package com.georgv.audioworkstation
 
 import android.app.Application
 import android.content.pm.ApplicationInfo
+import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
 import com.georgv.audioworkstation.ui.components.TimelineGeometryDebug
 import com.georgv.audioworkstation.ui.diagnostics.ComposeTimingDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
@@ -25,5 +26,8 @@ class MyApplication : Application() {
         QuickRecordDiagnostics.loggingEnabled = debuggable
         ThreadingDiagnostics.loggingEnabled = debuggable
         WaveformRecompositionDiagnostics.loggingEnabled = debuggable
+        if (debuggable) {
+            LiveSessionProfiling.captureOnOverdubEnd = true
+        }
     }
 }

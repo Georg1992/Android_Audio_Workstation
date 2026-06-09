@@ -22,6 +22,13 @@ fun TrackEntity.effectiveTrimEndMs(): Long {
 fun TrackEntity.trimmedClipDurationMs(): Long =
     (effectiveTrimEndMs() - effectiveTrimStartMs()).coerceAtLeast(0L)
 
+/** Timeline-visible clip duration (after [trimStartMs] / [trimEndMs]). */
+fun TrackEntity.timelineClipDurationMs(): Long {
+    val sourceDuration = sourceDurationMs()
+    if (sourceDuration <= 0L) return 0L
+    return trimmedClipDurationMs().coerceIn(0L, sourceDuration)
+}
+
 fun clampTrimRegionMs(
     trimStartMs: Long,
     trimEndMs: Long,

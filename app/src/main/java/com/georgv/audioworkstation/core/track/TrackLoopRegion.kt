@@ -79,7 +79,7 @@ fun TrackEntity.effectiveLoopEndMs(): Long {
  * Loop region bounds do not trim the base timeline.
  */
 fun TrackEntity.effectiveTimelineEndMs(): Long =
-    timelineStartOffsetMs.coerceAtLeast(0L) + sourceDurationMs()
+    timelineStartOffsetMs.coerceAtLeast(0L) + timelineClipDurationMs()
 
 fun clampLoopRegionMs(
     loopStartMs: Long,

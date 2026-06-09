@@ -2,6 +2,7 @@
 
 package com.georgv.audioworkstation.core.audio
 
+import com.georgv.audioworkstation.core.audio.latency.LiveSessionLatencySnapshot
 import kotlinx.coroutines.flow.StateFlow
 
 interface AudioController {    /**
@@ -32,8 +33,61 @@ interface AudioController {    /**
      */
     fun recordingFirstSampleTransportPositionMs(): Long = RecordingFirstSampleTransportUnset
 
+    fun recordingFirstSampleTransportFrame(): Long = RecordingFirstSampleTransportUnset
+
+    fun transportStartFrame(): Long = 0L
+
+    fun transportFrame(): Long = 0L
+
+    fun recordingCapturedFrameCount(): Long = 0L
+
+    fun recordingCapturedDurationMs(): Long = 0L
+
+    /**
+     * Transport stamp and PCM-derived duration from the last recording session.
+     * Call immediately after a successful [stopRecording].
+     */
+    fun readRecordingStopSnapshot(): RecordingStopSnapshot =
+        RecordingStopSnapshot(
+            firstSampleTransportPositionMs = recordingFirstSampleTransportPositionMs(),
+            capturedFrameCount = recordingCapturedFrameCount(),
+            capturedDurationMs = recordingCapturedDurationMs(),
+        )
+
+    /**
+     * Probe open streams while a recording session is still active (call before [stopRecording]).
+     */
+    fun captureLiveSessionLatencySnapshot(): LiveSessionLatencySnapshot =
+        LiveSessionLatencySnapshot.EMPTY
+
+    /**
+     * Atomic play+record: arms overdub lanes with deferred transport start, opens input capture,
+     * and starts shared playback on the first captured input frame.
+     */
+    fun startOverdubRecordingSession(
+        playbackSpec: MultiPlaybackSpec,
+        recordingSpec: RecordingSpec,
+        outputPath: String,
+    ): String? = null
+
+    /**
+     * Optional HAL latency hints for transport-clock diagnostics and capture placement.
+     * Input latency drives native capture placement; output latency is the profile fallback for
+     * native output render-ahead when live HAL [calculateLatencyMillis] is unavailable.
+     */
+    fun configureSessionTransportLatencies(
+        inputLatencyMs: Double = 0.0,
+        outputLatencyMs: Double = 0.0,
+    ) = Unit
+
     /** True when the native engine is actively playing (same signal as [playbackState] when in sync). */
     fun isPlaybackEngineRunning(): Boolean
+
+    /**
+     * Rebuild overdub backing lanes during an active recording session without resetting the
+     * overdub capture anchor or re-arming the deferred playback gate.
+     */
+    fun rearmOverdubPlaybackDuringRecording(spec: MultiPlaybackSpec): Boolean = false
 
     companion object {
         /** Sentinel from native when no input samples were captured. */
@@ -67,6 +121,7 @@ interface AudioController {    /**
         loopEnabled: Boolean = false,
         loopSourceStartMs: Long = 0L,
         loopSourceEndMs: Long = 0L,
+        sourceTrimStartMs: Long = 0L,
         pan: Float = 0f,
     ): Int
 

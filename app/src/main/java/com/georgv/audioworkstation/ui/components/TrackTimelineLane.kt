@@ -49,6 +49,7 @@ import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.track.hasTimelineClip
+import com.georgv.audioworkstation.core.track.timelineClipDurationMs
 import com.georgv.audioworkstation.core.track.trackLoopPlaybackPositionMs
 import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
@@ -99,6 +100,8 @@ data class TimelineClip(
     val effectiveStartMs: Long = 0L,
     /** Track-local active region end (ms from WAV start). */
     val effectiveEndMs: Long = 0L,
+    /** Non-destructive source trim start (ms from WAV start). */
+    val sourceTrimStartMs: Long = 0L,
     val importStatus: TrackImportStatus = TrackImportStatus.READY,
     val importProgress: Float = 0f,
 )
@@ -142,7 +145,8 @@ fun projectTimelineClips(
             return@mapNotNull null
         }
         val startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
-        track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = durationMs.coerceAtLeast(0L))
+        val visibleDurationMs = track.timelineClipDurationMs().coerceAtLeast(0L)
+        track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = visibleDurationMs)
     }
     if (playableTracks.isEmpty()) return emptyList()
     val baseEndMs =
@@ -165,6 +169,7 @@ fun projectTimelineClips(
             loopEndMs = track.loopEndMs,
             effectiveStartMs = track.effectiveLoopStartMs(),
             effectiveEndMs = track.effectiveLoopEndMs(),
+            sourceTrimStartMs = track.trimStartMs.coerceAtLeast(0L),
             importStatus = track.importStatus,
             importProgress = importProgressByTrackId[track.id] ?: 0f,
         )
@@ -180,6 +185,24 @@ private data class TimelineClipSpan(
  * Maps full-file [WaveformPeaks] to the timeline clip width when the on-disk WAV is longer than
  * [clipDurationMs], so the visible waveform matches the audio segment the engine plays from offset 0.
  */
+fun waveformPeaksForTrimmedClip(
+    peaks: WaveformPeaks,
+    trimStartMs: Long,
+    clipDurationMs: Long,
+): WaveformPeaks {
+    if (clipDurationMs <= 0L) return peaks
+    if (trimStartMs <= 0L) return waveformPeaksForTimelineClip(peaks, clipDurationMs)
+    val sourceDurationMs = peaks.sourceDurationMs
+    if (sourceDurationMs <= 0L) return peaks
+    val trimEndMs = (trimStartMs + clipDurationMs).coerceAtMost(sourceDurationMs)
+    return waveformPeaksForLoopPlaybackRegion(
+        peaks = peaks,
+        loopStartMs = trimStartMs,
+        loopEndMs = trimEndMs,
+        clipDurationMs = clipDurationMs,
+    )
+}
+
 fun waveformPeaksForTimelineClip(
     peaks: WaveformPeaks,
     clipDurationMs: Long,
@@ -595,8 +618,9 @@ fun TrackTimelineLane(
                                             clipDurationMs = activeClip.durationMs,
                                         )
                                     } else {
-                                        waveformPeaksForTimelineClip(
+                                        waveformPeaksForTrimmedClip(
                                             peaks = peaks,
+                                            trimStartMs = activeClip.sourceTrimStartMs,
                                             clipDurationMs = activeClip.durationMs,
                                         )
                                     }

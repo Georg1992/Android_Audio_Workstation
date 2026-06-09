@@ -2,7 +2,8 @@ package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
-import com.georgv.audioworkstation.core.track.sourceDurationMs
+import com.georgv.audioworkstation.core.track.effectiveTrimStartMs
+import com.georgv.audioworkstation.core.track.timelineClipDurationMs
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 
 /**
@@ -15,7 +16,7 @@ fun shouldHotJoinTrackAtTransport(track: TrackEntity, transportMs: Long): Boolea
     if (track.wavFilePath.isBlank()) return false
     if (track.isLoop) return true
     val clipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
-    val clipDurationMs = track.sourceDurationMs()
+    val clipDurationMs = track.timelineClipDurationMs()
     if (clipDurationMs <= 0L) return true
     return transportMs < clipStartMs + clipDurationMs
 }
@@ -27,15 +28,17 @@ data class HotJoinLaneSpec(
     val loopEnabled: Boolean,
     val loopSourceStartMs: Long,
     val loopSourceEndMs: Long,
+    val sourceTrimStartMs: Long,
     val pan: Float,
 )
 
 fun TrackEntity.toHotJoinLaneSpec(): HotJoinLaneSpec =
     HotJoinLaneSpec(
         timelineClipStartMs = timelineStartOffsetMs.coerceAtLeast(0L),
-        timelineClipDurationMs = sourceDurationMs(),
+        timelineClipDurationMs = timelineClipDurationMs(),
         loopEnabled = isLoop,
         loopSourceStartMs = effectiveLoopStartMs(),
         loopSourceEndMs = effectiveLoopEndMs(),
+        sourceTrimStartMs = effectiveTrimStartMs(),
         pan = PanRange.clamp(pan),
     )

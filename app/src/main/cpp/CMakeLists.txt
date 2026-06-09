@@ -77,6 +77,15 @@ add_library(audioworkstation SHARED
     engine/JNI_Bridge.cpp
     engine/LocalWavSource.cpp
     engine/OboeOutput.cpp
+    engine/OboeTimestampDiagnostics.cpp
+    engine/OboeStreamCapabilityProbe.cpp
+    engine/OverdubStartupOptimization.cpp
+    engine/TransportClockAnchor.cpp
+    engine/TransportClockDiagnostics.cpp
+    engine/OutputRenderAhead.cpp
+    engine/DeviceLatencyBudgetDiagnostics.cpp
+    engine/AudioStreamConfigurationDiagnostics.cpp
+    engine/AudioSyncLogConfig.cpp
 )
 
 target_include_directories(audioworkstation PRIVATE

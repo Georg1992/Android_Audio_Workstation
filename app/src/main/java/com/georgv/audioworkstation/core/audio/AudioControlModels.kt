@@ -2,7 +2,8 @@ package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
-import com.georgv.audioworkstation.core.track.sourceDurationMs
+import com.georgv.audioworkstation.core.track.effectiveTrimStartMs
+import com.georgv.audioworkstation.core.track.timelineClipDurationMs
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlin.math.roundToInt
@@ -101,6 +102,13 @@ data class RecordingSpec(
     }
 }
 
+/** Native transport + capture metrics read after [AudioController.stopRecording] succeeds. */
+data class RecordingStopSnapshot(
+    val firstSampleTransportPositionMs: Long,
+    val capturedFrameCount: Long,
+    val capturedDurationMs: Long,
+)
+
 data class RecordingRequest(
     val sampleRate: Int,
     val fileBitDepth: Int,
@@ -124,6 +132,8 @@ data class TrackPlaybackLane(
     val loopSourceStartMs: Long = 0L,
     /** Track-local source loop region end (ms from WAV start). */
     val loopSourceEndMs: Long = 0L,
+    /** Non-destructive source read offset (ms from WAV start). */
+    val sourceTrimStartMs: Long = 0L,
 ) {
     init {
         require(wavFilePath.isNotBlank()) { "Playback lane requires a WAV path." }
@@ -133,6 +143,7 @@ data class TrackPlaybackLane(
         require(timelineClipDurationMs >= 0L) { "Timeline clip duration must be non-negative." }
         require(loopSourceStartMs >= 0L) { "Loop source start must be non-negative." }
         require(loopSourceEndMs >= 0L) { "Loop source end must be non-negative." }
+        require(sourceTrimStartMs >= 0L) { "Source trim start must be non-negative." }
     }
 }
 
@@ -153,8 +164,11 @@ fun laneSourceReadOffsetMs(
     loopEnabled: Boolean,
     loopSourceStartMs: Long,
     loopSourceEndMs: Long,
+    sourceTrimStartMs: Long = 0L,
 ): Long {
-    if (!loopEnabled) return (playheadMs - clipStartMs).coerceAtLeast(0L)
+    if (!loopEnabled) {
+        return (playheadMs - clipStartMs).coerceAtLeast(0L) + sourceTrimStartMs.coerceAtLeast(0L)
+    }
     val loopLength = (loopSourceEndMs - loopSourceStartMs).coerceAtLeast(1L)
     val loopPhaseMs = ((playheadMs % loopLength) + loopLength) % loopLength
     return loopSourceStartMs + loopPhaseMs
@@ -226,10 +240,11 @@ fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackS
                         gain = GainRange.toUnit(track.gain),
                         pan = PanRange.clamp(track.pan),
                         timelineClipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
-                        timelineClipDurationMs = track.sourceDurationMs(),
+                        timelineClipDurationMs = track.timelineClipDurationMs(),
                         loopEnabled = track.isLoop,
                         loopSourceStartMs = effectiveStartMs,
                         loopSourceEndMs = effectiveEndMs,
+                        sourceTrimStartMs = track.effectiveTrimStartMs(),
                     )
                 }
         }

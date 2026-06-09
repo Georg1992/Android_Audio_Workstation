@@ -2,7 +2,6 @@ package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.MixdownTimelineStartMs
 import com.georgv.audioworkstation.ui.components.mixdownTimelineEndMs
 import com.georgv.audioworkstation.ui.screens.projects.FakeAudioController
 import kotlinx.coroutines.test.runTest
@@ -32,7 +31,7 @@ class ProjectOfflineMixdownRendererTest {
                     outputPath: String,
                     onProgress: (Float) -> Unit,
                 ): MixdownResult {
-                    assertEquals(MixdownTimelineStartMs, spec.startPositionMs)
+                    assertEquals(0L, spec.startPositionMs)
                     assertEquals(1_000L, spec.sessionTimelineEndMs)
                     assertEquals(1, spec.lanes.size)
                     onProgress(1f)
@@ -137,7 +136,7 @@ class ProjectOfflineMixdownRendererTest {
                     outputPath: String,
                     onProgress: (Float) -> Unit,
                 ): MixdownResult {
-                    assertEquals(MixdownTimelineStartMs, spec.startPositionMs)
+                    assertEquals(0L, spec.startPositionMs)
                     assertEquals(15_000L, spec.sessionTimelineEndMs)
                     return MixdownResult.Success(outputPath)
                 }
