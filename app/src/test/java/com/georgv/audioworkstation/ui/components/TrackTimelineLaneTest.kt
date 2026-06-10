@@ -324,7 +324,7 @@ class TrackTimelineLaneTest {
     }
 
     @Test
-    fun `project timeline clips use track timelineStartOffsetMs`() {
+    fun `project timeline clips use playback clip start for layout`() {
         val tracks = listOf(
             TrackEntity(
                 id = "offset",
@@ -338,6 +338,26 @@ class TrackTimelineLaneTest {
         val clip = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap()).single()
 
         assertEquals(30_000L, clip.startOffsetMs)
+    }
+
+    @Test
+    fun `overdub clip layout uses playback offset not capture placement`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "overdub",
+                    projectId = "p",
+                    wavFilePath = "overdub.wav",
+                    duration = 5_000L,
+                    timelineStartOffsetMs = 144L,
+                    overdubPlaybackSyncOffsetMs = 62L,
+                    overdubBackingArmMs = 0L,
+                ),
+            )
+
+        val clip = projectTimelineClips(tracks, waveformStatesByTrackId = emptyMap()).single()
+
+        assertEquals(82L, clip.startOffsetMs)
     }
 
     @Test

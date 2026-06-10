@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
 import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
@@ -35,6 +36,7 @@ class PlayheadTransportController(
     private val nativeTransportPositionMs: () -> Long,
     private val pollDispatcher: CoroutineDispatcher,
     private val pollIntervalMs: Long = NATIVE_TRANSPORT_POLL_INTERVAL_MS,
+    private val sessionOutputLatencyMs: () -> Double = { 0.0 },
 ) {
     private val _phase = MutableStateFlow(TransportPlaybackPhase.Idle)
     val phase: StateFlow<TransportPlaybackPhase> = _phase.asStateFlow()
@@ -157,13 +159,28 @@ class PlayheadTransportController(
     private fun readNativeTransportMs(): Long =
         (testNativePositionOverrideMs ?: nativeTransportPositionMs()).coerceAtLeast(0L)
 
+    private fun mixTransportToDisplayMs(raw: Long): Long {
+        val outputLatencyMs =
+            when (_phase.value) {
+                TransportPlaybackPhase.Playing,
+                TransportPlaybackPhase.Recording,
+                -> sessionOutputLatencyMs()
+                else -> 0.0
+            }
+        return PlaybackTransportSync.audiblePlayheadMs(
+            PlaybackTransportSync.mixTransportMsFromRaw(raw),
+            outputLatencyMs,
+        ).value
+    }
+
     private fun applyNativeTransportPosition(raw: Long) {
+        val displayMs = mixTransportToDisplayMs(raw)
         val next =
             when (_phase.value) {
-                TransportPlaybackPhase.Recording -> raw.coerceAtLeast(0L)
-                TransportPlaybackPhase.Playing -> raw.coerceIn(0L, TimelineMaxDurationMs)
+                TransportPlaybackPhase.Recording -> displayMs.coerceAtLeast(0L)
+                TransportPlaybackPhase.Playing -> displayMs.coerceIn(0L, TimelineMaxDurationMs)
                 TransportPlaybackPhase.Paused ->
-                    timelinePlayheadClampedPositionMs(raw, timelineBaseDurationMs)
+                    timelinePlayheadClampedPositionMs(displayMs, timelineBaseDurationMs)
                 else -> return
             }
         if (playheadPositionMs.value != next) {

@@ -1,7 +1,11 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.AudibleMs
+import com.georgv.audioworkstation.core.audio.MixTransportMs
+import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
+import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
+import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.track.activeMixScopeOverdubPlaybackTracks
@@ -11,17 +15,21 @@ import com.georgv.audioworkstation.core.track.playheadMsAfterScopeStop
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Rebuilds or stops native playback when [selectedTrackIds] changes during an active transport session.
- * Selection is the single source of truth for playback scope (no mute/hot-join path).
+ * Selection is the single source of truth for playback scope (full spec rebuild).
+ *
+ * Coordinate contract:
+ * - [MixTransportMs] — raw native transport; passed to engine arm/rebuild.
+ * - [AudibleMs] — UI playhead / scrubber; never passed to native without conversion.
  */
 internal class ScopePlaybackCoordinator(
     private val audioController: AudioController,
     private val dispatchers: AppDispatchers,
+    private val sessionTransportGate: SessionTransportCapabilityGate,
     private val playheadPositionMs: MutableStateFlow<Long>,
     private val playheadTransport: PlayheadTransportController,
     private val playbackSession: PlaybackSessionController,
@@ -40,11 +48,11 @@ internal class ScopePlaybackCoordinator(
         val recordingTrackId = recordingSession.recordingTrackId.value
         val tracks = visibleTracks()
         val scopePlayableTracks = activeMixScopePlayableTracks(tracks, selectedTrackIds)
-        val transportMs = readTransportMs()
+        val mixTransportMs = readMixTransportMs()
 
         if (selectedTrackIds.isEmpty()) {
             stopForScopeChange(
-                clampPlayheadMs = 0L,
+                clampMixTransportMs = MixTransportMs(0L),
                 recordingTrackId = recordingTrackId,
             )
             return
@@ -52,18 +60,18 @@ internal class ScopePlaybackCoordinator(
 
         if (scopePlayableTracks.isEmpty()) {
             if (recordingTrackId != null) {
-                rebuildOverdubBacking(selectedTrackIds, recordingTrackId, transportMs)
+                rebuildOverdubBacking(selectedTrackIds, recordingTrackId, mixTransportMs)
             } else {
-                stopForScopeChange(clampPlayheadMs = 0L, recordingTrackId = null)
+                stopForScopeChange(clampMixTransportMs = MixTransportMs(0L), recordingTrackId = null)
             }
             return
         }
 
-        if (playbackMustStopAtScopeEnd(transportMs, scopePlayableTracks)) {
+        if (playbackMustStopAtScopeEnd(mixTransportMs, scopePlayableTracks)) {
             stopForScopeChange(
-                clampPlayheadMs =
+                clampMixTransportMs =
                     playheadMsAfterScopeStop(
-                        transportMs = transportMs,
+                        mixTransportMs = mixTransportMs,
                         scopePlayableTracks = scopePlayableTracks,
                         selectionEmpty = false,
                     ),
@@ -73,53 +81,61 @@ internal class ScopePlaybackCoordinator(
         }
 
         if (recordingTrackId != null) {
-            rebuildOverdubBacking(selectedTrackIds, recordingTrackId, transportMs)
+            rebuildOverdubBacking(selectedTrackIds, recordingTrackId, mixTransportMs)
             return
         }
 
-        rebuildPlaybackScope(selectedTrackIds, scopePlayableTracks, transportMs)
+        rebuildPlaybackScope(selectedTrackIds, scopePlayableTracks, mixTransportMs)
     }
 
     suspend fun rebuildPlaybackAtCurrentTransport(selectedTrackIds: Set<String>): Boolean {
         if (!playbackSession.hasActivePlaybackSession()) return false
         val tracks = activeMixScopePlayableTracks(visibleTracks(), selectedTrackIds)
         if (tracks.isEmpty()) return false
-        val transportMs =
-            timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs())
+        val audibleMs =
+            AudibleMs(
+                timelinePlayheadClampedPositionMs(playheadPositionMs.value, timelineVisibleDurationMs()),
+            )
         if (
             !playbackStartAllowedAtPlayhead(
-                startPositionMs = transportMs,
+                startPositionMs = audibleMs.value,
                 timelineBaseDurationMs = timelineBaseDurationMs(),
                 tracks = tracks,
             )
         ) {
             return false
         }
-        return rebuildPlaybackScope(selectedTrackIds, tracks, transportMs)
+        val mixTransportMs = PlaybackTransportSync.mixTransportMs(audioController, audibleMs)
+        return rebuildPlaybackScope(selectedTrackIds, tracks, mixTransportMs, audibleMs)
     }
 
     private suspend fun rebuildPlaybackScope(
         selectedTrackIds: Set<String>,
         scopePlayableTracks: List<TrackEntity>,
-        transportMs: Long,
+        mixTransportMs: MixTransportMs,
+        audiblePlayheadMs: AudibleMs =
+            PlaybackTransportSync.audiblePlayheadMs(audioController, mixTransportMs),
     ): Boolean {
         val currentProjectId = projectId() ?: return false
         val currentProject = loadCurrentProject(currentProjectId) ?: return false
-        val startPositionMs =
-            timelinePlayheadClampedPositionMs(transportMs, timelineVisibleDurationMs())
+        val clampedAudible =
+            AudibleMs(
+                timelinePlayheadClampedPositionMs(audiblePlayheadMs.value, timelineVisibleDurationMs()),
+            )
         if (
             !playbackStartAllowedAtPlayhead(
-                startPositionMs = startPositionMs,
+                startPositionMs = clampedAudible.value,
                 timelineBaseDurationMs = timelineBaseDurationMs(),
                 tracks = scopePlayableTracks,
             )
         ) {
             return false
         }
+        PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
         val playbackSpec =
-            currentProject.toMultiPlaybackSpec(scopePlayableTracks)?.copy(
-                startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForPlayback(scopePlayableTracks),
+            currentProject.toLiveEnginePlaybackSpec(
+                tracks = scopePlayableTracks,
+                startPositionMs = mixTransportMs,
             ) ?: return false
         if (
             !playbackSession.restartEngineFromPlayhead(
@@ -130,9 +146,9 @@ internal class ScopePlaybackCoordinator(
         ) {
             return false
         }
-        playheadPositionMs.value = startPositionMs
+        playheadPositionMs.value = clampedAudible.value
         if (playheadTransport.phase.value == TransportPlaybackPhase.Playing) {
-            playheadTransport.onPlaybackStarted(fromPositionMs = startPositionMs)
+            playheadTransport.onPlaybackStarted(fromPositionMs = clampedAudible.value)
         }
         return true
     }
@@ -140,7 +156,7 @@ internal class ScopePlaybackCoordinator(
     private suspend fun rebuildOverdubBacking(
         selectedTrackIds: Set<String>,
         recordingTrackId: String,
-        transportMs: Long,
+        mixTransportMs: MixTransportMs,
     ) {
         val tracks = visibleTracks()
         val overdubTracks =
@@ -156,8 +172,7 @@ internal class ScopePlaybackCoordinator(
         }
         val currentProjectId = projectId() ?: return
         val currentProject = loadCurrentProject(currentProjectId) ?: return
-        val sessionEndMs = sessionTimelineEndMsForPlayback(overdubTracks)
-        if (playbackMustStopAtScopeEnd(transportMs, overdubTracks)) {
+        if (playbackMustStopAtScopeEnd(mixTransportMs, overdubTracks)) {
             playbackSession.clearPlayingTransportState()
             return
         }
@@ -166,8 +181,7 @@ internal class ScopePlaybackCoordinator(
                 project = currentProject,
                 selectedPlayableTracks = overdubTracks,
                 recordingTrackId = recordingTrackId,
-                transportMs = transportMs,
-                sessionTimelineEndMs = sessionEndMs,
+                mixTransportMs = mixTransportMs,
                 timelineVisibleDurationMs = timelineVisibleDurationMs(),
             )
         if (!started) {
@@ -176,7 +190,7 @@ internal class ScopePlaybackCoordinator(
     }
 
     private suspend fun stopForScopeChange(
-        clampPlayheadMs: Long,
+        clampMixTransportMs: MixTransportMs,
         recordingTrackId: String?,
     ) {
         playbackSession.cancelCompletionMonitorForTransportStop()
@@ -184,7 +198,8 @@ internal class ScopePlaybackCoordinator(
             playbackSession.stopEngineIfMarkedPlaying()
         }
         playbackSession.clearPlayingTransportState()
-        playheadPositionMs.value = clampPlayheadMs.coerceAtLeast(0L)
+        playheadPositionMs.value =
+            PlaybackTransportSync.audiblePlayheadMs(audioController, clampMixTransportMs).value
         when (playheadTransport.phase.value) {
             TransportPlaybackPhase.Recording -> Unit
             TransportPlaybackPhase.Playing,
@@ -197,6 +212,8 @@ internal class ScopePlaybackCoordinator(
         }
     }
 
-    private fun readTransportMs(): Long =
-        audioController.transportPositionMs().coerceAtLeast(0L)
+    private fun readMixTransportMs(): MixTransportMs =
+        PlaybackTransportSync.mixTransportMsFromRaw(
+            audioController.transportPositionMs().coerceAtLeast(0L),
+        )
 }

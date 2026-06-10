@@ -6,7 +6,7 @@ import com.georgv.audioworkstation.core.audio.MasterOutputMeterState
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.TrackPlaybackLane
 import com.georgv.audioworkstation.core.audio.RecordingSpec
-import com.georgv.audioworkstation.core.audio.capability.testAudioCapabilityProfileResolver
+import com.georgv.audioworkstation.core.audio.capability.testSessionTransportCapabilityGate
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -53,7 +53,7 @@ class ProjectTransportControllerTest {
     ): RecordingSessionController {
         val repo = ProjectRepository(FakeProjectDao(projects = listOf(project()), tracks = emptyList()), NoopProjectFileStore)
         val coordinator = testProjectRecordingCoordinator(repo, audio)
-        return RecordingSessionController(scope, audio, coordinator, testDispatchers(), testAudioCapabilityProfileResolver())
+        return RecordingSessionController(scope, audio, coordinator, testDispatchers(), testSessionTransportCapabilityGate())
     }
 
     private fun testDispatchers(): TestAppDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher)

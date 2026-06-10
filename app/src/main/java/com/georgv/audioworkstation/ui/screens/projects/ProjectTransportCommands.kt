@@ -3,16 +3,17 @@ package com.georgv.audioworkstation.ui.screens.projects
 import androidx.annotation.StringRes
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioController
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
+import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
+import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
+import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
+import com.georgv.audioworkstation.core.audio.TransportTimelinePolicy
+import com.georgv.audioworkstation.core.coroutines.withIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
-import com.georgv.audioworkstation.core.track.playbackStartPositionMsForTracks
-import com.georgv.audioworkstation.core.track.recordingClipTimelineStartMs
 import com.georgv.audioworkstation.ui.components.playbackStartAllowedAtPlayhead
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 internal class ProjectTransportCommands(
     private val audioController: AudioController,
     private val dispatchers: AppDispatchers,
+    private val sessionTransportGate: SessionTransportCapabilityGate,
     private val playheadPositionMs: MutableStateFlow<Long>,
     private val playheadTransport: PlayheadTransportController,
     private val playbackSession: PlaybackSessionController,
@@ -67,14 +69,14 @@ internal class ProjectTransportCommands(
         val recordTargetTrack =
             recordTargetTrackId()?.let { targetId -> tracks.find { it.id == targetId } }
         val overdubPlaybackStartMs =
-            playbackStartPositionMsForTracks(
+            TransportTimelinePolicy.playbackStartPositionMsForTracks(
                 scrubbedPlayheadMs = timelineStartOffsetMs,
                 timelineVisibleDurationMs = timelineVisibleDurationMs(),
                 tracks = overdubPlaybackTracks,
-            )
+            ).value
         val hasOverdubBacking = overdubPlaybackTracks.isNotEmpty()
         val recordingTimelineStartOffsetMs =
-            recordingClipTimelineStartMs(
+            TransportTimelinePolicy.recordingClipTimelineStartMs(
                 playheadMs = timelineStartOffsetMs,
                 overdubPlaybackStartMs = overdubPlaybackStartMs,
                 hasOverdubBacking = hasOverdubBacking,
@@ -163,15 +165,15 @@ internal class ProjectTransportCommands(
         }
         val currentProjectId = projectId() ?: return
         val currentProject = loadCurrentProject(currentProjectId) ?: return
-        val startPositionMs =
-            playbackStartPositionMsForTracks(
+        val audibleStart =
+            TransportTimelinePolicy.playbackStartPositionMsForTracks(
                 scrubbedPlayheadMs = playheadPositionMs.value,
                 timelineVisibleDurationMs = timelineVisibleDurationMs(),
                 tracks = selectedPlayableTracks,
             )
         if (
             !playbackStartAllowedAtPlayhead(
-                startPositionMs = startPositionMs,
+                startPositionMs = audibleStart.value,
                 timelineBaseDurationMs = timelineBaseDurationMs(),
                 tracks = selectedPlayableTracks,
             )
@@ -179,18 +181,20 @@ internal class ProjectTransportCommands(
             return
         }
 
-        val playbackSpec =
-            currentProject.toMultiPlaybackSpec(selectedPlayableTracks)?.copy(
-                startPositionMs = startPositionMs,
-                sessionTimelineEndMs = sessionTimelineEndMsForPlayback(selectedPlayableTracks),
-            )
-        if (playbackSpec == null) {
-            emitMessage(playbackStartRejectedMessage(selectedPlayableTracks.size))
-            return
-        }
-
+        var armedTrackIds: List<String> = emptyList()
         val started =
             withAudioIo(dispatchers, "AudioController.startPlayback") {
+                withIo(dispatchers, "prepare session transport capability") {
+                    sessionTransportGate.prepareForLiveSession(currentProject.sampleRate)
+                }
+                PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
+                val outputLatencyMs = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(audioController)
+                val playbackSpec =
+                    currentProject.toLiveEnginePlaybackSpec(
+                        tracks = selectedPlayableTracks,
+                        startPositionMs = PlaybackTransportSync.mixTransportMs(audibleStart, outputLatencyMs),
+                    ) ?: return@withAudioIo false
+                armedTrackIds = playbackSpec.lanes.map { it.trackId }
                 audioController.startPlayback(playbackSpec)
             }
         if (!started) {
@@ -198,11 +202,9 @@ internal class ProjectTransportCommands(
             emitMessage(R.string.error_playback_failed_to_start)
             return
         }
-        playheadPositionMs.value = startPositionMs
-        playheadTransport.onPlaybackStarted(fromPositionMs = startPositionMs)
-        playbackSession.markPlayingAndStartCompletionMonitor(
-            playbackSpec.lanes.map { it.trackId },
-        )
+        playheadPositionMs.value = audibleStart.value
+        playheadTransport.onPlaybackStarted(fromPositionMs = audibleStart.value)
+        playbackSession.markPlayingAndStartCompletionMonitor(armedTrackIds)
     }
 
     suspend fun performStopPressed() {

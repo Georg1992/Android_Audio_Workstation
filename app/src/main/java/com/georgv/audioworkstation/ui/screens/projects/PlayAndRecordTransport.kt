@@ -1,7 +1,8 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.MixTransportMs
+import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -12,8 +13,7 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
  * recording row. Playhead timing stays in [PlayheadTransportController]; Recording phase polls
  * the same native transport clock as playback.
  *
- * Initial overdub arm uses [AudioController.startOverdubRecordingSession] (deferred gate + capture
- * anchor). Scope rebuild during recording uses [AudioController.rearmOverdubPlaybackDuringRecording].
+ * Initial overdub arm uses [AudioController.startOverdubRecordingSession] with immediate playback.
  */
 class PlayAndRecordTransport(
     private val audioController: AudioController,
@@ -21,15 +21,14 @@ class PlayAndRecordTransport(
     private val dispatchers: AppDispatchers,
 ) {
     /**
-     * Rebuild overdub backing during an active recording session at the current transport ms
+     * Rebuild overdub backing during an active recording session at the current mix transport
      * (e.g. scope change while recording) without resetting the overdub capture anchor.
      */
     suspend fun rebuildOverdubAtCurrentTransport(
         project: ProjectEntity,
         selectedPlayableTracks: List<TrackEntity>,
         recordingTrackId: String,
-        transportMs: Long,
-        sessionTimelineEndMs: Long,
+        mixTransportMs: MixTransportMs,
         @Suppress("UNUSED_PARAMETER") timelineVisibleDurationMs: Long,
     ): Boolean {
         val overdubLanes =
@@ -40,9 +39,9 @@ class PlayAndRecordTransport(
             return true
         }
         val spec =
-            project.toMultiPlaybackSpec(overdubLanes)?.copy(
-                startPositionMs = transportMs,
-                sessionTimelineEndMs = sessionTimelineEndMs,
+            project.toLiveEnginePlaybackSpec(
+                tracks = overdubLanes,
+                startPositionMs = mixTransportMs,
             ) ?: return false
         val started =
             withAudioIo(dispatchers, "AudioController.rearmOverdubPlaybackDuringRecording") {

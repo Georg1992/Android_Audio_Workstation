@@ -7,6 +7,8 @@ import com.georgv.audioworkstation.core.audio.PreparedExistingTrackRecording
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
+import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot.Companion.SessionPerceivedPlaybackOffsetUnset
+import com.georgv.audioworkstation.core.audio.SessionRecordingPlacement
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
@@ -238,9 +240,9 @@ class ProjectRecordingCoordinator @Inject constructor(
      * Row to persist after a successful [AudioController.stopRecording].
      * Punch recordings splice temp audio into the live track WAV on success.
      *
-     * Capture placement: [RecordingStopSnapshot.firstSampleTransportPositionMs] comes from native
-     * estimated capture transport (HAL input latency corrected). Kotlin does not apply timeline
-     * compensation — it persists that stamp as [TrackEntity.timelineStartOffsetMs].
+     * Capture placement: [RecordingStopSnapshot.firstSampleTransportPositionMs] is stored on
+     * [TrackEntity.timelineStartOffsetMs] for visual alignment. Overdub playback scheduling uses
+     * [TrackEntity.overdubPlaybackSyncOffsetMs] via [TrackEntity.playbackTimelineClipStartMs].
      */
     fun finalizeTrackAfterStop(
         currentTrack: TrackEntity,
@@ -250,6 +252,7 @@ class ProjectRecordingCoordinator @Inject constructor(
             capturedFrameCount = 0L,
             capturedDurationMs = 0L,
         ),
+        overdubPlaybackStartMs: Long? = null,
     ): TrackEntity {
         val stopTimestamp = System.currentTimeMillis()
         if (punchContext == null) {
@@ -259,14 +262,23 @@ class ProjectRecordingCoordinator @Inject constructor(
                 } else {
                     max(0L, stopTimestamp - currentTrack.timeStampStart)
                 }
-            val timelineStartOffsetMs =
-                if (stopSnapshot.firstSampleTransportPositionMs >= 0L) {
-                    stopSnapshot.firstSampleTransportPositionMs
+            val capturePlacementMs = stopSnapshot.firstSampleTransportPositionMs
+            require(capturePlacementMs >= 0L) {
+                "Recording stop missing capture placement transport"
+            }
+            val isOverdub = overdubPlaybackStartMs != null
+            val syncOffsetMs =
+                if (isOverdub &&
+                    stopSnapshot.sessionPerceivedPlaybackOffsetMs >= 0L
+                ) {
+                    stopSnapshot.sessionPerceivedPlaybackOffsetMs
                 } else {
-                    currentTrack.timelineStartOffsetMs
+                    TrackEntity.OverdubPlaybackSyncOffsetUnset
                 }
             return currentTrack.copy(
-                timelineStartOffsetMs = timelineStartOffsetMs.coerceAtLeast(0L),
+                timelineStartOffsetMs = capturePlacementMs.coerceAtLeast(0L),
+                overdubPlaybackSyncOffsetMs = syncOffsetMs,
+                overdubBackingArmMs = overdubPlaybackStartMs?.coerceAtLeast(0L) ?: 0L,
                 trimStartMs = currentTrack.trimStartMs.coerceAtLeast(0L),
                 timeStampStop = stopTimestamp,
                 duration = duration,
@@ -299,11 +311,13 @@ class ProjectRecordingCoordinator @Inject constructor(
             capturedFrameCount = 0L,
             capturedDurationMs = 0L,
         ),
+        overdubPlaybackStartMs: Long? = null,
     ): TrackEntity =
         finalizeTrackAfterStop(
             currentTrack,
             punchContext = null,
             stopSnapshot = stopSnapshot,
+            overdubPlaybackStartMs = overdubPlaybackStartMs,
         )
 
     fun discardPunchRecordingTempFile(punchContext: RecordingPunchContext?) {

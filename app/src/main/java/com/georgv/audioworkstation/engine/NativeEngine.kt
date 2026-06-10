@@ -62,19 +62,18 @@ class NativeEngine @Inject constructor() {
             firstInputSampleSteadyNs = values[1],
             firstNonSilentOutputSteadyNs = values[2],
             firstAudibleOutputSteadyNs = values[3],
-            deferEnabled = values[4] != 0L,
-            prerollFrames = values[5].toInt(),
-            ioBatchFrames = values[6].toInt(),
-            recordReadFrames = values[7].toInt(),
-            playbackArmTransportStartFrame = values[8],
-            firstNonSilentTransportFrame = values[9],
-            firstAudiblePeakTransportFrame = values[10],
-            firstAudiblePeakMicro = values[11],
-            openInputBeginSteadyNs = values.getOrElse(12) { 0L },
-            openInputDoneSteadyNs = values.getOrElse(13) { 0L },
-            oboeStreamOpenBeginSteadyNs = values.getOrElse(14) { 0L },
-            oboeStreamOpenDoneSteadyNs = values.getOrElse(15) { 0L },
-            oboeStreamStartDoneSteadyNs = values.getOrElse(16) { 0L },
+            prerollFrames = values[4].toInt(),
+            ioBatchFrames = values[5].toInt(),
+            recordReadFrames = values[6].toInt(),
+            playbackArmTransportStartFrame = values[7],
+            firstNonSilentTransportFrame = values[8],
+            firstAudiblePeakTransportFrame = values[9],
+            firstAudiblePeakMicro = values[10],
+            openInputBeginSteadyNs = values.getOrElse(11) { 0L },
+            openInputDoneSteadyNs = values.getOrElse(12) { 0L },
+            oboeStreamOpenBeginSteadyNs = values.getOrElse(13) { 0L },
+            oboeStreamOpenDoneSteadyNs = values.getOrElse(14) { 0L },
+            oboeStreamStartDoneSteadyNs = values.getOrElse(15) { 0L },
             firstOboeCallbackSteadyNs =
                 values.getOrElse(PlaybackTimingsFirstOboeCallbackIndex) { 0L },
         )
@@ -103,6 +102,11 @@ class NativeEngine @Inject constructor() {
     fun recordingCapturedFrameCount(): Long = nativeGetRecordingCapturedFrameCount()
 
     fun recordingCapturedDurationMs(): Long = nativeGetRecordingCapturedDurationMs()
+
+    fun sessionPerceivedPlaybackOffsetMs(): Long = nativeGetSessionPerceivedPlaybackOffsetMs()
+
+    /** Live HAL output latency (ns), or [PlaybackTransportSync.LiveOutputLatencyUnsetNs] when invalid. */
+    fun liveOutputLatencyNs(): Long = nativeGetLiveOutputLatencyNs()
 
     fun lastPlacementClockDeltaMs(): Long = nativeGetLastPlacementClockDeltaMs()
 
@@ -341,6 +345,10 @@ class NativeEngine @Inject constructor() {
 
     private external fun nativeGetRecordingCapturedDurationMs(): Long
 
+    private external fun nativeGetSessionPerceivedPlaybackOffsetMs(): Long
+
+    private external fun nativeGetLiveOutputLatencyNs(): Long
+
     private external fun nativeGetLastPlacementClockDeltaMs(): Long
 
     private external fun nativeStartOverdubRecordingSession(
@@ -450,7 +458,7 @@ class NativeEngine @Inject constructor() {
     private external fun nativeReleaseEngine()
 
     private companion object {
-        private const val PlaybackTimingsFirstOboeCallbackIndex = 17
+        private const val PlaybackTimingsFirstOboeCallbackIndex = 16
 
         init {
             System.loadLibrary("audioworkstation")

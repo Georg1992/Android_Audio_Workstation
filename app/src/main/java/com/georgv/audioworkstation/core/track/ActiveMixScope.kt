@@ -1,7 +1,8 @@
 package com.georgv.audioworkstation.core.track
 
+import com.georgv.audioworkstation.core.audio.MixTransportMs
+import com.georgv.audioworkstation.core.audio.sessionPlaybackSchedulingEndMsForPlayback
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.timelineScopeTrackIds
 
 /**
@@ -36,25 +37,31 @@ fun activeMixScopeOverdubPlaybackTracks(
     return playable.filter { it.id != recordingTrackId }
 }
 
-/** True when non-loop scoped playback must stop because transport reached session end. */
+/**
+ * True when non-loop scoped playback must stop because mix transport reached scheduling session end.
+ *
+ * Compares raw [mixTransportMs] to [sessionPlaybackSchedulingEndMsForPlayback] — not visual timeline end.
+ */
 fun playbackMustStopAtScopeEnd(
-    transportMs: Long,
+    mixTransportMs: MixTransportMs,
     scopePlayableTracks: List<TrackEntity>,
 ): Boolean {
-    val sessionEndMs = sessionTimelineEndMsForPlayback(scopePlayableTracks)
-    return sessionEndMs > 0L && transportMs >= sessionEndMs
+    val sessionEndMs = sessionPlaybackSchedulingEndMsForPlayback(scopePlayableTracks)
+    return sessionEndMs > 0L && mixTransportMs.value >= sessionEndMs
 }
 
-/** Playhead position after scope-driven transport stop. */
+/** Mix transport position after scope-driven transport stop. */
 fun playheadMsAfterScopeStop(
-    transportMs: Long,
+    mixTransportMs: MixTransportMs,
     scopePlayableTracks: List<TrackEntity>,
     selectionEmpty: Boolean,
-): Long {
-    if (selectionEmpty) return 0L
-    val sessionEndMs = sessionTimelineEndMsForPlayback(scopePlayableTracks)
-    if (sessionEndMs > 0L && transportMs >= sessionEndMs) return sessionEndMs
-    return transportMs.coerceAtLeast(0L)
+): MixTransportMs {
+    if (selectionEmpty) return MixTransportMs(0L)
+    val sessionEndMs = sessionPlaybackSchedulingEndMsForPlayback(scopePlayableTracks)
+    if (sessionEndMs > 0L && mixTransportMs.value >= sessionEndMs) {
+        return MixTransportMs(sessionEndMs)
+    }
+    return mixTransportMs
 }
 
 /**

@@ -22,7 +22,7 @@ int64_t latencyNsFromHalMillis(const double latencyMs);
 /** Same frame math as [transport_clock::TransportClockAnchor::transportFrameAt]. */
 int64_t latencyFramesFromNs(const int64_t latencyNs, const int32_t sampleRateHz);
 
-/** Live HAL when valid; otherwise session profile hint; otherwise 0 (no render-ahead). */
+/** Live HAL when valid; otherwise 0 (no render-ahead). Session profile is transport-only. */
 int64_t effectiveOutputLatencyNs(const int64_t liveLatencyNs,
                                  const bool liveLatencyValid,
                                  const int64_t sessionConfiguredLatencyNs);

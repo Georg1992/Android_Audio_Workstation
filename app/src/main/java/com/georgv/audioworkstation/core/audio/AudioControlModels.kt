@@ -107,7 +107,12 @@ data class RecordingStopSnapshot(
     val firstSampleTransportPositionMs: Long,
     val capturedFrameCount: Long,
     val capturedDurationMs: Long,
-)
+    val sessionPerceivedPlaybackOffsetMs: Long = SessionPerceivedPlaybackOffsetUnset,
+) {
+    companion object {
+        const val SessionPerceivedPlaybackOffsetUnset = -1L
+    }
+}
 
 data class RecordingRequest(
     val sampleRate: Int,
@@ -226,7 +231,10 @@ fun RecordingSpec.toRecordingRequest(outputPath: String): RecordingRequest =
         timelineStartOffsetMs = timelineStartOffsetMs,
     )
 
-fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackSpec? {
+fun ProjectEntity.toMultiPlaybackSpec(
+    tracks: List<TrackEntity>,
+    clipStartSource: TimelineClipStartSource = TimelineClipStartSource.PlaybackScheduling,
+): MultiPlaybackSpec? {
     val lanes = tracks
         .mapNotNull { track ->
             track.wavFilePath
@@ -239,7 +247,7 @@ fun ProjectEntity.toMultiPlaybackSpec(tracks: List<TrackEntity>): MultiPlaybackS
                         wavFilePath = wavFilePath,
                         gain = GainRange.toUnit(track.gain),
                         pan = PanRange.clamp(track.pan),
-                        timelineClipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L),
+                        timelineClipStartMs = track.timelineClipStartMsFor(clipStartSource),
                         timelineClipDurationMs = track.timelineClipDurationMs(),
                         loopEnabled = track.isLoop,
                         loopSourceStartMs = effectiveStartMs,

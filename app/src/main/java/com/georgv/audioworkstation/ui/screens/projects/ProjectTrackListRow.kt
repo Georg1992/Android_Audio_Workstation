@@ -133,6 +133,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
     fun RowTrackCard(
         recordingInputLevel: Float,
         timelinePlayheadPositionMs: Long,
+        mixPlayheadPositionMs: Long,
         globalPlayheadTimelineDurationMs: Long,
         globalMixScopeDurationMs: Long,
         loopPlaybackActive: Boolean,
@@ -147,6 +148,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
             globalMixScopeDurationMs = globalMixScopeDurationMs,
             globalPlayheadTimelineDurationMs = globalPlayheadTimelineDurationMs,
             timelinePlayheadPositionMs = timelinePlayheadPositionMs,
+            mixPlayheadPositionMs = mixPlayheadPositionMs,
             loopPlaybackActive = loopPlaybackActive,
             gain = track.gain,
             onGainChange = { gain -> onGainChange(track.id, gain) },
@@ -224,7 +226,9 @@ internal fun LazyItemScope.ProjectTrackListRow(
             RowTrackCard(
                 recordingInputLevel = if (needsLiveMeter) realtime.recordingInputLevel else 0f,
                 timelinePlayheadPositionMs =
-                    if (showsGlobalPlayhead) realtime.playheadPositionMs else 0L,
+                    if (showsGlobalPlayhead) realtime.globalPlayheadPositionMs else 0L,
+                mixPlayheadPositionMs =
+                    if (showsGlobalPlayhead) realtime.mixPlayheadPositionMs else 0L,
                 globalPlayheadTimelineDurationMs =
                     if (showsGlobalPlayhead) {
                         trackLaneGlobalOverlayTimelineDurationMs(
@@ -242,6 +246,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
             RowTrackCard(
                 recordingInputLevel = 0f,
                 timelinePlayheadPositionMs = 0L,
+                mixPlayheadPositionMs = 0L,
                 globalPlayheadTimelineDurationMs = localLaneLayoutDurationMs,
                 globalMixScopeDurationMs = timelineLaneLayoutDurationMs,
                 loopPlaybackActive = false,

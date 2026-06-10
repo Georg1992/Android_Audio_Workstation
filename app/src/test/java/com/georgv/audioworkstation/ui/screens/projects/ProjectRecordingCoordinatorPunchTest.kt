@@ -1,6 +1,8 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
+import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
+import com.georgv.audioworkstation.core.audio.playbackTimelineClipStartMs
 import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
@@ -208,6 +210,46 @@ class ProjectRecordingCoordinatorPunchTest {
             )
 
         assertEquals(23_000L, finalized.duration)
+    }
+
+    @Test
+    fun `overdub finalize subtracts perceived playback offset from capture placement`() {
+        val coordinator =
+            ProjectRecordingCoordinator(
+                repo = ProjectRepository(FakeProjectDao(), NoopProjectFileStore),
+                audioController = FakeAudioController(),
+                audioFilePathProvider = TempDirAudioFilePathProvider(),
+                wavPunchSplicer = WavPunchSplicer(),
+                dispatchers = TestAppDispatchers(),
+            )
+        val track =
+            TrackEntity(
+                id = "take",
+                projectId = "p",
+                position = 1,
+                wavFilePath = "take.wav",
+                timelineStartOffsetMs = 0L,
+                timeStampStart = 1L,
+                isRecording = true,
+            )
+
+        val finalized =
+            coordinator.finalizeTrackAfterStop(
+                currentTrack = track,
+                punchContext = null,
+                overdubPlaybackStartMs = 0L,
+                stopSnapshot =
+                    RecordingStopSnapshot(
+                        firstSampleTransportPositionMs = 157L,
+                        capturedFrameCount = 8_268L,
+                        capturedDurationMs = 187L,
+                        sessionPerceivedPlaybackOffsetMs = 62L,
+                    ),
+            )
+
+        assertEquals(157L, finalized.timelineStartOffsetMs)
+        assertEquals(62L, finalized.overdubPlaybackSyncOffsetMs)
+        assertEquals(95L, finalized.playbackTimelineClipStartMs())
     }
 
     @Test

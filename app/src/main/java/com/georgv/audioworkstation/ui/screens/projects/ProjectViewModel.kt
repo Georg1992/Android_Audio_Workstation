@@ -22,6 +22,8 @@ import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
+import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
+import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
@@ -122,8 +124,10 @@ data class ProjectUiState(
 
 /** High-frequency transport/meter fields — kept out of [structuralUiState] to limit recomposition. */
 data class ProjectRealtimeUiState(
-    /** Raw engine/global transport position (ms). */
+    /** Audible timeline position (native mix − live output latency when valid). */
     val playheadPositionMs: Long = 0L,
+    /** Native mix transport ms — use for in-clip waveform playhead source mapping. */
+    val mixPlayheadPositionMs: Long = 0L,
     /** Global scrubber position on the project base timeline (clamped to [timelineVisibleDurationMs]). */
     val globalPlayheadPositionMs: Long = 0L,
     val recordingInputLevel: Float = 0f,
@@ -150,7 +154,7 @@ class ProjectViewModel @Inject constructor(
     private val audioIoScope: AudioIoScope,
     private val audioEngineSession: AudioEngineSession,
     private val audioParameterQueue: AudioParameterCommandQueue,
-    private val capabilityProfileResolver: com.georgv.audioworkstation.core.audio.capability.AudioCapabilityProfileResolver,
+    private val sessionTransportGate: SessionTransportCapabilityGate,
     private val recordingSessionLatencyAudit: LiveOverdubLatencySessionRecorder,
 ) : ViewModel() {
 
@@ -184,6 +188,9 @@ class ProjectViewModel @Inject constructor(
             playheadPositionMs = playheadPositionMs,
             nativeTransportPositionMs = { audioController.transportPositionMs() },
             pollDispatcher = dispatchers.default,
+            sessionOutputLatencyMs = {
+                PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(audioController)
+            },
         )
     private val masterPeakController =
         MasterPeakController(
@@ -222,7 +229,7 @@ class ProjectViewModel @Inject constructor(
             audioController = audioController,
             recordingCoordinator = recordingCoordinator,
             dispatchers = dispatchers,
-            capabilityProfileResolver = capabilityProfileResolver,
+            sessionTransportGate = sessionTransportGate,
         )
     private val recordingStorageMonitor =
         RecordingStorageMonitor(
@@ -273,7 +280,6 @@ class ProjectViewModel @Inject constructor(
                 }
             },
             suppressTransportOnPlaybackCompletion = { recordingSession.hasActiveRecordingTake() },
-            onHotJoinFailed = { viewModelScope.launch { emitMessage(R.string.error_playback_failed_to_start) } },
         )
 
     private val playAndRecordTransport =
@@ -309,6 +315,7 @@ class ProjectViewModel @Inject constructor(
         ScopePlaybackCoordinator(
             audioController = audioController,
             dispatchers = dispatchers,
+            sessionTransportGate = sessionTransportGate,
             playheadPositionMs = playheadPositionMs,
             playheadTransport = playheadTransport,
             playbackSession = playbackSession,
@@ -339,6 +346,7 @@ class ProjectViewModel @Inject constructor(
         ProjectTransportCommands(
             audioController = audioController,
             dispatchers = dispatchers,
+            sessionTransportGate = sessionTransportGate,
             playheadPositionMs = playheadPositionMs,
             playheadTransport = playheadTransport,
             playbackSession = playbackSession,
@@ -549,8 +557,16 @@ class ProjectViewModel @Inject constructor(
             structuralUiState,
             playheadTransport.phase,
         ) { playheadMs, recordingLevel, peakHoldLinear, structural, transportPhase ->
+            val mixPlayheadMs =
+                when (transportPhase) {
+                    TransportPlaybackPhase.Playing,
+                    TransportPlaybackPhase.Recording,
+                    -> audioController.transportPositionMs().coerceAtLeast(0L)
+                    else -> playheadMs.coerceAtLeast(0L)
+                }
             buildProjectRealtimeUiState(
                 playheadMs = playheadMs,
+                mixPlayheadMs = mixPlayheadMs,
                 recordingLevel = recordingLevel,
                 peakHoldLinear = peakHoldLinear,
                 structural = structural,
@@ -1160,6 +1176,7 @@ class ProjectViewModel @Inject constructor(
     private fun finalizeRecordingTrack(trackId: String, stopSnapshot: com.georgv.audioworkstation.core.audio.RecordingStopSnapshot) {
         val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
         val punchContext = recordingSession.punchRecordingContext()
+        val overdubPlaybackStartMs = recordingSession.activeNormalOverdubContext()?.playbackStartMs
         if (punchContext == null) {
             viewModelScope.launch {
                 val finalizedTrack =
@@ -1167,6 +1184,7 @@ class ProjectViewModel @Inject constructor(
                         currentTrack = currentTrack,
                         punchContext = null,
                         stopSnapshot = stopSnapshot,
+                        overdubPlaybackStartMs = overdubPlaybackStartMs,
                     )
                 dbActions.run(R.string.error_recording_metadata_failed) {
                     withIo(dispatchers, "persist finalized recording track") {

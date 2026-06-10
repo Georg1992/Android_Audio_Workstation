@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.core.audio
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.audio.laneSourceReadOffsetMs
+import com.georgv.audioworkstation.core.audio.sessionPlaybackSchedulingEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -135,7 +136,7 @@ class TrackLoopPlaybackSpecTest {
   }
 
   @Test
-  fun `sessionTimelineEndMsForPlayback is zero when any track loops`() {
+  fun `session playback scheduling end is zero when any track loops`() {
     val tracks =
         listOf(
             TrackEntity(
@@ -154,11 +155,11 @@ class TrackLoopPlaybackSpecTest {
             ),
         )
 
-    assertEquals(0L, sessionTimelineEndMsForPlayback(tracks))
-  }
+        assertEquals(0L, sessionPlaybackSchedulingEndMsForPlayback(tracks))
+    }
 
-  @Test
-  fun `non-loop tracks keep session timeline end for playback`() {
+    @Test
+    fun `non-loop tracks keep scheduling session timeline end for playback`() {
     val tracks =
         listOf(
             TrackEntity(
@@ -177,11 +178,33 @@ class TrackLoopPlaybackSpecTest {
             ),
         )
 
-        assertEquals(12_000L, sessionTimelineEndMsForPlayback(tracks))
-  }
+        assertEquals(12_000L, sessionPlaybackSchedulingEndMsForPlayback(tracks))
+    }
 
-  @Test
-  fun `toMultiPlaybackSpec maps loop fields for every looped lane`() {
+    @Test
+    fun `visual session timeline end still uses capture placement for UI`() {
+        val tracks =
+            listOf(
+                TrackEntity(
+                    id = "a",
+                    projectId = "project-1",
+                    wavFilePath = "a.wav",
+                    duration = 10_000L,
+                    timelineStartOffsetMs = 2_000L,
+                ),
+                TrackEntity(
+                    id = "b",
+                    projectId = "project-1",
+                    wavFilePath = "b.wav",
+                    duration = 5_000L,
+                    timelineStartOffsetMs = 1_000L,
+                ),
+            )
+        assertEquals(12_000L, sessionTimelineEndMsForPlayback(tracks))
+    }
+
+    @Test
+    fun `toMultiPlaybackSpec maps loop fields for every looped lane`() {
     val trackA =
         TrackEntity(
             id = "a",
@@ -205,7 +228,7 @@ class TrackLoopPlaybackSpecTest {
 
     val spec = project.toMultiPlaybackSpec(listOf(trackA, trackB))!!
 
-    assertEquals(0L, sessionTimelineEndMsForPlayback(listOf(trackA, trackB)))
+    assertEquals(0L, sessionPlaybackSchedulingEndMsForPlayback(listOf(trackA, trackB)))
     assertEquals(2, spec.lanes.size)
     val laneA = spec.lanes[0]
     val laneB = spec.lanes[1]

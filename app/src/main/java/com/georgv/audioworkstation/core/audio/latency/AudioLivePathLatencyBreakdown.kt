@@ -12,7 +12,6 @@ data class AudioLivePathLatencyBreakdown(
     val firstCallbackMs: Long?,
     val firstInputMs: Long?,
     val firstNonSilentOutputMs: Long?,
-    val deferredGateMs: Long?,
     val decoderOpenMs: Long?,
     val prerollMs: Long?,
     val ioPrefetchMs: Long?,

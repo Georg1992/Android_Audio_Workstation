@@ -5,7 +5,6 @@
 #include <android/log.h>
 
 #include <chrono>
-#include <cstring>
 
 namespace overdub_startup_opt {
 namespace {
@@ -45,13 +44,8 @@ void logStartupTiming(const dawengine::AudioEngine *const engine, const char *co
         deltaMsFromArm(armNs, timings.firstOboeCallbackSteadyNs);
     const long long firstInputMs =
         deltaMsFromArm(armNs, timings.firstInputSampleSteadyNs);
-    const long long deferredGateReleaseMs =
-        timings.deferEnabled != 0 ? firstInputMs : -1L;
     const long long totalArmToReadyMs =
-        std::strcmp(trigger, "deferred_gate_released") == 0
-            ? (firstInputMs >= 0 ? firstInputMs : deltaMsFromArm(armNs, nowNs))
-            : (jniReadyNs > 0 ? deltaMsFromArm(armNs, jniReadyNs)
-                              : deltaMsFromArm(armNs, nowNs));
+        jniReadyNs > 0 ? deltaMsFromArm(armNs, jniReadyNs) : deltaMsFromArm(armNs, nowNs);
 
     __android_log_print(
         ANDROID_LOG_INFO,
@@ -63,14 +57,12 @@ void logStartupTiming(const dawengine::AudioEngine *const engine, const char *co
         "inputOpenMs=%lld "
         "firstOutputCallbackMs=%lld "
         "firstInputMs=%lld "
-        "deferredGateReleaseMs=%lld "
         "totalArmToReadyMs=%lld",
         trigger,
         outputEnsureStartMs,
         inputOpenMs,
         firstOutputCallbackMs,
         firstInputMs,
-        deferredGateReleaseMs,
         totalArmToReadyMs);
 }
 

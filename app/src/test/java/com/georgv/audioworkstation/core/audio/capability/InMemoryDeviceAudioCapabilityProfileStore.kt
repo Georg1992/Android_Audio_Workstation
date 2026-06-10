@@ -127,3 +127,26 @@ fun calibratedResolvedCapability(
 
 fun AudioCapabilityProfileResolver.resolveBlocking(sampleRate: Int): ResolvedAudioCapability =
     runBlocking { resolve(sampleRate) }
+
+class TestSessionTransportCapabilityGate(
+    private val resolver: AudioCapabilityProfileResolver = testAudioCapabilityProfileResolver(),
+) : SessionTransportCapabilityGate {
+    private var lastPrepared: ResolvedAudioCapability? = null
+
+    override suspend fun prepareForLiveSession(sampleRate: Int): ResolvedAudioCapability {
+        val resolved = resolver.resolve(sampleRate)
+        lastPrepared = resolved
+        return resolved
+    }
+
+    override fun ensurePreparedForSampleRate(sampleRate: Int) {
+        if (lastPrepared?.sampleRate == sampleRate) return
+        runBlocking { prepareForLiveSession(sampleRate) }
+    }
+
+    override fun lastPreparedCapability(): ResolvedAudioCapability? = lastPrepared
+}
+
+fun testSessionTransportCapabilityGate(
+    resolver: AudioCapabilityProfileResolver = testAudioCapabilityProfileResolver(),
+): SessionTransportCapabilityGate = TestSessionTransportCapabilityGate(resolver)

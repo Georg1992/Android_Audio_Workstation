@@ -741,6 +741,8 @@ void AudioEngine::setSessionTransportLatenciesNs(const int64_t inputLatencyNs,
                                   std::memory_order_release);
     m_sessionOutputLatencyNs.store(std::max<int64_t>(0, outputLatencyNs),
                                    std::memory_order_release);
+    m_liveOutputLatencyValid.store(false, std::memory_order_release);
+    m_outputRenderAheadLogged.store(false, std::memory_order_release);
 }
 
 void AudioEngine::refreshLiveOutputLatencyFromStream(oboe::AudioStream *const stream) {
@@ -807,6 +809,50 @@ void AudioEngine::resetTransportClockAnchor() {
     m_inputCaptureBufferIndex.store(0, std::memory_order_release);
 }
 
+void AudioEngine::finalizeSessionPerceivedPlaybackOffsetMs() {
+    m_sessionPerceivedPlaybackOffsetMs.store(-1, std::memory_order_release);
+
+    const int64_t armNs = m_overdubPlaybackArmSteadyNs.load(std::memory_order_acquire);
+    const int64_t firstInputNs = m_overdubFirstInputSteadyNs.load(std::memory_order_acquire);
+    if (armNs <= 0 || firstInputNs <= armNs) {
+        return;
+    }
+
+    const int64_t armToFirstInputMs = (firstInputNs - armNs) / 1'000'000LL;
+    const int64_t inputCaptureMs =
+        m_sessionInputLatencyNs.load(std::memory_order_acquire) / 1'000'000LL;
+
+    const int64_t liveOutputNs = m_liveOutputLatencyNs.load(std::memory_order_acquire);
+    const bool liveOutputValid = m_liveOutputLatencyValid.load(std::memory_order_acquire);
+    if (!liveOutputValid || liveOutputNs <= 0) {
+        return;
+    }
+    const int64_t liveOutputMs = liveOutputNs / 1'000'000LL;
+
+    const int64_t offsetMs = liveOutputMs - inputCaptureMs;
+    m_sessionPerceivedPlaybackOffsetMs.store(offsetMs, std::memory_order_release);
+
+    const int64_t capturePlacementMs = recordingFirstSampleTransportPositionMs();
+    const int64_t playbackArmMs =
+        m_sampleRate > 0
+            ? (m_playbackArmTransportStartFrame.load(std::memory_order_acquire) * 1000LL) /
+                  static_cast<int64_t>(m_sampleRate)
+            : 0LL;
+
+    __android_log_print(
+        ANDROID_LOG_INFO,
+        playback::kAudioSyncDiagLogTag,
+        "[SESSION_PERCEIVED_PLAYBACK_OFFSET] offsetMs=%lld "
+        "armToFirstInputMs=%lld liveOutputMs=%lld inputCaptureMs=%lld "
+        "capturePlacementMs=%lld playbackArmMs=%lld",
+        static_cast<long long>(offsetMs),
+        static_cast<long long>(armToFirstInputMs),
+        static_cast<long long>(liveOutputMs),
+        static_cast<long long>(inputCaptureMs),
+        static_cast<long long>(capturePlacementMs),
+        static_cast<long long>(playbackArmMs));
+}
+
 int64_t AudioEngine::transportFrameAtMonotonicNs(const int64_t monotonicNs) const {
     const transport_clock::TransportClockAnchor anchor = transportClockAnchor();
     if (anchor.isValid()) {
@@ -832,9 +878,6 @@ int64_t AudioEngine::estimatedCaptureTransportFrame(
 }
 
 int64_t AudioEngine::currentTransportFrame() const {
-    if (m_awaitingDeferredPlaybackStart.load(std::memory_order_acquire)) {
-        return m_deferredPlaybackStartFrame.load(std::memory_order_acquire);
-    }
     return transportFrameAtMonotonicNs(transport_clock::monotonicNowNs());
 }
 
@@ -1122,7 +1165,6 @@ AudioEngine::PlaybackSessionTimings AudioEngine::playbackSessionTimings() const 
         m_overdubFirstNonSilentOutputSteadyNs.load(std::memory_order_acquire);
     timings.firstAudibleOutputSteadyNs =
         m_overdubFirstAudibleOutputSteadyNs.load(std::memory_order_acquire);
-    timings.deferEnabled = m_overdubDeferEnabledAtArm.load(std::memory_order_acquire);
     timings.prerollFrames = computePrerollFramesForSampleRate(m_sampleRate);
     timings.ioBatchFrames = playback::kIoBatchFrames;
     timings.recordReadFrames =
@@ -1276,11 +1318,9 @@ bool AudioEngine::startRecording(int32_t channelCount,
     configureInputReadSizeForSession();
     captureInputStreamSnapshot();
 
-    // Clock.3: seed transport from timeline when recording-only; deferred overdub starts on first sample.
+    // Clock.3: seed transport from timeline when recording-only; overdub shares playback transport.
     const bool playbackAlreadyActive = m_isPlaying.load(std::memory_order_acquire);
-    const bool deferredPlaybackStart =
-        m_awaitingDeferredPlaybackStart.load(std::memory_order_acquire);
-    if (!playbackAlreadyActive && !deferredPlaybackStart) {
+    if (!playbackAlreadyActive) {
         const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, m_sampleRate);
         initializeMasterPlaybackTimeline(startFrame);
         installTransportClockAnchor(
@@ -1322,13 +1362,13 @@ bool AudioEngine::armOverdubPlaybackSession(
             laneLoopSourceEndMs,
             laneSourceTrimStartMs,
             lanePan,
-            true)) {
+            true,
+            false)) {
         return false;
     }
     playback::logTransportFrameMap(
-        "overdub_session_armed startMs=%lld deferredPlayback=%d",
-        static_cast<long long>(startPositionMs),
-        1);
+        "overdub_session_armed startMs=%lld",
+        static_cast<long long>(startPositionMs));
     logPlaybackStartupMilestone("overdub_session_armed_only");
     return true;
 }
@@ -1387,12 +1427,8 @@ void AudioEngine::onRecordingFramesCaptured(const int32_t framesRead,
                                           std::memory_order_release);
 
     int64_t expectedUnset = kRecordingFirstSampleTransportUnset;
-    const bool deferred =
-        m_awaitingDeferredPlaybackStart.load(std::memory_order_acquire);
     const int64_t placementFrame =
         estimatedCaptureTransportFrame(appReceiveMonotonicNs);
-    const int64_t estimatedCaptureNs =
-        estimatedCaptureMonotonicNs(appReceiveMonotonicNs);
     if (!m_recordingFirstSampleTransportFrame.compare_exchange_strong(
             expectedUnset,
             placementFrame,
@@ -1403,23 +1439,6 @@ void AudioEngine::onRecordingFramesCaptured(const int32_t framesRead,
     const int64_t firstInputSteadyNs = steadyClockNowNs();
     m_overdubFirstInputSteadyNs.store(firstInputSteadyNs, std::memory_order_release);
 
-    if (deferred) {
-        m_awaitingDeferredPlaybackStart.store(false, std::memory_order_release);
-        // Re-anchor so transport origin = measured acoustic capture instant; backing
-        // and recording share the same timeline frame at gate release.
-        installTransportClockAnchor(
-            placementFrame,
-            estimatedCaptureNs,
-            "overdub_gate_released");
-        m_masterPlaybackFrame.store(placementFrame, std::memory_order_release);
-        m_masterPlaybackStartFrame.store(placementFrame, std::memory_order_release);
-        ensureIoThreadRunning();
-        m_isPlaying.store(true, std::memory_order_release);
-        logPlaybackStartupMilestone("deferred_gate_released");
-        logPlaybackStartupMilestone("playback_ungated");
-        overdub_startup_opt::logStartupTiming(this, "deferred_gate_released");
-    }
-
     const int64_t armSteadyNs =
         m_overdubPlaybackArmSteadyNs.load(std::memory_order_acquire);
     if (armSteadyNs > 0) {
@@ -1427,9 +1446,8 @@ void AudioEngine::onRecordingFramesCaptured(const int32_t framesRead,
         __android_log_print(
             ANDROID_LOG_INFO,
             playback::kAudioSyncDiagLogTag,
-            "[LATENCY_BUDGET] timing arm_to_first_input_ms=%lld deferred=%d",
-            static_cast<long long>(armToFirstInputMs),
-            deferred ? 1 : 0);
+            "[LATENCY_BUDGET] timing arm_to_first_input_ms=%lld",
+            static_cast<long long>(armToFirstInputMs));
     }
 
     const int64_t placementMs =
@@ -1448,10 +1466,9 @@ void AudioEngine::onRecordingFramesCaptured(const int32_t framesRead,
         placementFrame,
         appReceiveMonotonicNs);
     playback::logTransportFrameMap(
-        "recording_first_sample transportFrame=%lld transportMs=%lld deferred=%d capturedFrames=%lld",
+        "recording_first_sample transportFrame=%lld transportMs=%lld capturedFrames=%lld",
         static_cast<long long>(placementFrame),
         static_cast<long long>(placementMs),
-        deferred ? 1 : 0,
         static_cast<long long>(m_recordedCaptureFrameCount.load(std::memory_order_acquire)));
 }
 
@@ -1583,8 +1600,6 @@ bool AudioEngine::stopRecording() {
         m_recordingOutputPath.clear();
     }
 
-    m_awaitingDeferredPlaybackStart.store(false, std::memory_order_release);
-
     if (!m_isPlaying.load(std::memory_order_acquire)) {
         resetMasterPlaybackTimeline();
     }
@@ -1592,6 +1607,7 @@ bool AudioEngine::stopRecording() {
     const int64_t capturedFrames = m_recordedCaptureFrameCount.load(std::memory_order_acquire);
     const int64_t capturedDurationMs = recordingCapturedDurationMs();
     const int64_t firstSampleMs = recordingFirstSampleTransportPositionMs();
+    finalizeSessionPerceivedPlaybackOffsetMs();
     playback::logTransportFrameMap(
         "recording_stop capturedFrames=%lld capturedDurationMs=%lld firstSampleTransportMs=%lld wavSamples=%zu",
         static_cast<long long>(capturedFrames),
@@ -1664,7 +1680,7 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
                                      const std::vector<int64_t> &laneLoopSourceEndMs,
                                      const std::vector<int64_t> &laneSourceTrimStartMs,
                                      const std::vector<float> &lanePan,
-                                     const bool deferPlaybackStart,
+                                     const bool overdubInitialArm,
                                      const bool preserveActiveOverdubCapture) {
     const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, m_sampleRate);
     int64_t endFrame = playbackStartFrameFromMs(sessionTimelineEndMs, m_sampleRate);
@@ -1678,12 +1694,12 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
         preserveActiveOverdubCapture &&
         m_isRecording.load(std::memory_order_acquire);
     m_overdubPlaybackArmSteadyNs.store(steadyClockNowNs(), std::memory_order_release);
+    m_sessionPerceivedPlaybackOffsetMs.store(-1, std::memory_order_release);
     if (!preserveCapture) {
         m_overdubFirstInputSteadyNs.store(0, std::memory_order_release);
     }
     m_overdubFirstNonSilentOutputSteadyNs.store(0, std::memory_order_release);
     m_overdubFirstAudibleOutputSteadyNs.store(0, std::memory_order_release);
-    m_overdubDeferEnabledAtArm.store(deferPlaybackStart ? 1 : 0, std::memory_order_release);
     m_playbackArmTransportStartFrame.store(startFrame, std::memory_order_release);
     m_firstNonSilentTransportFrame.store(playback::kPlaybackMilestoneTransportUnset,
                                            std::memory_order_release);
@@ -1695,9 +1711,9 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
     logPlaybackStartupMilestone("playback_arm");
 
     const char *anchorReason =
-        deferPlaybackStart ? "overdub"
-            : preserveCapture ? "overdub_rearm"
-                              : "playback";
+        preserveCapture ? "overdub_rearm"
+            : overdubInitialArm ? "overdub"
+                                : "playback";
     installTransportClockAnchor(startFrame, anchorNs, anchorReason);
 
     logPlaybackStartupMilestone("stop_io_thread_begin");
@@ -1743,29 +1759,19 @@ bool AudioEngine::setPlaybackSources(const std::vector<std::string> &wavPaths,
         m_sessionHasLoopLanes.store(sessionHasLoopLanes, std::memory_order_release);
     }
 
-    if (deferPlaybackStart) {
-        m_deferredPlaybackStartFrame.store(startFrame, std::memory_order_release);
-        m_awaitingDeferredPlaybackStart.store(true, std::memory_order_release);
-        m_isPlaying.store(false, std::memory_order_release);
-        ensureIoThreadRunning();
-        logPlaybackStartupMilestone("deferred_gate_armed");
-    } else {
-        m_awaitingDeferredPlaybackStart.store(false, std::memory_order_release);
-        initializeMasterPlaybackTimeline(startFrame);
-        ensureIoThreadRunning();
-        m_isPlaying.store(true, std::memory_order_release);
-        logPlaybackStartupMilestone("playback_ungated");
-    }
+    initializeMasterPlaybackTimeline(startFrame);
+    ensureIoThreadRunning();
+    m_isPlaying.store(true, std::memory_order_release);
+    logPlaybackStartupMilestone("playback_ungated");
     ensureHotJoinThreadRunning();
     logPlaybackStartupMilestone("ensure_hot_join_thread_done");
     logPlaybackStartupMilestone("set_playback_sources_done");
     m_masterPeakHoldLinear.store(0.0f, std::memory_order_release);
     playback::logTransportFrameMap(
-        "playback_arm startFrame=%lld startMs=%lld laneCount=%zu defer=%d",
+        "playback_arm startFrame=%lld startMs=%lld laneCount=%zu",
         static_cast<long long>(startFrame),
         static_cast<long long>(startPositionMs),
-        wavPaths.size(),
-        deferPlaybackStart ? 1 : 0);
+        wavPaths.size());
     return true;
 }
 
@@ -1902,18 +1908,14 @@ void AudioEngine::stopIoThread() {
 void AudioEngine::ioLoop() {
     std::vector<float> scratch;
     while (m_ioRunning.load(std::memory_order_acquire)) {
-        const bool deferredPrefetch =
-            m_awaitingDeferredPlaybackStart.load(std::memory_order_acquire);
-        if (!m_isPlaying.load(std::memory_order_acquire) && !deferredPrefetch) {
+        if (!m_isPlaying.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(playback::kIoIdleSleepMs));
             continue;
         }
 
         bool progressed = false;
         const int64_t transportFrame =
-            deferredPrefetch
-                ? m_deferredPlaybackStartFrame.load(std::memory_order_acquire)
-                : mixTransportFrameAtMonotonicNs(transport_clock::monotonicNowNs());
+            mixTransportFrameAtMonotonicNs(transport_clock::monotonicNowNs());
         for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
             std::shared_ptr<IAudioSource> source;
             std::shared_ptr<RingBuffer> ring;

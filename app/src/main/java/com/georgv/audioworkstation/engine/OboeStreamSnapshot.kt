@@ -32,7 +32,6 @@ data class PlaybackSessionTimings(
     val firstInputSampleSteadyNs: Long,
     val firstNonSilentOutputSteadyNs: Long,
     val firstAudibleOutputSteadyNs: Long,
-    val deferEnabled: Boolean,
     val prerollFrames: Int,
     val ioBatchFrames: Int,
     val recordReadFrames: Int,

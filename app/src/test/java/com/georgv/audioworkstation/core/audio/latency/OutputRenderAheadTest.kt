@@ -22,9 +22,9 @@ class OutputRenderAheadTest {
     }
 
     @Test
-    fun `effectiveOutputLatencyNs prefers live HAL over profile`() {
+    fun `effectiveOutputLatencyNs uses live HAL only`() {
         assertEquals(12_000_000L, effectiveOutputLatencyNs(12_000_000L, true, 5_000_000L))
-        assertEquals(5_000_000L, effectiveOutputLatencyNs(0L, false, 5_000_000L))
+        assertEquals(0L, effectiveOutputLatencyNs(0L, false, 5_000_000L))
         assertEquals(0L, effectiveOutputLatencyNs(0L, false, 0L))
     }
 

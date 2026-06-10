@@ -4,6 +4,10 @@ import com.georgv.audioworkstation.engine.NativeEngine
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Read-only device latency summaries for UI. Live session preparation uses
+ * [SessionTransportCapabilityGate]; post-session measurement uses [AudioCapabilityProfileCollector].
+ */
 @Singleton
 class DeviceLatencyReadApi @Inject constructor(
     private val resolver: AudioCapabilityProfileResolver,

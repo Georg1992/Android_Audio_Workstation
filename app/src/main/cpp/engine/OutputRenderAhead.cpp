@@ -29,24 +29,18 @@ int64_t latencyFramesFromNs(const int64_t latencyNs, const int32_t sampleRateHz)
 
 int64_t effectiveOutputLatencyNs(const int64_t liveLatencyNs,
                                  const bool liveLatencyValid,
-                                 const int64_t sessionConfiguredLatencyNs) {
+                                 const int64_t /*sessionConfiguredLatencyNs*/) {
     if (liveLatencyValid && liveLatencyNs > 0) {
         return liveLatencyNs;
-    }
-    if (sessionConfiguredLatencyNs > 0) {
-        return sessionConfiguredLatencyNs;
     }
     return 0;
 }
 
 OutputLatencySource outputLatencySource(const int64_t liveLatencyNs,
                                         const bool liveLatencyValid,
-                                        const int64_t sessionConfiguredLatencyNs) {
+                                        const int64_t /*sessionConfiguredLatencyNs*/) {
     if (liveLatencyValid && liveLatencyNs > 0) {
         return OutputLatencySource::LiveHal;
-    }
-    if (sessionConfiguredLatencyNs > 0) {
-        return OutputLatencySource::SessionProfile;
     }
     return OutputLatencySource::None;
 }
@@ -79,10 +73,12 @@ void refreshLiveOutputLatencyFromStream(oboe::AudioStream *const stream,
     }
     const auto latencyResult = stream->calculateLatencyMillis();
     if (!latencyResult) {
+        outLiveLatencyValid = false;
         return;
     }
     const int64_t latencyNs = latencyNsFromHalMillis(latencyResult.value());
     if (latencyNs <= 0) {
+        outLiveLatencyValid = false;
         return;
     }
     outLiveLatencyNs = latencyNs;

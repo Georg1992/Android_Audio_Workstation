@@ -1,6 +1,5 @@
 package com.georgv.audioworkstation.core.audio
 
-import com.georgv.audioworkstation.core.track.playbackStartPositionMsForTracks
 import com.georgv.audioworkstation.core.track.selectedPlayableTracks
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -21,6 +20,9 @@ sealed class OfflineMixdownResult {
 
 /**
  * Kotlin orchestration entry for project mixdown. All audio rendering is native.
+ *
+ * Mixdown uses [TimelineClipStartSource.VisualPlacement] — exported audio follows the project
+ * timeline the user sees, not live overdub scheduling correction.
  */
 @Singleton
 class ProjectOfflineMixdownRenderer @Inject constructor(
@@ -39,21 +41,18 @@ class ProjectOfflineMixdownRenderer @Inject constructor(
             return OfflineMixdownResult.NoPlayableTracks
         }
 
-        val baseSpec = project.toMultiPlaybackSpec(mixTracks)
-            ?: return OfflineMixdownResult.WriteFailed
-
         val sessionEndMs = mixdownTimelineEndMs(tracks, selectedTrackIds)
-        val startPositionMs =
-            playbackStartPositionMsForTracks(
+        val audibleStart =
+            TransportTimelinePolicy.playbackStartPositionMsForTracks(
                 scrubbedPlayheadMs = 0L,
                 timelineVisibleDurationMs = sessionEndMs,
                 tracks = mixTracks,
             )
         val spec =
-            baseSpec.copy(
-                startPositionMs = startPositionMs,
+            project.toVisualTimelinePlaybackSpec(mixTracks)?.copy(
+                startPositionMs = audibleStart.value,
                 sessionTimelineEndMs = sessionEndMs,
-            )
+            ) ?: return OfflineMixdownResult.WriteFailed
         TransportFrameDiagnostics.logPlaybackArm(spec, transportStartFrame = -1L, transportFrame = -1L)
 
         return when (

@@ -21,12 +21,6 @@ object AudioLivePathLatencyAuditor {
         val firstCallbackMs = deltaMs(anchorNs, timings?.firstOboeCallbackSteadyNs)
         val firstInputMs = timings?.armToFirstInputMs()
         val firstNonSilentOutputMs = timings?.armToFirstNonSilentMs()
-        val deferredGateMs =
-            if (timings?.deferEnabled == true) {
-                firstInputMs
-            } else {
-                0L
-            }
         val prerollMs = framesToMs(timings?.prerollFrames, sampleRateHz)
         val ioPrefetchMs = framesToMs(timings?.ioBatchFrames, sampleRateHz)
         val inputReadMs = framesToMs(timings?.recordReadFrames, sampleRateHz)
@@ -37,7 +31,6 @@ object AudioLivePathLatencyAuditor {
                 prerollMs,
                 ioPrefetchMs?.let { it / 2 },
                 inputReadMs?.let { it / 2 },
-                deferredGateMs?.takeIf { it > 0L },
             ).sum()
         val hardwareMs = outputHalMs + inputHalMs
         val totalMs = hardwareMs + appAddedMs
@@ -45,7 +38,6 @@ object AudioLivePathLatencyAuditor {
         val notes =
             buildString {
                 append("path=$pathType ")
-                append("defer=${timings?.deferEnabled == true} ")
                 append("inputOpenMs=${deltaMs(anchorNs, timings?.openInputDoneSteadyNs)} ")
                 append("bufferProfile=${bufferProfile != null} ")
                 when (pathType) {
@@ -64,7 +56,6 @@ object AudioLivePathLatencyAuditor {
             firstCallbackMs = firstCallbackMs,
             firstInputMs = firstInputMs,
             firstNonSilentOutputMs = firstNonSilentOutputMs,
-            deferredGateMs = deferredGateMs,
             decoderOpenMs = null,
             prerollMs = prerollMs,
             ioPrefetchMs = ioPrefetchMs,

@@ -3,6 +3,7 @@
 package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.core.audio.latency.LiveSessionLatencySnapshot
+import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot.Companion.SessionPerceivedPlaybackOffsetUnset
 import kotlinx.coroutines.flow.StateFlow
 
 interface AudioController {    /**
@@ -52,7 +53,16 @@ interface AudioController {    /**
             firstSampleTransportPositionMs = recordingFirstSampleTransportPositionMs(),
             capturedFrameCount = recordingCapturedFrameCount(),
             capturedDurationMs = recordingCapturedDurationMs(),
+            sessionPerceivedPlaybackOffsetMs = sessionPerceivedPlaybackOffsetMs(),
         )
+
+    fun sessionPerceivedPlaybackOffsetMs(): Long = SessionPerceivedPlaybackOffsetUnset
+
+    /**
+     * Live HAL output latency (ns) from the running playback stream.
+     * [PlaybackTransportSync.LiveOutputLatencyUnsetNs] when invalid.
+     */
+    fun liveOutputLatencyNs(): Long = PlaybackTransportSync.LiveOutputLatencyUnsetNs
 
     /**
      * Probe open streams while a recording session is still active (call before [stopRecording]).
@@ -61,8 +71,7 @@ interface AudioController {    /**
         LiveSessionLatencySnapshot.EMPTY
 
     /**
-     * Atomic play+record: arms overdub lanes with deferred transport start, opens input capture,
-     * and starts shared playback on the first captured input frame.
+     * Atomic play+record: arms overdub lanes, opens input capture, and starts playback immediately.
      */
     fun startOverdubRecordingSession(
         playbackSpec: MultiPlaybackSpec,
@@ -71,9 +80,8 @@ interface AudioController {    /**
     ): String? = null
 
     /**
-     * Optional HAL latency hints for transport-clock diagnostics and capture placement.
-     * Input latency drives native capture placement; output latency is the profile fallback for
-     * native output render-ahead when live HAL [calculateLatencyMillis] is unavailable.
+     * Low-level native hint API. Prefer [com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate]
+     * for live sessions so profile resolution and apply stay in one place.
      */
     fun configureSessionTransportLatencies(
         inputLatencyMs: Double = 0.0,
@@ -85,7 +93,7 @@ interface AudioController {    /**
 
     /**
      * Rebuild overdub backing lanes during an active recording session without resetting the
-     * overdub capture anchor or re-arming the deferred playback gate.
+     * overdub capture anchor.
      */
     fun rearmOverdubPlaybackDuringRecording(spec: MultiPlaybackSpec): Boolean = false
 

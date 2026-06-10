@@ -9,6 +9,7 @@ import com.georgv.audioworkstation.ui.components.visibleTimelineDurationMs
 
 internal fun buildProjectRealtimeUiState(
     playheadMs: Long,
+    mixPlayheadMs: Long,
     recordingLevel: Float,
     peakHoldLinear: Float,
     structural: ProjectUiState,
@@ -69,6 +70,7 @@ internal fun buildProjectRealtimeUiState(
         )
     return ProjectRealtimeUiState(
         playheadPositionMs = playheadMs.coerceAtLeast(0L),
+        mixPlayheadPositionMs = mixPlayheadMs.coerceAtLeast(0L),
         globalPlayheadPositionMs = globalPlayheadPositionMs,
         recordingInputLevel = recordingLevel.coerceIn(0f, 1f),
         timelineVisibleDurationMs = timelineVisibleDurationMs,

@@ -3,8 +3,7 @@ package com.georgv.audioworkstation.core.audio
 import com.georgv.audioworkstation.core.audio.AudioRouteKeySource
 import com.georgv.audioworkstation.core.audio.latency.LiveSessionLatencySnapshot
 import com.georgv.audioworkstation.core.audio.latency.latencyMsToNs
-import com.georgv.audioworkstation.core.audio.capability.AudioCapabilityProfileResolver
-import com.georgv.audioworkstation.core.audio.capability.DeviceAudioCapabilityProfileCache
+import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.checkNotMainThreadForNativeLifecycle
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
@@ -37,7 +36,7 @@ class NativeAudioController @Inject constructor(
     private val routeKeySource: AudioRouteKeySource,
     private val audioFilePathProvider: AudioFilePathProvider,
     private val dispatchers: AppDispatchers,
-    private val capabilityProfileResolver: AudioCapabilityProfileResolver,
+    private val sessionTransportGate: SessionTransportCapabilityGate,
 ) : AudioController {
 
     private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -94,6 +93,16 @@ class NativeAudioController @Inject constructor(
         return nativeEngine.recordingCapturedDurationMs()
     }
 
+    override fun sessionPerceivedPlaybackOffsetMs(): Long {
+        checkNotMainThreadForNativeLifecycle("sessionPerceivedPlaybackOffsetMs")
+        return nativeEngine.sessionPerceivedPlaybackOffsetMs()
+    }
+
+    override fun liveOutputLatencyNs(): Long {
+        checkNotMainThreadForNativeLifecycle("liveOutputLatencyNs")
+        return nativeEngine.liveOutputLatencyNs()
+    }
+
     override fun configureSessionTransportLatencies(
         inputLatencyMs: Double,
         outputLatencyMs: Double,
@@ -105,21 +114,8 @@ class NativeAudioController @Inject constructor(
         )
     }
 
-    private fun applyProfileTransportLatencies(sampleRate: Int) {
-        val cached =
-            DeviceAudioCapabilityProfileCache.current()?.takeIf { it.sampleRate == sampleRate }
-                ?: run {
-                    configureSessionTransportLatencies(0.0, 0.0)
-                    return
-                }
-        val capability = capabilityProfileResolver.toResolvedCapability(cached)
-        configureSessionTransportLatencies(
-            inputLatencyMs =
-                capability.inputHalLatencyMs
-                    ?: capability.inputCaptureDelayMs
-                    ?: 0.0,
-            outputLatencyMs = capability.outputLatencyMs ?: 0.0,
-        )
+    private fun ensureSessionTransportPrepared(sampleRate: Int) {
+        sessionTransportGate.ensurePreparedForSampleRate(sampleRate)
     }
 
     override fun startOverdubRecordingSession(
@@ -128,7 +124,7 @@ class NativeAudioController @Inject constructor(
         outputPath: String,
     ): String? {
         checkNotMainThreadForNativeLifecycle("startOverdubRecordingSession")
-        applyProfileTransportLatencies(playbackSpec.sampleRate)
+        ensureSessionTransportPrepared(playbackSpec.sampleRate)
         ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startOverdubRecordingSession", phase = "beforeJni")
         PlaybackStartupTrace.logJniBoundary(path = "overdub_session", phase = "before_jni")
         val started =
@@ -154,6 +150,7 @@ class NativeAudioController @Inject constructor(
 
     override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
         checkNotMainThreadForNativeLifecycle("startRecording")
+        ensureSessionTransportPrepared(spec.sampleRate)
         ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "entered")
         val resolvedPath =
             outputPath ?: audioFilePathProvider.trackOutputPath(spec.projectId, spec.trackId)
@@ -191,7 +188,7 @@ class NativeAudioController @Inject constructor(
 
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
         checkNotMainThreadForNativeLifecycle("startPlayback")
-        applyProfileTransportLatencies(spec.sampleRate)
+        ensureSessionTransportPrepared(spec.sampleRate)
         PlaybackStartupTrace.logJniBoundary(path = "multi_playback", phase = "before_jni")
         val started = nativeEngine.startMultiPlayback(spec)
         PlaybackStartupTrace.logJniBoundary(path = "multi_playback", phase = "after_jni")
@@ -208,7 +205,7 @@ class NativeAudioController @Inject constructor(
 
     override fun rearmOverdubPlaybackDuringRecording(spec: MultiPlaybackSpec): Boolean {
         checkNotMainThreadForNativeLifecycle("rearmOverdubPlaybackDuringRecording")
-        applyProfileTransportLatencies(spec.sampleRate)
+        ensureSessionTransportPrepared(spec.sampleRate)
         PlaybackStartupTrace.logJniBoundary(path = "rearm_overdub", phase = "before_jni")
         val started = nativeEngine.rearmOverdubPlaybackDuringRecording(spec)
         PlaybackStartupTrace.logJniBoundary(path = "rearm_overdub", phase = "after_jni")

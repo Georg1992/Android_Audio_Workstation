@@ -110,6 +110,7 @@ class MasterPeakControllerTest {
         val playing =
             buildProjectRealtimeUiState(
                 playheadMs = 0L,
+                mixPlayheadMs = 0L,
                 recordingLevel = 0f,
                 peakHoldLinear = 0.316f,
                 structural = structural,
@@ -118,6 +119,7 @@ class MasterPeakControllerTest {
         val paused =
             buildProjectRealtimeUiState(
                 playheadMs = 0L,
+                mixPlayheadMs = 0L,
                 recordingLevel = 0f,
                 peakHoldLinear = 0.316f,
                 structural = structural,

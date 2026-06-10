@@ -44,6 +44,13 @@ data class TrackEntity(
     val position: Int = 0,
     /** Timeline position where this clip begins on the project base ruler (ms). */
     val timelineStartOffsetMs: Long = 0L,
+    /**
+     * Overdub-only: measured playback output−input latency offset (ms) for scheduling.
+     * Capture reaction time is already in [timelineStartOffsetMs]; visual placement stays there.
+     */
+    val overdubPlaybackSyncOffsetMs: Long = OverdubPlaybackSyncOffsetUnset,
+    /** Overdub-only: backing transport arm (ms) when the overdub session started. */
+    val overdubBackingArmMs: Long = 0L,
     /** Non-destructive trim start within the source WAV (ms from file start). */
     val trimStartMs: Long = 0L,
     /** Non-destructive trim end within the source WAV; null = full [duration]. */
@@ -58,4 +65,8 @@ data class TrackEntity(
     val syncStatus: SyncStatus = SyncStatus.LOCAL,
     val ownerUserId: String? = null,
     val editLamport: Long = 0L
-)
+) {
+    companion object {
+        const val OverdubPlaybackSyncOffsetUnset = -1L
+    }
+}

@@ -245,3 +245,15 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
         )
     }
 }
+
+/** Overdub playback sync metadata; visual timeline offset unchanged on existing rows. */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN overdubPlaybackSyncOffsetMs INTEGER NOT NULL DEFAULT -1",
+        )
+        db.execSQL(
+            "ALTER TABLE tracks ADD COLUMN overdubBackingArmMs INTEGER NOT NULL DEFAULT 0",
+        )
+    }
+}

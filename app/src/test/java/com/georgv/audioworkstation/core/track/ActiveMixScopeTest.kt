@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.core.track
 
+import com.georgv.audioworkstation.core.audio.MixTransportMs
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import org.junit.Assert.assertEquals
@@ -28,8 +29,8 @@ class ActiveMixScopeTest {
                     importStatus = TrackImportStatus.READY,
                 ),
             )
-        assertFalse(playbackMustStopAtScopeEnd(9_999L, tracks))
-        assertTrue(playbackMustStopAtScopeEnd(10_000L, tracks))
+        assertFalse(playbackMustStopAtScopeEnd(MixTransportMs(9_999L), tracks))
+        assertTrue(playbackMustStopAtScopeEnd(MixTransportMs(10_000L), tracks))
     }
 
     @Test
@@ -44,7 +45,7 @@ class ActiveMixScopeTest {
                     importStatus = TrackImportStatus.READY,
                 ),
             )
-        assertEquals(0L, playheadMsAfterScopeStop(5_000L, tracks, selectionEmpty = true))
-        assertEquals(10_000L, playheadMsAfterScopeStop(12_000L, tracks, selectionEmpty = false))
+        assertEquals(MixTransportMs(0L), playheadMsAfterScopeStop(MixTransportMs(5_000L), tracks, selectionEmpty = true))
+        assertEquals(MixTransportMs(10_000L), playheadMsAfterScopeStop(MixTransportMs(12_000L), tracks, selectionEmpty = false))
     }
 }

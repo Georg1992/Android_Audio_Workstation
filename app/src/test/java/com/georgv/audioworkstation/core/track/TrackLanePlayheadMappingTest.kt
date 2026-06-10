@@ -83,6 +83,7 @@ class TrackLanePlayheadMappingTest {
         val atStart =
             buildProjectRealtimeUiState(
                 playheadMs = 0L,
+                mixPlayheadMs = 0L,
                 recordingLevel = 0f,
                 peakHoldLinear = 0f,
                 structural = structural,
@@ -94,6 +95,7 @@ class TrackLanePlayheadMappingTest {
         val pastBase =
             buildProjectRealtimeUiState(
                 playheadMs = 22_000L,
+                mixPlayheadMs = 22_000L,
                 recordingLevel = 0f,
                 peakHoldLinear = 0f,
                 structural = structural,

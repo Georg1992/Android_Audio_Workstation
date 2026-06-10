@@ -59,41 +59,6 @@ class PlaybackSessionControllerTest {
         advanceUntilIdle()
     }
 
-    @Test
-    fun `onSelectionChangedDuringPlayback is deprecated no-op while session active`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            sut.onSelectionChangedDuringPlayback(setOf("a", "b"), emptyList())
-            advanceUntilIdle()
-            assertEquals(1, audio.startPlaybackCalls)
-            sut.cancelCompletionMonitorForTransportStop()
-        }
-
-    @Test
-    fun `onSelectionChangedDuringPlayback is no-op when playback is idle`() = runTest(mainDispatcherRule.dispatcher) {
-        val audio = PlaybackSessionTestAudio()
-        val sut = PlaybackSessionController(
-            scope = this,
-            audioController = audio,
-            dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-            loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-            currentProjectId = { PROJECT_ID },
-            visibleTracks = { emptyList() },
-        )
-        sut.onSelectionChangedDuringPlayback(setOf("a"), emptyList())
-        advanceUntilIdle()
-        org.junit.Assert.assertNull(audio.lastArmedLaneAudibility)
-    }
 
     @Test
     fun `playback completion clears playing ids when loop is off`() = runTest(mainDispatcherRule.dispatcher) {
@@ -115,7 +80,6 @@ class PlaybackSessionControllerTest {
         assertEquals(emptySet<String>(), sut.sessionTrackIds.value)
         assertTrue(sut.sessionLaneTrackIdsForTests().all { it == null })
         assertFalse(sut.hasActivePlaybackSession())
-        assertEquals(0, sut.hotJoinMonitorCountForTests())
     }
 
     @Test
@@ -281,7 +245,6 @@ class PlaybackSessionControllerTest {
             assertEquals(false, transportCompleted)
             assertTrue(sut.sessionLaneTrackIdsForTests().all { it == null })
             assertFalse(sut.hasActivePlaybackSession())
-            assertEquals(0, sut.hotJoinMonitorCountForTests())
         }
 
     @Test
@@ -303,62 +266,6 @@ class PlaybackSessionControllerTest {
         advanceUntilIdle()
         assertTrue(transportCompleted)
     }
-
-    @Test
-    fun `selection after playback completion does not touch native audibility`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { emptyList() },
-                )
-            armPlaybackMonitor(audio, sut)
-            audio.finishPlaybackPulse()
-            advanceUntilIdle()
-            val audibilityCallsBefore = audio.armedLaneAudibilityCalls
-
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a", "b"),
-                playableTracks = listOf(track("a", loop = false), track("b", loop = false, wav = "b.wav")),
-            )
-            advanceUntilIdle()
-
-            assertEquals(audibilityCallsBefore, audio.armedLaneAudibilityCalls)
-            assertEquals(0, audio.beginHotJoinCalls)
-        }
-
-    @Test
-    fun `selection after overdub backing completion does not touch native audibility`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val audio = PlaybackSessionTestAudio()
-            val sut =
-                PlaybackSessionController(
-                    scope = this,
-                    audioController = audio,
-                    dispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-                    loadCurrentProject = { if (it == PROJECT_ID) projectFix else null },
-                    currentProjectId = { PROJECT_ID },
-                    visibleTracks = { listOf(track("a", loop = false)) },
-                    suppressTransportOnPlaybackCompletion = { true },
-                )
-            armPlaybackMonitor(audio, sut)
-            audio.finishPlaybackPulse()
-            advanceUntilIdle()
-            val audibilityCallsBefore = audio.armedLaneAudibilityCalls
-
-            sut.onSelectionChangedDuringPlayback(
-                selectedTrackIds = setOf("a"),
-                playableTracks = listOf(track("a", loop = false)),
-            )
-            advanceUntilIdle()
-
-            assertEquals(audibilityCallsBefore, audio.armedLaneAudibilityCalls)
-        }
 
     @Test
     fun `clearPlayingTransportState clears lane maps`() =

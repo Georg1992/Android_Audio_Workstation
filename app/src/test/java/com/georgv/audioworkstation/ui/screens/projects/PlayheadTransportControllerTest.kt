@@ -55,6 +55,27 @@ class PlayheadTransportControllerTest {
         }
 
     @Test
+    fun `playback playhead follows audible transport when output latency is configured`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val playhead = MutableStateFlow(0L)
+            val nativeMs = MutableStateFlow(0L)
+            val sut =
+                PlayheadTransportController(
+                    scope = this,
+                    playheadPositionMs = playhead,
+                    nativeTransportPositionMs = { nativeMs.value },
+                    pollDispatcher = TestAppDispatchers.unified(mainDispatcherRule.dispatcher).default,
+                    sessionOutputLatencyMs = { 84.0 },
+                ).apply { nativePollEnabled = false }
+            sut.setTimelineBaseDurationMs(10_000L)
+            sut.onPlaybackStarted(fromPositionMs = 0L)
+
+            nativeMs.value = 500L
+            sut.setNativeTransportPositionForTests(500L)
+            assertEquals(416L, playhead.value)
+        }
+
+    @Test
     fun `playback playhead follows native transport position`() = runTest(mainDispatcherRule.dispatcher) {
         val playhead = MutableStateFlow(5_000L)
         val nativeMs = MutableStateFlow(0L)

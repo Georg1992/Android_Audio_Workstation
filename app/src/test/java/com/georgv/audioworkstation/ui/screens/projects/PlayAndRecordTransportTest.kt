@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
+import com.georgv.audioworkstation.core.audio.MixTransportMs
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
@@ -29,8 +30,7 @@ class PlayAndRecordTransportTest {
                 project = ProjectEntity(id = "p", name = "P"),
                 selectedPlayableTracks = emptyList(),
                 recordingTrackId = "rec",
-                transportMs = 0L,
-                sessionTimelineEndMs = 10_000L,
+                mixTransportMs = MixTransportMs(0L),
                 timelineVisibleDurationMs = 10_000L,
             ),
         )
@@ -52,8 +52,7 @@ class PlayAndRecordTransportTest {
                 project = ProjectEntity(id = "p", name = "P"),
                 selectedPlayableTracks = listOf(backing, recordingRow),
                 recordingTrackId = "rec",
-                transportMs = 5_000L,
-                sessionTimelineEndMs = 30_000L,
+                mixTransportMs = MixTransportMs(5_000L),
                 timelineVisibleDurationMs = 30_000L,
             ),
         )
@@ -77,8 +76,7 @@ class PlayAndRecordTransportTest {
             project = ProjectEntity(id = "p", name = "P"),
             selectedPlayableTracks = listOf(track),
             recordingTrackId = "rec",
-            transportMs = 0L,
-            sessionTimelineEndMs = 10_000L,
+            mixTransportMs = MixTransportMs(0L),
             timelineVisibleDurationMs = 10_000L,
         )
         advanceUntilIdle()

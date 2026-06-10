@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.core.track
 
+import com.georgv.audioworkstation.core.audio.TransportTimelinePolicy
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.TimelineLaneScaleMode
@@ -55,7 +56,7 @@ class LoopPlaybackProjectionTest {
     fun `recording clip timeline start uses overdub arm when backing present`() {
         assertEquals(
             0L,
-            recordingClipTimelineStartMs(
+            TransportTimelinePolicy.recordingClipTimelineStartMs(
                 playheadMs = 1_198L,
                 overdubPlaybackStartMs = 0L,
                 hasOverdubBacking = true,
@@ -63,7 +64,7 @@ class LoopPlaybackProjectionTest {
         )
         assertEquals(
             1_198L,
-            recordingClipTimelineStartMs(
+            TransportTimelinePolicy.recordingClipTimelineStartMs(
                 playheadMs = 1_198L,
                 overdubPlaybackStartMs = 0L,
                 hasOverdubBacking = false,
@@ -71,7 +72,7 @@ class LoopPlaybackProjectionTest {
         )
         assertEquals(
             1_198L,
-            recordingClipTimelineStartMs(
+            TransportTimelinePolicy.recordingClipTimelineStartMs(
                 playheadMs = 1_198L,
                 overdubPlaybackStartMs = null,
                 hasOverdubBacking = true,
@@ -84,11 +85,11 @@ class LoopPlaybackProjectionTest {
         val tracks = listOf(loopTrack())
         assertEquals(
             0L,
-            playbackStartPositionMsForTracks(
+            TransportTimelinePolicy.playbackStartPositionMsForTracks(
                 scrubbedPlayheadMs = 15_000L,
                 timelineVisibleDurationMs = 20_000L,
                 tracks = tracks,
-            ),
+            ).value,
         )
     }
 
@@ -105,11 +106,11 @@ class LoopPlaybackProjectionTest {
             )
         assertEquals(
             5_000L,
-            playbackStartPositionMsForTracks(
+            TransportTimelinePolicy.playbackStartPositionMsForTracks(
                 scrubbedPlayheadMs = 5_000L,
                 timelineVisibleDurationMs = 10_000L,
                 tracks = tracks,
-            ),
+            ).value,
         )
     }
 

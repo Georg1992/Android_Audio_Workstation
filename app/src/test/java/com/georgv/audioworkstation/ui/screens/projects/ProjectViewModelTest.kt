@@ -2,7 +2,7 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
-import com.georgv.audioworkstation.core.audio.capability.testAudioCapabilityProfileResolver
+import com.georgv.audioworkstation.core.audio.capability.testSessionTransportCapabilityGate
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
@@ -2769,7 +2769,7 @@ class ProjectViewModelTest {
             AudioIoScope(testDispatchers),
             audioEngineSession,
             audioParameterQueue,
-            capabilityProfileResolver = testAudioCapabilityProfileResolver(),
+            sessionTransportGate = testSessionTransportCapabilityGate(),
             recordingSessionLatencyAudit = LiveOverdubLatencySessionRecorder { _, _ -> },
         ).also {
             it.setPlayheadNativePollEnabledForTests(false)

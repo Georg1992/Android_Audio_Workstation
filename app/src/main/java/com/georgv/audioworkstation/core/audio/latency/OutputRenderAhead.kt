@@ -8,13 +8,13 @@ fun latencyFramesFromNs(latencyNs: Long, sampleRateHz: Int): Long {
 fun effectiveOutputLatencyNs(
     liveLatencyNs: Long,
     liveLatencyValid: Boolean,
-    sessionConfiguredLatencyNs: Long,
-): Long =
-    when {
-        liveLatencyValid && liveLatencyNs > 0L -> liveLatencyNs
-        sessionConfiguredLatencyNs > 0L -> sessionConfiguredLatencyNs
-        else -> 0L
+    @Suppress("UNUSED_PARAMETER") sessionConfiguredLatencyNs: Long,
+): Long {
+    if (liveLatencyValid && liveLatencyNs > 0L) {
+        return liveLatencyNs
     }
+    return 0L
+}
 
 fun mixTransportFrameAtCallback(
     callbackMonotonicNs: Long,

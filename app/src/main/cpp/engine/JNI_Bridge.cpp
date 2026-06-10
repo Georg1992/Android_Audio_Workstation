@@ -2,6 +2,7 @@
 
 #include <android/log.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,10 +19,24 @@ namespace {
 
 std::unique_ptr<dawengine::AudioEngine> g_engine;
 std::unique_ptr<OboeOutput> g_output;
+int64_t g_pendingSessionInputLatencyNs = 0;
+int64_t g_pendingSessionOutputLatencyNs = 0;
+
+void ApplyPendingSessionTransportLatencies(dawengine::AudioEngine *const engine) {
+    if (!engine) {
+        return;
+    }
+    if (g_pendingSessionInputLatencyNs <= 0 && g_pendingSessionOutputLatencyNs <= 0) {
+        return;
+    }
+    engine->setSessionTransportLatenciesNs(g_pendingSessionInputLatencyNs,
+                                           g_pendingSessionOutputLatencyNs);
+}
 
 dawengine::AudioEngine *EnsureEngine() {
     if (!g_engine) {
         g_engine = std::make_unique<dawengine::AudioEngine>();
+        ApplyPendingSessionTransportLatencies(g_engine.get());
     }
     return g_engine.get();
 }
@@ -211,10 +226,6 @@ bool StartOverdubRecordingSession(dawengine::AudioEngine *engine,
 
     engine->configureProject(sampleRate, 16);
     engine->logPlaybackStartupMilestone("jni_start_overdub_session");
-    __android_log_print(
-        ANDROID_LOG_INFO,
-        "AudioSyncDiag",
-        "[OVERDUB_DEFERRED_GATE] enabled=1");
 
     if (g_output) {
         if (!g_output->pauseForSafeEngineMutation()) {
@@ -343,7 +354,7 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetPlaybackSessionTim
     }
     const dawengine::AudioEngine::PlaybackSessionTimings timings =
         g_engine->playbackSessionTimings();
-    constexpr jsize kPlaybackSessionTimingsFieldCount = 18;
+    constexpr jsize kPlaybackSessionTimingsFieldCount = 17;
     jlongArray array = env->NewLongArray(kPlaybackSessionTimingsFieldCount);
     if (!array) {
         return nullptr;
@@ -353,7 +364,6 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetPlaybackSessionTim
         timings.firstInputSampleSteadyNs,
         timings.firstNonSilentOutputSteadyNs,
         timings.firstAudibleOutputSteadyNs,
-        static_cast<jlong>(timings.deferEnabled),
         static_cast<jlong>(timings.prerollFrames),
         static_cast<jlong>(timings.ioBatchFrames),
         static_cast<jlong>(timings.recordReadFrames),
@@ -571,10 +581,29 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeSetSessionTransportLa
         jobject,
         jlong inputLatencyNs,
         jlong outputLatencyNs) {
+    g_pendingSessionInputLatencyNs = std::max<int64_t>(0, static_cast<int64_t>(inputLatencyNs));
+    g_pendingSessionOutputLatencyNs = std::max<int64_t>(0, static_cast<int64_t>(outputLatencyNs));
     if (g_engine) {
-        g_engine->setSessionTransportLatenciesNs(static_cast<int64_t>(inputLatencyNs),
-                                                 static_cast<int64_t>(outputLatencyNs));
+        g_engine->setSessionTransportLatenciesNs(g_pendingSessionInputLatencyNs,
+                                                 g_pendingSessionOutputLatencyNs);
     }
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetSessionPerceivedPlaybackOffsetMs(
+        JNIEnv *,
+        jobject) {
+    return g_engine ? static_cast<jlong>(g_engine->sessionPerceivedPlaybackOffsetMs()) : -1L;
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetLiveOutputLatencyNs(
+        JNIEnv *,
+        jobject) {
+    if (!g_engine || !g_engine->liveOutputLatencyValid()) {
+        return -1L;
+    }
+    return g_engine->liveOutputLatencyNs();
 }
 
 extern "C" JNIEXPORT jlong JNICALL

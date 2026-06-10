@@ -5,7 +5,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.core.audio.capability.testAudioCapabilityProfileResolver
+import com.georgv.audioworkstation.core.audio.capability.testSessionTransportCapabilityGate
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportResult
@@ -257,7 +257,7 @@ class ProjectViewModelRobolectricTest {
             AudioIoScope(testDispatchers),
             audioEngineSession,
             AudioParameterCommandQueue(audio, testDispatchers, audioEngineSession),
-            capabilityProfileResolver = testAudioCapabilityProfileResolver(),
+            sessionTransportGate = testSessionTransportCapabilityGate(),
             recordingSessionLatencyAudit = LiveOverdubLatencySessionRecorder { _, _ -> },
         )
     }

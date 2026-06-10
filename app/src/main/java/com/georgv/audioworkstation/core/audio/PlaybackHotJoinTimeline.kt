@@ -15,7 +15,7 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 fun shouldHotJoinTrackAtTransport(track: TrackEntity, transportMs: Long): Boolean {
     if (track.wavFilePath.isBlank()) return false
     if (track.isLoop) return true
-    val clipStartMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
+    val clipStartMs = track.timelineClipStartMsFor(TimelineClipStartSource.PlaybackScheduling)
     val clipDurationMs = track.timelineClipDurationMs()
     if (clipDurationMs <= 0L) return true
     return transportMs < clipStartMs + clipDurationMs
@@ -34,7 +34,7 @@ data class HotJoinLaneSpec(
 
 fun TrackEntity.toHotJoinLaneSpec(): HotJoinLaneSpec =
     HotJoinLaneSpec(
-        timelineClipStartMs = timelineStartOffsetMs.coerceAtLeast(0L),
+        timelineClipStartMs = timelineClipStartMsFor(TimelineClipStartSource.PlaybackScheduling),
         timelineClipDurationMs = timelineClipDurationMs(),
         loopEnabled = isLoop,
         loopSourceStartMs = effectiveLoopStartMs(),

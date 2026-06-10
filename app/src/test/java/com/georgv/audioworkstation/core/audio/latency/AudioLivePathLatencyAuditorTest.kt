@@ -18,7 +18,6 @@ class AudioLivePathLatencyAuditorTest {
                 firstInputSampleSteadyNs = 50_000_000L,
                 firstNonSilentOutputSteadyNs = 60_000_000L,
                 firstAudibleOutputSteadyNs = 70_000_000L,
-                deferEnabled = true,
                 prerollFrames = 1_440,
                 ioBatchFrames = 1_024,
                 recordReadFrames = 256,
@@ -71,7 +70,6 @@ class AudioLivePathLatencyAuditorTest {
         assertEquals(AudioLivePathType.OVERDUB, breakdown.pathType)
         assertEquals(4L, breakdown.streamOpenMs)
         assertEquals(49L, breakdown.firstInputMs)
-        assertEquals(49L, breakdown.deferredGateMs)
         assertNotNull(breakdown.appAddedLatencyMs)
         assertTrue(breakdown.appAddedLatencyMs!! > 0L)
         assertTrue(breakdown.estimatedHardwareLatencyMs!! > 0L)

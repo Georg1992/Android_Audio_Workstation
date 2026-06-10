@@ -49,6 +49,7 @@ import com.georgv.audioworkstation.core.track.effectiveLoopEndMs
 import com.georgv.audioworkstation.core.track.effectiveLoopStartMs
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.track.hasTimelineClip
+import com.georgv.audioworkstation.core.audio.playbackTimelineClipStartMs
 import com.georgv.audioworkstation.core.track.timelineClipDurationMs
 import com.georgv.audioworkstation.core.track.trackLoopPlaybackPositionMs
 import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
@@ -144,7 +145,7 @@ fun projectTimelineClips(
         if (track.isRecording && track.importStatus == TrackImportStatus.READY && track.wavFilePath.isBlank()) {
             return@mapNotNull null
         }
-        val startOffsetMs = track.timelineStartOffsetMs.coerceAtLeast(0L)
+        val startOffsetMs = track.playbackTimelineClipStartMs()
         val visibleDurationMs = track.timelineClipDurationMs().coerceAtLeast(0L)
         track to TimelineClipSpan(startOffsetMs = startOffsetMs, durationMs = visibleDurationMs)
     }
@@ -401,6 +402,7 @@ fun TrackTimelineLane(
     /** Selection-scoped mix end for optional ruler marker on longer unselected lanes. */
     globalMixScopeDurationMs: Long = laneLayoutDurationMs,
     playheadPositionMs: Long,
+    mixPlayheadPositionMs: Long = playheadPositionMs,
     loopPlaybackActive: Boolean = false,
     recordingInputLevel: Float? = null,
     loopRegionEditingEnabled: Boolean = false,
@@ -488,6 +490,16 @@ fun TrackTimelineLane(
             } else {
                 playheadPositionMs
             }
+        val laneMixPlayheadMs =
+            if (useLoopPlaybackProjection) {
+                trackLoopPlaybackPositionMs(
+                    rawPlayheadMs = mixPlayheadPositionMs,
+                    loopStartMs = activeClip.effectiveStartMs,
+                    loopEndMs = activeClip.effectiveEndMs,
+                )
+            } else {
+                mixPlayheadPositionMs
+            }
         val laneScale =
             when {
                 useLoopPlaybackProjection -> loopPlaybackScale
@@ -536,7 +548,7 @@ fun TrackTimelineLane(
                             .coerceAtLeast(TimelineClipMinimumWidthDp.dp)
                     val sourcePlayheadMs =
                         trackSourcePlayheadMs(
-                            globalPlayheadMs = lanePlayheadMs,
+                            globalPlayheadMs = laneMixPlayheadMs,
                             timelineStartOffsetMs = activeClip.startOffsetMs,
                             sourceDurationMs = activeClip.durationMs,
                             loopEnabled = activeClip.isLoop,
@@ -547,7 +559,7 @@ fun TrackTimelineLane(
                     val clipLocalPlayheadMs =
                         if (laneViewportZoomed) {
                             trackSourcePlayheadMsForClipTimelineWindow(
-                                globalPlayheadMs = lanePlayheadMs,
+                                globalPlayheadMs = laneMixPlayheadMs,
                                 timelineStartOffsetMs = activeClip.startOffsetMs,
                                 sourceDurationMs = activeClip.durationMs,
                                 loopEnabled = activeClip.isLoop,

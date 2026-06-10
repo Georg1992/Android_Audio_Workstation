@@ -12,7 +12,7 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
         ProjectEntity::class,
         TrackEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 @TypeConverters(AudioConfigConverters::class)

@@ -20,6 +20,8 @@ import com.georgv.audioworkstation.core.audio.capability.DeviceAudioIdentityProv
 import com.georgv.audioworkstation.core.audio.capability.DeviceAudioIdentitySource
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
 import com.georgv.audioworkstation.core.audio.capability.RecordingSessionLatencyAudit
+import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
+import com.georgv.audioworkstation.core.audio.capability.DefaultSessionTransportCapabilityGate
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -84,6 +86,12 @@ abstract class AudioModule {
     abstract fun bindLiveOverdubLatencySessionRecorder(
         audit: RecordingSessionLatencyAudit,
     ): LiveOverdubLatencySessionRecorder
+
+    @Binds
+    @Singleton
+    abstract fun bindSessionTransportCapabilityGate(
+        gate: DefaultSessionTransportCapabilityGate,
+    ): SessionTransportCapabilityGate
 
     companion object {
         @Provides

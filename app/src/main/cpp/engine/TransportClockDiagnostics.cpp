@@ -167,6 +167,8 @@ void maybeLogOutputClockCorrelation(dawengine::AudioEngine *const engine,
 
     const int64_t renderedTransportFrame = engine->transportFrame();
     const int64_t anchorTransportFrame = anchor.transportFrameAt(callbackMonotonicNs);
+    const int64_t mixTransportFrame =
+        engine->mixTransportFrameAtMonotonicNs(callbackMonotonicNs);
 
     int64_t streamFramePosition = kUnavailable;
     int64_t streamTimestampNs = kUnavailable;
@@ -178,15 +180,16 @@ void maybeLogOutputClockCorrelation(dawengine::AudioEngine *const engine,
         }
     }
 
-    const int64_t outputLatencyNs = engine->sessionOutputLatencyNs();
+    const int64_t effectiveLatencyNs = engine->effectiveOutputLatencyNs();
     const int64_t estimatedPresentationNs =
-        outputLatencyNs > 0 ? callbackMonotonicNs + outputLatencyNs : kUnavailable;
+        effectiveLatencyNs > 0 ? callbackMonotonicNs + effectiveLatencyNs : kUnavailable;
     const int64_t estimatedAudibleTransportFrame =
-        outputLatencyNs > 0
-            ? anchor.transportFrameAt(callbackMonotonicNs - outputLatencyNs)
+        effectiveLatencyNs > 0
+            ? anchor.transportFrameAt(callbackMonotonicNs)
             : anchorTransportFrame;
 
     const int64_t deltaFrames = renderedTransportFrame - anchorTransportFrame;
+    const int64_t mixAheadFrames = mixTransportFrame - renderedTransportFrame;
 
     __android_log_print(
         ANDROID_LOG_INFO,
@@ -195,20 +198,26 @@ void maybeLogOutputClockCorrelation(dawengine::AudioEngine *const engine,
         "callbackNs=%lld "
         "anchorTransportFrame=%lld "
         "renderedTransportFrame=%lld "
+        "mixTransportFrame=%lld "
+        "effectiveLatencyNs=%lld "
         "streamFramePosition=%lld "
         "streamTimestampNs=%lld "
         "estimatedPresentationNs=%lld "
         "estimatedAudibleTransportFrame=%lld "
         "deltaFrames=%lld "
+        "mixAheadFrames=%lld "
         "callbackFrames=%d",
         static_cast<long long>(callbackMonotonicNs),
         static_cast<long long>(anchorTransportFrame),
         static_cast<long long>(renderedTransportFrame),
+        static_cast<long long>(mixTransportFrame),
+        static_cast<long long>(effectiveLatencyNs),
         static_cast<long long>(streamFramePosition),
         static_cast<long long>(streamTimestampNs),
         static_cast<long long>(estimatedPresentationNs),
         static_cast<long long>(estimatedAudibleTransportFrame),
         static_cast<long long>(deltaFrames),
+        static_cast<long long>(mixAheadFrames),
         numFrames);
 }
 

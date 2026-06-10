@@ -2,17 +2,18 @@ package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
-import com.georgv.audioworkstation.core.audio.capability.AudioCapabilityProfileResolver
+import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
 import com.georgv.audioworkstation.core.audio.RecordingLatencyCalibrationLog
 import com.georgv.audioworkstation.core.audio.isNormalOverdubRecording
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.coroutines.withIo
-import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
+import com.georgv.audioworkstation.core.audio.AudibleMs
+import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
+import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
+import com.georgv.audioworkstation.core.audio.TransportTimelinePolicy
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
-import com.georgv.audioworkstation.core.track.recordingClipTimelineStartMs
 import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +34,7 @@ class RecordingSessionController(
     private val audioController: AudioController,
     private val recordingCoordinator: ProjectRecordingCoordinator,
     private val dispatchers: AppDispatchers,
-    private val capabilityProfileResolver: AudioCapabilityProfileResolver,
+    private val sessionTransportGate: SessionTransportCapabilityGate,
 ) {
     private val _recordingTrackId = MutableStateFlow<String?>(null)
     val recordingTrackId: StateFlow<String?> = _recordingTrackId.asStateFlow()
@@ -179,7 +180,7 @@ class RecordingSessionController(
                 }
 
             val recordingTimelineStartOffsetMs =
-                recordingClipTimelineStartMs(
+                TransportTimelinePolicy.recordingClipTimelineStartMs(
                     playheadMs = timelineStartOffsetMs,
                     overdubPlaybackStartMs = overdubPlaybackStartMs,
                     hasOverdubBacking = overdubPlaybackTracks.isNotEmpty(),
@@ -227,13 +228,24 @@ class RecordingSessionController(
                 overdubPlaybackTracks
                     .filter { it.id != pendingTrack.id }
                     .filter { it.wavFilePath.isNotBlank() }
+            val audioCapability =
+                withIo(dispatchers, "prepare session transport capability") {
+                    sessionTransportGate.prepareForLiveSession(currentProject.sampleRate)
+                }
+            PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
             val overdubPlaybackSpec =
                 overdubLanes
                     .takeIf { it.isNotEmpty() }
                     ?.let { lanes ->
-                        currentProject.toMultiPlaybackSpec(lanes)?.copy(
-                            startPositionMs = overdubPlaybackStartMs,
-                            sessionTimelineEndMs = sessionTimelineEndMsForPlayback(lanes),
+                        currentProject.toLiveEnginePlaybackSpec(
+                            tracks = lanes,
+                            startPositionMs =
+                                PlaybackTransportSync.mixTransportMs(
+                                    AudibleMs(overdubPlaybackStartMs.coerceAtLeast(0L)),
+                                    PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(
+                                        audioController,
+                                    ),
+                                ),
                         )
                     }
             if (overdubLanes.isNotEmpty() && overdubPlaybackSpec == null) {
@@ -262,18 +274,7 @@ class RecordingSessionController(
                     null
                 }
             if (isNormalOverdub) {
-                val audioCapability =
-                    withIo(dispatchers, "resolve audio capability profile") {
-                        capabilityProfileResolver.resolve(currentProject.sampleRate)
-                    }
                 RecordingLatencyCalibrationLog.logNormalOverdubStart(audioCapability)
-                audioController.configureSessionTransportLatencies(
-                    inputLatencyMs =
-                        audioCapability.inputHalLatencyMs
-                            ?: audioCapability.inputCaptureDelayMs
-                            ?: 0.0,
-                    outputLatencyMs = audioCapability.outputLatencyMs ?: 0.0,
-                )
             }
 
             val engineStartMs = android.os.SystemClock.uptimeMillis()

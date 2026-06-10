@@ -217,8 +217,8 @@ fun playbackStartAllowedAtPlayhead(
 }
 
 /**
- * Native playback session end. Loop-enabled lanes wrap indefinitely in the engine, so session
- * completion must not be bound to the base timeline when any loop track is playing.
+ * Visual project-timeline session end for UI layout and offline mixdown bounds.
+ * Live engine playback uses [sessionPlaybackSchedulingEndMsForPlayback] instead.
  */
 fun sessionTimelineEndMsForPlayback(tracks: List<TrackEntity>): Long {
     if (tracks.any { it.isLoop }) return 0L

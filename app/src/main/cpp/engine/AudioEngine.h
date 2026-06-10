@@ -74,7 +74,16 @@ public:
     /** Query live HAL output latency from the running Oboe stream (callback thread). */
     void refreshLiveOutputLatencyFromStream(oboe::AudioStream *stream);
 
-    /** Live HAL when available, else session profile hint from Kotlin; 0 disables render-ahead. */
+    /** Live HAL output latency (ns), valid only after [liveOutputLatencyValid] is true. */
+    int64_t liveOutputLatencyNs() const {
+        return m_liveOutputLatencyNs.load(std::memory_order_acquire);
+    }
+
+    bool liveOutputLatencyValid() const {
+        return m_liveOutputLatencyValid.load(std::memory_order_acquire);
+    }
+
+    /** Live HAL when valid; otherwise 0 (no render-ahead). Session profile is transport-only. */
     int64_t effectiveOutputLatencyNs() const;
 
     int64_t outputLatencyFrames() const;
@@ -93,10 +102,7 @@ public:
                         const std::string &outputPath,
                         int64_t startPositionMs = 0);
 
-    /**
-     * Arms overdub lanes at [startPositionMs], opens input capture, and starts shared transport
-     * only when the first input frame arrives (same timeline frame as WAV sample 0).
-     */
+    /** Arms overdub lanes at [startPositionMs], opens input capture, and starts playback immediately. */
     bool startOverdubRecordingSession(const std::vector<std::string> &wavPaths,
                                       const std::vector<float> &gains,
                                       int64_t startPositionMs,
@@ -111,7 +117,7 @@ public:
                                       int32_t channelCount,
                                       const std::string &recordingOutputPath);
 
-    /** Arms deferred overdub playback lanes only (no input capture). */
+    /** Arms overdub playback lanes only (no input capture). */
     bool armOverdubPlaybackSession(const std::vector<std::string> &wavPaths,
                                    const std::vector<float> &gains,
                                    int64_t startPositionMs,
@@ -173,7 +179,6 @@ public:
         int64_t firstInputSampleSteadyNs = 0;
         int64_t firstNonSilentOutputSteadyNs = 0;
         int64_t firstAudibleOutputSteadyNs = 0;
-        int32_t deferEnabled = 0;
         int32_t prerollFrames = 0;
         int32_t ioBatchFrames = 0;
         int32_t recordReadFrames = 0;
@@ -263,6 +268,16 @@ public:
 
     int64_t recordingCapturedDurationMs() const;
 
+    /**
+     * Single overdub playback-alignment delay (ms), measured at [stopRecording]:
+     * liveOutputLatencyMs - inputCaptureDelayMs.
+     * armToFirstInputMs is excluded — it is already represented in capture placement.
+     * Returns -1 when not an overdub session or live output latency was unavailable.
+     */
+    int64_t sessionPerceivedPlaybackOffsetMs() const {
+        return m_sessionPerceivedPlaybackOffsetMs.load(std::memory_order_acquire);
+    }
+
     /** Session maximum pre-soft-clip master peak (linear) for the current playback arm. */
     float masterPeakHoldLinear() const {
         return m_masterPeakHoldLinear.load(std::memory_order_acquire);
@@ -286,12 +301,12 @@ public:
                             const std::vector<int64_t> &laneLoopSourceEndMs = {},
                             const std::vector<int64_t> &laneSourceTrimStartMs = {},
                             const std::vector<float> &lanePan = {},
-                            bool deferPlaybackStart = false,
+                            bool overdubInitialArm = false,
                             bool preserveActiveOverdubCapture = false);
 
     /**
      * Replace overdub backing lanes at [startPositionMs] while capture continues.
-     * Same transport rules as live playback (no deferred gate); preserves first-sample capture state.
+     * Preserves first-sample capture state.
      */
     bool rearmOverdubPlaybackDuringRecording(
         const std::vector<std::string> &wavPaths,
@@ -532,6 +547,8 @@ private:
                                      const char *reason);
     void resetTransportClockAnchor();
 
+    void finalizeSessionPerceivedPlaybackOffsetMs();
+
     int64_t transportFrameAtMonotonicNs(int64_t monotonicNs) const;
 
     int64_t estimatedCaptureMonotonicNs(int64_t appReceiveMonotonicNs) const;
@@ -572,8 +589,6 @@ private:
     std::atomic<bool> m_isRecording{false};
     std::atomic<int64_t> m_recordingFirstSampleTransportFrame{kRecordingFirstSampleTransportUnset};
     std::atomic<int64_t> m_recordedCaptureFrameCount{0};
-    std::atomic<bool> m_awaitingDeferredPlaybackStart{false};
-    std::atomic<int64_t> m_deferredPlaybackStartFrame{0};
     std::atomic<float> m_recordingInputLevel{0.0f};
     std::atomic<float> m_masterPeakHoldLinear{0.0f};
 
@@ -608,7 +623,7 @@ private:
     std::atomic<int64_t> m_overdubFirstInputSteadyNs{0};
     std::atomic<int64_t> m_overdubFirstNonSilentOutputSteadyNs{0};
     std::atomic<int64_t> m_overdubFirstAudibleOutputSteadyNs{0};
-    std::atomic<int32_t> m_overdubDeferEnabledAtArm{0};
+    std::atomic<int64_t> m_sessionPerceivedPlaybackOffsetMs{-1};
     std::atomic<int64_t> m_playbackArmTransportStartFrame{0};
     std::atomic<int64_t> m_firstNonSilentTransportFrame{-1};
     std::atomic<int64_t> m_firstAudiblePeakTransportFrame{-1};
