@@ -32,6 +32,8 @@ class LoopPlaybackProjectionTest {
             loopEndMs = loopEndMs,
         )
 
+    private fun TrackEntity.testSourceDurationMs(): Long = checkNotNull(duration)
+
     @Test
     fun `track loop playback position wraps within track loop length`() {
         assertEquals(
@@ -167,7 +169,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = 0L,
                 timelineStartOffsetMs = track.timelineStartOffsetMs,
-                sourceDurationMs = track.duration!!,
+                sourceDurationMs = track.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 2_000L,
                 loopEndMs = 9_000L,
@@ -179,7 +181,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = 2_000L,
                 timelineStartOffsetMs = track.timelineStartOffsetMs,
-                sourceDurationMs = track.duration!!,
+                sourceDurationMs = track.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 2_000L,
                 loopEndMs = 9_000L,
@@ -196,7 +198,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = 0L,
                 timelineStartOffsetMs = track.timelineStartOffsetMs,
-                sourceDurationMs = track.duration!!,
+                sourceDurationMs = track.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 2_000L,
                 loopEndMs = 9_000L,
@@ -208,7 +210,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = 3_000L,
                 timelineStartOffsetMs = track.timelineStartOffsetMs,
-                sourceDurationMs = track.duration!!,
+                sourceDurationMs = track.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 2_000L,
                 loopEndMs = 9_000L,
@@ -246,7 +248,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = globalMs,
                 timelineStartOffsetMs = loopA.timelineStartOffsetMs,
-                sourceDurationMs = loopA.duration!!,
+                sourceDurationMs = loopA.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 1_000L,
                 loopEndMs = 4_000L,
@@ -256,7 +258,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = globalMs,
                 timelineStartOffsetMs = loopB.timelineStartOffsetMs,
-                sourceDurationMs = loopB.duration!!,
+                sourceDurationMs = loopB.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 2_000L,
                 loopEndMs = 8_000L,
@@ -271,7 +273,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = seekMs,
                 timelineStartOffsetMs = loopA.timelineStartOffsetMs,
-                sourceDurationMs = loopA.duration!!,
+                sourceDurationMs = loopA.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 1_000L,
                 loopEndMs = 4_000L,
@@ -281,7 +283,7 @@ class LoopPlaybackProjectionTest {
             trackSourcePlayheadMs(
                 globalPlayheadMs = seekMs,
                 timelineStartOffsetMs = loopB.timelineStartOffsetMs,
-                sourceDurationMs = loopB.duration!!,
+                sourceDurationMs = loopB.testSourceDurationMs(),
                 loopEnabled = true,
                 loopStartMs = 2_000L,
                 loopEndMs = 8_000L,
