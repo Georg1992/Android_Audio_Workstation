@@ -9,10 +9,26 @@ import com.georgv.audioworkstation.core.track.activeMixScopeTrackIds
 import com.georgv.audioworkstation.core.track.clampLoopRegionMs
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.core.track.reconcileInScopeLoopRegions
-import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
 import com.georgv.audioworkstation.core.track.sourceDurationMs
-import com.georgv.audioworkstation.core.audio.AudioController
-import com.georgv.audioworkstation.core.audio.ChannelMode
+import com.georgv.audioworkstation.core.session.MasterPeakController
+import com.georgv.audioworkstation.core.session.PendingCompressedImport
+import com.georgv.audioworkstation.core.session.PendingCompressedImportRegistry
+import com.georgv.audioworkstation.core.session.ProjectAudioImportOutcome
+import com.georgv.audioworkstation.core.session.PlaybackSessionController
+import com.georgv.audioworkstation.core.session.PlayheadTransportController
+import com.georgv.audioworkstation.core.session.ProjectAudioImportCoordinator
+import com.georgv.audioworkstation.core.session.ProjectDbActionRunner
+import com.georgv.audioworkstation.core.session.ProjectPlayheadSeekCoordinator
+import com.georgv.audioworkstation.core.session.ProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.session.ProjectSession
+import com.georgv.audioworkstation.core.session.ProjectImportSession
+import com.georgv.audioworkstation.core.session.ProjectTransportController
+import com.georgv.audioworkstation.core.session.RecordingSessionController
+import com.georgv.audioworkstation.core.session.ScopePlaybackCoordinator
+import com.georgv.audioworkstation.core.session.TransportPlaybackPhase
+import com.georgv.audioworkstation.core.audio.PlaybackPort
+import com.georgv.audioworkstation.core.audio.CapturePort
+import com.georgv.audioworkstation.core.audio.MeterPort
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
@@ -23,15 +39,10 @@ import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
 import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
-import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
-import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
-import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.withIo
-import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
-import com.georgv.audioworkstation.core.audio.toUiMessage
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.validation.NameValidationResult
 import com.georgv.audioworkstation.core.validation.toProjectNameUiMessage
@@ -40,13 +51,13 @@ import com.georgv.audioworkstation.core.validation.validateName
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
-import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.components.TimelineClip
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
-import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.screens.projects.reorder.OptimisticTrackOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -61,16 +72,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.File
 import javax.inject.Inject
 
 data class SampleRateMismatchDialogState(
@@ -143,7 +151,9 @@ data class ProjectRealtimeUiState(
 @HiltViewModel
 class ProjectViewModel @Inject constructor(
     private val repo: ProjectRepository,
-    private val audioController: AudioController,
+    private val playback: PlaybackPort,
+    private val capture: CapturePort,
+    private val meter: MeterPort,
     private val audioImportCoordinator: ProjectAudioImportCoordinator,
     private val pendingCompressedImportRegistry: PendingCompressedImportRegistry,
     private val recordingCoordinator: ProjectRecordingCoordinator,
@@ -157,8 +167,6 @@ class ProjectViewModel @Inject constructor(
     private val sessionTransportGate: SessionTransportCapabilityGate,
     private val recordingSessionLatencyAudit: LiveOverdubLatencySessionRecorder,
 ) : ViewModel() {
-
-    private var engineSessionAcquired = false
 
     internal val appDispatchers: AppDispatchers
         get() = dispatchers
@@ -181,25 +189,6 @@ class ProjectViewModel @Inject constructor(
     internal val sampleRateMismatchDialog = MutableStateFlow<SampleRateMismatchDialogState?>(null)
     internal var pendingCompressedImport: PendingCompressedImport? = null
     private val waveformStatesByTrackId = MutableStateFlow<Map<String, WaveformState>>(emptyMap())
-    private val playheadPositionMs = MutableStateFlow(0L)
-    private val playheadTransport =
-        PlayheadTransportController(
-            scope = viewModelScope,
-            playheadPositionMs = playheadPositionMs,
-            nativeTransportPositionMs = { audioController.transportPositionMs() },
-            pollDispatcher = dispatchers.default,
-            sessionOutputLatencyMs = {
-                PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(audioController)
-            },
-        )
-    private val masterPeakController =
-        MasterPeakController(
-            scope = viewModelScope,
-            audioController = audioController,
-            dispatchers = dispatchers,
-            transportPhase = playheadTransport.phase,
-            onOverloadWarning = { emitMessage(R.string.warning_master_output_overloaded) },
-        )
     private val dbActions =
         ProjectDbActionRunner(logTag = TAG) { message -> emitMessage(message) }
     internal val importDbActions: ProjectDbActionRunner
@@ -223,21 +212,6 @@ class ProjectViewModel @Inject constructor(
     private val optimisticTracks = MutableStateFlow<List<TrackEntity>?>(null)
     private val optimisticTrackGains = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val optimisticTrackPans = MutableStateFlow<Map<String, Float>>(emptyMap())
-    internal val recordingSession =
-        RecordingSessionController(
-            scope = viewModelScope,
-            audioController = audioController,
-            recordingCoordinator = recordingCoordinator,
-            dispatchers = dispatchers,
-            sessionTransportGate = sessionTransportGate,
-        )
-    private val recordingStorageMonitor =
-        RecordingStorageMonitor(
-            scope = viewModelScope,
-            guard = recordingStorageGuard,
-            dispatchers = dispatchers,
-        )
-    private var recordingStorageMonitorEnabledForTests = true
     /** Serializes [persistTrackOrderToDb] so overlapping drops cannot apply DB writes in the wrong order. */
     private val trackOrderPersistMutex = Mutex()
     internal val importUiCoordinator = ProjectImportUiCoordinator()
@@ -254,138 +228,56 @@ class ProjectViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val playbackSession =
-        PlaybackSessionController(
+    private val session =
+        ProjectSession(
             scope = viewModelScope,
-            audioController = audioController,
+            playback = playback,
+            capture = capture,
+            meter = meter,
+            recordingCoordinator = recordingCoordinator,
             dispatchers = dispatchers,
-            loadCurrentProject = { pid -> loadCurrentProject(pid) },
-            currentProjectId = { projectId.value },
-            visibleTracks = {
-                visibleTracksWithRecordingOptimistic(
-                    projectTracks.value,
-                    optimisticTracks.value,
-                    recordingSession.optimisticRecordingTrack.value,
-                    optimisticTrackGains.value,
-                    optimisticTrackPans.value,
-                )
-            },
-            onPlaybackCompleted = {
-                masterPeakController.resetDisplayAndNativeHold()
-                playheadTransport.stopAndResetToZero()
-                viewModelScope.launch(dispatchers.audioIo) {
-                    withAudioIo(dispatchers, "AudioController.stopPlayback completion") {
-                        audioController.stopPlayback()
-                    }
-                }
-            },
-            suppressTransportOnPlaybackCompletion = { recordingSession.hasActiveRecordingTake() },
-        )
-
-    private val playAndRecordTransport =
-        PlayAndRecordTransport(
-            audioController = audioController,
-            playbackSession = playbackSession,
-            dispatchers = dispatchers,
-        )
-
-    private val transportController = ProjectTransportController(
-        audioController = audioController,
-        playbackSession = playbackSession,
-        recordingSession = recordingSession,
-        dispatchers = dispatchers,
-        finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, stopSnapshot ->
-            finalizeRecordingTrack(trackId, stopSnapshot)
-        },
-        onLiveOverdubSessionEnd = { capture ->
-            if (!LiveSessionProfiling.captureOnOverdubEnd) return@ProjectTransportController
-            viewModelScope.launch {
-                val sampleRateHz = uiState.value.project?.sampleRate ?: 44_100
-                withAudioIo(dispatchers, "RecordingSessionLatencyAudit.recordLiveOverdubSessionEnd") {
-                    recordingSessionLatencyAudit.recordLiveOverdubSessionEnd(
-                        sampleRateHz = sampleRateHz,
-                        capture = capture,
-                    )
-                }
-            }
-        },
-    )
-
-    private val scopePlaybackCoordinator =
-        ScopePlaybackCoordinator(
-            audioController = audioController,
-            dispatchers = dispatchers,
+            audioIoScope = audioIoScope,
+            audioEngineSession = audioEngineSession,
             sessionTransportGate = sessionTransportGate,
-            playheadPositionMs = playheadPositionMs,
-            playheadTransport = playheadTransport,
-            playbackSession = playbackSession,
-            transportController = transportController,
-            recordingSession = recordingSession,
-            playAndRecordTransport = playAndRecordTransport,
-            projectId = { projectId.value },
-            visibleTracks = { currentVisibleTracks() },
-            loadCurrentProject = { pid -> loadCurrentProject(pid) },
-            timelineVisibleDurationMs = { realtimeUiState.value.timelineVisibleDurationMs },
-            timelineBaseDurationMs = { structuralUiState.value.timelineBaseDurationMs },
-        )
-
-    private val playheadSeek =
-        ProjectPlayheadSeekCoordinator(
-            scope = viewModelScope,
-            playheadPositionMs = playheadPositionMs,
-            playheadTransport = playheadTransport,
-            playbackSession = playbackSession,
-            transportController = transportController,
-            recordingSession = recordingSession,
-            scopePlaybackCoordinator = scopePlaybackCoordinator,
+            recordingSessionLatencyAudit = recordingSessionLatencyAudit,
+            audioFilePathProvider = audioFilePathProvider,
+            recordingStorageGuard = recordingStorageGuard,
             projectId = { projectId.value },
             selectedTrackIds = { selectedTrackIds.value },
-        )
-
-    private val transportCommands =
-        ProjectTransportCommands(
-            audioController = audioController,
-            dispatchers = dispatchers,
-            sessionTransportGate = sessionTransportGate,
-            playheadPositionMs = playheadPositionMs,
-            playheadTransport = playheadTransport,
-            playbackSession = playbackSession,
-            recordingSession = recordingSession,
-            transportController = transportController,
-            playheadSeek = playheadSeek,
-            playAndRecordTransport = playAndRecordTransport,
-            projectId = { projectId.value },
-            selectedTrackIds = { selectedTrackIds.value },
+            recordTargetTrackId = { recordTargetTrackId.value },
             visibleTracks = { currentVisibleTracks() },
             visibleTrackCount = { structuralUiState.value.tracks.size },
-            recordTargetTrackId = { recordTargetTrackId.value },
             timelineVisibleDurationMs = { realtimeUiState.value.timelineVisibleDurationMs },
             timelineBaseDurationMs = { structuralUiState.value.timelineBaseDurationMs },
             loadCurrentProject = { pid -> loadCurrentProject(pid) },
             ensureProject = { pid, name -> ensureProject(pid, name) },
             persistRecordingRow = { track -> repo.upsertTracks(listOf(track)) },
             emitMessage = { resId -> emitMessage(resId) },
-            storagePrecheck = { project ->
-                val directoryPath = audioFilePathProvider.projectRecordingDirectory(project.id)
-                directoryPath != null && recordingStorageGuard.canStartRecording(directoryPath)
-            },
-            onRecordingStorageMonitorStart = { activeProjectId ->
-                if (!recordingStorageMonitorEnabledForTests) return@ProjectTransportCommands
-                val directoryPath = audioFilePathProvider.projectRecordingDirectory(activeProjectId)
-                if (directoryPath != null) {
-                    recordingStorageMonitor.start(
-                        projectDirectoryPath = directoryPath,
-                        isRecordingActive = { recordingSession.hasActiveRecordingTake() },
-                    ) {
-                        performStopRecordingForStorageExhaustion()
-                    }
-                }
-            },
-            onRecordingStorageMonitorStop = {
-                recordingStorageMonitor.stop()
-            },
             isImportInProgress = { structuralUiState.value.isImportInProgress },
+            boundProjectSampleRateHz = {
+                checkNotNull(resolvedProject.value) {
+                    "live overdub session end requires a bound project"
+                }.sampleRate
+            },
+            finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, stopSnapshot ->
+                finalizeRecordingTrack(trackId, stopSnapshot)
+            },
         )
+
+    internal val recordingSession: RecordingSessionController
+        get() = session.recordingSession
+    private val playbackSession: PlaybackSessionController
+        get() = session.playbackSession
+    private val playheadTransport: PlayheadTransportController
+        get() = session.playheadTransport
+    private val masterPeakController: MasterPeakController
+        get() = session.masterPeakController
+    private val playheadPositionMs: MutableStateFlow<Long>
+        get() = session.playheadPositionMs
+    private val playheadSeek: ProjectPlayheadSeekCoordinator
+        get() = session.playheadSeek
+    private val scopePlaybackCoordinator: ScopePlaybackCoordinator
+        get() = session.scopePlaybackCoordinator
 
     val userMessages = messages.receiveAsFlow()
     val openProjectRequests = openProjectRequestEvents.receiveAsFlow()
@@ -552,7 +444,7 @@ class ProjectViewModel @Inject constructor(
     val realtimeUiState: StateFlow<ProjectRealtimeUiState> =
         combine(
             playheadPositionMs,
-            audioController.recordingInputLevel,
+            meter.recordingInputLevel,
             masterPeakController.peakHoldLinear,
             structuralUiState,
             playheadTransport.phase,
@@ -561,7 +453,7 @@ class ProjectViewModel @Inject constructor(
                 when (transportPhase) {
                     TransportPlaybackPhase.Playing,
                     TransportPlaybackPhase.Recording,
-                    -> audioController.transportPositionMs().coerceAtLeast(0L)
+                    -> meter.transportPositionMs().coerceAtLeast(0L)
                     else -> playheadMs.coerceAtLeast(0L)
                 }
             buildProjectRealtimeUiState(
@@ -625,9 +517,6 @@ class ProjectViewModel @Inject constructor(
             optimisticTrackPans.value,
         )
 
-    private fun selectedPlayableTracks(): List<TrackEntity> =
-        activeMixScopePlayableTracks(currentVisibleTracks(), selectedTrackIds.value)
-
     /**
      * Wires repository/audio observation to [projectId] for this screen instance.
      *
@@ -642,15 +531,11 @@ class ProjectViewModel @Inject constructor(
             audioParameterQueue.clearPending()
             importSession.cancelAllJobsAndClear()
             importUiCoordinator.resetWhenProjectChanges()
-            transportController.resetPlaybackForProjectChange()
-            masterPeakController.resetDisplayAndNativeHold()
-            playheadSeek.resetWhenProjectChanges()
+            session.resetWhenBoundProjectChanges()
             optimisticTracks.value = null
             optimisticTrackGains.value = emptyMap()
             optimisticTrackPans.value = emptyMap()
             waveformPeaks.resetWhenProjectChanges()
-            recordingSession.resetWhenBoundProjectChanges()
-            recordingStorageMonitor.stop()
             selectedTrackIds.value = emptySet()
             recordTargetTrackId.value = null
         }
@@ -658,11 +543,11 @@ class ProjectViewModel @Inject constructor(
         this.projectId.value = projectId
         if (projectChanged) {
             withIo(dispatchers, "recoverStaleImports") {
-                recoverStaleImports(repo, projectId, importSession.jobs)
+                audioImportCoordinator.recoverStaleImports(projectId, importSession.jobs)
             }
         }
         withIo(dispatchers, "bind awaitProjectTracksSynced") {
-            awaitProjectTracksSynced(repo, projectTracks, projectId)
+            audioImportCoordinator.awaitObservedTracksSynced(projectId, projectTracks)
         }
         tryStartRegistryPendingCompressedImport(projectId)
         waveformPeakRefreshEnabled = true
@@ -724,19 +609,19 @@ class ProjectViewModel @Inject constructor(
         playheadSeek.restartPlaybackFromPlayheadAfterSeekDrag()
 
     internal fun setPlayheadNativePollEnabledForTests(enabled: Boolean) {
-        playheadTransport.nativePollEnabled = enabled
+        session.setPlayheadNativePollEnabledForTests(enabled)
     }
 
     internal fun setRecordingStorageMonitorEnabledForTests(enabled: Boolean) {
-        recordingStorageMonitorEnabledForTests = enabled
+        session.setRecordingStorageMonitorEnabledForTests(enabled)
     }
 
     internal fun setMasterPeakPollEnabledForTests(enabled: Boolean) {
-        masterPeakController.setPollEnabledForTests(enabled)
+        session.setMasterPeakPollEnabledForTests(enabled)
     }
 
     internal fun advancePlayheadNativeTransportForTests(positionMs: Long) {
-        playheadTransport.setNativeTransportPositionForTests(positionMs)
+        session.advancePlayheadNativeTransportForTests(positionMs)
     }
 
     internal fun setSelectedTrackIdsForTests(ids: Set<String>) {
@@ -1106,7 +991,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun onRecordPressed(projectId: String, projectName: String = "New Project") {
-        transportCommands.onRecordPressed(projectId, projectName)
+        session.onRecordPressed(projectId, projectName)
     }
 
     fun onPlayPressed() {
@@ -1114,10 +999,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     internal suspend fun performPlayPressed() {
-        if (playheadTransport.phase.value == TransportPlaybackPhase.Idle) {
-            masterPeakController.resetDisplayAndNativeHold()
-        }
-        transportCommands.performPlayPressed()
+        session.performPlayPressed()
     }
 
     /** Pause during playback; stop while paused resets playhead; recording still uses full [ProjectTransportController.stopAll]. */
@@ -1126,51 +1008,24 @@ class ProjectViewModel @Inject constructor(
     }
 
     internal suspend fun performStopPressed() {
-        transportCommands.performStopPressed()
-        if (playheadTransport.phase.value == TransportPlaybackPhase.Idle) {
-            masterPeakController.resetDisplayAndNativeHold()
-        }
+        session.performStopPressed()
     }
 
     fun onMasterPeakIndicatorClicked() {
-        masterPeakController.onIndicatorClicked()
+        session.onMasterPeakIndicatorClicked()
     }
 
     internal suspend fun performStopRecordingForStorageExhaustion() {
-        if (!recordingSession.hasActiveRecordingTake()) return
-        recordingStorageMonitor.stop()
-        transportController.stopAll()
-        masterPeakController.resetDisplayAndNativeHold()
-        playheadTransport.stopAndResetToZero()
-        emitMessage(R.string.error_recording_stopped_storage)
+        session.performStopRecordingForStorageExhaustion()
     }
 
     override fun onCleared() {
-        recordingStorageMonitor.stop()
-        if (!engineSessionAcquired) {
-            super.onCleared()
-            return
-        }
-        engineSessionAcquired = false
-        audioIoScope.scope.launch {
-            transportController.stopAll()
-            audioEngineSession.release {
-                withAudioIo(dispatchers, "AudioController.release") {
-                    audioController.release()
-                }
-            }
-            withContext(dispatchers.main) {
-                playheadTransport.stopAndResetToZero()
-                masterPeakController.clearDisplayOnTeardown()
-            }
-        }
+        session.releaseOnCleared()
         super.onCleared()
     }
 
     private suspend fun ensureEngineSessionAcquired() {
-        if (engineSessionAcquired) return
-        audioEngineSession.acquire()
-        engineSessionAcquired = true
+        session.ensureEngineSessionAcquired()
     }
 
     private fun finalizeRecordingTrack(trackId: String, stopSnapshot: com.georgv.audioworkstation.core.audio.RecordingStopSnapshot) {

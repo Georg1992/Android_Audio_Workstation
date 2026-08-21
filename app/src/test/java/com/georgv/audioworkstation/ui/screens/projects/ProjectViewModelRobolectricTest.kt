@@ -5,8 +5,9 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.georgv.audioworkstation.R
-import com.georgv.audioworkstation.core.audio.capability.testSessionTransportCapabilityGate
-import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.audio.FakeAudioController
+import com.georgv.audioworkstation.core.session.PendingCompressedImportRegistry
+import com.georgv.audioworkstation.core.session.ProjectRecordingCoordinator
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportResult
 import com.georgv.audioworkstation.core.audio.AudioImportSource
@@ -24,6 +25,7 @@ import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
+import com.georgv.audioworkstation.core.audio.capability.testSessionTransportCapabilityGate
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.audio.WavPunchSplicer
 import com.georgv.audioworkstation.data.db.AppDatabase
@@ -243,6 +245,8 @@ class ProjectViewModelRobolectricTest {
         return ProjectViewModel(
             repo,
             audio,
+            audio,
+            audio,
             testProjectAudioImportCoordinator(repo, audioFilePathProvider),
             PendingCompressedImportRegistry(),
             ProjectRecordingCoordinator(repo, audio, audioFilePathProvider, WavPunchSplicer(), testDispatchers),
@@ -275,39 +279,7 @@ class ProjectViewModelRobolectricTest {
     )
 }
 
-private class NoOpAudioControllerForRobolectric : AudioController {
-    override val playbackState = MutableStateFlow(false)
-    override val recordingInputLevel = MutableStateFlow(0f)
-    override fun readMasterPeakHoldLinear(): Float = 0f
-
-    override fun resetMasterPeakHold() = Unit
-    override fun transportPositionMs(): Long = 0L
-    override fun isPlaybackEngineRunning(): Boolean = playbackState.value
-    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
-    override fun stopRecording(): Boolean = true
-    override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
-    override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
-    override fun setPlaybackLanePan(laneIndex: Int, pan: Float) = Unit
-    override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
-    override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
-    override fun beginHotJoinLane(
-        wavFilePath: String,
-        gain: Float,
-        timelineClipStartMs: Long,
-        timelineClipDurationMs: Long,
-        loopEnabled: Boolean,
-        loopSourceStartMs: Long,
-        loopSourceEndMs: Long,
-        sourceTrimStartMs: Long,
-        pan: Float,
-    ): Int = -1
-    override fun cancelHotJoinLane(laneIndex: Int) = Unit
-    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
-        PlaybackLaneLifecycle.Inactive
-    override fun stopPlayback(): Boolean = true
-
-    override fun release() = Unit
-}
+private class NoOpAudioControllerForRobolectric : FakeAudioController(startPlaybackResult = false)
 
 
 private class NullablePathAudioFileProvider(

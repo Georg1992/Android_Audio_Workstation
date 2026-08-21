@@ -1,8 +1,8 @@
 package com.georgv.audioworkstation.core.track
 
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
-import com.georgv.audioworkstation.ui.screens.projects.TransportPlaybackPhase
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.core.session.TransportPlaybackPhase
 import com.georgv.audioworkstation.ui.screens.projects.buildProjectRealtimeUiState
 import org.junit.Assert.assertEquals
 import org.junit.Test

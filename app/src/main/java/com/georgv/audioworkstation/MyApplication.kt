@@ -5,8 +5,8 @@ import android.content.pm.ApplicationInfo
 import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
 import com.georgv.audioworkstation.ui.components.TimelineGeometryDebug
 import com.georgv.audioworkstation.ui.diagnostics.ComposeTimingDiagnostics
-import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
-import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.screens.library.LibraryDiagnostics

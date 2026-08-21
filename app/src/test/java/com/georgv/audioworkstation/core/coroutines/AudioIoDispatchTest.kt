@@ -3,10 +3,10 @@ package com.georgv.audioworkstation.core.coroutines
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.screens.projects.FakeAudioController
-import com.georgv.audioworkstation.ui.screens.projects.FakeProjectDao
-import com.georgv.audioworkstation.ui.screens.projects.NoopProjectFileStore
-import com.georgv.audioworkstation.ui.screens.projects.RecordingStartOutcome
+import com.georgv.audioworkstation.core.audio.FakeAudioController
+import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
+import com.georgv.audioworkstation.core.audio.NoopProjectFileStore
+import com.georgv.audioworkstation.core.session.RecordingStartOutcome
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher

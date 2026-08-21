@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -90,7 +91,7 @@ fun TrackCard(
     pan: Float = 0f,
     onPanChange: ((Float) -> Unit)? = null,
     onPanCommit: ((Float) -> Unit)? = null,
-    /** When false, timeline lane is hidden (legacy staged mount; Project screen keeps this true). */
+    /** When false, the timeline lane stays hidden until the project screen is ready to reveal. */
     showWaveforms: Boolean = true,
     onClick: () -> Unit,
     onDelete: () -> Unit,

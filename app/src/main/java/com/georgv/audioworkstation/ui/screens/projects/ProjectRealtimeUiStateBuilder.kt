@@ -1,10 +1,11 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import com.georgv.audioworkstation.core.audio.MasterPeakMeter
-import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.core.session.TransportPlaybackPhase
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadClampedPositionMs
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
 import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
-import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
 import com.georgv.audioworkstation.ui.components.visibleTimelineDurationMs
 
 internal fun buildProjectRealtimeUiState(

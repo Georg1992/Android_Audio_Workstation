@@ -76,8 +76,7 @@ class PlaybackTransportSyncTest {
 
     private class FakeLatencyAudioController(
         private val liveOutputLatencyNs: Long,
-    ) : AudioController {
-        override val playbackState = MutableStateFlow(false)
+    ) : MeterPort {
         override val recordingInputLevel = MutableStateFlow(0f)
 
         override fun liveOutputLatencyNs(): Long = liveOutputLatencyNs
@@ -88,41 +87,8 @@ class PlaybackTransportSyncTest {
 
         override fun transportPositionMs(): Long = 0L
 
-        override fun isPlaybackEngineRunning(): Boolean = false
+        override fun transportStartFrame(): Long = 0L
 
-        override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
-
-        override fun stopRecording(): Boolean = true
-
-        override fun startPlayback(spec: MultiPlaybackSpec): Boolean = true
-
-        override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
-
-        override fun setPlaybackLanePan(laneIndex: Int, pan: Float) = Unit
-
-        override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) = Unit
-
-        override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) = Unit
-
-        override fun beginHotJoinLane(
-            wavFilePath: String,
-            gain: Float,
-            timelineClipStartMs: Long,
-            timelineClipDurationMs: Long,
-            loopEnabled: Boolean,
-            loopSourceStartMs: Long,
-            loopSourceEndMs: Long,
-            sourceTrimStartMs: Long,
-            pan: Float,
-        ): Int = -1
-
-        override fun cancelHotJoinLane(laneIndex: Int) = Unit
-
-        override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
-            PlaybackLaneLifecycle.Inactive
-
-        override fun stopPlayback(): Boolean = true
-
-        override fun release() = Unit
+        override fun transportFrame(): Long = 0L
     }
 }

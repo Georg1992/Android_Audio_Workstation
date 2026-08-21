@@ -1,12 +1,15 @@
 package com.georgv.audioworkstation.core.audio.di
 
-import com.georgv.audioworkstation.core.audio.AudioController
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImporter
-import com.georgv.audioworkstation.core.audio.DelegatingAudioImporter
+import com.georgv.audioworkstation.core.audio.CapturePort
 import com.georgv.audioworkstation.core.audio.DefaultAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.DefaultProjectFileStore
+import com.georgv.audioworkstation.core.audio.DelegatingAudioImporter
+import com.georgv.audioworkstation.core.audio.MeterPort
+import com.georgv.audioworkstation.core.audio.MixdownPort
 import com.georgv.audioworkstation.core.audio.NativeAudioController
+import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.StatFsRecordingStorageFsQuery
@@ -35,9 +38,27 @@ abstract class AudioModule {
 
     @Binds
     @Singleton
-    abstract fun bindAudioController(
-        controller: NativeAudioController
-    ): AudioController
+    abstract fun bindPlaybackPort(
+        controller: NativeAudioController,
+    ): PlaybackPort
+
+    @Binds
+    @Singleton
+    abstract fun bindCapturePort(
+        controller: NativeAudioController,
+    ): CapturePort
+
+    @Binds
+    @Singleton
+    abstract fun bindMixdownPort(
+        controller: NativeAudioController,
+    ): MixdownPort
+
+    @Binds
+    @Singleton
+    abstract fun bindMeterPort(
+        controller: NativeAudioController,
+    ): MeterPort
 
     @Binds
     @Singleton

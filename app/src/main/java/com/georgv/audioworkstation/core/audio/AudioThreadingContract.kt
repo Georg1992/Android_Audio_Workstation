@@ -9,7 +9,7 @@ package com.georgv.audioworkstation.core.audio
  * - Must not call JNI, Oboe lifecycle, file I/O, or Room.
  *
  * ## [com.georgv.audioworkstation.core.coroutines.AppDispatchers.audioIo]
- * - Native engine lifecycle: acquire/release session, [com.georgv.audioworkstation.core.audio.AudioController.release].
+ * - Native engine lifecycle: acquire/release session, [com.georgv.audioworkstation.core.audio.PlaybackPort.release].
  * - Transport: start/stop playback, start/stop recording, seek/restart that arms native lanes.
  * - Hot-join lane prepare/commit/cancel, lane audibility batch updates during transport.
  * - Native peak reset and other session-scoped native mutations (non-live-parameter).
@@ -32,6 +32,6 @@ package com.georgv.audioworkstation.core.audio
  * - No mutex, no allocation, no file I/O, no JNI.
  * - Reads live gain/pan/audibility via atomics only.
  *
- * Debug builds may log Main-thread native lifecycle violations via [com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics].
+ * Debug builds may log Main-thread native lifecycle violations via [com.georgv.audioworkstation.core.diagnostics.ThreadingDiagnostics].
  */
 object AudioThreadingContract

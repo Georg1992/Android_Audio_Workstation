@@ -1,7 +1,9 @@
 package com.georgv.audioworkstation.ui.components
 
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.core.track.activeMixScopeTrackIds
 import com.georgv.audioworkstation.core.track.effectiveTimelineEndMs
+import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlin.math.max
 
 /** In-progress take on the shared project timeline (not yet a finalized playable clip). */
@@ -45,7 +47,7 @@ fun buildProjectTimelineProjection(
 ): ProjectTimelineProjection {
     val persistedClips = projectTimelineClips(tracks, waveformStatesByTrackId, importProgressByTrackId)
     val scopeTrackIds =
-        timelineScopeTrackIds(
+        activeMixScopeTrackIds(
             selectedTrackIds = selectedTrackIds,
             activeRecordingTrackId = activeRecording?.trackId,
         )
@@ -104,18 +106,6 @@ fun timelineScopeClips(
     if (scopeTrackIds.isEmpty()) return emptyList()
     return clips.filter { clip -> clip.laneId in scopeTrackIds }
 }
-
-/** Selected lanes plus the active recording row (when present) define global timeline scope. */
-fun timelineScopeTrackIds(
-    selectedTrackIds: Set<String>,
-    activeRecordingTrackId: String? = null,
-): Set<String> =
-    buildSet {
-        addAll(selectedTrackIds)
-        if (activeRecordingTrackId != null) {
-            add(activeRecordingTrackId)
-        }
-    }
 
 /** Base timeline from persisted clips only (no in-flight recording row, no playhead). */
 fun timelineBaseDurationMsFromClips(clips: List<TimelineClip>): Long {
@@ -181,39 +171,6 @@ fun sessionTimelineEndMsForTracks(tracks: List<TrackEntity>): Long {
     val furthestClipEndMs =
         tracks.maxOfOrNull { track -> track.effectiveTimelineEndMs() } ?: 0L
     return furthestClipEndMs.coerceAtLeast(TimelineMinimumBaseDurationMs)
-}
-
-/** Offline mixdown always renders from timeline 0:00. */
-const val MixdownTimelineStartMs = 0L
-
-/**
- * Furthest idle timeline boundary for mixdown — matches selection-scoped
- * [ProjectTimelineProjection.baseTimelineDurationMs].
- */
-fun mixdownTimelineEndMs(
-    tracks: List<TrackEntity>,
-    selectedTrackIds: Set<String>,
-): Long =
-    timelineBaseDurationMsFromClips(
-        timelineScopeClips(
-            projectTimelineClips(tracks, emptyMap(), emptyMap()),
-            selectedTrackIds,
-        ),
-    )
-
-/**
- * Open-ended native playback when any selected lane loops (mixed or all-loop sessions).
- */
-fun hasOpenEndedPlaybackSession(tracks: List<TrackEntity>): Boolean = tracks.any { it.isLoop }
-
-/** Allow starting/restarting playback at the base timeline end when any lane loops. */
-fun playbackStartAllowedAtPlayhead(
-    startPositionMs: Long,
-    timelineBaseDurationMs: Long,
-    tracks: List<TrackEntity>,
-): Boolean {
-    if (timelineBaseDurationMs <= 0L || startPositionMs < timelineBaseDurationMs) return true
-    return hasOpenEndedPlaybackSession(tracks)
 }
 
 /**

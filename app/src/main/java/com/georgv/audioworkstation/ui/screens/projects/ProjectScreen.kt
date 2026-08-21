@@ -73,7 +73,7 @@ import com.georgv.audioworkstation.ui.drag.DragController
 import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
-import com.georgv.audioworkstation.ui.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import androidx.compose.runtime.SideEffect
 import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel

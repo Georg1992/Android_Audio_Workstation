@@ -1,6 +1,6 @@
 package com.georgv.audioworkstation.core.coroutines
 
-import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.ThreadingDiagnostics
 import kotlinx.coroutines.withContext
 
 suspend fun <T> withAudioIo(

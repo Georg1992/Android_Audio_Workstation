@@ -14,7 +14,7 @@ value class AudibleMs(val value: Long) {
 }
 
 /**
- * Native mix transport position — raw engine clock from [AudioController.transportPositionMs].
+ * Native mix transport position — raw engine clock from [MeterPort.transportPositionMs].
  * Used for arm/seek/rebuild and in-clip waveform source mapping.
  */
 @JvmInline

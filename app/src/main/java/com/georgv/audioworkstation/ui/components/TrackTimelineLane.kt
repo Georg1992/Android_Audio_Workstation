@@ -56,15 +56,13 @@ import com.georgv.audioworkstation.core.track.trackLocalPlayheadVisibleInClip
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMs
 import com.georgv.audioworkstation.core.track.trackSourcePlayheadMsForClipTimelineWindow
 import com.georgv.audioworkstation.core.audio.waveform.WaveformPeaks
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.max
 import kotlin.math.min
 
-/** Viewport/ruler sanity cap for playback scrub and layout — not a recording duration limit. */
-const val TimelineMaxDurationMs = 10 * 60 * 1000L
-const val TimelineMinimumBaseDurationMs = 1L
 const val TimelineClipMinimumWidthDp = 3f
 const val TimelineMetadataWidthFraction = 0.12f
 const val TimelineWaveformWidthFraction = 1f - TimelineMetadataWidthFraction

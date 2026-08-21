@@ -1,7 +1,7 @@
 package com.georgv.audioworkstation.core.track
 
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.TimelineMaxDurationMs
+import com.georgv.audioworkstation.core.timeline.TimelineMaxDurationMs
 import kotlin.math.max
 
 /** Track-local trim start (ms from WAV start). */

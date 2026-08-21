@@ -1,5 +1,8 @@
 package com.georgv.audioworkstation.ui.components
 
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadClampedPositionMs
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadFraction
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadPositionMs
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

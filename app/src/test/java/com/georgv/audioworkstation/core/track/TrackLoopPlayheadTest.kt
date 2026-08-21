@@ -10,7 +10,7 @@ import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForPlayback
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
 import com.georgv.audioworkstation.ui.components.shouldExtendVisibleTimelineForAllLoopedPlayback
 import com.georgv.audioworkstation.ui.components.timelineClipEffectiveTimelineEndMs
-import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadClampedPositionMs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

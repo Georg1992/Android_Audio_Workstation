@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.Choreographer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import com.georgv.audioworkstation.core.diagnostics.NavEnterUptime
 
 /** Temporary debug diagnostics for navigation performance (enabled in debug builds). */
 object NavTransitionDiagnostics {
@@ -20,13 +21,9 @@ object NavTransitionDiagnostics {
     private var lastFrameUptimeMs: Long = 0L
     private var maxFrameGapMs: Long = 0L
     private var slowFrameCount: Int = 0
-    private var lastTransitionEnterStartUptimeMs: Long = 0L
 
     /** Milliseconds since the last forward/back enter transition started, or -1 if none. */
-    fun millisSinceLastTransitionEnterStart(): Long {
-        if (lastTransitionEnterStartUptimeMs == 0L) return -1L
-        return SystemClock.uptimeMillis() - lastTransitionEnterStartUptimeMs
-    }
+    fun millisSinceLastTransitionEnterStart(): Long = NavEnterUptime.millisSinceLastEnterStart()
 
     /** Largest inter-frame gap (ms) observed in the current/recent nav frame monitor window. */
     fun peekMaxFrameGapMs(): Long = maxFrameGapMs
@@ -62,7 +59,7 @@ object NavTransitionDiagnostics {
 
     fun logTransitionEnterStart(kind: String, fromRoute: String?, toRoute: String?) {
         if (!loggingEnabled) return
-        lastTransitionEnterStartUptimeMs = SystemClock.uptimeMillis()
+        NavEnterUptime.markEnterStart(SystemClock.uptimeMillis())
         Log.d(
             TAG,
             "transition enter start kind=$kind durationMs=$NavTransitionDurationMs " +

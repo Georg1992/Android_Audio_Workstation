@@ -3,8 +3,8 @@ package com.georgv.audioworkstation.core.audio
 import com.georgv.audioworkstation.core.track.selectedPlayableTracks
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.mixdownTimelineEndMs
-import com.georgv.audioworkstation.ui.diagnostics.TransportFrameDiagnostics
+import com.georgv.audioworkstation.core.audio.mixdownTimelineEndMs
+import com.georgv.audioworkstation.core.diagnostics.TransportFrameDiagnostics
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,7 +26,7 @@ sealed class OfflineMixdownResult {
  */
 @Singleton
 class ProjectOfflineMixdownRenderer @Inject constructor(
-    private val audioController: AudioController,
+    private val mixdown: MixdownPort,
 ) {
 
     suspend fun render(
@@ -57,7 +57,7 @@ class ProjectOfflineMixdownRenderer @Inject constructor(
 
         return when (
             val result =
-                audioController.renderOfflineMixdown(
+                mixdown.renderOfflineMixdown(
                     spec = spec,
                     outputPath = outputPath,
                     onProgress = onProgress,

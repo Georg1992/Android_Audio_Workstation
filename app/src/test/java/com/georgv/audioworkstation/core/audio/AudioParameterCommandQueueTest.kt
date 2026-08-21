@@ -12,7 +12,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AudioParameterCommandQueueTest {
 
-    private class RecordingAudioController : AudioController by FakeMinimalAudioController() {
+    private class RecordingAudioController : PlaybackPort by FakeMinimalAudioController() {
         val gainCalls = mutableListOf<Pair<Int, Float>>()
         val panCalls = mutableListOf<Pair<Int, Float>>()
 
@@ -119,15 +119,9 @@ class AudioParameterCommandQueueTest {
 }
 
 /** Minimal stub — only gain/pan are exercised in this test class. */
-private open class FakeMinimalAudioController : AudioController {
+private open class FakeMinimalAudioController : PlaybackPort {
     override val playbackState = kotlinx.coroutines.flow.MutableStateFlow(false)
-    override val recordingInputLevel = kotlinx.coroutines.flow.MutableStateFlow(0f)
-    override fun readMasterPeakHoldLinear(): Float = 0f
-    override fun resetMasterPeakHold() = Unit
-    override fun transportPositionMs(): Long = 0L
     override fun isPlaybackEngineRunning(): Boolean = false
-    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? = null
-    override fun stopRecording(): Boolean = true
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean = false
     override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) = Unit
     override fun setPlaybackLanePan(laneIndex: Int, pan: Float) = Unit
@@ -147,6 +141,7 @@ private open class FakeMinimalAudioController : AudioController {
     override fun cancelHotJoinLane(laneIndex: Int) = Unit
     override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
         PlaybackLaneLifecycle.Inactive
+    override fun rearmOverdubPlaybackDuringRecording(spec: MultiPlaybackSpec): Boolean = false
     override fun stopPlayback(): Boolean = true
     override fun release() = Unit
 }

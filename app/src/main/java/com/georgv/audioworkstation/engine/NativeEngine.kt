@@ -1,6 +1,6 @@
 package com.georgv.audioworkstation.engine
 
-import com.georgv.audioworkstation.ui.diagnostics.AudioSyncLogConfig
+import com.georgv.audioworkstation.core.diagnostics.AudioSyncLogConfig
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle

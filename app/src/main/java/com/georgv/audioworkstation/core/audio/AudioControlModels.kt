@@ -102,7 +102,7 @@ data class RecordingSpec(
     }
 }
 
-/** Native transport + capture metrics read after [AudioController.stopRecording] succeeds. */
+/** Native transport + capture metrics read after [CapturePort.stopRecording] succeeds. */
 data class RecordingStopSnapshot(
     val firstSampleTransportPositionMs: Long,
     val capturedFrameCount: Long,

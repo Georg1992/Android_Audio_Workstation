@@ -9,9 +9,9 @@ import com.georgv.audioworkstation.core.coroutines.checkNotMainThreadForNativeLi
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.engine.NativeEngine
 import com.georgv.audioworkstation.engine.NativeMixdownStatus
-import com.georgv.audioworkstation.ui.diagnostics.ThreadingDiagnostics
-import com.georgv.audioworkstation.ui.diagnostics.PlaybackStartupTrace
-import com.georgv.audioworkstation.ui.diagnostics.TransportFrameDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.ThreadingDiagnostics
+import com.georgv.audioworkstation.core.diagnostics.PlaybackStartupTrace
+import com.georgv.audioworkstation.core.diagnostics.TransportFrameDiagnostics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,9 +26,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * JNI-backed [AudioController]. After [startPlayback] succeeds, [playbackState] is updated from a
- * background poll of [NativeEngine.isPlaybackActive]. Screen code may also observe the same flow
- * for sequencing (for example playback completion)—keep behavior aligned if either side changes.
+ * JNI-backed playback, capture, mixdown, and meter ports. After [startPlayback] succeeds,
+ * [playbackState] is updated from a background poll of [NativeEngine.isPlaybackActive].
  */
 @Singleton
 class NativeAudioController @Inject constructor(
@@ -37,7 +36,7 @@ class NativeAudioController @Inject constructor(
     private val audioFilePathProvider: AudioFilePathProvider,
     private val dispatchers: AppDispatchers,
     private val sessionTransportGate: SessionTransportCapabilityGate,
-) : AudioController {
+) : PlaybackPort, CapturePort, MixdownPort, MeterPort {
 
     private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var monitorJob: Job? = null
@@ -97,6 +96,14 @@ class NativeAudioController @Inject constructor(
         checkNotMainThreadForNativeLifecycle("sessionPerceivedPlaybackOffsetMs")
         return nativeEngine.sessionPerceivedPlaybackOffsetMs()
     }
+
+    override fun readRecordingStopSnapshot(): RecordingStopSnapshot =
+        RecordingStopSnapshot(
+            firstSampleTransportPositionMs = recordingFirstSampleTransportPositionMs(),
+            capturedFrameCount = recordingCapturedFrameCount(),
+            capturedDurationMs = recordingCapturedDurationMs(),
+            sessionPerceivedPlaybackOffsetMs = sessionPerceivedPlaybackOffsetMs(),
+        )
 
     override fun liveOutputLatencyNs(): Long {
         checkNotMainThreadForNativeLifecycle("liveOutputLatencyNs")

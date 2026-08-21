@@ -9,7 +9,7 @@ import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.components.mixdownTimelineEndMs
+import com.georgv.audioworkstation.core.audio.mixdownTimelineEndMs
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,7 +34,7 @@ class ProjectMixdownCoordinator @Inject constructor(
     private val audioFilePathProvider: AudioFilePathProvider,
     private val offlineMixdownRenderer: ProjectOfflineMixdownRenderer,
     private val mixdownOutputValidator: MixdownOutputValidator,
-    private val audioController: AudioController,
+    private val mixdown: MixdownPort,
     private val dispatchers: AppDispatchers,
     private val audioIoScope: AudioIoScope,
 ) {
@@ -99,7 +99,7 @@ class ProjectMixdownCoordinator @Inject constructor(
             )
         }
         activeJobs.remove(projectId)?.cancel()
-        audioController.cancelOfflineMixdown()
+        mixdown.cancelOfflineMixdown()
         val job =
             audioIoScope.scope.launch(dispatchers.io) {
                 runMixdown(projectId, selectedTrackIds)
@@ -111,7 +111,7 @@ class ProjectMixdownCoordinator @Inject constructor(
 
     fun clearProject(projectId: String) {
         activeJobs.remove(projectId)?.cancel()
-        audioController.cancelOfflineMixdown()
+        mixdown.cancelOfflineMixdown()
         mixdownByProjectId.update { current -> current - projectId }
     }
 
@@ -212,7 +212,7 @@ class ProjectMixdownCoordinator @Inject constructor(
     }
 
     private fun handleMixdownCancellation(projectId: String) {
-        audioController.cancelOfflineMixdown()
+        mixdown.cancelOfflineMixdown()
         mixdownByProjectId.update { current ->
             val existing = current[projectId] ?: return@update current - projectId
             if (existing.isMixing) {

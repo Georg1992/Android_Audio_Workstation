@@ -20,19 +20,19 @@ object PlaybackTransportSync {
         }
 
     /** Live HAL ms when valid; otherwise 0 (no render-ahead on either side). */
-    fun effectiveOutputLatencyMsForUiSync(controller: AudioController): Double {
-        val liveNs = controller.liveOutputLatencyNs()
+    fun effectiveOutputLatencyMsForUiSync(meter: MeterPort): Double {
+        val liveNs = meter.liveOutputLatencyNs()
         if (liveNs <= LiveOutputLatencyUnsetNs) {
             return 0.0
         }
         return liveNs / LatencyTimeConstants.NanosecondsPerMillisecond
     }
 
-    fun mixTransportMs(controller: AudioController, audiblePlayheadMs: AudibleMs): MixTransportMs =
-        mixTransportMs(audiblePlayheadMs, effectiveOutputLatencyMsForUiSync(controller))
+    fun mixTransportMs(meter: MeterPort, audiblePlayheadMs: AudibleMs): MixTransportMs =
+        mixTransportMs(audiblePlayheadMs, effectiveOutputLatencyMsForUiSync(meter))
 
-    fun audiblePlayheadMs(controller: AudioController, mixTransportMs: MixTransportMs): AudibleMs =
-        audiblePlayheadMs(mixTransportMs, effectiveOutputLatencyMsForUiSync(controller))
+    fun audiblePlayheadMs(meter: MeterPort, mixTransportMs: MixTransportMs): AudibleMs =
+        audiblePlayheadMs(mixTransportMs, effectiveOutputLatencyMsForUiSync(meter))
 
     fun mixTransportMs(audiblePlayheadMs: AudibleMs, outputLatencyMs: Double): MixTransportMs =
         MixTransportMs(
@@ -47,8 +47,8 @@ object PlaybackTransportSync {
     fun mixTransportMsFromRaw(rawMixTransportMs: Long): MixTransportMs =
         MixTransportMs(rawMixTransportMs.coerceAtLeast(0L))
 
-    fun audiblePlayheadMsFromRaw(controller: AudioController, rawMixTransportMs: Long): AudibleMs =
-        audiblePlayheadMs(controller, mixTransportMsFromRaw(rawMixTransportMs))
+    fun audiblePlayheadMsFromRaw(meter: MeterPort, rawMixTransportMs: Long): AudibleMs =
+        audiblePlayheadMs(meter, mixTransportMsFromRaw(rawMixTransportMs))
 }
 
 /** Converts audible start intent to native mix transport for engine arm/seek. */

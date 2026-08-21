@@ -55,22 +55,6 @@ fun timelineXToMs(
     return (fraction * timelineDurationMs.toFloat()).roundToLong()
 }
 
-fun timelinePlayheadFraction(positionMs: Long, timelineDurationMs: Long): Float {
-    if (timelineDurationMs <= 0L) return 0f
-    return (positionMs.toFloat() / timelineDurationMs.toFloat()).coerceIn(0f, 1f)
-}
-
-fun timelinePlayheadPositionMs(fraction: Float, timelineDurationMs: Long): Long {
-    if (timelineDurationMs <= 0L) return 0L
-    return (fraction.coerceIn(0f, 1f) * timelineDurationMs.toFloat()).roundToLong()
-}
-
-fun timelinePlayheadClampedPositionMs(positionMs: Long, timelineDurationMs: Long): Long =
-    timelinePlayheadPositionMs(
-        timelinePlayheadFraction(positionMs, timelineDurationMs),
-        timelineDurationMs,
-    )
-
 fun timelinePlayheadFractionFromWaveformX(
     xPx: Float,
     waveformTimelineWidthPx: Float,

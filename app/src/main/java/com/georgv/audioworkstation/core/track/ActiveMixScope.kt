@@ -3,7 +3,6 @@ package com.georgv.audioworkstation.core.track
 import com.georgv.audioworkstation.core.audio.MixTransportMs
 import com.georgv.audioworkstation.core.audio.sessionPlaybackSchedulingEndMsForPlayback
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.timelineScopeTrackIds
 
 /**
  * Active mix scope: selected tracks plus the active recording row (when present).
@@ -13,10 +12,12 @@ fun activeMixScopeTrackIds(
     selectedTrackIds: Set<String>,
     activeRecordingTrackId: String? = null,
 ): Set<String> =
-    timelineScopeTrackIds(
-        selectedTrackIds = selectedTrackIds,
-        activeRecordingTrackId = activeRecordingTrackId,
-    )
+    buildSet {
+        addAll(selectedTrackIds)
+        if (activeRecordingTrackId != null) {
+            add(activeRecordingTrackId)
+        }
+    }
 
 /** Playable lanes in scope for playback / mixdown (selection only; recording row excluded). */
 fun activeMixScopePlayableTracks(

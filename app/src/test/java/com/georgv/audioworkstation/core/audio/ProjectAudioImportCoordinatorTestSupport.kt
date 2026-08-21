@@ -5,7 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.screens.projects.ProjectAudioImportCoordinator
+import com.georgv.audioworkstation.core.session.ProjectAudioImportCoordinator
 import java.io.File
 
 internal fun testProjectAudioImportCoordinator(

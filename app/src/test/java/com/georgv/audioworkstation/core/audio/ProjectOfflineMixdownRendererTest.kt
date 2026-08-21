@@ -2,8 +2,8 @@ package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.mixdownTimelineEndMs
-import com.georgv.audioworkstation.ui.screens.projects.FakeAudioController
+import com.georgv.audioworkstation.core.audio.mixdownTimelineEndMs
+import com.georgv.audioworkstation.core.audio.FakeAudioController
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,7 +25,7 @@ class ProjectOfflineMixdownRendererTest {
         )
         val outputPath = File(projectDir, "mixdown.wav").absolutePath
         val audioController =
-            object : AudioController by FakeAudioController() {
+            object : MixdownPort by FakeAudioController() {
                 override suspend fun renderOfflineMixdown(
                     spec: MultiPlaybackSpec,
                     outputPath: String,
@@ -72,7 +72,7 @@ class ProjectOfflineMixdownRendererTest {
         writeConstantPcm16Wav(file = trackBPath, sampleValue = 700, frameCount = 100, sampleRateHz = 44_100)
         val outputPath = File(projectDir, "mixdown.wav").absolutePath
         val audioController =
-            object : AudioController by FakeAudioController() {
+            object : MixdownPort by FakeAudioController() {
                 override suspend fun renderOfflineMixdown(
                     spec: MultiPlaybackSpec,
                     outputPath: String,
@@ -130,7 +130,7 @@ class ProjectOfflineMixdownRendererTest {
         )
         val outputPath = File(projectDir, "mixdown.wav").absolutePath
         val audioController =
-            object : AudioController by FakeAudioController() {
+            object : MixdownPort by FakeAudioController() {
                 override suspend fun renderOfflineMixdown(
                     spec: MultiPlaybackSpec,
                     outputPath: String,

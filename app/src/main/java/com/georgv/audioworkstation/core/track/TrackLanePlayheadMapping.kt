@@ -1,6 +1,6 @@
 package com.georgv.audioworkstation.core.track
 
-import com.georgv.audioworkstation.ui.components.TimelineMinimumBaseDurationMs
+import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
 
 /**
  * Timeline duration for the lane-level global playhead overlay (non-loop, timeline mode).

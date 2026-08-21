@@ -16,7 +16,7 @@ import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.screens.projects.FakeAudioController
+import com.georgv.audioworkstation.core.audio.FakeAudioController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -214,7 +214,7 @@ class LibraryViewModelTest {
             audioFilePathProvider = paths,
             offlineMixdownRenderer = ProjectOfflineMixdownRenderer(FakeAudioController()),
             mixdownOutputValidator = MixdownOutputValidator(),
-            audioController = FakeAudioController(),
+            mixdown = FakeAudioController(),
             dispatchers = TestAppDispatchers(),
             audioIoScope = AudioIoScope(TestAppDispatchers()),
         )

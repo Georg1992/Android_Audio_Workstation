@@ -1,7 +1,7 @@
 package com.georgv.audioworkstation.core.audio
 
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
-import com.georgv.audioworkstation.ui.components.timelinePlayheadClampedPositionMs
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadClampedPositionMs
 
 /**
  * Timeline placement rules for transport commands — not latency compensation.

@@ -8,6 +8,9 @@ import com.georgv.audioworkstation.core.audio.Mp3ImportTiming
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.audio.formatSampleRateLabel
 import com.georgv.audioworkstation.core.audio.toUiMessage
+import com.georgv.audioworkstation.core.session.CreateProjectForImportOutcome
+import com.georgv.audioworkstation.core.session.PendingCompressedImport
+import com.georgv.audioworkstation.core.session.ProjectAudioImportOutcome
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import kotlinx.coroutines.CancellationException
@@ -136,7 +139,10 @@ internal suspend fun ProjectViewModel.startCompressedImportAfterUserChoice(
             emitImportUiMessage(outcome.failure.toUiMessage())
         is ProjectAudioImportOutcome.ImportStarted ->
             persistAndLaunchBackgroundImport(outcome)
-        else -> Unit
+        is ProjectAudioImportOutcome.ReadyToPersist,
+        is ProjectAudioImportOutcome.SampleRateMismatchRequired,
+        ->
+            error("startCompressedImportFromPending returned unexpected $outcome")
     }
 }
 
@@ -193,7 +199,11 @@ internal fun ProjectViewModel.launchBackgroundImportJob(started: ProjectAudioImp
                     }
                     is ProjectAudioImportOutcome.ImportRejected ->
                         handleBackgroundImportRejected(started, trackId, outcome)
-                    else -> Unit
+                    ProjectAudioImportOutcome.StorageUnavailable,
+                    is ProjectAudioImportOutcome.ImportStarted,
+                    is ProjectAudioImportOutcome.SampleRateMismatchRequired,
+                    ->
+                        error("executeBackgroundImport returned unexpected $outcome")
                 }
             } catch (cancel: CancellationException) {
                 handleBackgroundImportCancellation(started, trackId, cancel)

@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.diagnostics
 
 import android.os.SystemClock
+import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
 import com.georgv.audioworkstation.data.repository.ProjectRepositoryDiagnostics
 import javax.inject.Inject
 import javax.inject.Singleton

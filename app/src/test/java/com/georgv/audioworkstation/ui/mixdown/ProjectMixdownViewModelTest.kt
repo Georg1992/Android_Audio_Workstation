@@ -4,7 +4,7 @@ import com.georgv.audioworkstation.core.audio.MixdownOutputValidator
 import com.georgv.audioworkstation.core.audio.ProjectOfflineMixdownRenderer
 import com.georgv.audioworkstation.core.audio.ProjectMixdownCoordinator
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
-import com.georgv.audioworkstation.ui.screens.projects.FakeAudioController
+import com.georgv.audioworkstation.core.audio.FakeAudioController
 import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
@@ -34,7 +34,7 @@ class ProjectMixdownViewModelTest {
                 audioFilePathProvider = TempDirAudioFilePathProvider(),
                 offlineMixdownRenderer = ProjectOfflineMixdownRenderer(FakeAudioController()),
                 mixdownOutputValidator = MixdownOutputValidator(),
-                audioController = FakeAudioController(),
+                mixdown = FakeAudioController(),
                 dispatchers = dispatchers,
                 audioIoScope = AudioIoScope(dispatchers),
             )

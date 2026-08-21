@@ -7,7 +7,7 @@ import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.ui.screens.projects.FakeAudioController
+import com.georgv.audioworkstation.core.audio.FakeAudioController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -190,14 +190,14 @@ class ProjectMixdownCoordinatorTest {
     private fun coordinator(
         paths: AudioFilePathProvider,
         repo: ProjectRepository,
-        audioController: AudioController,
+        audioController: MixdownPort,
     ): ProjectMixdownCoordinator =
         ProjectMixdownCoordinator(
             repo = repo,
             audioFilePathProvider = paths,
             offlineMixdownRenderer = ProjectOfflineMixdownRenderer(audioController),
             mixdownOutputValidator = MixdownOutputValidator(),
-            audioController = audioController,
+            mixdown = audioController,
             dispatchers = dispatchers,
             audioIoScope = AudioIoScope(dispatchers),
         )
@@ -206,7 +206,7 @@ class ProjectMixdownCoordinatorTest {
 private class SuccessMixdownAudioController(
     private val sampleRateHz: Int,
     private val durationMs: Long,
-) : AudioController by FakeAudioController() {
+) : MixdownPort by FakeAudioController() {
     override suspend fun renderOfflineMixdown(
         spec: MultiPlaybackSpec,
         outputPath: String,

@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
  */
 @Singleton
 class AudioParameterCommandQueue @Inject constructor(
-    private val audioController: AudioController,
+    private val playback: PlaybackPort,
     private val dispatchers: AppDispatchers,
     private val audioEngineSession: AudioEngineSession,
 ) {
@@ -86,8 +86,8 @@ class AudioParameterCommandQueue @Inject constructor(
                 return
             }
             when (key.kind) {
-                ParamKind.GAIN -> audioController.setPlaybackLaneGain(key.laneIndex, update.value)
-                ParamKind.PAN -> audioController.setPlaybackLanePan(key.laneIndex, update.value)
+                ParamKind.GAIN -> playback.setPlaybackLaneGain(key.laneIndex, update.value)
+                ParamKind.PAN -> playback.setPlaybackLanePan(key.laneIndex, update.value)
             }
         }
     }

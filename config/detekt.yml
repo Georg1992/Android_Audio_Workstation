@@ -660,9 +660,14 @@ style:
         value: 'TODO:'
     allowedPatterns: ''
   ForbiddenImport:
-    active: false
-    forbiddenImports: []
+    active: true
+    forbiddenImports:
+      - 'com.georgv.audioworkstation.ui.**'
     allowedImports: []
+    includes:
+      - '**/src/main/**/com/georgv/audioworkstation/core/**'
+      - '**/src/main/**/com/georgv/audioworkstation/engine/**'
+      - '**/src/main/**/com/georgv/audioworkstation/data/**'
   ForbiddenMethodCall:
     active: false
     methods:

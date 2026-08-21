@@ -2,7 +2,7 @@ package com.georgv.audioworkstation.core.audio
 
 import android.util.Log
 import com.georgv.audioworkstation.core.audio.capability.ResolvedAudioCapability
-import com.georgv.audioworkstation.ui.diagnostics.AudioSyncLogConfig
+import com.georgv.audioworkstation.core.diagnostics.AudioSyncLogConfig
 
 /**
  * Debug visibility for device latency profile at normal overdub record start.

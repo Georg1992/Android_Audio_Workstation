@@ -3,7 +3,13 @@ package com.georgv.audioworkstation.ui.screens.projects
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
 import com.georgv.audioworkstation.core.audio.capability.testSessionTransportCapabilityGate
-import com.georgv.audioworkstation.core.audio.AudioController
+import com.georgv.audioworkstation.core.session.PendingCompressedImportRegistry
+import com.georgv.audioworkstation.core.session.ProjectAudioImportOutcome
+import com.georgv.audioworkstation.core.session.ProjectRecordingCoordinator
+import com.georgv.audioworkstation.core.session.RecordingStartOutcome
+import com.georgv.audioworkstation.core.session.TransportPlaybackPhase
+import com.georgv.audioworkstation.core.audio.FakeAudioController
+import com.georgv.audioworkstation.core.audio.NoopProjectFileStore
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
@@ -16,7 +22,6 @@ import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.core.audio.MasterPeakMeter
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
-import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
@@ -30,14 +35,14 @@ import com.georgv.audioworkstation.core.audio.WavAudioImporter
 import com.georgv.audioworkstation.core.audio.testProjectRecordingCoordinator
 import com.georgv.audioworkstation.core.audio.wavImportSource
 import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
-import com.georgv.audioworkstation.data.db.dao.ProjectDao
+import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
-import com.georgv.audioworkstation.ui.components.timelinePlayheadPositionMs
+import com.georgv.audioworkstation.core.timeline.timelinePlayheadPositionMs
 import com.georgv.audioworkstation.core.audio.waveform.tempWav
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -2732,7 +2737,7 @@ class ProjectViewModelTest {
 
     private fun createViewModel(
         dao: FakeProjectDao,
-        audioController: AudioController = FakeAudioController(),
+        audioController: FakeAudioController = FakeAudioController(),
         audioFilePathProvider: AudioFilePathProvider = FakeAudioFilePathProvider(),
         recordingStorageGuard: RecordingStorageGuard = permissiveRecordingStorageGuard(),
         waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
@@ -2758,6 +2763,8 @@ class ProjectViewModelTest {
             AudioParameterCommandQueue(audioController, testDispatchers, audioEngineSession)
         return ProjectViewModel(
             repo,
+            audioController,
+            audioController,
             audioController,
             audioImportCoordinator,
             PendingCompressedImportRegistry(),
@@ -3929,10 +3936,6 @@ class ProjectViewModelTest {
 private fun playheadMsAtFraction(fraction: Float, timelineDurationMs: Long): Long =
     timelinePlayheadPositionMs(fraction, timelineDurationMs)
 
-internal object NoopProjectFileStore : ProjectFileStore {
-    override suspend fun deleteTrackFile(track: TrackEntity) = Unit
-    override suspend fun deleteProjectFolder(projectId: String) = Unit
-}
 
 private object NullTrackOutputPathProvider : AudioFilePathProvider {
     override fun projectRecordingDirectory(projectId: String): String? = null
@@ -3960,296 +3963,3 @@ private class FakeAudioFilePathProvider(
         "$basePath/$projectId/mixdown.wav"
 }
 
-internal class FakeAudioController(
-    private val startRecordingPath: String? = "recordings/project-1/default.wav",
-    private val stopRecordingResult: Boolean = true,
-    private val startPlaybackResult: Boolean = true,
-    private val stopPlaybackResult: Boolean = true,
-    /**
-     * Per-invocation gate for [startPlayback]. Index is 0-based across the test lifetime.
-     * Return value is AND-ed with [startPlaybackResult] for both the return and [playbackState].
-     */
-    private val startPlaybackPermitted: (Int) -> Boolean = { _ -> true },
-) : AudioController {
-    var startPlaybackCalls = 0
-        private set
-    var rearmOverdubPlaybackCalls = 0
-        private set
-    val playbackLaneGainCalls = mutableListOf<Pair<Int, Float>>()
-    var lastMultiPlaybackSpec: MultiPlaybackSpec? = null
-        private set
-    var lastRearmOverdubPlaybackSpec: MultiPlaybackSpec? = null
-        private set
-    var lastRecordingSpec: RecordingSpec? = null
-        private set
-
-    /** Test hook invoked at the beginning of native [startRecording] (before JNI work). */
-    var onEnterStartRecording: (() -> Unit)? = null
-
-    var stopRecordingCalls = 0
-        private set
-    var stopPlaybackCalls = 0
-        private set
-    private var startPlaybackInvocationIndex = 0
-    private val _playbackState = MutableStateFlow(false)
-    override val playbackState: StateFlow<Boolean> = _playbackState.asStateFlow()
-    private val _recordingInputLevel = MutableStateFlow(0f)
-    override val recordingInputLevel: StateFlow<Float> = _recordingInputLevel.asStateFlow()
-    var masterPeakHoldLinearValue = 0f
-
-    var transportPositionMsValue: Long = 0L
-    var recordingFirstSampleTransportPositionMsValue: Long = AudioController.RecordingFirstSampleTransportUnset
-    var recordingCapturedFrameCountValue: Long = 0L
-    var recordingCapturedDurationMsValue: Long = 0L
-    var lastOverdubPlaybackSpec: MultiPlaybackSpec? = null
-        private set
-
-    override fun transportPositionMs(): Long = transportPositionMsValue
-
-    override fun recordingFirstSampleTransportPositionMs(): Long =
-        recordingFirstSampleTransportPositionMsValue
-
-    override fun recordingCapturedFrameCount(): Long = recordingCapturedFrameCountValue
-
-    override fun recordingCapturedDurationMs(): Long = recordingCapturedDurationMsValue
-
-    override fun startOverdubRecordingSession(
-        playbackSpec: MultiPlaybackSpec,
-        recordingSpec: RecordingSpec,
-        outputPath: String,
-    ): String? {
-        onEnterStartRecording?.invoke()
-        lastRecordingSpec = recordingSpec
-        lastOverdubPlaybackSpec = playbackSpec
-        transportPositionMsValue = playbackSpec.startPositionMs
-        if (startRecordingPath == null) return null
-        val started = startPlayback(playbackSpec)
-        if (!started) return null
-        return outputPath
-    }
-
-    override fun isPlaybackEngineRunning(): Boolean = _playbackState.value
-
-    override fun readMasterPeakHoldLinear(): Float = masterPeakHoldLinearValue
-
-    override fun resetMasterPeakHold() {
-        masterPeakHoldLinearValue = 0f
-    }
-
-    /** Simulates the engine reporting playback completion. */
-    fun completePlayback() {
-        _playbackState.value = false
-    }
-
-    fun emitRecordingInputLevel(level: Float) {
-        _recordingInputLevel.value = level
-    }
-
-    fun setMasterPeakHoldLinear(linearPeak: Float) {
-        masterPeakHoldLinearValue = linearPeak
-    }
-
-    override fun startRecording(spec: RecordingSpec, outputPath: String?): String? {
-        onEnterStartRecording?.invoke()
-        lastRecordingSpec = spec
-        transportPositionMsValue = spec.timelineStartOffsetMs
-        if (startRecordingPath == null) return null
-        return outputPath ?: startRecordingPath.replace("default", spec.trackId)
-    }
-
-    override fun stopRecording(): Boolean {
-        stopRecordingCalls += 1
-        _recordingInputLevel.value = 0f
-        if (recordingFirstSampleTransportPositionMsValue < 0L && lastRecordingSpec != null) {
-            recordingFirstSampleTransportPositionMsValue = lastRecordingSpec!!.timelineStartOffsetMs
-        }
-        if (recordingCapturedDurationMsValue <= 0L && recordingCapturedFrameCountValue <= 0L) {
-            recordingCapturedDurationMsValue =
-                (recordingFirstSampleTransportPositionMsValue + 1_000L).coerceAtLeast(0L)
-        }
-        return stopRecordingResult
-    }
-
-    override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
-        startPlaybackCalls += 1
-        lastMultiPlaybackSpec = spec
-        transportPositionMsValue = spec.startPositionMs
-        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
-        val playing = permitted && startPlaybackResult
-        _playbackState.value = playing
-        return playing
-    }
-
-    override fun rearmOverdubPlaybackDuringRecording(spec: MultiPlaybackSpec): Boolean {
-        rearmOverdubPlaybackCalls += 1
-        lastRearmOverdubPlaybackSpec = spec
-        transportPositionMsValue = spec.startPositionMs
-        val permitted = startPlaybackPermitted(startPlaybackInvocationIndex++)
-        val playing = permitted && startPlaybackResult
-        _playbackState.value = playing
-        return playing
-    }
-
-    override fun setPlaybackLaneGain(laneIndex: Int, gain: Float) {
-        playbackLaneGainCalls.add(laneIndex to gain)
-    }
-
-    val playbackLanePanCalls = mutableListOf<Pair<Int, Float>>()
-
-    override fun setPlaybackLanePan(laneIndex: Int, pan: Float) {
-        playbackLanePanCalls.add(laneIndex to pan)
-    }
-
-    var lastArmedLaneAudibility: BooleanArray? = null
-        private set
-    var armedLaneAudibilityCalls = 0
-
-    override fun setArmedPlaybackLaneAudibility(audibleByLaneIndex: BooleanArray) {
-        armedLaneAudibilityCalls += 1
-        lastArmedLaneAudibility = audibleByLaneIndex.copyOf()
-    }
-
-    val playbackLaneAudibleCalls = mutableListOf<Pair<Int, Boolean>>()
-
-    override fun setPlaybackLaneAudible(laneIndex: Int, audible: Boolean) {
-        playbackLaneAudibleCalls.add(laneIndex to audible)
-    }
-
-    var beginHotJoinCalls = 0
-        private set
-    var lastHotJoinWavPath: String? = null
-        private set
-    var lastHotJoinGain: Float? = null
-        private set
-    var lastHotJoinClipStartMs: Long? = null
-        private set
-    var lastHotJoinClipDurationMs: Long? = null
-        private set
-    var lastHotJoinLoopEnabled: Boolean? = null
-        private set
-    var lastHotJoinLoopSourceStartMs: Long? = null
-        private set
-    var lastHotJoinLoopSourceEndMs: Long? = null
-        private set
-    var hotJoinReturnLaneIndex: Int = 1
-    var hotJoinCommitLifecycle: PlaybackLaneLifecycle = PlaybackLaneLifecycle.Active
-    private val laneLifecycleOverrides = mutableMapOf<Int, PlaybackLaneLifecycle>()
-
-    override fun beginHotJoinLane(
-        wavFilePath: String,
-        gain: Float,
-        timelineClipStartMs: Long,
-        timelineClipDurationMs: Long,
-        loopEnabled: Boolean,
-        loopSourceStartMs: Long,
-        loopSourceEndMs: Long,
-        sourceTrimStartMs: Long,
-        pan: Float,
-    ): Int {
-        beginHotJoinCalls += 1
-        lastHotJoinWavPath = wavFilePath
-        lastHotJoinGain = gain
-        lastHotJoinClipStartMs = timelineClipStartMs
-        lastHotJoinClipDurationMs = timelineClipDurationMs
-        lastHotJoinLoopEnabled = loopEnabled
-        lastHotJoinLoopSourceStartMs = loopSourceStartMs
-        lastHotJoinLoopSourceEndMs = loopSourceEndMs
-        laneLifecycleOverrides[hotJoinReturnLaneIndex] = PlaybackLaneLifecycle.Preparing
-        laneLifecycleOverrides[hotJoinReturnLaneIndex] = hotJoinCommitLifecycle
-        return hotJoinReturnLaneIndex
-    }
-
-    override fun cancelHotJoinLane(laneIndex: Int) {
-        laneLifecycleOverrides[laneIndex] = PlaybackLaneLifecycle.Cancelled
-    }
-
-    override fun playbackLaneLifecycle(laneIndex: Int): PlaybackLaneLifecycle =
-        laneLifecycleOverrides[laneIndex] ?: PlaybackLaneLifecycle.Inactive
-
-    override fun stopPlayback(): Boolean {
-        stopPlaybackCalls += 1
-        _playbackState.value = false
-        transportPositionMsValue = 0L
-        masterPeakHoldLinearValue = 0f
-        return stopPlaybackResult
-    }
-
-    var releaseCalls = 0
-        private set
-
-    override fun release() {
-        releaseCalls += 1
-        _playbackState.value = false
-        _recordingInputLevel.value = 0f
-    }
-}
-
-internal class FakeProjectDao(
-    projects: List<ProjectEntity> = emptyList(),
-    tracks: List<TrackEntity> = emptyList(),
-    private val failUpsertProject: Boolean = false,
-    private val failUpsertTrack: Boolean = false,
-    private val failDeleteTrackAndUpdatePositions: Boolean = false,
-    private val updateTracksGate: CompletableDeferred<Unit>? = null
-) : ProjectDao {
-    private val projectsFlow = MutableStateFlow(projects.sortedByDescending { it.createdAt })
-    private val tracksByProject = tracks.groupBy { it.projectId }
-        .mapValues { (_, list) -> MutableStateFlow(list.sortedBy { it.position }) }
-        .toMutableMap()
-
-    override suspend fun insertProject(project: ProjectEntity) {
-        if (failUpsertProject) error("insertProject failed")
-        projectsFlow.value = (projectsFlow.value.filterNot { it.id == project.id } + project)
-            .sortedByDescending { it.createdAt }
-    }
-
-    override suspend fun updateProject(project: ProjectEntity) {
-        if (failUpsertProject) error("updateProject failed")
-        projectsFlow.value = (projectsFlow.value.filterNot { it.id == project.id } + project)
-            .sortedByDescending { it.createdAt }
-    }
-
-    override fun observeProjects(): Flow<List<ProjectEntity>> = projectsFlow
-
-    override fun observeProject(projectId: String): Flow<ProjectEntity?> =
-        projectsFlow.map { projects -> projects.firstOrNull { it.id == projectId } }
-
-    override suspend fun projectExists(projectId: String): Boolean =
-        projectsFlow.value.any { it.id == projectId }
-
-    override suspend fun deleteProject(projectId: String) {
-        projectsFlow.value = projectsFlow.value.filterNot { it.id == projectId }
-        tracksByProject.remove(projectId)
-    }
-
-    override fun observeTracks(projectId: String): Flow<List<TrackEntity>> =
-        tracksByProject.getOrPut(projectId) { MutableStateFlow(emptyList()) }
-
-    override suspend fun upsertTrack(track: TrackEntity) {
-        if (failUpsertTrack) error("upsertTrack failed")
-        val flow = tracksByProject.getOrPut(track.projectId) { MutableStateFlow(emptyList()) }
-        flow.value = (flow.value.filterNot { it.id == track.id } + track).sortedBy { it.position }
-    }
-
-    override suspend fun upsertTracks(tracks: List<TrackEntity>) {
-        tracks.forEach { upsertTrack(it) }
-    }
-
-    override suspend fun updateTracks(tracks: List<TrackEntity>) {
-        if (tracks.isEmpty()) return
-        updateTracksGate?.await()
-        tracksByProject.getOrPut(tracks.first().projectId) { MutableStateFlow(emptyList()) }
-            .value = tracks.sortedBy { it.position }
-    }
-
-    override suspend fun deleteTrack(trackId: String) {
-        tracksByProject.values.forEach { flow ->
-            flow.value = flow.value.filterNot { it.id == trackId }
-        }
-    }
-
-    override suspend fun deleteTrackAndUpdatePositions(trackId: String, remaining: List<TrackEntity>) {
-        if (failDeleteTrackAndUpdatePositions) error("deleteTrackAndUpdatePositions failed")
-        super.deleteTrackAndUpdatePositions(trackId, remaining)
-    }
-}
