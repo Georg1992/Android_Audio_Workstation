@@ -130,6 +130,10 @@
     <string name="error_recording_failed_to_start">无法开始录音。</string>
     <string name="error_recording_storage_insufficient_start">无法开始录音：存储空间不足。</string>
     <string name="error_recording_stopped_storage">录音已停止：存储空间不足。</string>
+    <string name="error_recording_capture_failed">录音已停止：麦克风采集失败。</string>
+    <string name="recording_capture_channel_name">录音</string>
+    <string name="recording_capture_notification_title">录音</string>
+    <string name="recording_capture_notification_text">正在使用麦克风录音。</string>
     <string name="error_stop_playback_first">重新播放前请先停止播放。</string>
     <string name="error_single_track_playback_only">目前仅支持播放一个选中音轨。</string>
     <string name="error_no_audio_for_selected_tracks">所选音轨尚无音频。</string>

@@ -296,6 +296,13 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopRecording(JNIEnv 
     return g_engine && g_engine->stopRecording() ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsRecordingCaptureFailed(
+        JNIEnv *,
+        jobject) {
+    return g_engine && g_engine->isRecordingCaptureFailed() ? JNI_TRUE : JNI_FALSE;
+}
+
 namespace {
 
 constexpr jint kOboeStreamSnapshotFieldCount = 8;

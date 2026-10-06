@@ -36,6 +36,7 @@ class NativeAudioController @Inject constructor(
     private val audioFilePathProvider: AudioFilePathProvider,
     private val dispatchers: AppDispatchers,
     private val sessionTransportGate: SessionTransportCapabilityGate,
+    private val microphoneCaptureForeground: MicrophoneCaptureForeground,
 ) : PlaybackPort, CapturePort, MixdownPort, MeterPort {
 
     private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -134,6 +135,7 @@ class NativeAudioController @Inject constructor(
         ensureSessionTransportPrepared(playbackSpec.sampleRate)
         ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startOverdubRecordingSession", phase = "beforeJni")
         PlaybackStartupTrace.logJniBoundary(path = "overdub_session", phase = "before_jni")
+        microphoneCaptureForeground.start()
         val started =
             nativeEngine.startOverdubRecordingSession(
                 playbackSpec = playbackSpec,
@@ -143,7 +145,10 @@ class NativeAudioController @Inject constructor(
             )
         PlaybackStartupTrace.logJniBoundary(path = "overdub_session", phase = "after_jni")
         ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startOverdubRecordingSession", phase = "afterJni")
-        if (!started) return null
+        if (!started) {
+            microphoneCaptureForeground.stop()
+            return null
+        }
         TransportFrameDiagnostics.logOverdubSessionArm(playbackSpec)
         monitorPlaybackCompletion(waitForActiveFirst = true)
         monitorRecordingInputLevel()
@@ -164,14 +169,20 @@ class NativeAudioController @Inject constructor(
                 ?: return null
         val request = spec.toRecordingRequest(resolvedPath)
         ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "beforeJni")
-        return resolvedPath.takeIf {
-            val started = nativeEngine.startRecording(request)
-            ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "afterJni")
-            if (started) {
-                monitorRecordingInputLevel()
-            }
-            started
+        microphoneCaptureForeground.start()
+        val started = nativeEngine.startRecording(request)
+        ThreadingDiagnostics.logWorkBoundary("NativeAudioController.startRecording", phase = "afterJni")
+        if (!started) {
+            microphoneCaptureForeground.stop()
+            return null
         }
+        monitorRecordingInputLevel()
+        return resolvedPath
+    }
+
+    override fun isRecordingCaptureFailed(): Boolean {
+        checkNotMainThreadForNativeLifecycle("isRecordingCaptureFailed")
+        return nativeEngine.isRecordingCaptureFailed()
     }
 
     override fun captureLiveSessionLatencySnapshot(): LiveSessionLatencySnapshot {
@@ -189,6 +200,7 @@ class NativeAudioController @Inject constructor(
         recordingLevelJob?.cancel()
         recordingLevelJob = null
         val ok = nativeEngine.stopRecording()
+        microphoneCaptureForeground.stop()
         _recordingInputLevel.value = 0f
         return ok
     }
@@ -299,6 +311,7 @@ class NativeAudioController @Inject constructor(
         recordingLevelJob = null
         _playbackState.value = false
         _recordingInputLevel.value = 0f
+        microphoneCaptureForeground.stop()
         nativeEngine.releaseEngine()
     }
 

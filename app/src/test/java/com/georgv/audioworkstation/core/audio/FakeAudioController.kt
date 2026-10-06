@@ -31,6 +31,8 @@ internal open class FakeAudioController(
     /** Test hook invoked at the beginning of native [startRecording] (before JNI work). */
     var onEnterStartRecording: (() -> Unit)? = null
 
+    var recordingCaptureFailed: Boolean = false
+
     var stopRecordingCalls = 0
         private set
     var stopPlaybackCalls = 0
@@ -102,8 +104,11 @@ internal open class FakeAudioController(
         return outputPath ?: startRecordingPath.replace("default", spec.trackId)
     }
 
+    override fun isRecordingCaptureFailed(): Boolean = recordingCaptureFailed
+
     override fun stopRecording(): Boolean {
         stopRecordingCalls += 1
+        recordingCaptureFailed = false
         _recordingInputLevel.value = 0f
         if (recordingFirstSampleTransportPositionMsValue < 0L && lastRecordingSpec != null) {
             recordingFirstSampleTransportPositionMsValue = lastRecordingSpec!!.timelineStartOffsetMs

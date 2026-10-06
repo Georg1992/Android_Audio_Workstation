@@ -8,6 +8,9 @@ interface CapturePort {
 
     fun stopRecording(): Boolean
 
+    /** True when the capture thread ended on an input or disk error and has not been stopped yet. */
+    fun isRecordingCaptureFailed(): Boolean
+
     fun startOverdubRecordingSession(
         playbackSpec: MultiPlaybackSpec,
         recordingSpec: RecordingSpec,

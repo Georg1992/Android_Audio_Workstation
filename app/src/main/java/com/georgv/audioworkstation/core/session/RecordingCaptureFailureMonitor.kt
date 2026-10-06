@@ -1,6 +1,5 @@
 package com.georgv.audioworkstation.core.session
 
-import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
@@ -10,33 +9,33 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Polls free space while a take is active. Invokes [onStorageExhausted] at most once per start cycle.
+ * While a take is active, notices that native capture ended on an input or disk error.
+ * Invokes [onCaptureFailed] at most once per start cycle, on [scope] so cancelling this
+ * monitor does not cancel the stop that follows.
  */
-class RecordingStorageMonitor(
+class RecordingCaptureFailureMonitor(
     private val scope: CoroutineScope,
-    private val guard: RecordingStorageGuard,
     private val dispatchers: AppDispatchers,
-    private val pollIntervalMs: Long = RecordingStorageGuard.MONITOR_POLL_INTERVAL_MS,
+    private val pollIntervalMs: Long = POLL_INTERVAL_MS,
 ) {
     private var monitorJob: Job? = null
-    private val storageStopInFlight = AtomicBoolean(false)
+    private val failureStopInFlight = AtomicBoolean(false)
 
     fun start(
-        projectDirectoryPath: String,
         isRecordingActive: () -> Boolean,
-        onStorageExhausted: suspend () -> Unit,
+        captureFailed: () -> Boolean,
+        onCaptureFailed: suspend () -> Unit,
     ) {
         stop()
-        storageStopInFlight.set(false)
+        failureStopInFlight.set(false)
         monitorJob =
             scope.launch(dispatchers.io) {
                 while (isActive && isRecordingActive()) {
                     delay(pollIntervalMs)
                     if (!isRecordingActive()) break
-                    val available = guard.availableBytes(projectDirectoryPath)
-                    if (available == null || !guard.hasReserveRemaining(available)) {
-                        if (storageStopInFlight.compareAndSet(false, true)) {
-                            scope.launch { onStorageExhausted() }
+                    if (captureFailed()) {
+                        if (failureStopInFlight.compareAndSet(false, true)) {
+                            scope.launch { onCaptureFailed() }
                         }
                         break
                     }
@@ -47,5 +46,9 @@ class RecordingStorageMonitor(
     fun stop() {
         monitorJob?.cancel()
         monitorJob = null
+    }
+
+    companion object {
+        const val POLL_INTERVAL_MS = 200L
     }
 }

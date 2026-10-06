@@ -25,7 +25,8 @@ class IAudioSource;
 /**
  * Streaming playback engine with a fixed-capacity multi-lane playback skeleton.
  *
- * Recording is unchanged — capture path is separate from playback lanes.
+ * Capture is a separate path from playback lanes and appends PCM to the take WAV
+ * while the record thread is running.
  *
  * Playback uses one dedicated I/O thread that prefetches WAV PCM into per-lane
  * SPSC [RingBuffer]s; the Oboe callback drains them in [render] without
@@ -137,6 +138,9 @@ public:
     }
 
     bool stopRecording();
+
+    /** True after the record thread stops on an input or disk error, until [stopRecording]. */
+    bool isRecordingCaptureFailed() const;
 
     struct OboeStreamSnapshot {
         int32_t sampleRateHz = 0;
@@ -520,9 +524,10 @@ private:
     void configureInputReadSizeForSession();
     void recordLoop();
     void onRecordingFramesCaptured(int32_t framesRead, int64_t appReceiveMonotonicNs);
-    bool writeRecordingToWav(const std::vector<float> &samples,
-                             int32_t channelCount,
-                             const std::string &outputPath) const;
+    bool openRecordingTakeFile(const std::string &outputPath, int32_t channelCount);
+    void discardUnstartedRecordingTakeFile();
+    bool sealRecordingTakeFile();
+    void markRecordingCaptureFailed();
 
     void ensureIoThreadRunning();
     void stopIoThread();
@@ -577,8 +582,10 @@ private:
     int32_t m_sampleRate = 44'100;
     int32_t m_fileBitDepth = 16;
 
+    struct RecordingTakeFile;
+
     std::mutex m_recordMutex;
-    std::vector<float> m_recordedSamples;
+    std::unique_ptr<RecordingTakeFile> m_recordingTakeFile;
     std::string m_recordingOutputPath;
     int32_t m_recordingChannelCount = 1;
     int32_t m_sessionRecordReadFrames = kInputReadBlockFrames;
@@ -587,6 +594,7 @@ private:
     std::shared_ptr<oboe::AudioStream> m_outputStreamForDiagnostics;
     std::thread m_recordThread;
     std::atomic<bool> m_isRecording{false};
+    std::atomic<bool> m_recordingCaptureFailed{false};
     std::atomic<int64_t> m_recordingFirstSampleTransportFrame{kRecordingFirstSampleTransportUnset};
     std::atomic<int64_t> m_recordedCaptureFrameCount{0};
     std::atomic<float> m_recordingInputLevel{0.0f};

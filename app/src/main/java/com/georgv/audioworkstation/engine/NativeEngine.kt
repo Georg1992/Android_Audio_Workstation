@@ -32,6 +32,8 @@ class NativeEngine @Inject constructor() {
 
     fun stopRecording(): Boolean = nativeStopRecording()
 
+    fun isRecordingCaptureFailed(): Boolean = nativeIsRecordingCaptureFailed()
+
     fun inputStreamSnapshot(): OboeStreamSnapshot? =
         parseOboeStreamSnapshot(nativeGetInputStreamSnapshot())
 
@@ -299,6 +301,8 @@ class NativeEngine @Inject constructor() {
     ): Boolean
 
     private external fun nativeStopRecording(): Boolean
+
+    private external fun nativeIsRecordingCaptureFailed(): Boolean
 
     private external fun nativeGetInputStreamSnapshot(): LongArray?
 

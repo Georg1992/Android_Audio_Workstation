@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "StreamingPcm16WavWriter.h"
 
 #include "AudioSyncLogConfig.h"
 #include "OutputRenderAhead.h"
@@ -30,29 +31,6 @@ namespace {
 
 constexpr int64_t kReadTimeoutNanos = 100 * oboe::kNanosPerMillisecond;
 constexpr int32_t kFramesPerRead = 256;
-constexpr uint16_t kWavBitsPerSample = 16;
-void WriteUint16LE(FILE *file, uint16_t value) {
-    const std::array<uint8_t, 2> bytes = {
-        static_cast<uint8_t>(value & 0xFFu),
-        static_cast<uint8_t>((value >> 8u) & 0xFFu)
-    };
-    std::fwrite(bytes.data(), 1, bytes.size(), file);
-}
-
-void WriteUint32LE(FILE *file, uint32_t value) {
-    const std::array<uint8_t, 4> bytes = {
-        static_cast<uint8_t>(value & 0xFFu),
-        static_cast<uint8_t>((value >> 8u) & 0xFFu),
-        static_cast<uint8_t>((value >> 16u) & 0xFFu),
-        static_cast<uint8_t>((value >> 24u) & 0xFFu)
-    };
-    std::fwrite(bytes.data(), 1, bytes.size(), file);
-}
-
-int16_t FloatToPcm16(float sample) {
-    const float clamped = std::max(-1.0f, std::min(1.0f, sample));
-    return static_cast<int16_t>(clamped * 32767.0f);
-}
 
 int64_t playbackStartFrameFromMs(int64_t startPositionMs, int32_t sampleRateHz) {
     if (startPositionMs <= 0 || sampleRateHz <= 0) return 0;
@@ -224,6 +202,11 @@ void mixLaneSampleWithPan(float gain,
 
 namespace dawengine {
 
+struct AudioEngine::RecordingTakeFile {
+    playback::StreamingPcm16WavWriter writer;
+    std::string path;
+};
+
 namespace {
 
 void storeLaneRing(std::shared_ptr<RingBuffer> &slot, std::shared_ptr<RingBuffer> value) {
@@ -266,80 +249,6 @@ constexpr std::size_t kRenderScratchFloatCount =
     static_cast<std::size_t>(kMaxRenderFramesPerCallback) * 2u;
 
 constexpr const char *kMixdownLogTag = "AudioMixdown";
-
-class StreamingPcm16WavWriter {
-public:
-    bool Open(const std::string &path, int32_t sampleRateHz, int32_t channelCount) {
-        if (path.empty() || sampleRateHz <= 0) return false;
-        file_ = std::fopen(path.c_str(), "wb");
-        if (!file_) return false;
-        sampleRateHz_ = sampleRateHz;
-        channelCount_ = static_cast<uint16_t>(std::max(1, channelCount));
-        const uint32_t bytesPerSample = kWavBitsPerSample / 8u;
-        const uint32_t byteRate =
-            static_cast<uint32_t>(sampleRateHz_) * channelCount_ * bytesPerSample;
-        const uint16_t blockAlign =
-            static_cast<uint16_t>(channelCount_ * bytesPerSample);
-
-        std::fwrite("RIFF", 1, 4, file_);
-        WriteUint32LE(file_, 36u);
-        std::fwrite("WAVE", 1, 4, file_);
-        std::fwrite("fmt ", 1, 4, file_);
-        WriteUint32LE(file_, 16u);
-        WriteUint16LE(file_, 1u);
-        WriteUint16LE(file_, channelCount_);
-        WriteUint32LE(file_, static_cast<uint32_t>(sampleRateHz_));
-        WriteUint32LE(file_, byteRate);
-        WriteUint16LE(file_, blockAlign);
-        WriteUint16LE(file_, kWavBitsPerSample);
-        std::fwrite("data", 1, 4, file_);
-        WriteUint32LE(file_, 0u);
-        dataBytesWritten_ = 0;
-        return std::ferror(file_) == 0;
-    }
-
-    bool WriteFloatInterleaved(const float *samples, std::size_t sampleCount) {
-        if (!file_ || !samples) return false;
-        for (std::size_t i = 0; i < sampleCount; ++i) {
-            const int16_t pcm16 = FloatToPcm16(samples[i]);
-            if (std::fwrite(&pcm16, sizeof(pcm16), 1, file_) != 1u) {
-                return false;
-            }
-        }
-        dataBytesWritten_ += static_cast<uint32_t>(sampleCount * sizeof(int16_t));
-        return std::ferror(file_) == 0;
-    }
-
-    bool Finalize() {
-        if (!file_) return false;
-        const long dataSizePos = std::ftell(file_);
-        if (dataSizePos < 0) return false;
-        if (std::fseek(file_, 4, SEEK_SET) != 0) return false;
-        WriteUint32LE(file_, 36u + dataBytesWritten_);
-        if (std::fseek(file_, 40, SEEK_SET) != 0) return false;
-        WriteUint32LE(file_, dataBytesWritten_);
-        const bool ok = std::ferror(file_) == 0;
-        std::fclose(file_);
-        file_ = nullptr;
-        return ok && dataBytesWritten_ > 0u;
-    }
-
-    void Abort() {
-        if (file_) {
-            std::fclose(file_);
-            file_ = nullptr;
-        }
-        dataBytesWritten_ = 0;
-    }
-
-    uint32_t dataBytesWritten() const { return dataBytesWritten_; }
-
-private:
-    FILE *file_ = nullptr;
-    uint32_t dataBytesWritten_ = 0;
-    int32_t sampleRateHz_ = 44'100;
-    uint16_t channelCount_ = 2;
-};
 
 // Master safety soft-clip knee (~-0.09 dBFS). UI yellow lamp uses this same value:
 // held pre-soft-clip peak >= kMasterSafetyThreshold means soft clip has engaged.
@@ -1298,20 +1207,28 @@ bool AudioEngine::startRecording(int32_t channelCount,
         return false;
     }
 
-    {
-        std::lock_guard<std::mutex> recordLock(m_recordMutex);
-        m_recordedSamples.clear();
-        m_recordingOutputPath = outputPath;
-        m_recordingChannelCount = channelCount == 2 ? 2 : 1;
-    }
+    m_recordingCaptureFailed.store(false, std::memory_order_release);
     m_recordingInputLevel.store(0.0f, std::memory_order_release);
     m_recordingFirstSampleTransportFrame.store(kRecordingFirstSampleTransportUnset,
                                                std::memory_order_release);
     m_recordedCaptureFrameCount.store(0, std::memory_order_release);
     m_inputCaptureBufferIndex.store(0, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> recordLock(m_recordMutex);
+        m_recordingOutputPath = outputPath;
+        m_recordingChannelCount = channelCount == 2 ? 2 : 1;
+    }
+
+    if (!openRecordingTakeFile(outputPath, m_recordingChannelCount)) {
+        m_isRecording.store(false, std::memory_order_release);
+        std::lock_guard<std::mutex> recordLock(m_recordMutex);
+        m_recordingOutputPath.clear();
+        return false;
+    }
 
     if (!openInputStream(m_recordingChannelCount)) {
-        m_isRecording = false;
+        discardUnstartedRecordingTakeFile();
+        m_isRecording.store(false, std::memory_order_release);
         m_recordingInputLevel.store(0.0f, std::memory_order_release);
         return false;
     }
@@ -1483,12 +1400,16 @@ void AudioEngine::recordLoop() {
     std::vector<float> buffer(static_cast<size_t>(readFrames * channelCount));
 
     while (m_isRecording) {
-        if (!m_inputStream) break;
+        if (!m_inputStream) {
+            markRecordingCaptureFailed();
+            break;
+        }
         const int64_t readStartNs = steadyClockNowNs();
         const auto result = m_inputStream->read(buffer.data(), readFrames, kReadTimeoutNanos);
         const int64_t readEndNs = steadyClockNowNs();
         if (!result) {
             if (result.error() != oboe::Result::ErrorTimeout) {
+                markRecordingCaptureFailed();
                 break;
             }
             continue;
@@ -1521,12 +1442,17 @@ void AudioEngine::recordLoop() {
         }
         m_recordingInputLevel.store(std::min(peak, 1.0f), std::memory_order_release);
 
-        std::lock_guard<std::mutex> recordLock(m_recordMutex);
-        m_recordedSamples.insert(
-            m_recordedSamples.end(),
-            buffer.begin(),
-            buffer.begin() + static_cast<std::ptrdiff_t>(sampleCount)
-        );
+        {
+            std::lock_guard<std::mutex> recordLock(m_recordMutex);
+            const bool durable =
+                m_recordingTakeFile &&
+                m_recordingTakeFile->writer.WriteFloatInterleaved(buffer.data(), sampleCount) &&
+                m_recordingTakeFile->writer.CommitDurableHeader();
+            if (!durable) {
+                markRecordingCaptureFailed();
+                break;
+            }
+        }
 
         const int64_t processEndNs = steadyClockNowNs();
         recordInputLoopCost(
@@ -1536,42 +1462,55 @@ void AudioEngine::recordLoop() {
     }
 }
 
-bool AudioEngine::writeRecordingToWav(const std::vector<float> &samples,
-                                      int32_t channelCount,
-                                      const std::string &outputPath) const {
-    if (outputPath.empty()) return false;
-
-    FILE *file = std::fopen(outputPath.c_str(), "wb");
-    if (!file) return false;
-
-    const uint32_t bytesPerSample = kWavBitsPerSample / 8u;
-    const uint32_t dataSize = static_cast<uint32_t>(samples.size() * bytesPerSample);
-    const uint16_t wavChannelCount = static_cast<uint16_t>(std::max(1, channelCount));
-    const uint32_t byteRate = static_cast<uint32_t>(m_sampleRate) * wavChannelCount * bytesPerSample;
-    const uint16_t blockAlign = static_cast<uint16_t>(wavChannelCount * bytesPerSample);
-
-    std::fwrite("RIFF", 1, 4, file);
-    WriteUint32LE(file, 36u + dataSize);
-    std::fwrite("WAVE", 1, 4, file);
-    std::fwrite("fmt ", 1, 4, file);
-    WriteUint32LE(file, 16u);
-    WriteUint16LE(file, 1u);
-    WriteUint16LE(file, wavChannelCount);
-    WriteUint32LE(file, static_cast<uint32_t>(m_sampleRate));
-    WriteUint32LE(file, byteRate);
-    WriteUint16LE(file, blockAlign);
-    WriteUint16LE(file, kWavBitsPerSample);
-    std::fwrite("data", 1, 4, file);
-    WriteUint32LE(file, dataSize);
-
-    for (float sample : samples) {
-        const int16_t pcm16 = FloatToPcm16(sample);
-        std::fwrite(&pcm16, sizeof(pcm16), 1, file);
+bool AudioEngine::openRecordingTakeFile(const std::string &outputPath, int32_t channelCount) {
+    auto take = std::make_unique<RecordingTakeFile>();
+    take->path = outputPath;
+    if (!take->writer.Open(outputPath, m_sampleRate, channelCount)) {
+        return false;
     }
+    if (!take->writer.CommitDurableHeader()) {
+        take->writer.Abort();
+        std::remove(outputPath.c_str());
+        return false;
+    }
+    std::lock_guard<std::mutex> recordLock(m_recordMutex);
+    m_recordingTakeFile = std::move(take);
+    return true;
+}
 
-    const bool writeOk = std::ferror(file) == 0;
-    std::fclose(file);
-    return writeOk;
+void AudioEngine::discardUnstartedRecordingTakeFile() {
+    std::string path;
+    {
+        std::lock_guard<std::mutex> recordLock(m_recordMutex);
+        if (m_recordingTakeFile) {
+            path = m_recordingTakeFile->path;
+            m_recordingTakeFile->writer.Abort();
+            m_recordingTakeFile.reset();
+        }
+        m_recordingOutputPath.clear();
+    }
+    if (!path.empty()) {
+        std::remove(path.c_str());
+    }
+}
+
+bool AudioEngine::sealRecordingTakeFile() {
+    std::lock_guard<std::mutex> recordLock(m_recordMutex);
+    bool sealed = false;
+    if (m_recordingTakeFile) {
+        sealed = m_recordingTakeFile->writer.Close();
+        m_recordingTakeFile.reset();
+    }
+    m_recordingOutputPath.clear();
+    return sealed;
+}
+
+void AudioEngine::markRecordingCaptureFailed() {
+    m_recordingCaptureFailed.store(true, std::memory_order_release);
+}
+
+bool AudioEngine::isRecordingCaptureFailed() const {
+    return m_recordingCaptureFailed.load(std::memory_order_acquire);
 }
 
 bool AudioEngine::stopRecording() {
@@ -1588,17 +1527,14 @@ bool AudioEngine::stopRecording() {
     closeInputStream();
     m_recordingInputLevel.store(0.0f, std::memory_order_release);
 
-    std::vector<float> recordedSamples;
-    std::string outputPath;
-    int32_t channelCount = 1;
+    uint32_t sealedBytes = 0;
     {
         std::lock_guard<std::mutex> recordLock(m_recordMutex);
-        recordedSamples = m_recordedSamples;
-        outputPath = m_recordingOutputPath;
-        channelCount = m_recordingChannelCount;
-        m_recordedSamples.clear();
-        m_recordingOutputPath.clear();
+        if (m_recordingTakeFile) {
+            sealedBytes = m_recordingTakeFile->writer.dataBytesWritten();
+        }
     }
+    const bool sealed = sealRecordingTakeFile();
 
     if (!m_isPlaying.load(std::memory_order_acquire)) {
         resetMasterPlaybackTimeline();
@@ -1609,13 +1545,14 @@ bool AudioEngine::stopRecording() {
     const int64_t firstSampleMs = recordingFirstSampleTransportPositionMs();
     finalizeSessionPerceivedPlaybackOffsetMs();
     playback::logTransportFrameMap(
-        "recording_stop capturedFrames=%lld capturedDurationMs=%lld firstSampleTransportMs=%lld wavSamples=%zu",
+        "recording_stop capturedFrames=%lld capturedDurationMs=%lld firstSampleTransportMs=%lld wavBytes=%u",
         static_cast<long long>(capturedFrames),
         static_cast<long long>(capturedDurationMs),
         static_cast<long long>(firstSampleMs),
-        recordedSamples.size());
+        sealedBytes);
 
-    return writeRecordingToWav(recordedSamples, channelCount, outputPath);
+    m_recordingCaptureFailed.store(false, std::memory_order_release);
+    return sealed;
 }
 
 // ---------------------------------------------------------------------------

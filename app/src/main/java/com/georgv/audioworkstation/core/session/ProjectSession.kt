@@ -94,6 +94,12 @@ class ProjectSession(
             dispatchers = dispatchers,
         )
 
+    private val recordingCaptureFailureMonitor =
+        RecordingCaptureFailureMonitor(
+            scope = scope,
+            dispatchers = dispatchers,
+        )
+
     private var recordingStorageMonitorEnabledForTests = true
     private var engineSessionAcquired = false
 
@@ -208,7 +214,7 @@ class ProjectSession(
                 startRecordingStorageMonitor(activeProjectId)
             },
             onRecordingStorageMonitorStop = {
-                recordingStorageMonitor.stop()
+                stopRecordingMonitors()
             },
             isImportInProgress = isImportInProgress,
         )
@@ -224,7 +230,7 @@ class ProjectSession(
         masterPeakController.resetDisplayAndNativeHold()
         playheadSeek.resetWhenProjectChanges()
         recordingSession.resetWhenBoundProjectChanges()
-        recordingStorageMonitor.stop()
+        stopRecordingMonitors()
     }
 
     fun onRecordPressed(projectId: String, projectName: String) {
@@ -251,15 +257,24 @@ class ProjectSession(
 
     suspend fun performStopRecordingForStorageExhaustion() {
         if (!recordingSession.hasActiveRecordingTake()) return
-        recordingStorageMonitor.stop()
+        stopRecordingMonitors()
         transportController.stopAll()
         masterPeakController.resetDisplayAndNativeHold()
         playheadTransport.stopAndResetToZero()
         emitMessage(R.string.error_recording_stopped_storage)
     }
 
+    suspend fun performStopRecordingForCaptureFailure() {
+        if (!recordingSession.hasActiveRecordingTake()) return
+        stopRecordingMonitors()
+        transportController.stopAll()
+        masterPeakController.resetDisplayAndNativeHold()
+        playheadTransport.stopAndResetToZero()
+        emitMessage(R.string.error_recording_capture_failed)
+    }
+
     fun releaseOnCleared() {
-        recordingStorageMonitor.stop()
+        stopRecordingMonitors()
         if (!engineSessionAcquired) return
         engineSessionAcquired = false
         audioIoScope.scope.launch {
@@ -295,12 +310,24 @@ class ProjectSession(
     private fun startRecordingStorageMonitor(activeProjectId: String) {
         if (!recordingStorageMonitorEnabledForTests) return
         val directoryPath = audioFilePathProvider.projectRecordingDirectory(activeProjectId)
-        if (directoryPath == null) return
-        recordingStorageMonitor.start(
-            projectDirectoryPath = directoryPath,
-            isRecordingActive = { recordingSession.hasActiveRecordingTake() },
-        ) {
-            performStopRecordingForStorageExhaustion()
+        if (directoryPath != null) {
+            recordingStorageMonitor.start(
+                projectDirectoryPath = directoryPath,
+                isRecordingActive = { recordingSession.hasActiveRecordingTake() },
+            ) {
+                performStopRecordingForStorageExhaustion()
+            }
         }
+        recordingCaptureFailureMonitor.start(
+            isRecordingActive = { recordingSession.hasActiveRecordingTake() },
+            captureFailed = { capture.isRecordingCaptureFailed() },
+        ) {
+            performStopRecordingForCaptureFailure()
+        }
+    }
+
+    private fun stopRecordingMonitors() {
+        recordingStorageMonitor.stop()
+        recordingCaptureFailureMonitor.stop()
     }
 }

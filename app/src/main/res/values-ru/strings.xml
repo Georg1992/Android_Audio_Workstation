@@ -126,6 +126,10 @@
     <string name="error_recording_failed_to_start">Не удалось начать запись.</string>
     <string name="error_recording_storage_insufficient_start">Запись невозможна: недостаточно места на диске.</string>
     <string name="error_recording_stopped_storage">Запись остановлена: недостаточно места на диске.</string>
+    <string name="error_recording_capture_failed">Запись остановлена: сбой захвата микрофона.</string>
+    <string name="recording_capture_channel_name">Запись</string>
+    <string name="recording_capture_notification_title">Запись</string>
+    <string name="recording_capture_notification_text">Идёт запись с микрофона.</string>
     <string name="error_stop_playback_first">Остановите воспроизведение перед повторным запуском.</string>
     <string name="error_single_track_playback_only">Сейчас поддерживается воспроизведение только одной дорожки.</string>
     <string name="error_no_audio_for_selected_tracks">У выбранных дорожек ещё нет аудио.</string>
