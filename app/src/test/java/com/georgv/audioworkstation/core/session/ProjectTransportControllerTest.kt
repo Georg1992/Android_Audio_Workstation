@@ -247,7 +247,7 @@ class ProjectTransportControllerTest {
                     }
                 }
 
-        override fun stopRecording(): Boolean {
+        override fun stopRecording(): com.georgv.audioworkstation.core.audio.RecordingStopKind {
             journal += "stopRecording"
             return super.stopRecording()
         }

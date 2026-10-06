@@ -5,6 +5,8 @@ import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.CapturePort
 import com.georgv.audioworkstation.core.audio.MeterPort
+import com.georgv.audioworkstation.core.audio.MicrophoneCaptureForeground
+import com.georgv.audioworkstation.core.audio.RecordingStopKind
 import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
@@ -54,6 +56,8 @@ class ProjectSession(
     private val isImportInProgress: () -> Boolean,
     private val boundProjectSampleRateHz: () -> Int,
     private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String, RecordingStopSnapshot) -> Unit,
+    private val microphoneCaptureForeground: MicrophoneCaptureForeground,
+    private val onRecordingCaptureFailed: (String) -> Unit,
 ) {
     val playheadPositionMs = MutableStateFlow(0L)
 
@@ -85,6 +89,7 @@ class ProjectSession(
             recordingCoordinator = recordingCoordinator,
             dispatchers = dispatchers,
             sessionTransportGate = sessionTransportGate,
+            microphoneCaptureForeground = microphoneCaptureForeground,
         )
 
     private val recordingStorageMonitor =
@@ -101,6 +106,7 @@ class ProjectSession(
         )
 
     private var recordingStorageMonitorEnabledForTests = true
+    private var recordingCaptureFailureMonitorEnabledForTests = true
     private var engineSessionAcquired = false
 
     val playbackSession =
@@ -149,6 +155,8 @@ class ProjectSession(
                     }
                 }
             },
+            microphoneCaptureForeground = microphoneCaptureForeground,
+            onRecordingCaptureFailed = onRecordingCaptureFailed,
         )
 
     internal val scopePlaybackCoordinator =
@@ -211,7 +219,7 @@ class ProjectSession(
                 directoryPath != null && recordingStorageGuard.canStartRecording(directoryPath)
             },
             onRecordingStorageMonitorStart = { activeProjectId ->
-                startRecordingStorageMonitor(activeProjectId)
+                startRecordingMonitors(activeProjectId)
             },
             onRecordingStorageMonitorStop = {
                 stopRecordingMonitors()
@@ -256,21 +264,22 @@ class ProjectSession(
     }
 
     suspend fun performStopRecordingForStorageExhaustion() {
-        if (!recordingSession.hasActiveRecordingTake()) return
-        stopRecordingMonitors()
-        transportController.stopAll()
-        masterPeakController.resetDisplayAndNativeHold()
-        playheadTransport.stopAndResetToZero()
-        emitMessage(R.string.error_recording_stopped_storage)
+        stopRecordingFromMonitor(R.string.error_recording_stopped_storage)
     }
 
-    suspend fun performStopRecordingForCaptureFailure() {
+    private suspend fun stopRecordingFromMonitor(messageRes: Int) {
         if (!recordingSession.hasActiveRecordingTake()) return
         stopRecordingMonitors()
-        transportController.stopAll()
+        val kind = transportController.stopAll()
         masterPeakController.resetDisplayAndNativeHold()
         playheadTransport.stopAndResetToZero()
-        emitMessage(R.string.error_recording_capture_failed)
+        val message =
+            if (kind == RecordingStopKind.CaptureFailed) {
+                R.string.error_recording_capture_failed
+            } else {
+                messageRes
+            }
+        emitMessage(message)
     }
 
     fun releaseOnCleared() {
@@ -299,6 +308,10 @@ class ProjectSession(
         recordingStorageMonitorEnabledForTests = enabled
     }
 
+    fun setRecordingCaptureFailureMonitorEnabledForTests(enabled: Boolean) {
+        recordingCaptureFailureMonitorEnabledForTests = enabled
+    }
+
     fun setMasterPeakPollEnabledForTests(enabled: Boolean) {
         masterPeakController.setPollEnabledForTests(enabled)
     }
@@ -307,22 +320,25 @@ class ProjectSession(
         playheadTransport.setNativeTransportPositionForTests(positionMs)
     }
 
-    private fun startRecordingStorageMonitor(activeProjectId: String) {
-        if (!recordingStorageMonitorEnabledForTests) return
-        val directoryPath = audioFilePathProvider.projectRecordingDirectory(activeProjectId)
-        if (directoryPath != null) {
-            recordingStorageMonitor.start(
-                projectDirectoryPath = directoryPath,
-                isRecordingActive = { recordingSession.hasActiveRecordingTake() },
-            ) {
-                performStopRecordingForStorageExhaustion()
+    private fun startRecordingMonitors(activeProjectId: String) {
+        if (recordingStorageMonitorEnabledForTests) {
+            val directoryPath = audioFilePathProvider.projectRecordingDirectory(activeProjectId)
+            if (directoryPath != null) {
+                recordingStorageMonitor.start(
+                    projectDirectoryPath = directoryPath,
+                    isRecordingActive = { recordingSession.hasActiveRecordingTake() },
+                ) {
+                    stopRecordingFromMonitor(R.string.error_recording_stopped_storage)
+                }
             }
         }
-        recordingCaptureFailureMonitor.start(
-            isRecordingActive = { recordingSession.hasActiveRecordingTake() },
-            captureFailed = { capture.isRecordingCaptureFailed() },
-        ) {
-            performStopRecordingForCaptureFailure()
+        if (recordingCaptureFailureMonitorEnabledForTests) {
+            recordingCaptureFailureMonitor.start(
+                isRecordingActive = { recordingSession.hasActiveRecordingTake() },
+                captureFailed = { capture.isRecordingCaptureFailed() },
+            ) {
+                stopRecordingFromMonitor(R.string.error_recording_capture_failed)
+            }
         }
     }
 

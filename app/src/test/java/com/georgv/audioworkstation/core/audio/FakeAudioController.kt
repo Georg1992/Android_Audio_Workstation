@@ -106,10 +106,12 @@ internal open class FakeAudioController(
 
     override fun isRecordingCaptureFailed(): Boolean = recordingCaptureFailed
 
-    override fun stopRecording(): Boolean {
+    override fun stopRecording(): RecordingStopKind {
         stopRecordingCalls += 1
+        val failed = recordingCaptureFailed
         recordingCaptureFailed = false
         _recordingInputLevel.value = 0f
+        if (failed) return RecordingStopKind.CaptureFailed
         if (recordingFirstSampleTransportPositionMsValue < 0L && lastRecordingSpec != null) {
             recordingFirstSampleTransportPositionMsValue = lastRecordingSpec!!.timelineStartOffsetMs
         }
@@ -117,7 +119,7 @@ internal open class FakeAudioController(
             recordingCapturedDurationMsValue =
                 (recordingFirstSampleTransportPositionMsValue + 1_000L).coerceAtLeast(0L)
         }
-        return stopRecordingResult
+        return if (stopRecordingResult) RecordingStopKind.Sealed else RecordingStopKind.NotRecording
     }
 
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {

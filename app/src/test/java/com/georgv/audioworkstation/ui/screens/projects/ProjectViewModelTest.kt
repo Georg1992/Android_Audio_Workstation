@@ -9,6 +9,8 @@ import com.georgv.audioworkstation.core.session.ProjectRecordingCoordinator
 import com.georgv.audioworkstation.core.session.RecordingStartOutcome
 import com.georgv.audioworkstation.core.session.TransportPlaybackPhase
 import com.georgv.audioworkstation.core.audio.FakeAudioController
+import com.georgv.audioworkstation.core.audio.InactiveMicrophoneCaptureForeground
+import com.georgv.audioworkstation.core.audio.MicrophoneCaptureForeground
 import com.georgv.audioworkstation.core.audio.NoopProjectFileStore
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
@@ -172,6 +174,41 @@ class ProjectViewModelTest {
         assertFalse(vm.uiState.value.isRecordingStartup)
         assertEquals(0, audioController.stopRecordingCalls)
         assertEquals(R.string.error_recording_storage_insufficient_start, vm.userMessages.first().resId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `capture failure drops the take and stops the microphone service`() = runTest(mainDispatcherRule.dispatcher) {
+        val dao = FakeProjectDao(projects = listOf(project()), tracks = emptyList())
+        val audioController = FakeAudioController()
+        val foreground = CountingMicrophoneCaptureForeground()
+        val vm =
+            createViewModel(
+                dao,
+                audioController,
+                microphoneCaptureForeground = foreground,
+            )
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+        vm.setRecordingCaptureFailureMonitorEnabledForTests(true)
+
+        vm.bind(PROJECT_ID)
+        advanceUntilIdle()
+        vm.onRecordPressed(PROJECT_ID)
+        runCurrent()
+
+        val recordingId = vm.uiState.value.recordingTrackId
+        assertNotNull(recordingId)
+        assertTrue(vm.uiState.value.tracks.any { it.id == recordingId })
+
+        audioController.recordingCaptureFailed = true
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.recordingTrackId)
+        assertTrue(vm.uiState.value.tracks.none { it.id == recordingId })
+        assertTrue(dao.observeTracks(PROJECT_ID).first().none { it.id == recordingId })
+        assertEquals(1, foreground.stopCount)
+        assertEquals(1, audioController.stopRecordingCalls)
+        assertEquals(R.string.error_recording_capture_failed, vm.userMessages.first().resId)
         collectJob.cancel()
     }
 
@@ -2742,6 +2779,7 @@ class ProjectViewModelTest {
         recordingStorageGuard: RecordingStorageGuard = permissiveRecordingStorageGuard(),
         waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
         testDispatchers: TestAppDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
+        microphoneCaptureForeground: MicrophoneCaptureForeground = InactiveMicrophoneCaptureForeground,
     ): ProjectViewModel {
         val repo = ProjectRepository(dao, NoopProjectFileStore)
         val audioImportCoordinator =
@@ -2776,11 +2814,13 @@ class ProjectViewModelTest {
             AudioIoScope(testDispatchers),
             audioEngineSession,
             audioParameterQueue,
+            microphoneCaptureForeground,
             sessionTransportGate = testSessionTransportCapabilityGate(),
             recordingSessionLatencyAudit = LiveOverdubLatencySessionRecorder { _, _ -> },
         ).also {
             it.setPlayheadNativePollEnabledForTests(false)
             it.setRecordingStorageMonitorEnabledForTests(false)
+            it.setRecordingCaptureFailureMonitorEnabledForTests(false)
             it.setMasterPeakPollEnabledForTests(false)
         }
     }
@@ -3930,6 +3970,17 @@ class ProjectViewModelTest {
     private companion object {
         const val PROJECT_ID = "project-1"
         const val PROJECT_2_ID = "project-2"
+    }
+}
+
+private class CountingMicrophoneCaptureForeground : MicrophoneCaptureForeground {
+    var stopCount = 0
+        private set
+
+    override fun start() = Unit
+
+    override fun stop() {
+        stopCount += 1
     }
 }
 

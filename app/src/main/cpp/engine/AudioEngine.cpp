@@ -1,5 +1,5 @@
 #include "AudioEngine.h"
-#include "StreamingPcm16WavWriter.h"
+#include "TakeWavCommitter.h"
 
 #include "AudioSyncLogConfig.h"
 #include "OutputRenderAhead.h"
@@ -203,8 +203,7 @@ void mixLaneSampleWithPan(float gain,
 namespace dawengine {
 
 struct AudioEngine::RecordingTakeFile {
-    playback::StreamingPcm16WavWriter writer;
-    std::string path;
+    TakeWavCommitter committer;
 };
 
 namespace {
@@ -1398,9 +1397,17 @@ void AudioEngine::recordLoop() {
     const int32_t readFrames =
         m_sessionRecordReadFrames > 0 ? m_sessionRecordReadFrames : kFramesPerRead;
     std::vector<float> buffer(static_cast<size_t>(readFrames * channelCount));
+    TakeWavCommitter *committer = nullptr;
+    {
+        std::lock_guard<std::mutex> recordLock(m_recordMutex);
+        if (m_recordingTakeFile) {
+            committer = &m_recordingTakeFile->committer;
+        }
+    }
 
-    while (m_isRecording) {
-        if (!m_inputStream) {
+    while (m_isRecording.load(std::memory_order_acquire) &&
+           !m_recordingCaptureFailed.load(std::memory_order_acquire)) {
+        if (!m_inputStream || committer == nullptr) {
             markRecordingCaptureFailed();
             break;
         }
@@ -1442,16 +1449,9 @@ void AudioEngine::recordLoop() {
         }
         m_recordingInputLevel.store(std::min(peak, 1.0f), std::memory_order_release);
 
-        {
-            std::lock_guard<std::mutex> recordLock(m_recordMutex);
-            const bool durable =
-                m_recordingTakeFile &&
-                m_recordingTakeFile->writer.WriteFloatInterleaved(buffer.data(), sampleCount) &&
-                m_recordingTakeFile->writer.CommitDurableHeader();
-            if (!durable) {
-                markRecordingCaptureFailed();
-                break;
-            }
+        if (!committer->Enqueue(buffer.data(), sampleCount)) {
+            markRecordingCaptureFailed();
+            break;
         }
 
         const int64_t processEndNs = steadyClockNowNs();
@@ -1464,41 +1464,39 @@ void AudioEngine::recordLoop() {
 
 bool AudioEngine::openRecordingTakeFile(const std::string &outputPath, int32_t channelCount) {
     auto take = std::make_unique<RecordingTakeFile>();
-    take->path = outputPath;
-    if (!take->writer.Open(outputPath, m_sampleRate, channelCount)) {
+    {
+        std::lock_guard<std::mutex> recordLock(m_recordMutex);
+        m_recordingTakeFile = std::move(take);
+    }
+    if (!m_recordingTakeFile->committer.Open(
+            outputPath,
+            m_sampleRate,
+            channelCount,
+            m_fileBitDepth,
+            &m_recordingCaptureFailed)) {
+        std::lock_guard<std::mutex> recordLock(m_recordMutex);
+        m_recordingTakeFile.reset();
         return false;
     }
-    if (!take->writer.CommitDurableHeader()) {
-        take->writer.Abort();
-        std::remove(outputPath.c_str());
-        return false;
-    }
-    std::lock_guard<std::mutex> recordLock(m_recordMutex);
-    m_recordingTakeFile = std::move(take);
     return true;
 }
 
 void AudioEngine::discardUnstartedRecordingTakeFile() {
-    std::string path;
-    {
-        std::lock_guard<std::mutex> recordLock(m_recordMutex);
-        if (m_recordingTakeFile) {
-            path = m_recordingTakeFile->path;
-            m_recordingTakeFile->writer.Abort();
-            m_recordingTakeFile.reset();
-        }
-        m_recordingOutputPath.clear();
+    std::lock_guard<std::mutex> recordLock(m_recordMutex);
+    if (m_recordingTakeFile) {
+        m_recordingTakeFile->committer.Finish(true);
+        m_recordingTakeFile.reset();
     }
-    if (!path.empty()) {
-        std::remove(path.c_str());
-    }
+    m_recordingOutputPath.clear();
 }
 
-bool AudioEngine::sealRecordingTakeFile() {
+bool AudioEngine::sealRecordingTakeFile(bool discard, uint32_t &sealedBytes) {
     std::lock_guard<std::mutex> recordLock(m_recordMutex);
     bool sealed = false;
+    sealedBytes = 0;
     if (m_recordingTakeFile) {
-        sealed = m_recordingTakeFile->writer.Close();
+        sealed = m_recordingTakeFile->committer.Finish(discard);
+        sealedBytes = m_recordingTakeFile->committer.dataBytesWritten();
         m_recordingTakeFile.reset();
     }
     m_recordingOutputPath.clear();
@@ -1513,9 +1511,9 @@ bool AudioEngine::isRecordingCaptureFailed() const {
     return m_recordingCaptureFailed.load(std::memory_order_acquire);
 }
 
-bool AudioEngine::stopRecording() {
+AudioEngine::RecordingStopKind AudioEngine::stopRecording() {
     if (!m_isRecording.exchange(false)) {
-        return false;
+        return RecordingStopKind::NotRecording;
     }
 
     if (m_inputStream) {
@@ -1527,14 +1525,11 @@ bool AudioEngine::stopRecording() {
     closeInputStream();
     m_recordingInputLevel.store(0.0f, std::memory_order_release);
 
+    const bool discard = m_recordingCaptureFailed.load(std::memory_order_acquire);
     uint32_t sealedBytes = 0;
-    {
-        std::lock_guard<std::mutex> recordLock(m_recordMutex);
-        if (m_recordingTakeFile) {
-            sealedBytes = m_recordingTakeFile->writer.dataBytesWritten();
-        }
-    }
-    const bool sealed = sealRecordingTakeFile();
+    const bool sealed = sealRecordingTakeFile(discard, sealedBytes);
+    const bool captureFailed =
+        discard || m_recordingCaptureFailed.load(std::memory_order_acquire);
 
     if (!m_isPlaying.load(std::memory_order_acquire)) {
         resetMasterPlaybackTimeline();
@@ -1552,7 +1547,13 @@ bool AudioEngine::stopRecording() {
         sealedBytes);
 
     m_recordingCaptureFailed.store(false, std::memory_order_release);
-    return sealed;
+    if (captureFailed) {
+        return RecordingStopKind::CaptureFailed;
+    }
+    if (sealed) {
+        return RecordingStopKind::Sealed;
+    }
+    return RecordingStopKind::NotRecording;
 }
 
 // ---------------------------------------------------------------------------
@@ -2351,8 +2352,8 @@ AudioEngine::OfflineMixdownStatus AudioEngine::renderOfflineMixdown(
         m_renderScratch.resize(playback::kRenderScratchFloatCount);
     }
 
-    playback::StreamingPcm16WavWriter writer;
-    if (!writer.Open(outputPath, m_sampleRate, 2)) {
+    StreamingPcm16WavWriter writer;
+    if (!writer.Open(outputPath, m_sampleRate, 2, m_fileBitDepth)) {
         std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
         clearPlaybackLanesLocked();
         resetMasterPlaybackTimeline();

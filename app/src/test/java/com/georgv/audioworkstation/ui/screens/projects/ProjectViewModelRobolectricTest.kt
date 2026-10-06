@@ -22,6 +22,7 @@ import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.testProjectAudioImportCoordinator
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
+import com.georgv.audioworkstation.core.audio.InactiveMicrophoneCaptureForeground
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
@@ -261,6 +262,7 @@ class ProjectViewModelRobolectricTest {
             AudioIoScope(testDispatchers),
             audioEngineSession,
             AudioParameterCommandQueue(audio, testDispatchers, audioEngineSession),
+            InactiveMicrophoneCaptureForeground,
             sessionTransportGate = testSessionTransportCapabilityGate(),
             recordingSessionLatencyAudit = LiveOverdubLatencySessionRecorder { _, _ -> },
         )

@@ -291,9 +291,12 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStartRecording(
                : JNI_FALSE;
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
+extern "C" JNIEXPORT jint JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeStopRecording(JNIEnv *, jobject) {
-    return g_engine && g_engine->stopRecording() ? JNI_TRUE : JNI_FALSE;
+    if (!g_engine) {
+        return static_cast<jint>(dawengine::AudioEngine::RecordingStopKind::NotRecording);
+    }
+    return static_cast<jint>(g_engine->stopRecording());
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

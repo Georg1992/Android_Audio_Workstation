@@ -6,6 +6,7 @@ import com.georgv.audioworkstation.core.audio.PanRange
 import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingRequest
 import com.georgv.audioworkstation.core.audio.RecordingSpec
+import com.georgv.audioworkstation.core.audio.RecordingStopKind
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,7 +31,12 @@ class NativeEngine @Inject constructor() {
         )
     }
 
-    fun stopRecording(): Boolean = nativeStopRecording()
+    fun stopRecording(): RecordingStopKind =
+        when (nativeStopRecording()) {
+            RecordingStopKind.Sealed.code -> RecordingStopKind.Sealed
+            RecordingStopKind.CaptureFailed.code -> RecordingStopKind.CaptureFailed
+            else -> RecordingStopKind.NotRecording
+        }
 
     fun isRecordingCaptureFailed(): Boolean = nativeIsRecordingCaptureFailed()
 
@@ -300,7 +306,7 @@ class NativeEngine @Inject constructor() {
         startPositionMs: Long,
     ): Boolean
 
-    private external fun nativeStopRecording(): Boolean
+    private external fun nativeStopRecording(): Int
 
     private external fun nativeIsRecordingCaptureFailed(): Boolean
 

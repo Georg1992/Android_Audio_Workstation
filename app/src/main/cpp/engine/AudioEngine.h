@@ -131,15 +131,26 @@ public:
                                    const std::vector<int64_t> &laneSourceTrimStartMs,
                                    const std::vector<float> &lanePan);
 
+    enum class RecordingStopKind : int32_t {
+        NotRecording = 0,
+        Sealed = 1,
+        CaptureFailed = 2,
+    };
+
     void markOverdubJniReady();
 
     int64_t overdubJniReadySteadyNs() const {
         return m_overdubJniReadySteadyNs.load(std::memory_order_acquire);
     }
 
-    bool stopRecording();
+    /**
+     * Closes input and the take file.
+     * [RecordingStopKind::CaptureFailed] means the file was removed and the row must not be finalized.
+     * The failure flag stays set until this returns.
+     */
+    RecordingStopKind stopRecording();
 
-    /** True after the record thread stops on an input or disk error, until [stopRecording]. */
+    /** True after capture hits an input or disk error, until [stopRecording] returns. */
     bool isRecordingCaptureFailed() const;
 
     struct OboeStreamSnapshot {
@@ -526,7 +537,7 @@ private:
     void onRecordingFramesCaptured(int32_t framesRead, int64_t appReceiveMonotonicNs);
     bool openRecordingTakeFile(const std::string &outputPath, int32_t channelCount);
     void discardUnstartedRecordingTakeFile();
-    bool sealRecordingTakeFile();
+    bool sealRecordingTakeFile(bool discard, uint32_t &sealedBytes);
     void markRecordingCaptureFailed();
 
     void ensureIoThreadRunning();

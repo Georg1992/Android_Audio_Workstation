@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.core.session
 
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.MeterPort
+import com.georgv.audioworkstation.core.audio.RecordingStopKind
 import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
@@ -214,8 +215,11 @@ internal class ProjectTransportCommands(
             recordingSession.isStartupInFlight()
         ) {
             onRecordingStorageMonitorStop()
-            transportController.stopAll()
+            val kind = transportController.stopAll()
             playheadTransport.stopAndResetToZero()
+            if (kind == RecordingStopKind.CaptureFailed) {
+                emitMessage(R.string.error_recording_capture_failed)
+            }
             return
         }
 

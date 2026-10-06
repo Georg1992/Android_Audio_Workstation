@@ -31,8 +31,8 @@ uint32_t ReadLe32(std::FILE *file) {
 
 TEST(StreamingPcm16WavWriter, CommittedChunksStayInTheFileAfterClose) {
     const std::string path = TempWavPath();
-    dawengine::playback::StreamingPcm16WavWriter writer;
-    ASSERT_TRUE(writer.Open(path, 48'000, 1));
+    dawengine::StreamingPcm16WavWriter writer;
+    ASSERT_TRUE(writer.Open(path, 48'000, 1, dawengine::StreamingPcm16WavWriter::kBitsPerSample));
     ASSERT_TRUE(writer.CommitDurableHeader());
 
     const float first[] = {0.5f, -0.5f};
@@ -66,6 +66,11 @@ TEST(StreamingPcm16WavWriter, CommittedChunksStayInTheFileAfterClose) {
 }
 
 TEST(StreamingPcm16WavWriter, EmptyPathDoesNotOpen) {
-    dawengine::playback::StreamingPcm16WavWriter writer;
-    EXPECT_FALSE(writer.Open("", 48'000, 1));
+    dawengine::StreamingPcm16WavWriter writer;
+    EXPECT_FALSE(writer.Open("", 48'000, 1, dawengine::StreamingPcm16WavWriter::kBitsPerSample));
+}
+
+TEST(StreamingPcm16WavWriter, NonPcm16BitDepthDoesNotOpen) {
+    dawengine::StreamingPcm16WavWriter writer;
+    EXPECT_FALSE(writer.Open("take.wav", 48'000, 1, 24));
 }

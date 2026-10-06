@@ -1,6 +1,8 @@
 package com.georgv.audioworkstation.core.session
 
 import com.georgv.audioworkstation.core.audio.CapturePort
+import com.georgv.audioworkstation.core.audio.InactiveMicrophoneCaptureForeground
+import com.georgv.audioworkstation.core.audio.MicrophoneCaptureForeground
 import com.georgv.audioworkstation.core.audio.MeterPort
 import com.georgv.audioworkstation.core.audio.RecordingPunchContext
 import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
@@ -37,6 +39,7 @@ class RecordingSessionController(
     private val recordingCoordinator: ProjectRecordingCoordinator,
     private val dispatchers: AppDispatchers,
     private val sessionTransportGate: SessionTransportCapabilityGate,
+    private val microphoneCaptureForeground: MicrophoneCaptureForeground = InactiveMicrophoneCaptureForeground,
 ) {
     private val _recordingTrackId = MutableStateFlow<String?>(null)
     val recordingTrackId: StateFlow<String?> = _recordingTrackId.asStateFlow()
@@ -394,6 +397,7 @@ class RecordingSessionController(
             recordingCoordinator.discardPunchRecordingTempFile(_punchRecordingContext.value)
         }
         clearPunchRecordingContext()
+        microphoneCaptureForeground.stop()
         withAudioIo(dispatchers, "CapturePort.stopRecording rollback") {
             capture.stopRecording()
         }

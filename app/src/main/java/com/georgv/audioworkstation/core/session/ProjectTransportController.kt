@@ -1,6 +1,9 @@
 package com.georgv.audioworkstation.core.session
 
 import com.georgv.audioworkstation.core.audio.CapturePort
+import com.georgv.audioworkstation.core.audio.InactiveMicrophoneCaptureForeground
+import com.georgv.audioworkstation.core.audio.MicrophoneCaptureForeground
+import com.georgv.audioworkstation.core.audio.RecordingStopKind
 import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
 import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
 import com.georgv.audioworkstation.core.audio.latency.LiveSessionLatencySnapshot
@@ -17,7 +20,9 @@ import com.georgv.audioworkstation.core.coroutines.withAudioIo
  * **Stop ordering (behavior preserved from Phase 0):**
  * 1. Cancel playback completion monitoring ([PlaybackSessionController.cancelCompletionMonitorForTransportStop]).
  * 2. Set recording startup flag to false ([RecordingSessionController.clearStartupFlagForTransportStop]).
- * 3. If a recording row was active (non-null id) and [CapturePort.stopRecording] succeeds, invoke finalize callback.
+ * 3. If a recording row was active, stop the microphone service and [CapturePort.stopRecording].
+ *    Finalize only when the stop kind is [RecordingStopKind.Sealed].
+ *    [RecordingStopKind.CaptureFailed] drops the row via [onRecordingCaptureFailed].
  * 4. If playback was marked active, [PlaybackPort.stopPlayback].
  * 5. Clear recording markers ([RecordingSessionController.clearRecordingTransportMarkers]).
  * 6. Clear playing markers ([PlaybackSessionController.clearPlayingTransportState]).
@@ -29,10 +34,12 @@ class ProjectTransportController(
     private val dispatchers: AppDispatchers,
     private val finalizeRecordingTrackAfterSuccessfulEngineStop: (String, RecordingStopSnapshot) -> Unit,
     private val onLiveOverdubSessionEnd: suspend (LiveSessionLatencySnapshot) -> Unit,
+    private val microphoneCaptureForeground: MicrophoneCaptureForeground = InactiveMicrophoneCaptureForeground,
+    private val onRecordingCaptureFailed: (String) -> Unit = {},
 ) {
 
-    /** Full user / lifecycle transport stop. */
-    suspend fun stopAll() {
+    /** Full user / lifecycle transport stop. Returns the capture stop kind when a take was active. */
+    suspend fun stopAll(): RecordingStopKind {
         playbackSession.cancelCompletionMonitorForTransportStop()
 
         recordingSession.clearStartupFlagForTransportStop()
@@ -50,16 +57,17 @@ class ProjectTransportController(
             } else {
                 null
             }
-        val recordingStopped =
-            withAudioIo(dispatchers, "CapturePort.stopRecording") {
-                if (activeRecordingTrackId != null) {
+        val recordingStopKind =
+            if (activeRecordingTrackId != null) {
+                microphoneCaptureForeground.stop()
+                withAudioIo(dispatchers, "CapturePort.stopRecording") {
                     capture.stopRecording()
-                } else {
-                    false
                 }
+            } else {
+                RecordingStopKind.NotRecording
             }
         val stopSnapshot =
-            if (activeRecordingTrackId != null && recordingStopped) {
+            if (activeRecordingTrackId != null && recordingStopKind == RecordingStopKind.Sealed) {
                 withAudioIo(dispatchers, "CapturePort.readRecordingStopSnapshot") {
                     capture.readRecordingStopSnapshot()
                 }.also { snapshot ->
@@ -72,7 +80,7 @@ class ProjectTransportController(
                     capturedDurationMs = 0L,
                 )
             }
-        if (activeRecordingTrackId != null && recordingStopped) {
+        if (activeRecordingTrackId != null && recordingStopKind == RecordingStopKind.Sealed) {
             finalizeRecordingTrackAfterSuccessfulEngineStop(
                 activeRecordingTrackId,
                 stopSnapshot,
@@ -81,11 +89,15 @@ class ProjectTransportController(
                 onLiveOverdubSessionEnd(liveSessionCapture)
             }
         }
+        if (activeRecordingTrackId != null && recordingStopKind == RecordingStopKind.CaptureFailed) {
+            onRecordingCaptureFailed(activeRecordingTrackId)
+        }
 
         playbackSession.stopEngineIfMarkedPlaying()
 
         recordingSession.clearRecordingTransportMarkers()
         playbackSession.clearPlayingTransportState()
+        return recordingStopKind
     }
 
     /** Playback markers only — used when navigating to another project ([ProjectViewModel.bind]). */

@@ -30,6 +30,7 @@ import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.audio.CapturePort
 import com.georgv.audioworkstation.core.audio.MeterPort
 import com.georgv.audioworkstation.core.audio.AudioEngineSession
+import com.georgv.audioworkstation.core.audio.MicrophoneCaptureForeground
 import com.georgv.audioworkstation.core.audio.AudioParameterCommandQueue
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.AudioImportSource
@@ -164,6 +165,7 @@ class ProjectViewModel @Inject constructor(
     private val audioIoScope: AudioIoScope,
     private val audioEngineSession: AudioEngineSession,
     private val audioParameterQueue: AudioParameterCommandQueue,
+    private val microphoneCaptureForeground: MicrophoneCaptureForeground,
     private val sessionTransportGate: SessionTransportCapabilityGate,
     private val recordingSessionLatencyAudit: LiveOverdubLatencySessionRecorder,
 ) : ViewModel() {
@@ -261,6 +263,10 @@ class ProjectViewModel @Inject constructor(
             },
             finalizeRecordingTrackAfterSuccessfulEngineStop = { trackId, stopSnapshot ->
                 finalizeRecordingTrack(trackId, stopSnapshot)
+            },
+            microphoneCaptureForeground = microphoneCaptureForeground,
+            onRecordingCaptureFailed = { trackId ->
+                dropRecordingTrackAfterCaptureFailure(trackId)
             },
         )
 
@@ -614,6 +620,10 @@ class ProjectViewModel @Inject constructor(
 
     internal fun setRecordingStorageMonitorEnabledForTests(enabled: Boolean) {
         session.setRecordingStorageMonitorEnabledForTests(enabled)
+    }
+
+    internal fun setRecordingCaptureFailureMonitorEnabledForTests(enabled: Boolean) {
+        session.setRecordingCaptureFailureMonitorEnabledForTests(enabled)
     }
 
     internal fun setMasterPeakPollEnabledForTests(enabled: Boolean) {
@@ -1026,6 +1036,30 @@ class ProjectViewModel @Inject constructor(
 
     private suspend fun ensureEngineSessionAcquired() {
         session.ensureEngineSessionAcquired()
+    }
+
+    private fun dropRecordingTrackAfterCaptureFailure(trackId: String) {
+        val punch = recordingSession.punchRecordingContext()
+        viewModelScope.launch {
+            if (punch != null) {
+                withIo(dispatchers, "discard failed punch take") {
+                    recordingCoordinator.discardPunchRecordingTempFile(punch)
+                    val track = uiState.value.tracks.find { it.id == trackId } ?: return@withIo
+                    repo.upsertTrack(track.copy(isRecording = false))
+                }
+                recordingSession.clearPunchRecordingContext()
+            } else {
+                val tracks = uiState.value.tracks
+                val track = tracks.find { it.id == trackId } ?: return@launch
+                val remaining =
+                    tracks.filter { it.id != trackId }.mapIndexed { index, item ->
+                        item.copy(position = index)
+                    }
+                withIo(dispatchers, "delete failed recording track") {
+                    repo.deleteTrack(track, remaining)
+                }
+            }
+        }
     }
 
     private fun finalizeRecordingTrack(trackId: String, stopSnapshot: com.georgv.audioworkstation.core.audio.RecordingStopSnapshot) {

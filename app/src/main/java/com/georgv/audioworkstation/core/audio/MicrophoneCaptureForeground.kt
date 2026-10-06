@@ -14,6 +14,13 @@ interface MicrophoneCaptureForeground {
     fun stop()
 }
 
+/** Used when a caller has no process-wide service to stop. */
+object InactiveMicrophoneCaptureForeground : MicrophoneCaptureForeground {
+    override fun start() = Unit
+
+    override fun stop() = Unit
+}
+
 @Singleton
 class AndroidMicrophoneCaptureForeground @Inject constructor(
     @ApplicationContext private val context: Context,

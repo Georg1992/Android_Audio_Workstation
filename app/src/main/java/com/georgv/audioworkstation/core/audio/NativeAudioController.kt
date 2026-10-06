@@ -195,14 +195,13 @@ class NativeAudioController @Inject constructor(
         )
     }
 
-    override fun stopRecording(): Boolean {
+    override fun stopRecording(): RecordingStopKind {
         checkNotMainThreadForNativeLifecycle("stopRecording")
         recordingLevelJob?.cancel()
         recordingLevelJob = null
-        val ok = nativeEngine.stopRecording()
-        microphoneCaptureForeground.stop()
+        val kind = nativeEngine.stopRecording()
         _recordingInputLevel.value = 0f
-        return ok
+        return kind
     }
 
     override fun startPlayback(spec: MultiPlaybackSpec): Boolean {
@@ -311,7 +310,6 @@ class NativeAudioController @Inject constructor(
         recordingLevelJob = null
         _playbackState.value = false
         _recordingInputLevel.value = 0f
-        microphoneCaptureForeground.stop()
         nativeEngine.releaseEngine()
     }
 
