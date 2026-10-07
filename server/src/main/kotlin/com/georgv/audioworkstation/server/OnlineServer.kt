@@ -23,14 +23,14 @@ class OnlineServer(
         const val STORAGE_DIRECTORY = "storage"
         const val DATABASE_FILE = "online.db"
 
-        fun start(port: Int, root: File): OnlineServer {
+        fun start(port: Int, root: File, google: GoogleIdTokens): OnlineServer {
             check(root.mkdirs() || root.isDirectory) { "Online data directory was not created." }
             val storage = ContentAddressedStorage(File(root, STORAGE_DIRECTORY))
             val database = OnlineDatabase(File(root, DATABASE_FILE))
             val http = HttpServer.create(InetSocketAddress("127.0.0.1", port), 0)
             val executor = Executors.newCachedThreadPool()
             http.executor = executor
-            http.createContext("/", OnlineHandler(OnlineService(database, storage)))
+            http.createContext("/", OnlineHandler(AccountService(database, google), OnlineService(database, storage)))
             http.start()
             return OnlineServer(http, executor, database)
         }

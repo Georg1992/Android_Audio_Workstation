@@ -17,7 +17,7 @@ sealed class ShareResult {
 @Singleton
 class ProjectShareCoordinator @Inject constructor(
     private val sessions: AccountSessionStore,
-    private val api: OnlineApi,
+    private val api: ProjectShareApi,
     private val projects: ProjectRepository,
     private val pending: PendingProjectShare,
     private val dispatchers: AppDispatchers,

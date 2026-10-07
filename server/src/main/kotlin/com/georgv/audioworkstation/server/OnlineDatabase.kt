@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.server
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.ResultSet
 import java.sql.SQLException
 
 class OnlineDatabase(file: File) : AutoCloseable {
@@ -19,8 +20,13 @@ class OnlineDatabase(file: File) : AutoCloseable {
                 CREATE TABLE IF NOT EXISTS accounts (
                     id TEXT PRIMARY KEY,
                     email TEXT NOT NULL UNIQUE,
-                    password_salt TEXT NOT NULL,
-                    password_hash TEXT NOT NULL
+                    password_salt TEXT,
+                    password_hash TEXT,
+                    google_subject TEXT UNIQUE,
+                    CHECK (
+                        (password_salt IS NULL) = (password_hash IS NULL)
+                        AND (password_hash IS NOT NULL OR google_subject IS NOT NULL)
+                    )
                 )
                 """.trimIndent(),
             )
@@ -56,15 +62,19 @@ class OnlineDatabase(file: File) : AutoCloseable {
         }
     }
 
-    fun insertAccount(id: String, email: String, passwordSalt: String, passwordHash: String) {
+    fun insertAccount(id: String, email: String, passwordSalt: String?, passwordHash: String?, googleSubject: String?) {
         locked {
             connection.prepareStatement(
-                "INSERT INTO accounts (id, email, password_salt, password_hash) VALUES (?, ?, ?, ?)",
+                """
+                INSERT INTO accounts (id, email, password_salt, password_hash, google_subject)
+                VALUES (?, ?, ?, ?, ?)
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, id)
                 statement.setString(2, email)
                 statement.setString(3, passwordSalt)
                 statement.setString(4, passwordHash)
+                statement.setString(5, googleSubject)
                 statement.executeUpdate()
             }
         }
@@ -72,19 +82,31 @@ class OnlineDatabase(file: File) : AutoCloseable {
 
     fun findAccount(email: String): StoredAccount? = locked {
         connection.prepareStatement(
-            "SELECT id, email, password_salt, password_hash FROM accounts WHERE email = ?",
+            "SELECT $ACCOUNT_COLUMNS FROM accounts WHERE email = ?",
         ).use { statement ->
             statement.setString(1, email)
-            statement.executeQuery().use { rows ->
-                if (!rows.next()) {
-                    null
-                } else {
-                    StoredAccount(
-                        id = rows.getString("id"),
-                        email = rows.getString("email"),
-                        passwordSalt = rows.getString("password_salt"),
-                        passwordHash = rows.getString("password_hash"),
-                    )
+            statement.executeQuery().use { rows -> if (rows.next()) readAccount(rows) else null }
+        }
+    }
+
+    fun findAccountByGoogleSubject(googleSubject: String): StoredAccount? = locked {
+        connection.prepareStatement(
+            "SELECT $ACCOUNT_COLUMNS FROM accounts WHERE google_subject = ?",
+        ).use { statement ->
+            statement.setString(1, googleSubject)
+            statement.executeQuery().use { rows -> if (rows.next()) readAccount(rows) else null }
+        }
+    }
+
+    fun setGoogleSubject(accountId: String, googleSubject: String) {
+        locked {
+            connection.prepareStatement(
+                "UPDATE accounts SET google_subject = ? WHERE id = ? AND google_subject IS NULL",
+            ).use { statement ->
+                statement.setString(1, googleSubject)
+                statement.setString(2, accountId)
+                if (statement.executeUpdate() != 1) {
+                    throw OnlineFailure(409, "email is linked to a different gmail account")
                 }
             }
         }
@@ -112,25 +134,14 @@ class OnlineDatabase(file: File) : AutoCloseable {
     fun accountForToken(token: String): StoredAccount? = locked {
         connection.prepareStatement(
             """
-            SELECT accounts.id, accounts.email, accounts.password_salt, accounts.password_hash
+            SELECT $ACCOUNT_COLUMNS
             FROM sessions
             JOIN accounts ON accounts.id = sessions.account_id
             WHERE sessions.token = ?
             """.trimIndent(),
         ).use { statement ->
             statement.setString(1, token)
-            statement.executeQuery().use { rows ->
-                if (!rows.next()) {
-                    null
-                } else {
-                    StoredAccount(
-                        id = rows.getString("id"),
-                        email = rows.getString("email"),
-                        passwordSalt = rows.getString("password_salt"),
-                        passwordHash = rows.getString("password_hash"),
-                    )
-                }
-            }
+            statement.executeQuery().use { rows -> if (rows.next()) readAccount(rows) else null }
         }
     }
 
@@ -216,6 +227,15 @@ class OnlineDatabase(file: File) : AutoCloseable {
         connection.close()
     }
 
+    private fun readAccount(rows: ResultSet): StoredAccount =
+        StoredAccount(
+            id = rows.getString("id"),
+            email = rows.getString("email"),
+            passwordSalt = rows.getString("password_salt"),
+            passwordHash = rows.getString("password_hash"),
+            googleSubject = rows.getString("google_subject"),
+        )
+
     private fun <T> locked(block: () -> T): T =
         synchronized(connection) {
             try {
@@ -227,11 +247,18 @@ class OnlineDatabase(file: File) : AutoCloseable {
                 throw error
             }
         }
+
+    private companion object {
+        const val ACCOUNT_COLUMNS =
+            "accounts.id AS id, accounts.email AS email, accounts.password_salt AS password_salt, " +
+                "accounts.password_hash AS password_hash, accounts.google_subject AS google_subject"
+    }
 }
 
 data class StoredAccount(
     val id: String,
     val email: String,
-    val passwordSalt: String,
-    val passwordHash: String,
+    val passwordSalt: String?,
+    val passwordHash: String?,
+    val googleSubject: String?,
 )

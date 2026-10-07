@@ -1,46 +1,12 @@
 package com.georgv.audioworkstation.server
 
 import java.io.InputStream
-import java.security.SecureRandom
-import java.util.Locale
 import java.util.UUID
 
 class OnlineService(
     private val database: OnlineDatabase,
     private val storage: ContentAddressedStorage,
 ) {
-    private val random = SecureRandom()
-
-    fun createAccount(emailRaw: String, password: String): AccountSession {
-        val email = normalizeEmail(emailRaw)
-        requirePassword(password)
-        val id = UUID.randomUUID().toString()
-        val salt = PasswordHasher.salt()
-        val hash = PasswordHasher.hash(password, salt)
-        database.insertAccount(id, email, salt.toHex(), hash.toHex())
-        return openSession(id, email)
-    }
-
-    fun createSession(emailRaw: String, password: String): AccountSession {
-        val email = normalizeEmail(emailRaw)
-        requirePassword(password)
-        val account = database.findAccount(email) ?: throw OnlineFailure(401, "invalid email or password")
-        val salt = hexToBytes(account.passwordSalt)
-        val expected = hexToBytes(account.passwordHash)
-        if (!PasswordHasher.matches(password, salt, expected)) {
-            throw OnlineFailure(401, "invalid email or password")
-        }
-        return openSession(account.id, account.email)
-    }
-
-    fun deleteSession(token: String) {
-        if (!database.deleteSession(token)) {
-            throw OnlineFailure(401, "session is not valid")
-        }
-    }
-
-    fun currentAccount(token: String): StoredAccount = account(token)
-
     fun createProject(token: String, title: String): SharedProjectRecord {
         val owner = account(token)
         val normalized = title.trim()
@@ -93,14 +59,6 @@ class OnlineService(
         database.insertFile(projectId, file)
     }
 
-    private fun openSession(accountId: String, email: String): AccountSession {
-        val tokenBytes = ByteArray(TOKEN_BYTES)
-        random.nextBytes(tokenBytes)
-        val token = tokenBytes.toHex()
-        database.insertSession(token, accountId)
-        return AccountSession(token = token, accountId = accountId, email = email)
-    }
-
     private fun account(token: String): StoredAccount =
         database.accountForToken(token) ?: throw OnlineFailure(401, "session is not valid")
 
@@ -110,22 +68,7 @@ class OnlineService(
         return record
     }
 
-    private fun normalizeEmail(emailRaw: String): String {
-        val email = emailRaw.trim().lowercase(Locale.US)
-        if (!emailPattern.matches(email)) throw OnlineFailure(400, "email is invalid")
-        return email
-    }
-
-    private fun requirePassword(password: String) {
-        if (password.isBlank()) throw OnlineFailure(400, "password is required")
-    }
-
     private fun requireTrack(clientTrackId: String) {
         if (clientTrackId.isBlank()) throw OnlineFailure(400, "client track id is required")
-    }
-
-    private companion object {
-        const val TOKEN_BYTES = 32
-        val emailPattern = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
     }
 }

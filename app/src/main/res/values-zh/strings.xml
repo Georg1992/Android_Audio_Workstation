@@ -36,6 +36,9 @@
     <string name="community_password_label">密码</string>
     <string name="community_sign_in">登录</string>
     <string name="community_create_account">创建账户</string>
+    <string name="community_confirm_password_label">确认密码</string>
+    <string name="community_register">注册</string>
+    <string name="community_gmail">使用 Gmail 登录</string>
     <string name="community_sign_out">退出</string>
     <string name="community_signed_in">已登录：%1$s</string>
     <string name="cd_share_project">分享项目</string>
@@ -166,6 +169,9 @@
     <string name="error_mix_preview_failed">无法播放混音预览。</string>
     <string name="error_sign_in_failed">登录失败。</string>
     <string name="error_create_account_failed">无法创建账户。</string>
+    <string name="error_invalid_email">请输入有效邮箱。</string>
+    <string name="error_password_mismatch">两次密码不一致。</string>
+    <string name="error_gmail_sign_in_failed">Gmail 登录失败。</string>
     <string name="error_sign_out_failed">退出失败。</string>
     <string name="error_share_failed">无法分享项目。</string>
 </resources>

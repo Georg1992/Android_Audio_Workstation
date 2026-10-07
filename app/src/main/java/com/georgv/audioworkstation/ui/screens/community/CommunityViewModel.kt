@@ -6,10 +6,12 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.util.logWarning
+import com.georgv.audioworkstation.online.AccountApi
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
+import com.georgv.audioworkstation.online.GmailSignIn
+import com.georgv.audioworkstation.online.GmailSignInCancelled
 import com.georgv.audioworkstation.online.HttpUnauthorized
-import com.georgv.audioworkstation.online.OnlineApi
 import com.georgv.audioworkstation.online.OnlineApiException
 import com.georgv.audioworkstation.online.ProjectShareCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,7 +35,8 @@ data class CommunityUiState(
 @HiltViewModel
 class CommunityViewModel @Inject constructor(
     private val sessions: AccountSessionStore,
-    private val api: OnlineApi,
+    private val accounts: AccountApi,
+    private val gmail: GmailSignIn,
     private val share: ProjectShareCoordinator,
     private val dispatchers: AppDispatchers,
 ) : ViewModel() {
@@ -51,11 +54,53 @@ class CommunityViewModel @Inject constructor(
         )
 
     fun signIn(email: String, password: String) {
-        submit(email, password, R.string.error_sign_in_failed, api::createSession)
+        submit(email, password, R.string.error_sign_in_failed, accounts::createSession)
     }
 
-    fun createAccount(email: String, password: String) {
-        submit(email, password, R.string.error_create_account_failed, api::createAccount)
+    fun register(email: String, password: String, confirmation: String) {
+        if (busy.value) return
+        val emailText = email.trim()
+        if (rejectRegistration(emailText, password, confirmation)) return
+        viewModelScope.launch {
+            busy.value = true
+            var registered = false
+            try {
+                val session = withContext(dispatchers.io) {
+                    accounts.register(emailText, password)
+                    registered = true
+                    accounts.createSession(emailText, password)
+                }
+                finishSignIn(session)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                logWarning(TAG, "registration failed", error)
+                val failure = if (registered) R.string.error_sign_in_failed else R.string.error_create_account_failed
+                messages.send(UiMessage(failure))
+            } finally {
+                busy.value = false
+            }
+        }
+    }
+
+    fun signInWithGmail() {
+        if (busy.value) return
+        viewModelScope.launch {
+            busy.value = true
+            try {
+                val idToken = gmail.idToken()
+                val session = withContext(dispatchers.io) { accounts.createGoogleSession(idToken) }
+                finishSignIn(session)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: GmailSignInCancelled) {
+            } catch (error: Exception) {
+                logWarning(TAG, "gmail sign-in failed", error)
+                messages.send(UiMessage(R.string.error_gmail_sign_in_failed))
+            } finally {
+                busy.value = false
+            }
+        }
     }
 
     fun signOut() {
@@ -64,7 +109,7 @@ class CommunityViewModel @Inject constructor(
             val session = sessions.current() ?: return@launch
             busy.value = true
             try {
-                withContext(dispatchers.io) { api.deleteSession(session.token) }
+                withContext(dispatchers.io) { accounts.deleteSession(session.token) }
                 sessions.clear()
             } catch (cancel: CancellationException) {
                 throw cancel
@@ -100,8 +145,7 @@ class CommunityViewModel @Inject constructor(
             busy.value = true
             try {
                 val session = withContext(dispatchers.io) { call(emailText, password) }
-                sessions.save(session)
-                reportPendingShare()
+                finishSignIn(session)
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
@@ -111,6 +155,27 @@ class CommunityViewModel @Inject constructor(
                 busy.value = false
             }
         }
+    }
+
+    private fun rejectRegistration(email: String, password: String, confirmation: String): Boolean {
+        if (email.isEmpty() || password.isBlank() || confirmation.isBlank()) {
+            viewModelScope.launch { messages.send(UiMessage(R.string.error_create_account_failed)) }
+            return true
+        }
+        if (!email.matches(emailPattern)) {
+            viewModelScope.launch { messages.send(UiMessage(R.string.error_invalid_email)) }
+            return true
+        }
+        if (password != confirmation) {
+            viewModelScope.launch { messages.send(UiMessage(R.string.error_password_mismatch)) }
+            return true
+        }
+        return false
+    }
+
+    private suspend fun finishSignIn(session: AccountSession) {
+        sessions.save(session)
+        reportPendingShare()
     }
 
     private suspend fun reportPendingShare() {
@@ -127,5 +192,6 @@ class CommunityViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "CommunityViewModel"
+        val emailPattern = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
     }
 }

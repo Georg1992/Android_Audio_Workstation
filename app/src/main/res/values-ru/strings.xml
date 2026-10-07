@@ -32,6 +32,9 @@
     <string name="community_password_label">Пароль</string>
     <string name="community_sign_in">Войти</string>
     <string name="community_create_account">Создать аккаунт</string>
+    <string name="community_confirm_password_label">Подтверждение пароля</string>
+    <string name="community_register">Зарегистрироваться</string>
+    <string name="community_gmail">Войти через Gmail</string>
     <string name="community_sign_out">Выйти</string>
     <string name="community_signed_in">Вы вошли как %1$s</string>
     <string name="cd_share_project">Поделиться проектом</string>
@@ -162,6 +165,9 @@
     <string name="error_mix_preview_failed">Не удалось воспроизвести превью микса.</string>
     <string name="error_sign_in_failed">Не удалось войти.</string>
     <string name="error_create_account_failed">Не удалось создать аккаунт.</string>
+    <string name="error_invalid_email">Укажите корректную почту.</string>
+    <string name="error_password_mismatch">Пароли не совпадают.</string>
+    <string name="error_gmail_sign_in_failed">Не удалось войти через Gmail.</string>
     <string name="error_sign_out_failed">Не удалось выйти.</string>
     <string name="error_share_failed">Не удалось поделиться проектом.</string>
 </resources>

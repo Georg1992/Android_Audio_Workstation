@@ -1,5 +1,7 @@
 package com.georgv.audioworkstation.server
 
+data class RegisteredAccount(val accountId: String, val email: String)
+
 data class AccountSession(val token: String, val accountId: String, val email: String)
 
 data class SharedProjectRecord(val id: String, val ownerAccountId: String, val title: String)

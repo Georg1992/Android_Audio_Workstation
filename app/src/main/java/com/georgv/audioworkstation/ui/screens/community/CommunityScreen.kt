@@ -53,6 +53,8 @@ fun CommunityScreen(
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var registering by remember { mutableStateOf(false) }
 
     LaunchedEffect(vm) {
         vm.userMessages.collect { message ->
@@ -89,10 +91,27 @@ fun CommunityScreen(
                     keyboardType = KeyboardType.Password,
                     onValueChange = { password = it },
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                ) {
+                if (registering) {
+                    CommunityField(
+                        label = stringResource(R.string.community_confirm_password_label),
+                        value = confirmation,
+                        enabled = !state.busy,
+                        keyboardType = KeyboardType.Password,
+                        onValueChange = { confirmation = it },
+                    )
+                    CommunityAction(
+                        text = stringResource(R.string.community_register),
+                        fillColor = AppColors.Green,
+                        enabled = !state.busy,
+                        onClick = { vm.register(email, password, confirmation) },
+                    )
+                    CommunityAction(
+                        text = stringResource(R.string.community_sign_in),
+                        fillColor = AppColors.SurfacePanel,
+                        enabled = !state.busy,
+                        onClick = { registering = false },
+                    )
+                } else {
                     CommunityAction(
                         text = stringResource(R.string.community_sign_in),
                         fillColor = AppColors.Green,
@@ -103,7 +122,13 @@ fun CommunityScreen(
                         text = stringResource(R.string.community_create_account),
                         fillColor = AppColors.SurfacePanel,
                         enabled = !state.busy,
-                        onClick = { vm.createAccount(email, password) },
+                        onClick = { registering = true },
+                    )
+                    CommunityAction(
+                        text = stringResource(R.string.community_gmail),
+                        fillColor = AppColors.SurfacePanel,
+                        enabled = !state.busy,
+                        onClick = vm::signInWithGmail,
                     )
                 }
             } else {
@@ -170,6 +195,7 @@ private fun CommunityAction(
     Surface(
         onClick = onClick,
         enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
         color = AppColors.SurfacePanel,
         shadowElevation = Dimens.Stroke,
     ) {

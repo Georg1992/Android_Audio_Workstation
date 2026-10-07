@@ -18,11 +18,12 @@ class OnlineApiTest {
     private lateinit var root: File
     private lateinit var server: OnlineServer
     private lateinit var api: Api
+    private val google = MapGoogleIdTokens()
 
     @Before
     fun setUp() {
         root = Files.createTempDirectory("online-api").toFile()
-        server = OnlineServer.start(port = 0, root = root)
+        server = OnlineServer.start(port = 0, root = root, google = google)
         api = Api("http://127.0.0.1:${server.port}")
     }
 
@@ -39,22 +40,76 @@ class OnlineApiTest {
     }
 
     @Test
-    fun createAccountStartsASessionAndRejectsADuplicateEmail() {
+    fun registrationReturnsTheAccountAndSignInStartsTheSession() {
         val created = api.postJson("/accounts", """{"email":"Ada@Example.com","password":"plain-password-secret"}""")
         assertEquals(201, created.statusCode())
-        val session = JSONObject(created.body())
-        assertEquals("ada@example.com", session.getString("email"))
+        val account = JSONObject(created.body())
+        assertEquals("ada@example.com", account.getString("email"))
+        assertFalse(account.has("token"))
+        assertEquals(401, api.get("/session", null).statusCode())
+
+        val signedIn = api.postJson("/sessions", """{"email":"ada@example.com","password":"plain-password-secret"}""")
+        assertEquals(200, signedIn.statusCode())
+        val session = JSONObject(signedIn.body())
+        assertEquals(account.getString("accountId"), session.getString("accountId"))
         assertTrue(session.getString("token").isNotBlank())
 
         val current = api.get("/session", session.getString("token"))
         assertEquals(200, current.statusCode())
-        assertEquals(session.getString("accountId"), JSONObject(current.body()).getString("accountId"))
+        assertEquals(account.getString("accountId"), JSONObject(current.body()).getString("accountId"))
 
         val duplicate = api.postJson("/accounts", """{"email":"ada@example.com","password":"other-password"}""")
         assertEquals(409, duplicate.statusCode())
 
         val database = File(root, OnlineServer.DATABASE_FILE).readBytes().toString(Charsets.ISO_8859_1)
         assertFalse(database.contains("plain-password-secret"))
+    }
+
+    @Test
+    fun gmailSignInCreatesAPasswordlessAccount() {
+        google.accept("token-1", "subject-1", "Ada@Gmail.com")
+        val created = api.postJson("/sessions/google", """{"idToken":"token-1"}""")
+        assertEquals(200, created.statusCode())
+        val session = JSONObject(created.body())
+        assertEquals("ada@gmail.com", session.getString("email"))
+        val accountId = session.getString("accountId")
+
+        google.accept("token-2", "subject-1", "ada@gmail.com")
+        val again = api.postJson("/sessions/google", """{"idToken":"token-2"}""")
+        assertEquals(200, again.statusCode())
+        assertEquals(accountId, JSONObject(again.body()).getString("accountId"))
+
+        val password = api.postJson("/sessions", """{"email":"ada@gmail.com","password":"secret"}""")
+        assertEquals(401, password.statusCode())
+    }
+
+    @Test
+    fun gmailSignInLinksTheEmailAccountAndRejectsADifferentSubject() {
+        val created = api.postJson("/accounts", """{"email":"ada@gmail.com","password":"secret"}""")
+        val accountId = JSONObject(created.body()).getString("accountId")
+        google.accept("token-1", "subject-1", "Ada@gmail.com")
+        val linked = api.postJson("/sessions/google", """{"idToken":"token-1"}""")
+        assertEquals(200, linked.statusCode())
+        assertEquals(accountId, JSONObject(linked.body()).getString("accountId"))
+
+        val password = api.postJson("/sessions", """{"email":"ada@gmail.com","password":"secret"}""")
+        assertEquals(200, password.statusCode())
+
+        google.accept("token-2", "subject-2", "ada@gmail.com")
+        assertEquals(409, api.postJson("/sessions/google", """{"idToken":"token-2"}""").statusCode())
+    }
+
+    @Test
+    fun gmailSubjectRejectsADifferentEmail() {
+        google.accept("token-1", "subject-1", "ada@gmail.com")
+        assertEquals(200, api.postJson("/sessions/google", """{"idToken":"token-1"}""").statusCode())
+        google.accept("token-2", "subject-1", "other@gmail.com")
+        assertEquals(409, api.postJson("/sessions/google", """{"idToken":"token-2"}""").statusCode())
+    }
+
+    @Test
+    fun invalidGmailTokenIsRejected() {
+        assertEquals(401, api.postJson("/sessions/google", """{"idToken":"nope"}""").statusCode())
     }
 
     @Test
@@ -187,9 +242,12 @@ class OnlineApiTest {
     }
 
     private fun tokenFor(email: String): String {
-        val response = api.postJson("/accounts", """{"email":"$email","password":"secret"}""")
-        assertEquals(201, response.statusCode())
-        return JSONObject(response.body()).getString("token")
+        val created = api.postJson("/accounts", """{"email":"$email","password":"secret"}""")
+        assertEquals(201, created.statusCode())
+        assertFalse(JSONObject(created.body()).has("token"))
+        val session = api.postJson("/sessions", """{"email":"$email","password":"secret"}""")
+        assertEquals(200, session.statusCode())
+        return JSONObject(session.body()).getString("token")
     }
 
     private fun tokenAccount(token: String): String =

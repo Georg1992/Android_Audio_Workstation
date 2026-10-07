@@ -8,7 +8,10 @@ import org.json.JSONObject
 import java.io.IOException
 import java.sql.SQLException
 
-class OnlineHandler(private val service: OnlineService) : HttpHandler {
+class OnlineHandler(
+    private val accounts: AccountService,
+    private val projects: OnlineService,
+) : HttpHandler {
     override fun handle(exchange: HttpExchange) {
         try {
             dispatch(exchange)
@@ -31,6 +34,7 @@ class OnlineHandler(private val service: OnlineService) : HttpHandler {
         when {
             method == "POST" && path == "/accounts" -> postAccount(exchange)
             method == "POST" && path == "/sessions" -> postSession(exchange)
+            method == "POST" && path == "/sessions/google" -> postGoogleSession(exchange)
             method == "DELETE" && path == "/sessions" -> deleteSession(exchange)
             method == "GET" && path == "/session" -> getSession(exchange)
             method == "POST" && path == "/projects" -> postProject(exchange)
@@ -44,23 +48,29 @@ class OnlineHandler(private val service: OnlineService) : HttpHandler {
 
     private fun postAccount(exchange: HttpExchange) {
         val body = jsonBody(exchange)
-        val session = service.createAccount(body.requiredString("email"), body.requiredString("password"))
-        sendJson(exchange, 201, sessionJson(session))
+        val account = accounts.createAccount(body.requiredString("email"), body.requiredString("password"))
+        sendJson(exchange, 201, JSONObject().put("accountId", account.accountId).put("email", account.email))
     }
 
     private fun postSession(exchange: HttpExchange) {
         val body = jsonBody(exchange)
-        val session = service.createSession(body.requiredString("email"), body.requiredString("password"))
+        val session = accounts.createSession(body.requiredString("email"), body.requiredString("password"))
+        sendJson(exchange, 200, sessionJson(session))
+    }
+
+    private fun postGoogleSession(exchange: HttpExchange) {
+        val body = jsonBody(exchange)
+        val session = accounts.createGoogleSession(body.requiredString("idToken"))
         sendJson(exchange, 200, sessionJson(session))
     }
 
     private fun deleteSession(exchange: HttpExchange) {
-        service.deleteSession(token(exchange))
+        accounts.deleteSession(token(exchange))
         sendEmpty(exchange, 204)
     }
 
     private fun getSession(exchange: HttpExchange) {
-        val account = service.currentAccount(token(exchange))
+        val account = accounts.currentAccount(token(exchange))
         sendJson(
             exchange,
             200,
@@ -70,12 +80,12 @@ class OnlineHandler(private val service: OnlineService) : HttpHandler {
 
     private fun postProject(exchange: HttpExchange) {
         val body = jsonBody(exchange)
-        val project = service.createProject(token(exchange), body.requiredString("title"))
+        val project = projects.createProject(token(exchange), body.requiredString("title"))
         sendJson(exchange, 201, projectJson(project))
     }
 
     private fun getProject(exchange: HttpExchange, projectId: String) {
-        val details = service.project(token(exchange), projectId)
+        val details = projects.project(token(exchange), projectId)
         val files = JSONArray()
         details.files.forEach { file -> files.put(fileJson(file)) }
         sendJson(
@@ -87,7 +97,7 @@ class OnlineHandler(private val service: OnlineService) : HttpHandler {
 
     private fun postStorageKey(exchange: HttpExchange, projectId: String) {
         val body = jsonBody(exchange)
-        val key = service.storageKey(
+        val key = projects.storageKey(
             token = token(exchange),
             projectId = projectId,
             clientTrackId = body.requiredString("clientTrackId"),
@@ -99,7 +109,7 @@ class OnlineHandler(private val service: OnlineService) : HttpHandler {
 
     private fun putStorage(exchange: HttpExchange, storageKey: String) {
         val sessionToken = token(exchange)
-        exchange.requestBody.use { body -> service.write(sessionToken, storageKey, body) }
+        exchange.requestBody.use { body -> projects.write(sessionToken, storageKey, body) }
         sendJson(exchange, 200, JSONObject().put("storageKey", storageKey))
     }
 
@@ -111,7 +121,7 @@ class OnlineHandler(private val service: OnlineService) : HttpHandler {
             storageKey = body.requiredString("storageKey"),
             size = body.requiredLong("size"),
         )
-        service.commitFile(token(exchange), projectId, file)
+        projects.commitFile(token(exchange), projectId, file)
         sendJson(exchange, 201, fileJson(file).put("sharedProjectId", projectId))
     }
 

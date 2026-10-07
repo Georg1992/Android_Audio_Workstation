@@ -64,12 +64,14 @@ Release builds use R8 minification and resource shrinking; configure release sig
 
 `:server` is the account and shared-project API. The phone keeps the project files. The server stores the account, the shared project, and file rows. Audio bytes go in one directory, `online-data/storage`, named by content hash.
 
+Register with `POST /accounts` (email and password). That response has the account id and email, and no session. Sign in with `POST /sessions`. Gmail sign-in is `POST /sessions/google` with a Google ID token. The server checks that token with Google's RS256 certificates at `https://www.googleapis.com/oauth2/v3/certs`. Set `GOOGLE_WEB_CLIENT_ID` to the same web client id as `google_web_client_id` in the app. Leave that string empty until the client id is set; Gmail sign-in then fails closed.
+
 ```bash
 ./gradlew :server:test
 ./gradlew :server:run
 ```
 
-The debug app talks to `http://127.0.0.1:8080`. Community is the login. Sharing a library project while signed out opens that login, then shares. The library stays the projects on the phone.
+The debug app talks to `http://127.0.0.1:8080`. Community is registration and sign-in, including Gmail. Sharing a library project while signed out opens that screen, then shares. The library stays the projects on the phone.
 
 ## CI
 

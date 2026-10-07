@@ -1,10 +1,19 @@
 package com.georgv.audioworkstation.online
 
+import android.content.Context
+import androidx.credentials.CredentialManager
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.online.network.HttpAccountApi
+import com.georgv.audioworkstation.online.network.HttpProjectShareApi
+import com.georgv.audioworkstation.online.network.HttpTransport
+import com.georgv.audioworkstation.online.network.JsonHttp
+import com.georgv.audioworkstation.online.network.UrlConnectionHttpTransport
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -18,7 +27,29 @@ abstract class OnlineModule {
     companion object {
         @Provides
         @Singleton
-        fun provideOnlineApi(dispatchers: AppDispatchers): OnlineApi =
-            HttpOnlineApi(OnlineApiBaseUrl.VALUE, dispatchers.io)
+        fun provideHttpTransport(): HttpTransport = UrlConnectionHttpTransport(OnlineApiBaseUrl.VALUE)
+
+        @Provides
+        @Singleton
+        fun provideJsonHttp(transport: HttpTransport): JsonHttp = JsonHttp(transport)
+
+        @Provides
+        @Singleton
+        fun provideAccountApi(http: JsonHttp, dispatchers: AppDispatchers): AccountApi =
+            HttpAccountApi(http, dispatchers.io)
+
+        @Provides
+        @Singleton
+        fun provideProjectShareApi(http: JsonHttp, dispatchers: AppDispatchers): ProjectShareApi =
+            HttpProjectShareApi(http, dispatchers.io)
+
+        @Provides
+        @Singleton
+        fun provideGmailSignIn(@ApplicationContext context: Context): GmailSignIn =
+            CredentialManagerGmailSignIn(
+                context = context,
+                webClientId = context.getString(R.string.google_web_client_id),
+                credentials = CredentialManager.create(context),
+            )
     }
 }
