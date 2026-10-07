@@ -28,6 +28,14 @@
     <string name="screen_community">Community</string>
     <string name="screen_devices">Devices</string>
     <string name="screen_community_placeholder_body">Community features will appear here.</string>
+    <string name="community_email_label">Email</string>
+    <string name="community_password_label">Password</string>
+    <string name="community_sign_in">Sign in</string>
+    <string name="community_create_account">Create account</string>
+    <string name="community_sign_out">Sign out</string>
+    <string name="community_signed_in">Signed in as %1$s</string>
+    <string name="cd_share_project">Share project</string>
+    <string name="share_completed">Project shared.</string>
     <string name="screen_devices_placeholder_body">Audio devices and Bluetooth controls will appear here.</string>
 
     <!-- Create Project screen -->
@@ -161,4 +169,8 @@
     <string name="error_mixdown_unsupported_audio">Mixdown requires 16-bit mono or stereo WAV at the project sample rate.</string>
     <string name="error_mixdown_failed">Mixdown failed.</string>
     <string name="error_mix_preview_failed">Could not play mix preview.</string>
+    <string name="error_sign_in_failed">Sign-in failed.</string>
+    <string name="error_create_account_failed">Could not create the account.</string>
+    <string name="error_sign_out_failed">Sign-out failed.</string>
+    <string name="error_share_failed">Could not share the project.</string>
 </resources>

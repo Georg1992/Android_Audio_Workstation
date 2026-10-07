@@ -128,7 +128,10 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenProject = { projectId ->
                     navController.navigate("${Routes.PROJECT}/$projectId?quick=false")
-                }
+                },
+                onShareNeedsLogin = {
+                    navController.navigate(Routes.COMMUNITY) { launchSingleTop = true }
+                },
             )
         }
 

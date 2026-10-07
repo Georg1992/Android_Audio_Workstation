@@ -60,9 +60,20 @@ Release builds use R8 minification and resource shrinking; configure release sig
 ./gradlew :app:detekt
 ```
 
+## Online API
+
+`:server` is the account and shared-project API. The phone keeps the project files. The server stores the account, the shared project, and file rows. Audio bytes go in one directory, `online-data/storage`, named by content hash.
+
+```bash
+./gradlew :server:test
+./gradlew :server:run
+```
+
+The debug app talks to `http://127.0.0.1:8080`. Community is the login. Sharing a library project while signed out opens that login, then shares. The library stays the projects on the phone.
+
 ## CI
 
-`.github/workflows/android-ci.yml` installs JDK 17, Android SDK platform 36, build-tools 36.0.0, CMake 3.22.1, and the pinned NDK, then runs `assembleDebug`, `detekt`, and `testDebugUnitTest`, and uploads the debug APK as an artifact.
+`.github/workflows/android-ci.yml` installs JDK 17, Android SDK platform 36, build-tools 36.0.0, CMake 3.22.1, and the pinned NDK, then runs `assembleDebug`, `detekt`, `testDebugUnitTest`, and `:server:test`, and uploads the debug APK as an artifact.
 
 ## Repository
 

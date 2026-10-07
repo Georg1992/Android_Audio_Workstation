@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -62,7 +63,9 @@ import java.io.File
 fun LibraryScreen(
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit,
-    vm: LibraryViewModel = hiltViewModel()
+    onShareNeedsLogin: () -> Unit,
+    vm: LibraryViewModel = hiltViewModel(),
+    shareVm: LibraryShareViewModel = hiltViewModel(),
 ) {
     NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
 
@@ -82,6 +85,11 @@ fun LibraryScreen(
             snackbarHostState.showSnackbar(message.resolve(context))
         }
     }
+    LaunchedEffect(shareVm) {
+        shareVm.userMessages.collect { message ->
+            snackbarHostState.showSnackbar(message.resolve(context))
+        }
+    }
 
     ScreenScaffold(
         title = stringResource(R.string.screen_library),
@@ -96,17 +104,24 @@ fun LibraryScreen(
         ) {
             TopToolbarPanel()
 
+            val untitledProject = stringResource(R.string.library_untitled_project)
             LibraryProjectContent(
                 state = state,
-                onProjectCardBodyClick = vm::onProjectCardBodyClick,
-                onOpenProject = { projectId ->
-                    scope.launch {
-                        vm.warmUpProject(projectId)
-                        delay(LibraryProjectOpenWarmupMs)
-                        onOpenProject(projectId)
-                    }
-                },
-                onDeleteClick = { pendingDeleteProject = it },
+                handlers = LibraryRowHandlers(
+                    onBodyClick = vm::onProjectCardBodyClick,
+                    onOpen = { projectId ->
+                        scope.launch {
+                            vm.warmUpProject(projectId)
+                            delay(LibraryProjectOpenWarmupMs)
+                            onOpenProject(projectId)
+                        }
+                    },
+                    onShare = { item ->
+                        val title = item.project.name?.takeIf { it.isNotBlank() } ?: untitledProject
+                        shareVm.share(item.project.id, title, onShareNeedsLogin)
+                    },
+                    onDelete = { pendingDeleteProject = it },
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -165,12 +180,17 @@ fun LibraryScreen(
     }
 }
 
+private data class LibraryRowHandlers(
+    val onBodyClick: (LibraryProjectItem) -> Unit,
+    val onOpen: (String) -> Unit,
+    val onShare: (LibraryProjectItem) -> Unit,
+    val onDelete: (LibraryProjectItem) -> Unit,
+)
+
 @Composable
 private fun LibraryProjectContent(
     state: ScreenState<LibraryContent>,
-    onProjectCardBodyClick: (LibraryProjectItem) -> Unit,
-    onOpenProject: (String) -> Unit,
-    onDeleteClick: (LibraryProjectItem) -> Unit,
+    handlers: LibraryRowHandlers,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(state.availability, state.content.projects.size) {
@@ -221,9 +241,10 @@ private fun LibraryProjectContent(
                 itemsIndexed(projects, key = { _, item -> item.project.id }) { _, item ->
                     LibraryProjectRow(
                         item = item,
-                        onBodyClick = { onProjectCardBodyClick(item) },
-                        onOpenProjectClick = { onOpenProject(item.project.id) },
-                        onDeleteClick = { onDeleteClick(item) },
+                        onBodyClick = { handlers.onBodyClick(item) },
+                        onOpenProjectClick = { handlers.onOpen(item.project.id) },
+                        onShareClick = { handlers.onShare(item) },
+                        onDeleteClick = { handlers.onDelete(item) },
                     )
                 }
             }
@@ -237,6 +258,7 @@ private fun LibraryProjectRow(
     item: LibraryProjectItem,
     onBodyClick: () -> Unit,
     onOpenProjectClick: () -> Unit,
+    onShareClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
     val projectName =
@@ -311,6 +333,13 @@ private fun LibraryProjectRow(
                 horizontalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(onClick = onShareClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = stringResource(R.string.cd_share_project),
+                        tint = AppColors.Line,
+                    )
+                }
                 IconButton(onClick = onOpenProjectClick) {
                     Icon(
                         imageVector = Icons.Filled.FolderOpen,

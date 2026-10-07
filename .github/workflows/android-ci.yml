@@ -47,6 +47,9 @@ jobs:
       - name: Run unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
 
+      - name: Run online API tests
+        run: ./gradlew --no-daemon :server:test
+
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
