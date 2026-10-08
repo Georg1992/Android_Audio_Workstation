@@ -31,6 +31,7 @@
     <string name="community_email_label">Email</string>
     <string name="community_password_label">Password</string>
     <string name="community_sign_in">Sign in</string>
+    <string name="community_sign_in_hint">Opens the account page, where you can sign in or create an account.</string>
     <string name="community_create_account">Create account</string>
     <string name="community_confirm_password_label">Confirm password</string>
     <string name="community_register">Register</string>

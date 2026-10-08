@@ -4,7 +4,6 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
@@ -18,12 +17,12 @@ class OnlineApiTest {
     private lateinit var root: File
     private lateinit var server: OnlineServer
     private lateinit var api: Api
-    private val google = MapGoogleIdTokens()
+    private val cognito = MapCognitoAccessTokens()
 
     @Before
     fun setUp() {
         root = Files.createTempDirectory("online-api").toFile()
-        server = OnlineServer.start(port = 0, root = root, google = google)
+        server = OnlineServer.start(port = 0, root = root, cognito = cognito)
         api = Api("http://127.0.0.1:${server.port}")
     }
 
@@ -40,87 +39,16 @@ class OnlineApiTest {
     }
 
     @Test
-    fun registrationReturnsTheAccountAndSignInStartsTheSession() {
-        val created = api.postJson("/accounts", """{"email":"Ada@Example.com","password":"plain-password-secret"}""")
-        assertEquals(201, created.statusCode())
-        val account = JSONObject(created.body())
-        assertEquals("ada@example.com", account.getString("email"))
-        assertFalse(account.has("token"))
-        assertEquals(401, api.get("/session", null).statusCode())
-
-        val signedIn = api.postJson("/sessions", """{"email":"ada@example.com","password":"plain-password-secret"}""")
-        assertEquals(200, signedIn.statusCode())
-        val session = JSONObject(signedIn.body())
-        assertEquals(account.getString("accountId"), session.getString("accountId"))
-        assertTrue(session.getString("token").isNotBlank())
-
-        val current = api.get("/session", session.getString("token"))
+    fun cognitoTokenOpensTheAccount() {
+        cognito.accept("token-1", "sub-1", "Ada@Example.com")
+        val current = api.get("/session", "token-1")
         assertEquals(200, current.statusCode())
-        assertEquals(account.getString("accountId"), JSONObject(current.body()).getString("accountId"))
-
-        val duplicate = api.postJson("/accounts", """{"email":"ada@example.com","password":"other-password"}""")
-        assertEquals(409, duplicate.statusCode())
-
-        val database = File(root, OnlineServer.DATABASE_FILE).readBytes().toString(Charsets.ISO_8859_1)
-        assertFalse(database.contains("plain-password-secret"))
-    }
-
-    @Test
-    fun gmailSignInCreatesAPasswordlessAccount() {
-        google.accept("token-1", "subject-1", "Ada@Gmail.com")
-        val created = api.postJson("/sessions/google", """{"idToken":"token-1"}""")
-        assertEquals(200, created.statusCode())
-        val session = JSONObject(created.body())
-        assertEquals("ada@gmail.com", session.getString("email"))
-        val accountId = session.getString("accountId")
-
-        google.accept("token-2", "subject-1", "ada@gmail.com")
-        val again = api.postJson("/sessions/google", """{"idToken":"token-2"}""")
-        assertEquals(200, again.statusCode())
-        assertEquals(accountId, JSONObject(again.body()).getString("accountId"))
-
-        val password = api.postJson("/sessions", """{"email":"ada@gmail.com","password":"secret"}""")
-        assertEquals(401, password.statusCode())
-    }
-
-    @Test
-    fun gmailSignInLinksTheEmailAccountAndRejectsADifferentSubject() {
-        val created = api.postJson("/accounts", """{"email":"ada@gmail.com","password":"secret"}""")
-        val accountId = JSONObject(created.body()).getString("accountId")
-        google.accept("token-1", "subject-1", "Ada@gmail.com")
-        val linked = api.postJson("/sessions/google", """{"idToken":"token-1"}""")
-        assertEquals(200, linked.statusCode())
-        assertEquals(accountId, JSONObject(linked.body()).getString("accountId"))
-
-        val password = api.postJson("/sessions", """{"email":"ada@gmail.com","password":"secret"}""")
-        assertEquals(200, password.statusCode())
-
-        google.accept("token-2", "subject-2", "ada@gmail.com")
-        assertEquals(409, api.postJson("/sessions/google", """{"idToken":"token-2"}""").statusCode())
-    }
-
-    @Test
-    fun gmailSubjectRejectsADifferentEmail() {
-        google.accept("token-1", "subject-1", "ada@gmail.com")
-        assertEquals(200, api.postJson("/sessions/google", """{"idToken":"token-1"}""").statusCode())
-        google.accept("token-2", "subject-1", "other@gmail.com")
-        assertEquals(409, api.postJson("/sessions/google", """{"idToken":"token-2"}""").statusCode())
-    }
-
-    @Test
-    fun invalidGmailTokenIsRejected() {
-        assertEquals(401, api.postJson("/sessions/google", """{"idToken":"nope"}""").statusCode())
-    }
-
-    @Test
-    fun signInAcceptsThePasswordAndRejectsAWrongOne() {
-        api.postJson("/accounts", """{"email":"a@b.co","password":"secret"}""")
-        val signedIn = api.postJson("/sessions", """{"email":"A@b.co","password":"secret"}""")
-        assertEquals(200, signedIn.statusCode())
-        val wrong = api.postJson("/sessions", """{"email":"a@b.co","password":"nope"}""")
-        assertEquals(401, wrong.statusCode())
-        val missing = api.get("/session", null)
-        assertEquals(401, missing.statusCode())
+        val body = JSONObject(current.body())
+        assertEquals("sub-1", body.getString("accountId"))
+        assertEquals("ada@example.com", body.getString("email"))
+        assertEquals("sub-1", JSONObject(api.get("/session", "token-1").body()).getString("accountId"))
+        assertEquals(401, api.get("/session", null).statusCode())
+        assertEquals(401, api.get("/session", "other").statusCode())
     }
 
     @Test
@@ -234,20 +162,15 @@ class OnlineApiTest {
     }
 
     @Test
-    fun endingTheSessionRejectsTheToken() {
-        val token = tokenFor("owner@studio.test")
-        assertEquals(204, api.delete("/sessions", token).statusCode())
-        assertEquals(401, api.get("/session", token).statusCode())
+    fun anUnknownTokenIsRejected() {
+        assertEquals(401, api.get("/session", "missing").statusCode())
         assertEquals(401, api.putBytes("/storage/${"ab".repeat(32)}", byteArrayOf(1), null).statusCode())
     }
 
     private fun tokenFor(email: String): String {
-        val created = api.postJson("/accounts", """{"email":"$email","password":"secret"}""")
-        assertEquals(201, created.statusCode())
-        assertFalse(JSONObject(created.body()).has("token"))
-        val session = api.postJson("/sessions", """{"email":"$email","password":"secret"}""")
-        assertEquals(200, session.statusCode())
-        return JSONObject(session.body()).getString("token")
+        val token = "token-$email"
+        cognito.accept(token, "sub-$email", email)
+        return token
     }
 
     private fun tokenAccount(token: String): String =

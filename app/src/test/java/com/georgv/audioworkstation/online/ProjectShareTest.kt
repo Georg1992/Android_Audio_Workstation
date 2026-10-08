@@ -60,17 +60,17 @@ class ProjectShareTest {
         val log = CallLog()
         val pending = PendingProjectShare()
         val coordinator = coordinator(sessions, RecordingProjectShareApi(log), dao, pending)
-        val vm = community(sessions, RecordingAccountApi(log), coordinator)
+        val vm = community(sessions, RecordingCognito(log), coordinator)
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         assertEquals(ShareResult.NeedsLogin, coordinator.share(project.id, "Night Take"))
         assertEquals(emptyList<String>(), log.calls)
 
-        vm.signIn("Ada@Example.com", "secret")
+        vm.signIn()
         advanceUntilIdle()
 
         assertEquals("ada@example.com", vm.uiState.value.signedInEmail)
-        assertEquals(listOf("session", "project", "key", "write", "commit"), log.calls)
+        assertEquals(listOf("cognito", "project", "key", "write", "commit"), log.calls)
         assertEquals(audio.toList(), file.readBytes().toList())
         assertEquals(listOf(project), dao.projects.value)
         collectJob.cancel()
@@ -87,7 +87,7 @@ class ProjectShareTest {
             tracks = listOf(TrackEntity(id = "track-1", projectId = project.id, wavFilePath = file.absolutePath)),
         )
         val sessions = MemoryAccountSessionStore()
-        sessions.save(AccountSession(token = "stale", accountId = "account-1", email = "ada@example.com"))
+        sessions.save(AccountSession(token = "stale", accountId = "account-1", email = "ada@example.com", refreshToken = "refresh"))
         val log = CallLog()
         val coordinator = coordinator(sessions, RecordingProjectShareApi(log, unauthorizedCreates = 1), dao, PendingProjectShare())
 
@@ -95,7 +95,7 @@ class ProjectShareTest {
         assertNull(sessions.current())
         assertEquals(emptyList<String>(), log.calls)
 
-        sessions.save(AccountSession(token = "fresh", accountId = "account-1", email = "ada@example.com"))
+        sessions.save(AccountSession(token = "fresh", accountId = "account-1", email = "ada@example.com", refreshToken = "refresh"))
         assertEquals("shared-1", coordinator.completePending())
         assertEquals(listOf("project", "key", "write", "commit"), log.calls)
         assertTrue(file.isFile)
@@ -110,7 +110,7 @@ class ProjectShareTest {
             tracks = listOf(TrackEntity(id = "track-1", projectId = project.id, wavFilePath = "missing.wav")),
         )
         val sessions = MemoryAccountSessionStore()
-        sessions.save(AccountSession(token = "token", accountId = "account-1", email = "ada@example.com"))
+        sessions.save(AccountSession(token = "token", accountId = "account-1", email = "ada@example.com", refreshToken = "refresh"))
         val log = CallLog()
         val coordinator = coordinator(sessions, RecordingProjectShareApi(log), dao, PendingProjectShare())
 
@@ -121,112 +121,27 @@ class ProjectShareTest {
     }
 
     @Test
-    fun `registration signs in and finishes the pending share`() = runTest {
-        val file = File.createTempFile("take", ".wav")
-        file.writeBytes("take".toByteArray(Charsets.UTF_8))
-        val project = ProjectEntity(id = "local-1", name = "Night Take")
-        val dao = ReadOnlyShareProjectDao(
-            project = project,
-            tracks = listOf(TrackEntity(id = "track-1", projectId = project.id, wavFilePath = file.absolutePath)),
-        )
-        val sessions = MemoryAccountSessionStore()
-        val log = CallLog()
-        val coordinator = coordinator(sessions, RecordingProjectShareApi(log), dao, PendingProjectShare())
-        val vm = community(sessions, RecordingAccountApi(log), coordinator)
-        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
-        assertEquals(ShareResult.NeedsLogin, coordinator.share(project.id, "Night Take"))
-        vm.register("Ada@Example.com", "secret", "secret")
-        advanceUntilIdle()
-        assertEquals("ada@example.com", vm.uiState.value.signedInEmail)
-        assertEquals(listOf("register", "session", "project", "key", "write", "commit"), log.calls)
-        collectJob.cancel()
-        file.delete()
-    }
-
-    @Test
-    fun `password confirmation must match before registration`() = runTest {
-        val sessions = MemoryAccountSessionStore()
-        val log = CallLog()
-        val dao = ReadOnlyShareProjectDao(ProjectEntity(id = "local-1", name = "Night Take"), emptyList())
-        val vm = community(sessions, RecordingAccountApi(log), coordinator(sessions, RecordingProjectShareApi(log), dao, PendingProjectShare()))
-        backgroundScope.launch { vm.uiState.collect { } }
-        vm.register("Ada@Example.com", "secret", "other")
-        advanceUntilIdle()
-        assertNull(vm.uiState.value.signedInEmail)
-        assertEquals(emptyList<String>(), log.calls)
-    }
-
-    @Test
-    fun `failed sign in after registration does not use gmail`() = runTest {
+    fun `cancelled sign in leaves the account signed out`() = runTest {
         val sessions = MemoryAccountSessionStore()
         val log = CallLog()
         val dao = ReadOnlyShareProjectDao(ProjectEntity(id = "local-1", name = "Night Take"), emptyList())
         val vm = community(
             sessions,
-            RecordingAccountApi(log, failSession = true),
+            RecordingCognito(log, cancel = true),
             coordinator(sessions, RecordingProjectShareApi(log), dao, PendingProjectShare()),
         )
         backgroundScope.launch { vm.uiState.collect { } }
-        vm.register("ada@example.com", "secret", "secret")
+        vm.signIn()
         advanceUntilIdle()
         assertNull(vm.uiState.value.signedInEmail)
-        assertEquals(listOf("register", "session"), log.calls)
-    }
-
-    @Test
-    fun `gmail cancellation leaves the account signed out`() = runTest {
-        val sessions = MemoryAccountSessionStore()
-        val log = CallLog()
-        val dao = ReadOnlyShareProjectDao(ProjectEntity(id = "local-1", name = "Night Take"), emptyList())
-        val vm = community(
-            sessions,
-            RecordingAccountApi(log),
-            coordinator(sessions, RecordingProjectShareApi(log), dao, PendingProjectShare()),
-            CancellingGmail,
-        )
-        backgroundScope.launch { vm.uiState.collect { } }
-        vm.signInWithGmail()
-        advanceUntilIdle()
-        assertNull(vm.uiState.value.signedInEmail)
-        assertEquals(emptyList<String>(), log.calls)
-    }
-
-    @Test
-    fun `gmail sign in uploads the pending share`() = runTest {
-        val file = File.createTempFile("take", ".wav")
-        file.writeBytes("take".toByteArray(Charsets.UTF_8))
-        val project = ProjectEntity(id = "local-1", name = "Night Take")
-        val dao = ReadOnlyShareProjectDao(
-            project = project,
-            tracks = listOf(TrackEntity(id = "track-1", projectId = project.id, wavFilePath = file.absolutePath)),
-        )
-        val sessions = MemoryAccountSessionStore()
-        val log = CallLog()
-        val coordinator = coordinator(sessions, RecordingProjectShareApi(log), dao, PendingProjectShare())
-        val vm = community(sessions, RecordingAccountApi(log), coordinator, TokenGmail)
-        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
-        assertEquals(ShareResult.NeedsLogin, coordinator.share(project.id, "Night Take"))
-        vm.signInWithGmail()
-        advanceUntilIdle()
-        assertEquals("ada@example.com", vm.uiState.value.signedInEmail)
-        assertEquals(listOf("google", "project", "key", "write", "commit"), log.calls)
-        collectJob.cancel()
-        file.delete()
+        assertEquals(listOf("cognito"), log.calls)
     }
 
     private fun community(
         sessions: MemoryAccountSessionStore,
-        accounts: RecordingAccountApi,
+        cognito: CognitoSignIn,
         coordinator: ProjectShareCoordinator,
-        gmail: GmailSignIn = UnusedGmail,
-    ): CommunityViewModel =
-        CommunityViewModel(
-            sessions,
-            accounts,
-            gmail,
-            coordinator,
-            TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
-        )
+    ): CommunityViewModel = CommunityViewModel(sessions, cognito, coordinator)
 
     private fun coordinator(
         sessions: MemoryAccountSessionStore,
@@ -259,32 +174,24 @@ private class CallLog {
     val calls = mutableListOf<String>()
 }
 
-private class RecordingAccountApi(
+private class RecordingCognito(
     private val log: CallLog,
-    private val failSession: Boolean = false,
-) : AccountApi {
-    override suspend fun register(email: String, password: String): RegisteredAccount {
-        log.calls.add("register")
-        return RegisteredAccount(accountId = "account-1", email = "ada@example.com")
+    private val cancel: Boolean = false,
+) : CognitoSignIn {
+    override suspend fun signIn(): AccountSession {
+        log.calls.add("cognito")
+        if (cancel) throw CognitoSignInCancelled()
+        return AccountSession(
+            token = "token",
+            accountId = "account-1",
+            email = "ada@example.com",
+            refreshToken = "refresh",
+        )
     }
 
-    override suspend fun createSession(email: String, password: String): AccountSession {
-        log.calls.add("session")
-        if (failSession) throw OnlineApiException(HttpUnauthorized, "unauthorized")
-        return signedIn()
+    override suspend fun signOut(refreshToken: String) {
+        log.calls.add("revoke")
     }
-
-    override suspend fun createGoogleSession(idToken: String): AccountSession {
-        log.calls.add("google")
-        return signedIn()
-    }
-
-    override suspend fun deleteSession(token: String) {
-        log.calls.add("delete")
-    }
-
-    private fun signedIn(): AccountSession =
-        AccountSession(token = "token", accountId = "account-1", email = "ada@example.com")
 }
 
 private class RecordingProjectShareApi(
@@ -313,18 +220,6 @@ private class RecordingProjectShareApi(
         log.calls.add("commit")
         assertEquals(file.contentHash, file.storageKey)
     }
-}
-
-private object UnusedGmail : GmailSignIn {
-    override suspend fun idToken(): String = error("gmail was not requested")
-}
-
-private object TokenGmail : GmailSignIn {
-    override suspend fun idToken(): String = "google-id-token"
-}
-
-private object CancellingGmail : GmailSignIn {
-    override suspend fun idToken(): String = throw GmailSignInCancelled(IllegalStateException("cancelled"))
 }
 
 private class ReadOnlyShareProjectDao(

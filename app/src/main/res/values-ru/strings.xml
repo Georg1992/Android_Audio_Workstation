@@ -31,6 +31,7 @@
     <string name="community_email_label">Эл. почта</string>
     <string name="community_password_label">Пароль</string>
     <string name="community_sign_in">Войти</string>
+    <string name="community_sign_in_hint">Откроется страница аккаунта: вход или регистрация.</string>
     <string name="community_create_account">Создать аккаунт</string>
     <string name="community_confirm_password_label">Подтверждение пароля</string>
     <string name="community_register">Зарегистрироваться</string>

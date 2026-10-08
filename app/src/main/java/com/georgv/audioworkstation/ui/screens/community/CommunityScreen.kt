@@ -9,29 +9,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
@@ -51,10 +43,6 @@ fun CommunityScreen(
     val state by vm.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmation by remember { mutableStateOf("") }
-    var registering by remember { mutableStateOf(false) }
 
     LaunchedEffect(vm) {
         vm.userMessages.collect { message ->
@@ -77,60 +65,17 @@ fun CommunityScreen(
         ) {
             val signedInEmail = state.signedInEmail
             if (signedInEmail == null) {
-                CommunityField(
-                    label = stringResource(R.string.community_email_label),
-                    value = email,
-                    enabled = !state.busy,
-                    keyboardType = KeyboardType.Email,
-                    onValueChange = { email = it },
+                Text(
+                    text = stringResource(R.string.community_sign_in_hint),
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
                 )
-                CommunityField(
-                    label = stringResource(R.string.community_password_label),
-                    value = password,
+                CommunityAction(
+                    text = stringResource(R.string.community_sign_in),
+                    fillColor = AppColors.Green,
                     enabled = !state.busy,
-                    keyboardType = KeyboardType.Password,
-                    onValueChange = { password = it },
+                    onClick = vm::signIn,
                 )
-                if (registering) {
-                    CommunityField(
-                        label = stringResource(R.string.community_confirm_password_label),
-                        value = confirmation,
-                        enabled = !state.busy,
-                        keyboardType = KeyboardType.Password,
-                        onValueChange = { confirmation = it },
-                    )
-                    CommunityAction(
-                        text = stringResource(R.string.community_register),
-                        fillColor = AppColors.Green,
-                        enabled = !state.busy,
-                        onClick = { vm.register(email, password, confirmation) },
-                    )
-                    CommunityAction(
-                        text = stringResource(R.string.community_sign_in),
-                        fillColor = AppColors.SurfacePanel,
-                        enabled = !state.busy,
-                        onClick = { registering = false },
-                    )
-                } else {
-                    CommunityAction(
-                        text = stringResource(R.string.community_sign_in),
-                        fillColor = AppColors.Green,
-                        enabled = !state.busy,
-                        onClick = { vm.signIn(email, password) },
-                    )
-                    CommunityAction(
-                        text = stringResource(R.string.community_create_account),
-                        fillColor = AppColors.SurfacePanel,
-                        enabled = !state.busy,
-                        onClick = { registering = true },
-                    )
-                    CommunityAction(
-                        text = stringResource(R.string.community_gmail),
-                        fillColor = AppColors.SurfacePanel,
-                        enabled = !state.busy,
-                        onClick = vm::signInWithGmail,
-                    )
-                }
             } else {
                 Text(
                     text = stringResource(R.string.community_signed_in, signedInEmail),
@@ -146,42 +91,6 @@ fun CommunityScreen(
             }
         }
     }
-}
-
-@Composable
-private fun CommunityField(
-    label: String,
-    value: String,
-    enabled: Boolean,
-    keyboardType: KeyboardType,
-    onValueChange: (String) -> Unit,
-) {
-    Text(text = label, style = AppText.TileTitle, color = AppColors.Text)
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        enabled = enabled,
-        visualTransformation = if (keyboardType == KeyboardType.Password) {
-            PasswordVisualTransformation()
-        } else {
-            VisualTransformation.None
-        },
-        modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = AppColors.SurfacePanel,
-            unfocusedContainerColor = AppColors.SurfacePanel,
-            disabledContainerColor = AppColors.SurfacePanel,
-            focusedTextColor = AppColors.Line,
-            unfocusedTextColor = AppColors.Line,
-            disabledTextColor = AppColors.Line,
-            focusedIndicatorColor = AppColors.Line,
-            unfocusedIndicatorColor = AppColors.Line,
-            disabledIndicatorColor = AppColors.Line,
-            cursorColor = AppColors.Line,
-        ),
-    )
 }
 
 @Composable

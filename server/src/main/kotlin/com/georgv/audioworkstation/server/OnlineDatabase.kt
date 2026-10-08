@@ -23,9 +23,14 @@ class OnlineDatabase(file: File) : AutoCloseable {
                     password_salt TEXT,
                     password_hash TEXT,
                     google_subject TEXT UNIQUE,
+                    cognito_sub TEXT UNIQUE,
                     CHECK (
                         (password_salt IS NULL) = (password_hash IS NULL)
-                        AND (password_hash IS NOT NULL OR google_subject IS NOT NULL)
+                        AND (
+                            password_hash IS NOT NULL
+                            OR google_subject IS NOT NULL
+                            OR cognito_sub IS NOT NULL
+                        )
                     )
                 )
                 """.trimIndent(),
@@ -62,21 +67,28 @@ class OnlineDatabase(file: File) : AutoCloseable {
         }
     }
 
-    fun insertAccount(id: String, email: String, passwordSalt: String?, passwordHash: String?, googleSubject: String?) {
+    fun insertCognitoAccount(id: String, email: String) {
         locked {
             connection.prepareStatement(
                 """
-                INSERT INTO accounts (id, email, password_salt, password_hash, google_subject)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO accounts (id, email, password_salt, password_hash, google_subject, cognito_sub)
+                VALUES (?, ?, NULL, NULL, NULL, ?)
                 """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, id)
                 statement.setString(2, email)
-                statement.setString(3, passwordSalt)
-                statement.setString(4, passwordHash)
-                statement.setString(5, googleSubject)
+                statement.setString(3, id)
                 statement.executeUpdate()
             }
+        }
+    }
+
+    fun findAccountById(id: String): StoredAccount? = locked {
+        connection.prepareStatement(
+            "SELECT $ACCOUNT_COLUMNS FROM accounts WHERE id = ?",
+        ).use { statement ->
+            statement.setString(1, id)
+            statement.executeQuery().use { rows -> if (rows.next()) readAccount(rows) else null }
         }
     }
 

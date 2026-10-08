@@ -35,6 +35,7 @@
     <string name="community_email_label">邮箱</string>
     <string name="community_password_label">密码</string>
     <string name="community_sign_in">登录</string>
+    <string name="community_sign_in_hint">将打开账户页面，可以登录或注册。</string>
     <string name="community_create_account">创建账户</string>
     <string name="community_confirm_password_label">确认密码</string>
     <string name="community_register">注册</string>

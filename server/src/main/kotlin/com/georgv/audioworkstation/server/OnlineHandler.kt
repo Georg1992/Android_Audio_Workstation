@@ -32,10 +32,6 @@ class OnlineHandler(
         val path = exchange.requestURI.path
         val method = exchange.requestMethod
         when {
-            method == "POST" && path == "/accounts" -> postAccount(exchange)
-            method == "POST" && path == "/sessions" -> postSession(exchange)
-            method == "POST" && path == "/sessions/google" -> postGoogleSession(exchange)
-            method == "DELETE" && path == "/sessions" -> deleteSession(exchange)
             method == "GET" && path == "/session" -> getSession(exchange)
             method == "POST" && path == "/projects" -> postProject(exchange)
             method == "GET" && projectById.matches(path) -> getProject(exchange, pathId(projectById, path))
@@ -44,29 +40,6 @@ class OnlineHandler(
             method == "POST" && projectFiles.matches(path) -> postFile(exchange, pathId(projectFiles, path))
             else -> throw OnlineFailure(404, "not found")
         }
-    }
-
-    private fun postAccount(exchange: HttpExchange) {
-        val body = jsonBody(exchange)
-        val account = accounts.createAccount(body.requiredString("email"), body.requiredString("password"))
-        sendJson(exchange, 201, JSONObject().put("accountId", account.accountId).put("email", account.email))
-    }
-
-    private fun postSession(exchange: HttpExchange) {
-        val body = jsonBody(exchange)
-        val session = accounts.createSession(body.requiredString("email"), body.requiredString("password"))
-        sendJson(exchange, 200, sessionJson(session))
-    }
-
-    private fun postGoogleSession(exchange: HttpExchange) {
-        val body = jsonBody(exchange)
-        val session = accounts.createGoogleSession(body.requiredString("idToken"))
-        sendJson(exchange, 200, sessionJson(session))
-    }
-
-    private fun deleteSession(exchange: HttpExchange) {
-        accounts.deleteSession(token(exchange))
-        sendEmpty(exchange, 204)
     }
 
     private fun getSession(exchange: HttpExchange) {
@@ -159,9 +132,6 @@ class OnlineHandler(
             return getLong(name)
         }
 
-        fun sessionJson(session: AccountSession): JSONObject =
-            JSONObject().put("token", session.token).put("accountId", session.accountId).put("email", session.email)
-
         fun projectJson(project: SharedProjectRecord): JSONObject =
             JSONObject().put("id", project.id).put("ownerAccountId", project.ownerAccountId).put("title", project.title)
 
@@ -179,8 +149,5 @@ class OnlineHandler(
             exchange.responseBody.use { it.write(bytes) }
         }
 
-        fun sendEmpty(exchange: HttpExchange, status: Int) {
-            exchange.sendResponseHeaders(status, -1)
-        }
     }
 }

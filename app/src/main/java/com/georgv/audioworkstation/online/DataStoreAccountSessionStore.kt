@@ -24,10 +24,18 @@ class DataStoreAccountSessionStore @Inject constructor(
             val token = prefs[Keys.TOKEN]
             val accountId = prefs[Keys.ACCOUNT_ID]
             val email = prefs[Keys.EMAIL]
-            if (token.isNullOrBlank() || accountId.isNullOrBlank() || email.isNullOrBlank()) {
+            val refreshToken = prefs[Keys.REFRESH_TOKEN]
+            if (token.isNullOrBlank() || accountId.isNullOrBlank()) {
+                null
+            } else if (email.isNullOrBlank() || refreshToken.isNullOrBlank()) {
                 null
             } else {
-                AccountSession(token = token, accountId = accountId, email = email)
+                AccountSession(
+                    token = token,
+                    accountId = accountId,
+                    email = email,
+                    refreshToken = refreshToken,
+                )
             }
         }
 
@@ -38,6 +46,7 @@ class DataStoreAccountSessionStore @Inject constructor(
             prefs[Keys.TOKEN] = session.token
             prefs[Keys.ACCOUNT_ID] = session.accountId
             prefs[Keys.EMAIL] = session.email
+            prefs[Keys.REFRESH_TOKEN] = session.refreshToken
         }
     }
 
@@ -49,5 +58,6 @@ class DataStoreAccountSessionStore @Inject constructor(
         val TOKEN = stringPreferencesKey("token")
         val ACCOUNT_ID = stringPreferencesKey("account_id")
         val EMAIL = stringPreferencesKey("email")
+        val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
     }
 }

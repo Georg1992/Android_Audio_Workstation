@@ -65,14 +65,6 @@ tasks.register('clangTidyAudit', Exec) {
     }
 }
 
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withInputStream { localProperties.load(it) }
-}
-def googleWebClientId = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")
-def googleOAuthClientSecret = localProperties.getProperty("GOOGLE_OAUTH_CLIENT_SECRET", "")
-
 android {
     namespace = 'com.georgv.audioworkstation'
     compileSdk = 36
@@ -85,8 +77,6 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        resValue "string", "google_web_client_id", googleWebClientId
-        resValue "string", "google_oauth_client_secret", googleOAuthClientSecret
 
         externalNativeBuild {
             cmake {
@@ -100,7 +90,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = false
-        resValues = true
     }
 
     testOptions {

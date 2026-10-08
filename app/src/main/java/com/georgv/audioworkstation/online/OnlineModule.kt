@@ -1,9 +1,7 @@
 package com.georgv.audioworkstation.online
 
 import android.content.Context
-import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
-import com.georgv.audioworkstation.online.network.HttpAccountApi
 import com.georgv.audioworkstation.online.network.HttpProjectShareApi
 import com.georgv.audioworkstation.online.network.HttpTransport
 import com.georgv.audioworkstation.online.network.JsonHttp
@@ -23,6 +21,10 @@ abstract class OnlineModule {
     @Singleton
     abstract fun bindAccountSessionStore(impl: DataStoreAccountSessionStore): AccountSessionStore
 
+    @Binds
+    @Singleton
+    abstract fun bindCognitoRedirects(impl: ChannelCognitoRedirects): CognitoRedirects
+
     companion object {
         @Provides
         @Singleton
@@ -34,23 +36,20 @@ abstract class OnlineModule {
 
         @Provides
         @Singleton
-        fun provideAccountApi(http: JsonHttp, dispatchers: AppDispatchers): AccountApi =
-            HttpAccountApi(http, dispatchers.io)
-
-        @Provides
-        @Singleton
         fun provideProjectShareApi(http: JsonHttp, dispatchers: AppDispatchers): ProjectShareApi =
             HttpProjectShareApi(http, dispatchers.io)
 
         @Provides
         @Singleton
-        fun provideGmailSignIn(@ApplicationContext context: Context, dispatchers: AppDispatchers): GmailSignIn =
-            LoopbackGmailSignIn(
-                context = context,
-                clientId = context.getString(R.string.google_web_client_id),
-                clientSecret = context.getString(R.string.google_oauth_client_secret),
-                io = dispatchers.io,
-                main = dispatchers.main,
-            )
+        fun provideCognitoSignIn(
+            @ApplicationContext context: Context,
+            redirects: CognitoRedirects,
+            dispatchers: AppDispatchers,
+        ): CognitoSignIn = HostedCognitoSignIn.create(
+            context = context,
+            redirects = redirects,
+            io = dispatchers.io,
+            main = dispatchers.main,
+        )
     }
 }

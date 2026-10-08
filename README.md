@@ -64,21 +64,12 @@ Release builds use R8 minification and resource shrinking; configure release sig
 
 `:server` is the account and shared-project API. The phone keeps the project files. The server stores the account, the shared project, and file rows. Audio bytes go in one directory, `online-data/storage`, named by content hash.
 
-Register with `POST /accounts` (email and password). That response has the account id and email, and no session. Sign in with `POST /sessions`. The debug app calls `http://127.0.0.1:8080` on the phone. `installDebug` runs `adb reverse tcp:8080 tcp:8080` so that address reaches this computer. Start the server before registering:
+Sign-in opens the Cognito account page. The user pool is `us-east-1_CaWxPoiz1`, the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`, and the page is `https://georg-audioworkstation.auth.us-east-1.amazoncognito.com`. The phone returns through `audioworkstation://callback`. The API bearer token is the Cognito access token. The debug app still calls `http://127.0.0.1:8080` for shared projects. `installDebug` runs `adb reverse tcp:8080 tcp:8080` so that address reaches this computer.
 
 ```bash
 ./gradlew :server:test
 ./gradlew :server:run
 ```
-
-Gmail opens the browser. Google redirects to a loopback page on the phone, and the app sends the ID token to `POST /sessions/google`. The server checks it as RS256 against `https://www.googleapis.com/oauth2/v3/certs`. Create a Google Auth Platform client of type **Desktop**, then put its id and secret in `local.properties` (this file stays off git):
-
-```
-GOOGLE_WEB_CLIENT_ID=your-id.apps.googleusercontent.com
-GOOGLE_OAUTH_CLIENT_SECRET=your-secret
-```
-
-Run the server with the same id: `GOOGLE_WEB_CLIENT_ID=your-id.apps.googleusercontent.com ./gradlew :server:run`. An empty id fails closed.
 
 Community is registration and sign-in, including Gmail. Sharing a library project while signed out opens that screen, then shares. The library stays the projects on the phone.
 

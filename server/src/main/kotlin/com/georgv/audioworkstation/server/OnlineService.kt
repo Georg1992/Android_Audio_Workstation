@@ -4,6 +4,7 @@ import java.io.InputStream
 import java.util.UUID
 
 class OnlineService(
+    private val accounts: AccountService,
     private val database: OnlineDatabase,
     private val storage: ContentAddressedStorage,
 ) {
@@ -59,8 +60,7 @@ class OnlineService(
         database.insertFile(projectId, file)
     }
 
-    private fun account(token: String): StoredAccount =
-        database.accountForToken(token) ?: throw OnlineFailure(401, "session is not valid")
+    private fun account(token: String): StoredAccount = accounts.currentAccount(token)
 
     private fun ownedProject(accountId: String, projectId: String): SharedProjectRecord {
         val record = database.findProject(projectId) ?: throw OnlineFailure(404, "shared project was not found")
