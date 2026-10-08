@@ -38,8 +38,6 @@
     <string name="community_gmail">Sign in with Gmail</string>
     <string name="community_sign_out">Sign out</string>
     <string name="community_signed_in">Signed in as %1$s</string>
-    <string name="cd_share_project">Share project</string>
-    <string name="share_completed">Project shared.</string>
     <string name="screen_devices_placeholder_body">Audio devices and Bluetooth controls will appear here.</string>
 
     <!-- Create Project screen -->
@@ -180,5 +178,4 @@
     <string name="error_gmail_not_configured">Gmail sign-in needs a desktop OAuth client in local.properties.</string>
     <string name="error_gmail_sign_in_failed">Gmail sign-in failed.</string>
     <string name="error_sign_out_failed">Sign-out failed.</string>
-    <string name="error_share_failed">Could not share the project.</string>
 </resources>

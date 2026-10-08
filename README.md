@@ -60,22 +60,13 @@ Release builds use R8 minification and resource shrinking; configure release sig
 ./gradlew :app:detekt
 ```
 
-## Online API
+## Sign-in
 
-`:server` is the account and shared-project API. The phone keeps the project files. The server stores the account, the shared project, and file rows. Audio bytes go in one directory, `online-data/storage`, named by content hash.
-
-Sign-in opens the Cognito account page. The user pool is `us-east-1_CaWxPoiz1`, the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`, and the page is `https://georg-audioworkstation.auth.us-east-1.amazoncognito.com`. The phone returns through `audioworkstation://callback`. The API bearer token is the Cognito access token. The debug app still calls `http://127.0.0.1:8080` for shared projects. `installDebug` runs `adb reverse tcp:8080 tcp:8080` so that address reaches this computer.
-
-```bash
-./gradlew :server:test
-./gradlew :server:run
-```
-
-Community is registration and sign-in, including Gmail. Sharing a library project while signed out opens that screen, then shares. The library stays the projects on the phone.
+Community opens the Cognito account page. The user pool is `us-east-1_CaWxPoiz1`, the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`, and the page is `https://georg-audioworkstation.auth.us-east-1.amazoncognito.com`. The phone returns through `audioworkstation://callback`. Cognito keeps the password and the session. The app stores the access token, refresh token, account id, and email on the phone.
 
 ## CI
 
-`.github/workflows/android-ci.yml` installs JDK 17, Android SDK platform 36, build-tools 36.0.0, CMake 3.22.1, and the pinned NDK, then runs `assembleDebug`, `detekt`, `testDebugUnitTest`, and `:server:test`, and uploads the debug APK as an artifact.
+`.github/workflows/android-ci.yml` installs JDK 17, Android SDK platform 36, build-tools 36.0.0, CMake 3.22.1, and the pinned NDK, then runs `assembleDebug`, `detekt`, and `testDebugUnitTest`, and uploads the debug APK as an artifact.
 
 ## Repository
 

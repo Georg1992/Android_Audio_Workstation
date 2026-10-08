@@ -2,10 +2,6 @@ package com.georgv.audioworkstation.online
 
 import android.content.Context
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
-import com.georgv.audioworkstation.online.network.HttpProjectShareApi
-import com.georgv.audioworkstation.online.network.HttpTransport
-import com.georgv.audioworkstation.online.network.JsonHttp
-import com.georgv.audioworkstation.online.network.UrlConnectionHttpTransport
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -26,19 +22,6 @@ abstract class OnlineModule {
     abstract fun bindCognitoRedirects(impl: ChannelCognitoRedirects): CognitoRedirects
 
     companion object {
-        @Provides
-        @Singleton
-        fun provideHttpTransport(): HttpTransport = UrlConnectionHttpTransport(OnlineApiBaseUrl.VALUE)
-
-        @Provides
-        @Singleton
-        fun provideJsonHttp(transport: HttpTransport): JsonHttp = JsonHttp(transport)
-
-        @Provides
-        @Singleton
-        fun provideProjectShareApi(http: JsonHttp, dispatchers: AppDispatchers): ProjectShareApi =
-            HttpProjectShareApi(http, dispatchers.io)
-
         @Provides
         @Singleton
         fun provideCognitoSignIn(

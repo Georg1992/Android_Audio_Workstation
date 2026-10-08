@@ -204,15 +204,3 @@ dependencies {
     androidTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2"
 }
 
-tasks.configureEach { task ->
-    if (task.name == "installDebug") {
-        task.doLast {
-            def adbName = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "adb.exe" : "adb"
-            def adb = new File(android.sdkDirectory, "platform-tools/$adbName")
-            project.exec {
-                commandLine adb.absolutePath, "reverse", "tcp:8080", "tcp:8080"
-            }
-        }
-    }
-}
-
