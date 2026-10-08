@@ -7,6 +7,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.georgv.audioworkstation.ui.screens.community.CommunityHomeScreen
 import com.georgv.audioworkstation.ui.screens.community.CommunityScreen
 import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
@@ -133,7 +134,27 @@ fun AppNavHost(
         }
 
         composable(Routes.COMMUNITY) {
-            CommunityScreen(onBack = { navController.popBackStack() })
+            CommunityScreen(
+                onBack = { navController.popBackStack() },
+                onSignedIn = {
+                    navController.navigate(Routes.COMMUNITY_HOME) {
+                        popUpTo(Routes.COMMUNITY) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable(Routes.COMMUNITY_HOME) {
+            CommunityHomeScreen(
+                onBack = { navController.popBackStack() },
+                onSignedOut = {
+                    navController.navigate(Routes.COMMUNITY) {
+                        popUpTo(Routes.COMMUNITY_HOME) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
 
         composable(Routes.DEVICES) {

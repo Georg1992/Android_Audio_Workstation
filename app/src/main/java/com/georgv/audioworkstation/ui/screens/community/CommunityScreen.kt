@@ -44,6 +44,7 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 @Composable
 fun CommunityScreen(
     onBack: () -> Unit,
+    onSignedIn: () -> Unit,
     vm: CommunityViewModel = hiltViewModel(),
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -54,6 +55,11 @@ fun CommunityScreen(
         vm.userMessages.collect { message ->
             snackbarHostState.showSnackbar(message.resolve(context))
         }
+    }
+
+    val place = communityDestination(state.sessionKnown, state.signedInEmail != null)
+    LaunchedEffect(place) {
+        if (place == CommunityDestination.Home) onSignedIn()
     }
 
     ScreenScaffold(
@@ -69,29 +75,13 @@ fun CommunityScreen(
                 .padding(Dimens.ScreenContentPadding),
             verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
         ) {
-            val signedInEmail = state.signedInEmail
-            when {
-                signedInEmail != null -> SignedIn(signedInEmail, state.busy, vm::signOut)
-                state.awaitingCode -> Confirmation(state, vm)
-                else -> Credentials(state, vm)
+            when (place) {
+                CommunityDestination.SignIn ->
+                    if (state.awaitingCode) Confirmation(state, vm) else Credentials(state, vm)
+                CommunityDestination.Pending, CommunityDestination.Home -> Unit
             }
         }
     }
-}
-
-@Composable
-private fun SignedIn(email: String, busy: Boolean, onSignOut: () -> Unit) {
-    Text(
-        text = stringResource(R.string.community_signed_in, email),
-        style = AppText.TileTitle,
-        color = AppColors.Line,
-    )
-    CommunityAction(
-        text = stringResource(R.string.community_sign_out),
-        fillColor = AppColors.SurfacePanel,
-        enabled = !busy,
-        onClick = onSignOut,
-    )
 }
 
 @Composable
@@ -208,7 +198,7 @@ private fun CommunityField(
 }
 
 @Composable
-private fun CommunityAction(
+internal fun CommunityAction(
     text: String,
     fillColor: Color,
     enabled: Boolean,

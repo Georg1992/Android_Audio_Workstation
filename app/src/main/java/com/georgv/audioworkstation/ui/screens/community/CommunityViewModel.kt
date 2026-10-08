@@ -32,6 +32,7 @@ data class CommunityForm(
 )
 
 data class CommunityUiState(
+    val sessionKnown: Boolean = false,
     val signedInEmail: String? = null,
     val email: String = "",
     val password: String = "",
@@ -55,6 +56,7 @@ class CommunityViewModel @Inject constructor(
     val uiState: StateFlow<CommunityUiState> =
         combine(sessions.state, form, busy) { session, fields, isBusy ->
             CommunityUiState(
+                sessionKnown = true,
                 signedInEmail = session?.email,
                 email = fields.email,
                 password = fields.password,
@@ -136,14 +138,6 @@ class CommunityViewModel @Inject constructor(
     fun signInWithGoogle() {
         submit(R.string.error_gmail_sign_in_failed) {
             sessions.save(google.signIn())
-        }
-    }
-
-    fun signOut() {
-        submit(R.string.error_sign_out_failed) {
-            val session = sessions.current() ?: return@submit
-            accounts.signOut(session.refreshToken)
-            sessions.clear()
         }
     }
 
