@@ -10,7 +10,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -20,7 +25,9 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -114,8 +121,19 @@ private fun Confirmation(state: CommunityUiState, vm: CommunityViewModel) {
 
 @Composable
 private fun Credentials(state: CommunityUiState, vm: CommunityViewModel) {
+    var registering by remember { mutableStateOf(false) }
+    AccountFields(state, vm, registering)
+    if (registering) {
+        RegisterActions(enabled = !state.busy, onRegister = vm::register, onSignIn = { registering = false })
+    } else {
+        SignInActions(enabled = !state.busy, onSignIn = vm::signIn, onRegister = { registering = true }, onGmail = vm::signInWithGoogle)
+    }
+}
+
+@Composable
+private fun AccountFields(state: CommunityUiState, vm: CommunityViewModel, registering: Boolean) {
     Text(
-        text = stringResource(R.string.community_sign_in_hint),
+        text = stringResource(if (registering) R.string.community_create_account else R.string.community_sign_in_hint),
         style = AppText.TileTitle,
         color = AppColors.Line,
     )
@@ -134,32 +152,34 @@ private fun Credentials(state: CommunityUiState, vm: CommunityViewModel) {
         hidden = true,
         enabled = !state.busy,
     )
-    CommunityField(
-        value = state.confirmPassword,
-        onValueChange = vm::onConfirmPasswordChange,
-        label = stringResource(R.string.community_confirm_password_label),
-        keyboardType = KeyboardType.Password,
-        hidden = true,
-        enabled = !state.busy,
-    )
-    CommunityAction(
-        text = stringResource(R.string.community_sign_in),
-        fillColor = AppColors.Green,
-        enabled = !state.busy,
-        onClick = vm::signIn,
-    )
-    CommunityAction(
-        text = stringResource(R.string.community_register),
-        fillColor = AppColors.SurfacePanel,
-        enabled = !state.busy,
-        onClick = vm::register,
-    )
-    CommunityAction(
-        text = stringResource(R.string.community_gmail),
-        fillColor = AppColors.SurfacePanel,
-        enabled = !state.busy,
-        onClick = vm::signInWithGoogle,
-    )
+    if (registering) {
+        CommunityField(
+            value = state.confirmPassword,
+            onValueChange = vm::onConfirmPasswordChange,
+            label = stringResource(R.string.community_confirm_password_label),
+            keyboardType = KeyboardType.Password,
+            hidden = true,
+            enabled = !state.busy,
+        )
+    }
+}
+
+@Composable
+private fun SignInActions(
+    enabled: Boolean,
+    onSignIn: () -> Unit,
+    onRegister: () -> Unit,
+    onGmail: () -> Unit,
+) {
+    CommunityAction(stringResource(R.string.community_sign_in), AppColors.Green, enabled, onSignIn)
+    CommunityAction(stringResource(R.string.community_register), AppColors.SurfacePanel, enabled, onRegister)
+    CommunityAction(stringResource(R.string.community_gmail), AppColors.SurfacePanel, enabled, onGmail)
+}
+
+@Composable
+private fun RegisterActions(enabled: Boolean, onRegister: () -> Unit, onSignIn: () -> Unit) {
+    CommunityAction(stringResource(R.string.community_register), AppColors.Green, enabled, onRegister)
+    CommunityAction(stringResource(R.string.community_sign_in), AppColors.SurfacePanel, enabled, onSignIn)
 }
 
 @Composable
@@ -171,14 +191,20 @@ private fun CommunityField(
     enabled: Boolean,
     hidden: Boolean = false,
 ) {
+    var revealed by remember { mutableStateOf(false) }
     TextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         enabled = enabled,
         label = { Text(text = label) },
-        visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation = if (hidden && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        trailingIcon = if (hidden) {
+            { PasswordVisibility(revealed = revealed, enabled = enabled, onToggle = { revealed = !revealed }) }
+        } else {
+            null
+        },
         modifier = Modifier.fillMaxWidth(),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = AppColors.SurfacePanel,
@@ -195,6 +221,19 @@ private fun CommunityField(
             unfocusedLabelColor = AppColors.iconMuted,
         ),
     )
+}
+
+@Composable
+private fun PasswordVisibility(revealed: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle, enabled = enabled) {
+        Icon(
+            imageVector = if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+            contentDescription = stringResource(
+                if (revealed) R.string.cd_hide_password else R.string.cd_show_password,
+            ),
+            tint = AppColors.Line,
+        )
+    }
 }
 
 @Composable

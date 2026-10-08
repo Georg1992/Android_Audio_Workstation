@@ -86,6 +86,8 @@
     <string name="action_mix">Микс</string>
 
     <!-- Content descriptions (accessibility) -->
+    <string name="cd_show_password">Показать пароль</string>
+    <string name="cd_hide_password">Скрыть пароль</string>
     <string name="cd_back">Назад</string>
     <string name="cd_play">Воспроизвести</string>
     <string name="cd_pause">Пауза</string>

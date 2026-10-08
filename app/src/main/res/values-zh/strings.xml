@@ -90,6 +90,8 @@
     <string name="action_mix">混音</string>
 
     <!-- Content descriptions (accessibility) -->
+    <string name="cd_show_password">显示密码</string>
+    <string name="cd_hide_password">隐藏密码</string>
     <string name="cd_back">返回</string>
     <string name="cd_play">播放</string>
     <string name="cd_pause">暂停</string>
