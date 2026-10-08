@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.GmailSignIn
 import com.georgv.audioworkstation.online.GmailSignInCancelled
+import com.georgv.audioworkstation.online.GmailSignInNotConfigured
 import com.georgv.audioworkstation.online.HttpUnauthorized
 import com.georgv.audioworkstation.online.OnlineApiException
 import com.georgv.audioworkstation.online.ProjectShareCoordinator
@@ -94,6 +95,8 @@ class CommunityViewModel @Inject constructor(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: GmailSignInCancelled) {
+            } catch (_: GmailSignInNotConfigured) {
+                messages.send(UiMessage(R.string.error_gmail_not_configured))
             } catch (error: Exception) {
                 logWarning(TAG, "gmail sign-in failed", error)
                 messages.send(UiMessage(R.string.error_gmail_sign_in_failed))

@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.online
 
 import android.content.Context
-import androidx.credentials.CredentialManager
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.online.network.HttpAccountApi
@@ -45,11 +44,13 @@ abstract class OnlineModule {
 
         @Provides
         @Singleton
-        fun provideGmailSignIn(@ApplicationContext context: Context): GmailSignIn =
-            CredentialManagerGmailSignIn(
+        fun provideGmailSignIn(@ApplicationContext context: Context, dispatchers: AppDispatchers): GmailSignIn =
+            LoopbackGmailSignIn(
                 context = context,
-                webClientId = context.getString(R.string.google_web_client_id),
-                credentials = CredentialManager.create(context),
+                clientId = context.getString(R.string.google_web_client_id),
+                clientSecret = context.getString(R.string.google_oauth_client_secret),
+                io = dispatchers.io,
+                main = dispatchers.main,
             )
     }
 }

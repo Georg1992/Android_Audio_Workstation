@@ -167,6 +167,7 @@
     <string name="error_create_account_failed">Не удалось создать аккаунт.</string>
     <string name="error_invalid_email">Укажите корректную почту.</string>
     <string name="error_password_mismatch">Пароли не совпадают.</string>
+    <string name="error_gmail_not_configured">Для входа через Gmail укажите OAuth-клиент в local.properties.</string>
     <string name="error_gmail_sign_in_failed">Не удалось войти через Gmail.</string>
     <string name="error_sign_out_failed">Не удалось выйти.</string>
     <string name="error_share_failed">Не удалось поделиться проектом.</string>

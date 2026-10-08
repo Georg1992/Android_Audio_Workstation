@@ -171,6 +171,7 @@
     <string name="error_create_account_failed">无法创建账户。</string>
     <string name="error_invalid_email">请输入有效邮箱。</string>
     <string name="error_password_mismatch">两次密码不一致。</string>
+    <string name="error_gmail_not_configured">请在 local.properties 中配置 Gmail 的 OAuth 客户端。</string>
     <string name="error_gmail_sign_in_failed">Gmail 登录失败。</string>
     <string name="error_sign_out_failed">退出失败。</string>
     <string name="error_share_failed">无法分享项目。</string>

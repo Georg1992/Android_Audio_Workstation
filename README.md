@@ -64,14 +64,23 @@ Release builds use R8 minification and resource shrinking; configure release sig
 
 `:server` is the account and shared-project API. The phone keeps the project files. The server stores the account, the shared project, and file rows. Audio bytes go in one directory, `online-data/storage`, named by content hash.
 
-Register with `POST /accounts` (email and password). That response has the account id and email, and no session. Sign in with `POST /sessions`. Gmail sign-in is `POST /sessions/google` with a Google ID token. The server checks that token with Google's RS256 certificates at `https://www.googleapis.com/oauth2/v3/certs`. Set `GOOGLE_WEB_CLIENT_ID` to the same web client id as `google_web_client_id` in the app. Leave that string empty until the client id is set; Gmail sign-in then fails closed.
+Register with `POST /accounts` (email and password). That response has the account id and email, and no session. Sign in with `POST /sessions`. The debug app calls `http://127.0.0.1:8080` on the phone. `installDebug` runs `adb reverse tcp:8080 tcp:8080` so that address reaches this computer. Start the server before registering:
 
 ```bash
 ./gradlew :server:test
 ./gradlew :server:run
 ```
 
-The debug app talks to `http://127.0.0.1:8080`. Community is registration and sign-in, including Gmail. Sharing a library project while signed out opens that screen, then shares. The library stays the projects on the phone.
+Gmail opens the browser. Google redirects to a loopback page on the phone, and the app sends the ID token to `POST /sessions/google`. The server checks it as RS256 against `https://www.googleapis.com/oauth2/v3/certs`. Create a Google Auth Platform client of type **Desktop**, then put its id and secret in `local.properties` (this file stays off git):
+
+```
+GOOGLE_WEB_CLIENT_ID=your-id.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=your-secret
+```
+
+Run the server with the same id: `GOOGLE_WEB_CLIENT_ID=your-id.apps.googleusercontent.com ./gradlew :server:run`. An empty id fails closed.
+
+Community is registration and sign-in, including Gmail. Sharing a library project while signed out opens that screen, then shares. The library stays the projects on the phone.
 
 ## CI
 

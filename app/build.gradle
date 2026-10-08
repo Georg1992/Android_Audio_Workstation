@@ -65,6 +65,14 @@ tasks.register('clangTidyAudit', Exec) {
     }
 }
 
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+def googleWebClientId = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")
+def googleOAuthClientSecret = localProperties.getProperty("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
 android {
     namespace = 'com.georgv.audioworkstation'
     compileSdk = 36
@@ -77,6 +85,8 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        resValue "string", "google_web_client_id", googleWebClientId
+        resValue "string", "google_oauth_client_secret", googleOAuthClientSecret
 
         externalNativeBuild {
             cmake {
@@ -90,6 +100,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = false
+        resValues = true
     }
 
     testOptions {
@@ -191,10 +202,6 @@ dependencies {
     // Coroutines
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
 
-    implementation "androidx.credentials:credentials:1.5.0"
-    implementation "androidx.credentials:credentials-play-services-auth:1.5.0"
-    implementation "com.google.android.libraries.identity.googleid:googleid:1.1.1"
-
     // Test
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
@@ -206,5 +213,17 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:1.2.1"
     androidTestImplementation "androidx.test:runner:1.6.2"
     androidTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2"
+}
+
+tasks.configureEach { task ->
+    if (task.name == "installDebug") {
+        task.doLast {
+            def adbName = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "adb.exe" : "adb"
+            def adb = new File(android.sdkDirectory, "platform-tools/$adbName")
+            project.exec {
+                commandLine adb.absolutePath, "reverse", "tcp:8080", "tcp:8080"
+            }
+        }
+    }
 }
 

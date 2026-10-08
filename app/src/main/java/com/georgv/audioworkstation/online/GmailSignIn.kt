@@ -6,4 +6,6 @@ interface GmailSignIn {
 
 class GmailSignInCancelled(cause: Throwable) : Exception("gmail sign-in was cancelled", cause)
 
-class GmailSignInException(message: String) : Exception(message)
+open class GmailSignInException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+class GmailSignInNotConfigured : GmailSignInException("gmail sign-in is not configured")
