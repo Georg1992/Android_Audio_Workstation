@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.online
 
 import java.util.Base64
 import org.json.JSONObject
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -54,6 +55,24 @@ class CognitoApiTest {
     }
 
     @Test
+    fun gmailSessionTrustsTheGoogleIdentity() {
+        val session = CognitoApi.accountFromTokens(
+            "access",
+            "refresh",
+            idToken(gmailClaims()),
+        )
+        assertEquals("self@gmail.com", session.email)
+    }
+
+    @Test
+    fun passwordSessionRejectsAnUnverifiedEmail() {
+        val error = runCatching {
+            CognitoApi.accountFromTokens("access", "refresh", idToken(unverifiedClaims()))
+        }.exceptionOrNull()
+        assertTrue(error is CognitoRejected)
+    }
+
+    @Test
     fun cognitoErrorTypeDropsTheServicePrefix() {
         val rejected = CognitoApi.rejected(
             """{"__type":"com.amazonaws.cognito.NotAuthorizedException","message":"Incorrect username or password."}""",
@@ -72,4 +91,27 @@ class CognitoApiTest {
         assertTrue(acceptableEmail("ada@example.com"))
         assertFalse(acceptableEmail("ada"))
     }
+}
+
+private fun gmailClaims(): JSONObject =
+    JSONObject()
+        .put("sub", "sub-google")
+        .put("email", "self@gmail.com")
+        .put("email_verified", false)
+        .put(
+            "identities",
+            JSONArray().put(JSONObject().put("providerName", "Google")),
+        )
+
+private fun unverifiedClaims(): JSONObject =
+    JSONObject()
+        .put("sub", "sub-1")
+        .put("email", "ada@example.com")
+        .put("email_verified", false)
+
+private fun idToken(claims: JSONObject): String {
+    val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
+        claims.toString().toByteArray(Charsets.UTF_8),
+    )
+    return "header.$payload.sig"
 }
