@@ -40,7 +40,18 @@ internal object CognitoApi {
     fun session(json: String): AccountSession {
         val auth = JSONObject(json).optJSONObject("AuthenticationResult")
             ?: throw CognitoRejected("Unknown", "sign-in did not return tokens")
-        return readSession(auth)
+        return accountFromTokens(
+            auth.optString("AccessToken"),
+            auth.optString("RefreshToken"),
+            auth.optString("IdToken"),
+        )
+    }
+
+    fun accountFromTokens(accessToken: String, refreshToken: String, idToken: String): AccountSession {
+        if (accessToken.isBlank() || refreshToken.isBlank() || idToken.isBlank()) {
+            throw CognitoRejected("Unknown", "sign-in did not return tokens")
+        }
+        return sessionFromClaims(accessToken, refreshToken, idToken)
     }
 
     fun rejected(body: String): CognitoRejected {
@@ -50,13 +61,7 @@ internal object CognitoApi {
         return CognitoRejected(type, message)
     }
 
-    private fun readSession(auth: JSONObject): AccountSession {
-        val accessToken = auth.optString("AccessToken")
-        val refreshToken = auth.optString("RefreshToken")
-        val idToken = auth.optString("IdToken")
-        if (accessToken.isBlank() || refreshToken.isBlank() || idToken.isBlank()) {
-            throw CognitoRejected("Unknown", "sign-in did not return tokens")
-        }
+    private fun sessionFromClaims(accessToken: String, refreshToken: String, idToken: String): AccountSession {
         val claims = JSONObject(String(decode(idToken.split('.')[PAYLOAD]), Charsets.UTF_8))
         val subject = claims.optString("sub")
         val email = claims.optString("email")

@@ -8,6 +8,8 @@ import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.CognitoRejected
+import com.georgv.audioworkstation.online.CognitoSignInCancelled
+import com.georgv.audioworkstation.online.GoogleCognitoSignIn
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -43,6 +45,7 @@ data class CommunityUiState(
 class CommunityViewModel @Inject constructor(
     private val sessions: AccountSessionStore,
     private val accounts: CognitoAccounts,
+    private val google: GoogleCognitoSignIn,
 ) : ViewModel() {
     private val form = MutableStateFlow(CommunityForm())
     private val busy = MutableStateFlow(false)
@@ -130,6 +133,12 @@ class CommunityViewModel @Inject constructor(
         }
     }
 
+    fun signInWithGoogle() {
+        submit(R.string.error_gmail_sign_in_failed) {
+            sessions.save(google.signIn())
+        }
+    }
+
     fun signOut() {
         submit(R.string.error_sign_out_failed) {
             val session = sessions.current() ?: return@submit
@@ -150,6 +159,7 @@ class CommunityViewModel @Inject constructor(
                 block()
             } catch (cancel: CancellationException) {
                 throw cancel
+            } catch (_: CognitoSignInCancelled) {
             } catch (error: CognitoRejected) {
                 onRejected(error)
             } catch (error: Exception) {

@@ -62,7 +62,7 @@ Release builds use R8 minification and resource shrinking; configure release sig
 
 ## Sign-in
 
-Community registers and signs in inside the app. Cognito stores the account. The user pool is `us-east-1_CaWxPoiz1` and the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`. Registration emails a confirmation code. The app stores the access token, refresh token, account id, and email on the phone.
+Community registers and signs in inside the app. Cognito stores the account. The user pool is `us-east-1_CaWxPoiz1` and the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`. Registration emails a confirmation code. Gmail opens Google’s account chooser and returns through `audioworkstation://callback`. The app stores the access token, refresh token, account id, and email on the phone.
 
 ## CI
 

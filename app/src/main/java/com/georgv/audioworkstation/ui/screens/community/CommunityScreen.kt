@@ -164,6 +164,12 @@ private fun Credentials(state: CommunityUiState, vm: CommunityViewModel) {
         enabled = !state.busy,
         onClick = vm::register,
     )
+    CommunityAction(
+        text = stringResource(R.string.community_gmail),
+        fillColor = AppColors.SurfacePanel,
+        enabled = !state.busy,
+        onClick = vm::signInWithGoogle,
+    )
 }
 
 @Composable
