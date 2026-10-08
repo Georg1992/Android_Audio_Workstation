@@ -28,6 +28,7 @@ class UrlConnectionHttpTransport(private val baseUrl: String) : HttpTransport {
         connection.instanceFollowRedirects = false
         connection.useCaches = false
         if (call.token != null) connection.setRequestProperty("Authorization", "Bearer ${call.token}")
+        call.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
         return connection
     }
 

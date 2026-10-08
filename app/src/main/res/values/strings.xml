@@ -31,7 +31,10 @@
     <string name="community_email_label">Email</string>
     <string name="community_password_label">Password</string>
     <string name="community_sign_in">Sign in</string>
-    <string name="community_sign_in_hint">Opens the account page, where you can sign in or create an account.</string>
+    <string name="community_sign_in_hint">Create an account with your email, or sign in.</string>
+    <string name="community_check_email">Enter the confirmation code from your email.</string>
+    <string name="community_code_label">Confirmation code</string>
+    <string name="community_confirm">Confirm</string>
     <string name="community_create_account">Create account</string>
     <string name="community_confirm_password_label">Confirm password</string>
     <string name="community_register">Register</string>
@@ -175,6 +178,9 @@
     <string name="error_create_account_failed">Could not create the account.</string>
     <string name="error_invalid_email">Enter a valid email.</string>
     <string name="error_password_mismatch">Passwords do not match.</string>
+    <string name="error_password_invalid">Use at least 8 characters, with an uppercase letter, a lowercase letter, and a number.</string>
+    <string name="error_account_exists">An account with this email already exists.</string>
+    <string name="error_confirmation_code">The confirmation code is not valid.</string>
     <string name="error_gmail_not_configured">Gmail sign-in needs a desktop OAuth client in local.properties.</string>
     <string name="error_gmail_sign_in_failed">Gmail sign-in failed.</string>
     <string name="error_sign_out_failed">Sign-out failed.</string>

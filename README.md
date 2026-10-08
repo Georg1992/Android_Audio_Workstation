@@ -62,7 +62,7 @@ Release builds use R8 minification and resource shrinking; configure release sig
 
 ## Sign-in
 
-Community opens the Cognito account page. The user pool is `us-east-1_CaWxPoiz1`, the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`, and the page is `https://georg-audioworkstation.auth.us-east-1.amazoncognito.com`. The phone returns through `audioworkstation://callback`. Cognito keeps the password and the session. The app stores the access token, refresh token, account id, and email on the phone.
+Community registers and signs in inside the app. Cognito stores the account. The user pool is `us-east-1_CaWxPoiz1` and the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`. Registration emails a confirmation code. The app stores the access token, refresh token, account id, and email on the phone.
 
 ## CI
 

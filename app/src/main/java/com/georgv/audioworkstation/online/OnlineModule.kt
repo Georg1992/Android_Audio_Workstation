@@ -1,12 +1,11 @@
 package com.georgv.audioworkstation.online
 
-import android.content.Context
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.online.network.UrlConnectionHttpTransport
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -17,22 +16,13 @@ abstract class OnlineModule {
     @Singleton
     abstract fun bindAccountSessionStore(impl: DataStoreAccountSessionStore): AccountSessionStore
 
-    @Binds
-    @Singleton
-    abstract fun bindCognitoRedirects(impl: ChannelCognitoRedirects): CognitoRedirects
-
     companion object {
         @Provides
         @Singleton
-        fun provideCognitoSignIn(
-            @ApplicationContext context: Context,
-            redirects: CognitoRedirects,
-            dispatchers: AppDispatchers,
-        ): CognitoSignIn = HostedCognitoSignIn.create(
-            context = context,
-            redirects = redirects,
-            io = dispatchers.io,
-            main = dispatchers.main,
-        )
+        fun provideCognitoAccounts(dispatchers: AppDispatchers): CognitoAccounts =
+            ApiCognitoAccounts(
+                transport = UrlConnectionHttpTransport(CognitoConfig.ENDPOINT),
+                io = dispatchers.io,
+            )
     }
 }

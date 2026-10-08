@@ -31,7 +31,10 @@
     <string name="community_email_label">Эл. почта</string>
     <string name="community_password_label">Пароль</string>
     <string name="community_sign_in">Войти</string>
-    <string name="community_sign_in_hint">Откроется страница аккаунта: вход или регистрация.</string>
+    <string name="community_sign_in_hint">Создайте аккаунт по почте или войдите.</string>
+    <string name="community_check_email">Введите код подтверждения из письма.</string>
+    <string name="community_code_label">Код подтверждения</string>
+    <string name="community_confirm">Подтвердить</string>
     <string name="community_create_account">Создать аккаунт</string>
     <string name="community_confirm_password_label">Подтверждение пароля</string>
     <string name="community_register">Зарегистрироваться</string>
@@ -166,6 +169,9 @@
     <string name="error_create_account_failed">Не удалось создать аккаунт.</string>
     <string name="error_invalid_email">Укажите корректную почту.</string>
     <string name="error_password_mismatch">Пароли не совпадают.</string>
+    <string name="error_password_invalid">Пароль должен быть не короче 8 символов и содержать заглавную, строчную букву и цифру.</string>
+    <string name="error_account_exists">Аккаунт с этой почтой уже есть.</string>
+    <string name="error_confirmation_code">Неверный код подтверждения.</string>
     <string name="error_gmail_not_configured">Для входа через Gmail укажите OAuth-клиент в local.properties.</string>
     <string name="error_gmail_sign_in_failed">Не удалось войти через Gmail.</string>
     <string name="error_sign_out_failed">Не удалось выйти.</string>

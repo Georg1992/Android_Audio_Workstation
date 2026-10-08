@@ -9,6 +9,7 @@ class HttpCall(
     val contentType: String?,
     val contentLength: Long,
     val writeBody: ((OutputStream) -> Unit)?,
+    val headers: Map<String, String> = emptyMap(),
 )
 
 class HttpResult(val status: Int, val body: String)
