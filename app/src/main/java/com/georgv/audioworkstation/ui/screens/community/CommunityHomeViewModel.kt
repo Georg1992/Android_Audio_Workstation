@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 data class CommunityHomeUiState(
     val sessionKnown: Boolean = false,
     val email: String? = null,
+    val name: String? = null,
     val busy: Boolean = false,
 )
 
@@ -39,6 +40,7 @@ class CommunityHomeViewModel @Inject constructor(
             CommunityHomeUiState(
                 sessionKnown = true,
                 email = session?.email,
+                name = session?.name,
                 busy = isBusy,
             )
         }.stateIn(

@@ -61,10 +61,16 @@ fun CommunityHomeScreen(
             verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
         ) {
             val email = state.email
-            if (email != null) {
+            val name = state.name
+            if (email != null && name != null) {
                 Text(
-                    text = stringResource(R.string.community_signed_in, email),
+                    text = stringResource(R.string.community_signed_in, name),
                     style = AppText.TileTitle,
+                    color = AppColors.Line,
+                )
+                Text(
+                    text = email,
+                    style = AppText.TileSubtitle,
                     color = AppColors.Line,
                 )
                 Text(

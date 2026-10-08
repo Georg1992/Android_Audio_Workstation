@@ -137,6 +137,15 @@ private fun AccountFields(state: CommunityUiState, vm: CommunityViewModel, regis
         style = AppText.TileTitle,
         color = AppColors.Line,
     )
+    if (registering) {
+        CommunityField(
+            value = state.profileName,
+            onValueChange = vm::onProfileNameChange,
+            label = stringResource(R.string.community_profile_name_label),
+            keyboardType = KeyboardType.Text,
+            enabled = !state.busy,
+        )
+    }
     CommunityField(
         value = state.email,
         onValueChange = vm::onEmailChange,

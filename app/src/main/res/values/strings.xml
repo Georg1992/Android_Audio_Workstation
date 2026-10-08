@@ -28,6 +28,7 @@
     <string name="screen_community">Community</string>
     <string name="screen_devices">Devices</string>
     <string name="screen_community_placeholder_body">Community features will appear here.</string>
+    <string name="community_profile_name_label">Profile name</string>
     <string name="community_email_label">Email</string>
     <string name="community_password_label">Password</string>
     <string name="community_sign_in">Sign in</string>

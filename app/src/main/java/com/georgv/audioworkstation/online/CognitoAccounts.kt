@@ -6,7 +6,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.withContext
 
 interface CognitoAccounts {
-    suspend fun register(email: String, password: String)
+    suspend fun register(email: String, password: String, name: String)
 
     suspend fun confirm(email: String, code: String)
 
@@ -19,8 +19,8 @@ class ApiCognitoAccounts(
     private val transport: HttpTransport,
     private val io: CoroutineContext,
 ) : CognitoAccounts {
-    override suspend fun register(email: String, password: String) {
-        withContext(io) { post(SIGN_UP, CognitoApi.signUp(email, password)) }
+    override suspend fun register(email: String, password: String, name: String) {
+        withContext(io) { post(SIGN_UP, CognitoApi.signUp(email, password, name)) }
     }
 
     override suspend fun confirm(email: String, code: String) {

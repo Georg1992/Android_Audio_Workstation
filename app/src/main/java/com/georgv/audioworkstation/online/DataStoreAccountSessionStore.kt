@@ -34,6 +34,7 @@ class DataStoreAccountSessionStore @Inject constructor(
                     token = token,
                     accountId = accountId,
                     email = email,
+                    name = profileName(prefs[Keys.NAME].orEmpty(), email),
                     refreshToken = refreshToken,
                 )
             }
@@ -46,6 +47,7 @@ class DataStoreAccountSessionStore @Inject constructor(
             prefs[Keys.TOKEN] = session.token
             prefs[Keys.ACCOUNT_ID] = session.accountId
             prefs[Keys.EMAIL] = session.email
+            prefs[Keys.NAME] = session.name
             prefs[Keys.REFRESH_TOKEN] = session.refreshToken
         }
     }
@@ -58,6 +60,7 @@ class DataStoreAccountSessionStore @Inject constructor(
         val TOKEN = stringPreferencesKey("token")
         val ACCOUNT_ID = stringPreferencesKey("account_id")
         val EMAIL = stringPreferencesKey("email")
+        val NAME = stringPreferencesKey("name")
         val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
     }
 }
