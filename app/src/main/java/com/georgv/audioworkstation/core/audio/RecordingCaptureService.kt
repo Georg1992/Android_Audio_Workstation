@@ -4,12 +4,14 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.localization.withAppLanguage
 
 /**
  * Microphone foreground service. While a take is open, leaving the app must not revoke capture.
@@ -28,17 +30,16 @@ class RecordingCaptureService : Service() {
     }
 
     private fun startMicrophoneForeground() {
+        val localized = withAppLanguage()
         val manager = getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    getString(R.string.recording_capture_channel_name),
-                    NotificationManager.IMPORTANCE_LOW,
-                ),
-            )
-        }
-        val notification = microphoneNotification()
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                localized.getString(R.string.recording_capture_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
+        val notification = microphoneNotification(localized)
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
@@ -47,10 +48,10 @@ class RecordingCaptureService : Service() {
         )
     }
 
-    private fun microphoneNotification(): Notification =
+    private fun microphoneNotification(localized: Context): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.recording_capture_notification_title))
-            .setContentText(getString(R.string.recording_capture_notification_text))
+            .setContentTitle(localized.getString(R.string.recording_capture_notification_title))
+            .setContentText(localized.getString(R.string.recording_capture_notification_text))
             .setSmallIcon(R.drawable.ic_recording_notification)
             .setOngoing(true)
             .build()

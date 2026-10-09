@@ -30,18 +30,26 @@ fun AppRoot() {
         // disable it globally. Providing `null` to LocalRippleConfiguration removes the indication
         // entirely without having to override every interactive component's `indication` modifier.
         CompositionLocalProvider(LocalRippleConfiguration provides null) {
-            ProvideAppLocale(languageTag = tag) {
-                val navController = rememberNavController()
-
+            val resolvedTag = tag
+            if (resolvedTag == null) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = AppColors.Bg,
-                ) {
-                    AppNavHost(
-                        currentLanguageTag = tag,
-                        onSetLanguage = languageVm::setLanguage,
-                        navController = navController
-                    )
+                ) {}
+            } else {
+                ProvideAppLocale(languageTag = resolvedTag) {
+                    val navController = rememberNavController()
+
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = AppColors.Bg,
+                    ) {
+                        AppNavHost(
+                            currentLanguageTag = resolvedTag,
+                            onSetLanguage = languageVm::setLanguage,
+                            navController = navController
+                        )
+                    }
                 }
             }
         }

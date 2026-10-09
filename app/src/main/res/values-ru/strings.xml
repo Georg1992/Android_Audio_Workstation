@@ -3,7 +3,7 @@
     <string name="lang_russian">Русский</string>
     <string name="lang_chinese"> 中文（简体）</string>
 
-    <string name="app_title">Audio Workstation</string>
+    <string name="app_title">Аудиостудия</string>
 
     <string name="menu_project">Проект</string>
     <string name="menu_project_sub">Открыть / создать</string>
@@ -15,7 +15,7 @@
     <string name="menu_community_sub">Найти</string>
 
     <string name="menu_devices">Устройства</string>
-    <string name="menu_devices_sub">Bluetooth / I/O</string>
+    <string name="menu_devices_sub">Bluetooth / вход-выход</string>
 
     <string name="menu_quick_record">Быстрая запись</string>
     <string name="menu_quick_record_sub">Нажми, чтобы записать</string>
@@ -75,6 +75,7 @@
     <string name="library_loading_state">Загрузка проектов…</string>
     <string name="library_open_project_hint">Нажмите, чтобы открыть проект</string>
     <string name="library_untitled_project">Проект без названия</string>
+    <string name="default_new_project_name">Новый проект</string>
     <string name="library_delete_project_title">Удалить проект?</string>
     <string name="library_delete_project_message">Это навсегда удалит %1$s и все его дорожки.</string>
     <string name="library_no_mix_yet">Микса пока нет</string>
@@ -115,9 +116,15 @@
     <string name="import_failure_invalid_wav">Файл не является корректным WAV.</string>
     <string name="import_failure_unsupported_encoding">Этот аудиоформат не поддерживается.</string>
     <string name="import_failure_unsupported_channels">Поддерживается только моно или стерео.</string>
-    <string name="track_channel_mono">MONO</string>
-    <string name="track_channel_stereo">STEREO</string>
-    <string name="track_lane_viewport_zoomed">ZOOMED</string>
+    <string name="track_channel_mono">МОНО</string>
+    <string name="track_channel_stereo">СТЕРЕО</string>
+    <string name="track_lane_viewport_zoomed">МАСШТАБ</string>
+    <string name="track_lane_viewport_base">БАЗА</string>
+    <string name="cd_track_pan">Панорама дорожки %1$s %2$s</string>
+    <string name="pan_side_left">Л</string>
+    <string name="pan_side_right">П</string>
+    <string name="pan_side_center">Ц</string>
+    <string name="track_unnamed">Дорожка</string>
     <string name="import_failure_sample_rate_mismatch">Частота %1$d Гц не совпадает с %2$d Гц проекта.</string>
     <string name="import_failure_bit_depth_mismatch">Разрядность %1$d бит не совпадает с %2$d бит проекта.</string>
     <string name="import_failure_write_failed">Не удалось импортировать аудио: %1$s</string>
@@ -130,6 +137,12 @@
     <string name="import_sample_rate_mismatch_resample">Импорт с ресемплингом</string>
     <string name="import_sample_rate_mismatch_create_project">Создать проект %1$s</string>
     <string name="error_import_unsupported_source_sample_rate">Частота этого файла не поддерживается для нового проекта.</string>
+    <string name="waveform_generating">Создание…</string>
+    <string name="waveform_unavailable">Нет волны</string>
+    <string name="waveform_no_audio">Нет аудио</string>
+    <string name="import_clip_failed">Импорт не удался</string>
+    <string name="import_status_importing">ИМПОРТ</string>
+    <string name="import_status_failed">ОШИБКА ИМПОРТА</string>
 
     <!-- Project / track flow errors -->
     <string name="error_microphone_permission_required">Требуется доступ к микрофону.</string>
@@ -160,6 +173,7 @@
     <string name="error_loop_update_failed">Не удалось обновить настройку цикла.</string>
     <string name="error_track_edit_save_failed">Не удалось сохранить изменения дорожки.</string>
     <string name="error_gain_update_failed">Не удалось обновить громкость дорожки.</string>
+    <string name="error_pan_update_failed">Не удалось обновить панораму дорожки.</string>
     <string name="error_save_track_order_failed">Не удалось сохранить порядок дорожек.</string>
     <string name="error_save_imported_track_failed">Не удалось сохранить импортированную дорожку.</string>
     <string name="error_recording_metadata_failed">Не удалось обновить метаданные записи.</string>
@@ -179,4 +193,56 @@
     <string name="error_gmail_not_configured">Для входа через Gmail укажите OAuth-клиент в local.properties.</string>
     <string name="error_gmail_sign_in_failed">Не удалось войти через Gmail.</string>
     <string name="error_sign_out_failed">Не удалось выйти.</string>
+
+    <string name="devices_refresh">Обновить</string>
+    <string name="devices_route_latency">Задержка маршрута (только измерение — компенсация выключена)</string>
+    <string name="devices_error">Ошибка: %1$s</string>
+    <string name="devices_load_failed">Не удалось загрузить сводку задержки.</string>
+    <string name="devices_no_latency">Нет данных о задержке для текущего маршрута.</string>
+    <string name="devices_route">Маршрут</string>
+    <string name="devices_sample_rate">Частота</string>
+    <string name="devices_sample_rate_value">%1$d Гц</string>
+    <string name="devices_profile_state">Состояние профиля</string>
+    <string name="devices_data_complete">Данные полные</string>
+    <string name="devices_yes">Да</string>
+    <string name="devices_no">Нет</string>
+    <string name="devices_output_floor_median">Нижняя граница выхода (медиана)</string>
+    <string name="devices_output_floor_p95">Нижняя граница выхода (p95)</string>
+    <string name="devices_capture_delay_median">Задержка захвата (медиана)</string>
+    <string name="devices_round_trip_median">Круговая задержка (медиана)</string>
+    <string name="devices_jitter_median">Джиттер (медиана)</string>
+    <string name="devices_app_output_overhead_p95">Накладные расходы выхода (p95)</string>
+    <string name="devices_app_input_overhead_p95">Накладные расходы входа (p95)</string>
+    <string name="devices_low_latency_output">Выход с низкой задержкой</string>
+    <string name="devices_low_latency_input">Вход с низкой задержкой</string>
+    <string name="devices_best_backend">Лучший известный бэкенд</string>
+    <string name="devices_backend_unspecified">Не задан</string>
+    <string name="devices_high_latency_route">Маршрут с высокой задержкой</string>
+    <string name="devices_data_confidence">Достоверность данных</string>
+    <string name="devices_confidence_value">%1$.2f</string>
+    <string name="devices_missing_data">Недостающие данные</string>
+    <string name="devices_warnings">Предупреждения:</string>
+    <string name="devices_backend_inventory">Список бэкендов:</string>
+    <string name="devices_latency_unknown">неизвестно</string>
+    <string name="devices_latency_ms">%1$.1f мс</string>
+    <string name="devices_backend_entry">%1$s %2$s режим=%3$s выдан=%4$s буфер=%5$d задержка=%6$s</string>
+    <string name="devices_profile_empty">Пусто</string>
+    <string name="devices_profile_partial">Частично</string>
+    <string name="devices_profile_measured">Измерено</string>
+    <string name="devices_profile_validated">Проверено</string>
+    <string name="devices_profile_inconsistent">Несогласованно</string>
+    <string name="devices_profile_high_latency">Маршрут с высокой задержкой</string>
+    <string name="devices_warning_low_latency_denied">Низкая задержка отклонена</string>
+    <string name="devices_warning_bluetooth">Маршрут Bluetooth</string>
+    <string name="devices_warning_output_latency_high">Высокая задержка выхода</string>
+    <string name="devices_warning_capture_delay_unknown">Задержка захвата неизвестна</string>
+    <string name="devices_warning_measurement_inconsistent">Измерение несогласованно</string>
+    <string name="devices_missing_profile">профиль</string>
+    <string name="devices_missing_output_stream_config">конфигурация выходного потока</string>
+    <string name="devices_missing_input_stream_config">конфигурация входного потока</string>
+    <string name="devices_missing_output_hardware_floor">аппаратная граница выхода</string>
+    <string name="devices_missing_true_capture_delay">задержка захвата</string>
+    <string name="devices_missing_round_trip">круговая задержка</string>
+    <string name="devices_missing_jitter">джиттер</string>
+    <string name="devices_missing_startup_metrics">метрики запуска</string>
 </resources>

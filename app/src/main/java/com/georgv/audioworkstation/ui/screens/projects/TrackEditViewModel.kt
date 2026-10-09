@@ -41,6 +41,7 @@ data class TrackEditUiState(
     val trimmedDurationMs: Long = 0L,
     val waveformState: WaveformState = WaveformState.Loading,
     val trackMissing: Boolean = false,
+    val trackLoaded: Boolean = false,
 )
 
 @HiltViewModel
@@ -120,7 +121,7 @@ class TrackEditViewModel @Inject constructor(
             )
         _uiState.value =
             TrackEditUiState(
-                trackName = track.name ?: "Track",
+                trackName = track.name.orEmpty(),
                 sourceDurationMs = sourceDuration,
                 clipStartOffsetMs = track.timelineStartOffsetMs,
                 trimStartMs = track.effectiveTrimStartMs(),
@@ -129,6 +130,7 @@ class TrackEditViewModel @Inject constructor(
                 trimmedDurationMs = trimmedDuration,
                 waveformState = _uiState.value.waveformState,
                 trackMissing = false,
+                trackLoaded = true,
             )
         if (track.hasPersistedPlayableAudio()) {
             ensureWaveformLoaded(track)

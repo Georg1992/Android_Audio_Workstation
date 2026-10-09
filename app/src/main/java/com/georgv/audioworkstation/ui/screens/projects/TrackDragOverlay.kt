@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.TrackCard
 import com.georgv.audioworkstation.ui.drag.DragController
@@ -100,12 +102,13 @@ private fun TrackDragFloatingCard(
     val liftOffsetPx = with(density) { Dimens.DragOverlayLiftOffset.toPx() }
     val cardShape = RoundedCornerShape(Dimens.TileRadius)
 
+    val unnamedTrack = stringResource(R.string.track_unnamed)
     val cardContent =
-        remember(track.id, track.name, track.isLoop, isSelected, isRecording, gain) {
+        remember(track.id, track.name, track.isLoop, isSelected, isRecording, gain, unnamedTrack) {
             movableContentOf {
                 TrackCard(
                     modifier = Modifier.fillMaxSize(),
-                    title = track.name ?: "Track",
+                    title = track.name ?: unnamedTrack,
                     isSelected = isSelected,
                     isRecording = isRecording,
                     gain = gain,

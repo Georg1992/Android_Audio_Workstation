@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.localization
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.georgv.audioworkstation.core.localization.applyAppLanguage
 import com.georgv.audioworkstation.core.localization.data.AppLanguageStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,16 +16,17 @@ class LanguageViewModel @Inject constructor(
     private val appLanguageStore: AppLanguageStore
 ) : ViewModel() {
 
-    val currentTag: StateFlow<String> =
+    val currentTag: StateFlow<String?> =
         appLanguageStore.languageTagFlow.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = appLanguageStore.defaultLanguageTag
+            started = SharingStarted.Eagerly,
+            initialValue = null,
         )
 
     init {
         viewModelScope.launch {
             appLanguageStore.ensureInitialized()
+            appLanguageStore.languageTagFlow.collect(::applyAppLanguage)
         }
     }
 

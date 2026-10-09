@@ -107,8 +107,11 @@ fun TrackPanKnob(
     val displayPan = PanRange.snapToIndicatorStep(continuousPan)
     val currentPan by rememberUpdatedState(PanRange.clamp(pan))
 
-    val label = PanRange.label(displayPan)
-    val valueText = PanRange.formatValue(displayPan)
+    val panLeft = stringResource(R.string.pan_side_left)
+    val panRight = stringResource(R.string.pan_side_right)
+    val panCenter = stringResource(R.string.pan_side_center)
+    val label = localizedPanReadout(PanRange.label(displayPan), panLeft, panRight, panCenter)
+    val valueText = localizedPanReadout(PanRange.formatValue(displayPan), panLeft, panRight, panCenter)
     val knobSize = Dimens.TrackHeaderButtonSize
     val density = LocalDensity.current
     val knobSizePx = with(density) { knobSize.toPx() }
@@ -265,13 +268,13 @@ fun TrackPanKnob(
                 )
             }
             PanSweepEndpointLabel(
-                text = "L",
+                text = panLeft,
                 degrees = PanKnobStartDegrees,
                 labelDistanceFromCenterPx = labelDistanceFromCenterPx,
                 style = valueLabelStyle,
             )
             PanSweepEndpointLabel(
-                text = "R",
+                text = panRight,
                 degrees = panKnobEndDegrees(),
                 labelDistanceFromCenterPx = labelDistanceFromCenterPx,
                 style = valueLabelStyle,

@@ -876,7 +876,7 @@ private fun ClipMetadataArea(
         Spacer(modifier = Modifier.weight(1f))
         if (clip.isTimelineBase) {
             Text(
-                text = "BASE",
+                text = stringResource(R.string.track_lane_viewport_base),
                 style = labelStyle,
             )
         }

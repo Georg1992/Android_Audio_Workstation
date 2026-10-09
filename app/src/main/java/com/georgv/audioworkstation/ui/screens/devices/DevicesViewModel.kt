@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 data class DevicesUiState(
     val loading: Boolean = true,
     val summary: DeviceLatencySummary? = null,
-    val error: String? = null,
+    val errorDetail: String? = null,
+    val loadFailed: Boolean = false,
 )
 
 @HiltViewModel
@@ -36,10 +37,12 @@ class DevicesViewModel @Inject constructor(
                     _state.value = DevicesUiState(loading = false, summary = summary)
                 }
                 .onFailure { error ->
+                    val detail = error.message
                     _state.value =
                         DevicesUiState(
                             loading = false,
-                            error = error.message ?: "Failed to load latency summary",
+                            errorDetail = detail,
+                            loadFailed = detail == null,
                         )
                 }
         }

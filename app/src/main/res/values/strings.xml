@@ -75,6 +75,7 @@
     <string name="library_loading_state">Loading projects…</string>
     <string name="library_open_project_hint">Tap to open project</string>
     <string name="library_untitled_project">Untitled Project</string>
+    <string name="default_new_project_name">New Project</string>
     <string name="library_delete_project_title">Delete project?</string>
     <string name="library_delete_project_message">This will permanently delete %1$s and all its tracks.</string>
     <string name="library_no_mix_yet">No mix yet</string>
@@ -105,6 +106,10 @@
     <string name="cd_record_target_off">Record target off</string>
     <string name="cd_track_menu">Track menu</string>
     <string name="cd_track_pan">Track pan %1$s %2$s</string>
+    <string name="pan_side_left">L</string>
+    <string name="pan_side_right">R</string>
+    <string name="pan_side_center">C</string>
+    <string name="track_unnamed">Track</string>
 
     <!-- Validation errors -->
     <string name="error_project_name_blank">Project name cannot be blank.</string>
@@ -120,6 +125,7 @@
     <string name="track_channel_mono">MONO</string>
     <string name="track_channel_stereo">STEREO</string>
     <string name="track_lane_viewport_zoomed">ZOOMED</string>
+    <string name="track_lane_viewport_base">BASE</string>
     <string name="import_failure_sample_rate_mismatch">Sample rate %1$d Hz does not match project %2$d Hz.</string>
     <string name="import_failure_bit_depth_mismatch">Bit depth %1$d-bit does not match project %2$d-bit.</string>
     <string name="import_failure_write_failed">Failed to import audio: %1$s</string>
@@ -188,4 +194,57 @@
     <string name="error_gmail_not_configured">Gmail sign-in needs a desktop OAuth client in local.properties.</string>
     <string name="error_gmail_sign_in_failed">Gmail sign-in failed.</string>
     <string name="error_sign_out_failed">Sign-out failed.</string>
+
+    <!-- Devices -->
+    <string name="devices_refresh">Refresh</string>
+    <string name="devices_route_latency">Route latency (measurement only — compensation disabled)</string>
+    <string name="devices_error">Error: %1$s</string>
+    <string name="devices_load_failed">Failed to load latency summary.</string>
+    <string name="devices_no_latency">No latency data for current route.</string>
+    <string name="devices_route">Route</string>
+    <string name="devices_sample_rate">Sample rate</string>
+    <string name="devices_sample_rate_value">%1$d Hz</string>
+    <string name="devices_profile_state">Profile state</string>
+    <string name="devices_data_complete">Data complete</string>
+    <string name="devices_yes">Yes</string>
+    <string name="devices_no">No</string>
+    <string name="devices_output_floor_median">Output floor (median)</string>
+    <string name="devices_output_floor_p95">Output floor (p95)</string>
+    <string name="devices_capture_delay_median">Capture delay (median)</string>
+    <string name="devices_round_trip_median">Round trip (median)</string>
+    <string name="devices_jitter_median">Jitter (median)</string>
+    <string name="devices_app_output_overhead_p95">App output overhead (p95)</string>
+    <string name="devices_app_input_overhead_p95">App input overhead (p95)</string>
+    <string name="devices_low_latency_output">Low latency output</string>
+    <string name="devices_low_latency_input">Low latency input</string>
+    <string name="devices_best_backend">Best known backend</string>
+    <string name="devices_backend_unspecified">Unspecified</string>
+    <string name="devices_high_latency_route">High latency route</string>
+    <string name="devices_data_confidence">Data confidence</string>
+    <string name="devices_confidence_value">%1$.2f</string>
+    <string name="devices_missing_data">Missing data</string>
+    <string name="devices_warnings">Warnings:</string>
+    <string name="devices_backend_inventory">Backend inventory:</string>
+    <string name="devices_latency_unknown">unknown</string>
+    <string name="devices_latency_ms">%1$.1f ms</string>
+    <string name="devices_backend_entry">%1$s %2$s perf=%3$s granted=%4$s buf=%5$d latency=%6$s</string>
+    <string name="devices_profile_empty">Empty</string>
+    <string name="devices_profile_partial">Partial</string>
+    <string name="devices_profile_measured">Measured</string>
+    <string name="devices_profile_validated">Validated</string>
+    <string name="devices_profile_inconsistent">Inconsistent</string>
+    <string name="devices_profile_high_latency">High-latency route</string>
+    <string name="devices_warning_low_latency_denied">Low latency denied</string>
+    <string name="devices_warning_bluetooth">Bluetooth route</string>
+    <string name="devices_warning_output_latency_high">Output latency high</string>
+    <string name="devices_warning_capture_delay_unknown">Capture delay unknown</string>
+    <string name="devices_warning_measurement_inconsistent">Measurement inconsistent</string>
+    <string name="devices_missing_profile">profile</string>
+    <string name="devices_missing_output_stream_config">output stream config</string>
+    <string name="devices_missing_input_stream_config">input stream config</string>
+    <string name="devices_missing_output_hardware_floor">output hardware floor</string>
+    <string name="devices_missing_true_capture_delay">capture delay</string>
+    <string name="devices_missing_round_trip">round trip</string>
+    <string name="devices_missing_jitter">jitter</string>
+    <string name="devices_missing_startup_metrics">startup metrics</string>
 </resources>

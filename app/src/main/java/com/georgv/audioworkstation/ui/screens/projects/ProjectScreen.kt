@@ -659,6 +659,7 @@ private fun ProjectScreenHeavyLayer(
     var showMixdownDialog by remember(projectId) { mutableStateOf(false) }
 
     val microphonePermissionError = stringResource(R.string.error_microphone_permission_required)
+    val newProjectName = stringResource(R.string.default_new_project_name)
     val recordPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -837,7 +838,7 @@ private fun ProjectScreenHeavyLayer(
                 playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
                 onPlay = { vm.onPlayPressed() },
                 onStop = { vm.onStopPressed() },
-                onRecord = { startRecordingIfPermitted("New Project") },
+                onRecord = { startRecordingIfPermitted(newProjectName) },
                 isRecordEnabled = !structuralState.isImportInProgress,
                 inputLocked = reorderActive,
                 modifier = Modifier.fillMaxWidth(Dimens.TransportPanelWidthFraction),

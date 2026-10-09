@@ -22,8 +22,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
@@ -139,7 +141,7 @@ internal fun LazyItemScope.ProjectTrackListRow(
         loopPlaybackActive: Boolean,
     ) {
         TrackCard(
-            title = track.name ?: "Track",
+            title = track.name ?: stringResource(R.string.track_unnamed),
             isSelected = selectedTrackIds.contains(track.id),
             isRecording = recordingTrackId == track.id,
             recordingInputLevel = recordingInputLevel,

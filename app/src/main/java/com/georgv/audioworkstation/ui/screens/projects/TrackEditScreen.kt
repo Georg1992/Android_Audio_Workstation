@@ -55,7 +55,11 @@ fun TrackEditScreen(
     }
 
     ScreenScaffold(
-        title = state.trackName,
+        title = if (state.trackLoaded && state.trackName.isEmpty()) {
+            stringResource(R.string.track_unnamed)
+        } else {
+            state.trackName
+        },
         onBack = onBack,
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
