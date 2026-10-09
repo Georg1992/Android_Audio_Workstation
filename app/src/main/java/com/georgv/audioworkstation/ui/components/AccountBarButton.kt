@@ -17,11 +17,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.ui.navigation.LoginRoute
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
@@ -31,7 +34,12 @@ fun AccountBarButton() {
     val name = bar.state.name
     if (!bar.state.known) return
     if (name == null) {
-        BarLabel(text = stringResource(R.string.bar_login), onClick = bar.openLogin)
+        val recording = LocalRecordingBlocksLogin.current
+        BarLabel(
+            text = stringResource(R.string.bar_login),
+            enabled = LoginRoute.allowedDuring(recording),
+            onClick = bar.openLogin,
+        )
     } else {
         ProfileMenu(name = name, onSignOut = bar.signOut)
     }
@@ -66,13 +74,19 @@ private fun ProfileMenu(name: String, onSignOut: () -> Unit) {
 }
 
 @Composable
-private fun BarLabel(text: String, onClick: () -> Unit) {
+private fun BarLabel(
+    text: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
     Box(
         modifier =
             Modifier
                 .height(Dimens.TopBarHeight)
                 .widthIn(min = Dimens.TopBarHeight, max = Dimens.AccountBarMaxWidth)
+                .alpha(if (enabled) 1f else AppOpacity.disabled)
                 .clickable(
+                    enabled = enabled,
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onClick,
@@ -101,3 +115,5 @@ internal val LocalAccountBar =
     staticCompositionLocalOf<AccountBarController> {
         error("Account bar is missing")
     }
+
+internal val LocalRecordingBlocksLogin = staticCompositionLocalOf { false }

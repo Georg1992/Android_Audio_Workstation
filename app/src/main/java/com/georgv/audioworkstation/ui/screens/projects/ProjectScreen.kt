@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +63,7 @@ import com.georgv.audioworkstation.core.content.resolveDisplayName
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.AppMusicLoadingPlaceholder
+import com.georgv.audioworkstation.ui.components.LocalRecordingBlocksLogin
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
 import com.georgv.audioworkstation.ui.components.MixdownAudioButton
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
@@ -366,7 +368,9 @@ private fun ProjectScreenContent(
     val placeholderMessage =
         if (destinationReady) loadingTracksMessage else openingMessage
     var trackPagingSummary by remember(projectId) { mutableStateOf("1/1") }
+    val recordingBlocksLogin = state.recordingTrackId != null || state.isRecordingStartup
 
+    CompositionLocalProvider(LocalRecordingBlocksLogin provides recordingBlocksLogin) {
     ScreenScaffold(
         topBarAlertMessage = if (workspaceMounted) topBarAlertState.message else null,
         titleContent = {
@@ -414,6 +418,7 @@ private fun ProjectScreenContent(
                 )
             }
         }
+    }
     }
 }
 

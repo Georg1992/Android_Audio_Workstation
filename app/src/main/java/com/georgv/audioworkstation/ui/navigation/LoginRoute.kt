@@ -6,4 +6,6 @@ internal object LoginRoute {
         if (path == Routes.LOGIN) return false
         return path != Routes.COMMUNITY
     }
+
+    fun allowedDuring(recording: Boolean): Boolean = !recording
 }

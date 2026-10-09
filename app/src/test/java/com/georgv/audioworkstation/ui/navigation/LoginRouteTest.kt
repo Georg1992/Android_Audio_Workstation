@@ -22,4 +22,10 @@ class LoginRouteTest {
         assertFalse(LoginRoute.opensFrom(Routes.COMMUNITY))
         assertFalse(LoginRoute.opensFrom(null))
     }
+
+    @Test
+    fun staysClosedWhileRecording() {
+        assertFalse(LoginRoute.allowedDuring(recording = true))
+        assertTrue(LoginRoute.allowedDuring(recording = false))
+    }
 }
