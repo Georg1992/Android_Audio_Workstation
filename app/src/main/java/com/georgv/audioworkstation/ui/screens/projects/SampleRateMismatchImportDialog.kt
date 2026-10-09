@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -31,52 +32,57 @@ fun SampleRateMismatchImportDialog(
     onCreateProject: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    val locale = rememberAppLocaleScope()
     AlertDialog(
         onDismissRequest = onCancel,
         containerColor = AppColors.Bg,
         tonalElevation = 0.dp,
         title = {
-            Text(
-                text =
-                    stringResource(
-                        R.string.import_sample_rate_mismatch_message,
-                        dialog.sourceSampleRateLabel,
-                        dialog.projectSampleRateLabel,
-                    ),
-                style = AppText.TileTitle,
-                color = AppColors.Line,
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            ) {
+            locale.Provide {
                 Text(
-                    text = stringResource(R.string.import_sample_rate_mismatch_resample_hint),
-                    style = AppText.TileSubtitle,
-                    color = AppColors.Line,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
-                ImportDialogChoiceButton(
-                    text = stringResource(R.string.import_sample_rate_mismatch_resample),
-                    fillColor = AppColors.Green,
-                    onClick = onImportWithResampling,
-                )
-                ImportDialogChoiceButton(
                     text =
                         stringResource(
-                            R.string.import_sample_rate_mismatch_create_project,
-                            dialog.createProjectSampleRateLabel,
+                            R.string.import_sample_rate_mismatch_message,
+                            dialog.sourceSampleRateLabel,
+                            dialog.projectSampleRateLabel,
                         ),
-                    fillColor = AppColors.Cyan,
-                    onClick = onCreateProject,
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
                 )
-                ImportDialogChoiceButton(
-                    text = stringResource(R.string.action_cancel),
-                    fillColor = AppColors.SurfacePanel,
-                    onClick = onCancel,
-                )
+            }
+        },
+        text = {
+            locale.Provide {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                ) {
+                    Text(
+                        text = stringResource(R.string.import_sample_rate_mismatch_resample_hint),
+                        style = AppText.TileSubtitle,
+                        color = AppColors.Line,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    ImportDialogChoiceButton(
+                        text = stringResource(R.string.import_sample_rate_mismatch_resample),
+                        fillColor = AppColors.Green,
+                        onClick = onImportWithResampling,
+                    )
+                    ImportDialogChoiceButton(
+                        text =
+                            stringResource(
+                                R.string.import_sample_rate_mismatch_create_project,
+                                dialog.createProjectSampleRateLabel,
+                            ),
+                        fillColor = AppColors.Cyan,
+                        onClick = onCreateProject,
+                    )
+                    ImportDialogChoiceButton(
+                        text = stringResource(R.string.action_cancel),
+                        fillColor = AppColors.SurfacePanel,
+                        onClick = onCancel,
+                    )
+                }
             }
         },
         confirmButton = {},

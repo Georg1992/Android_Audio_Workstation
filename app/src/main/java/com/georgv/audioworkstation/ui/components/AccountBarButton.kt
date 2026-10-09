@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.navigation.LoginRoute
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -50,11 +48,9 @@ private fun ProfileMenu(name: String, onSignOut: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         BarLabel(text = name, onClick = { expanded = true })
-        DropdownMenu(
+        AppDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            containerColor = AppColors.Bg,
-            tonalElevation = 0.dp,
         ) {
             DropdownMenuItem(
                 text = {

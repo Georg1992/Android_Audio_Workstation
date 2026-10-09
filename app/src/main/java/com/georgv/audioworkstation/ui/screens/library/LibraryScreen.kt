@@ -47,6 +47,7 @@ import com.georgv.audioworkstation.core.ui.ScreenState
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
+import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
 import com.georgv.audioworkstation.ui.components.warmLoadingBoxAsset
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
@@ -76,6 +77,7 @@ fun LibraryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var pendingDeleteProject by remember { mutableStateOf<LibraryProjectItem?>(null) }
+    val locale = rememberAppLocaleScope()
 
     LaunchedEffect(vm) {
         vm.userMessages.collect { message ->
@@ -122,44 +124,52 @@ fun LibraryScreen(
                 containerColor = AppColors.Bg,
                 tonalElevation = 0.dp,
                 title = {
-                    Text(
-                        text = stringResource(R.string.library_delete_project_title),
-                        style = AppText.TileTitle,
-                        color = AppColors.Line
-                    )
+                    locale.Provide {
+                        Text(
+                            text = stringResource(R.string.library_delete_project_title),
+                            style = AppText.TileTitle,
+                            color = AppColors.Line
+                        )
+                    }
                 },
                 text = {
-                    Text(
-                        text = stringResource(
-                            R.string.library_delete_project_message,
-                            project.name?.takeIf { it.isNotBlank() }
-                                ?: stringResource(R.string.library_untitled_project)
-                        ),
-                        style = AppText.TileSubtitle,
-                        color = AppColors.Line
-                    )
-                },
-                dismissButton = {
-                    TextButton(onClick = { pendingDeleteProject = null }) {
+                    locale.Provide {
                         Text(
-                            text = stringResource(R.string.action_cancel),
+                            text = stringResource(
+                                R.string.library_delete_project_message,
+                                project.name?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.library_untitled_project)
+                            ),
                             style = AppText.TileSubtitle,
                             color = AppColors.Line
                         )
                     }
                 },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            vm.deleteProject(project.id)
-                            pendingDeleteProject = null
+                dismissButton = {
+                    locale.Provide {
+                        TextButton(onClick = { pendingDeleteProject = null }) {
+                            Text(
+                                text = stringResource(R.string.action_cancel),
+                                style = AppText.TileSubtitle,
+                                color = AppColors.Line
+                            )
                         }
-                    ) {
-                        Text(
-                            text = stringResource(R.string.action_delete),
-                            style = AppText.TileSubtitle,
-                            color = AppColors.Red
-                        )
+                    }
+                },
+                confirmButton = {
+                    locale.Provide {
+                        TextButton(
+                            onClick = {
+                                vm.deleteProject(project.id)
+                                pendingDeleteProject = null
+                            }
+                        ) {
+                            Text(
+                                text = stringResource(R.string.action_delete),
+                                style = AppText.TileSubtitle,
+                                color = AppColors.Red
+                            )
+                        }
                     }
                 }
             )

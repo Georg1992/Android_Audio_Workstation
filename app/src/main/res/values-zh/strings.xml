@@ -47,8 +47,6 @@
     <string name="community_gmail">使用 Gmail 登录</string>
     <string name="community_sign_out">退出</string>
     <string name="community_signed_in">已登录：%1$s</string>
-    <string name="screen_devices_placeholder_body">音频设备与蓝牙控制将在此处提供。</string>
-
     <!-- Create Project screen -->
     <string name="create_project_name_label">项目名称</string>
     <string name="create_project_name_placeholder">输入项目名称</string>
@@ -198,55 +196,15 @@
     <string name="error_gmail_sign_in_failed">Gmail 登录失败。</string>
     <string name="error_sign_out_failed">退出失败。</string>
 
-    <string name="devices_refresh">刷新</string>
-    <string name="devices_route_latency">路由延迟（仅测量，补偿已关闭）</string>
-    <string name="devices_error">错误：%1$s</string>
-    <string name="devices_load_failed">无法加载延迟摘要。</string>
-    <string name="devices_no_latency">当前路由没有延迟数据。</string>
-    <string name="devices_route">路由</string>
-    <string name="devices_sample_rate">采样率</string>
-    <string name="devices_sample_rate_value">%1$d Hz</string>
-    <string name="devices_profile_state">配置状态</string>
-    <string name="devices_data_complete">数据完整</string>
-    <string name="devices_yes">是</string>
-    <string name="devices_no">否</string>
-    <string name="devices_output_floor_median">输出下限（中位数）</string>
-    <string name="devices_output_floor_p95">输出下限（p95）</string>
-    <string name="devices_capture_delay_median">采集延迟（中位数）</string>
-    <string name="devices_round_trip_median">往返延迟（中位数）</string>
-    <string name="devices_jitter_median">抖动（中位数）</string>
-    <string name="devices_app_output_overhead_p95">应用输出开销（p95）</string>
-    <string name="devices_app_input_overhead_p95">应用输入开销（p95）</string>
-    <string name="devices_low_latency_output">低延迟输出</string>
-    <string name="devices_low_latency_input">低延迟输入</string>
-    <string name="devices_best_backend">已知最佳后端</string>
-    <string name="devices_backend_unspecified">未指定</string>
-    <string name="devices_high_latency_route">高延迟路由</string>
-    <string name="devices_data_confidence">数据置信度</string>
-    <string name="devices_confidence_value">%1$.2f</string>
-    <string name="devices_missing_data">缺失数据</string>
-    <string name="devices_warnings">警告：</string>
-    <string name="devices_backend_inventory">后端清单：</string>
-    <string name="devices_latency_unknown">未知</string>
-    <string name="devices_latency_ms">%1$.1f 毫秒</string>
-    <string name="devices_backend_entry">%1$s %2$s 性能=%3$s 已授予=%4$s 缓冲=%5$d 延迟=%6$s</string>
-    <string name="devices_profile_empty">空</string>
-    <string name="devices_profile_partial">部分</string>
-    <string name="devices_profile_measured">已测量</string>
-    <string name="devices_profile_validated">已验证</string>
-    <string name="devices_profile_inconsistent">不一致</string>
-    <string name="devices_profile_high_latency">高延迟路由</string>
-    <string name="devices_warning_low_latency_denied">低延迟被拒绝</string>
-    <string name="devices_warning_bluetooth">蓝牙路由</string>
-    <string name="devices_warning_output_latency_high">输出延迟偏高</string>
-    <string name="devices_warning_capture_delay_unknown">采集延迟未知</string>
-    <string name="devices_warning_measurement_inconsistent">测量不一致</string>
-    <string name="devices_missing_profile">配置</string>
-    <string name="devices_missing_output_stream_config">输出流配置</string>
-    <string name="devices_missing_input_stream_config">输入流配置</string>
-    <string name="devices_missing_output_hardware_floor">输出硬件下限</string>
-    <string name="devices_missing_true_capture_delay">采集延迟</string>
-    <string name="devices_missing_round_trip">往返延迟</string>
-    <string name="devices_missing_jitter">抖动</string>
-    <string name="devices_missing_startup_metrics">启动指标</string>
+    <string name="devices_output">输出</string>
+    <string name="devices_input">输入</string>
+    <string name="devices_kind_integrated">手机</string>
+    <string name="devices_kind_bluetooth">蓝牙</string>
+    <string name="devices_kind_wired">有线</string>
+    <string name="devices_kind_usb">USB</string>
+    <string name="devices_speaker">扬声器</string>
+    <string name="devices_earpiece">听筒</string>
+    <string name="devices_microphone">麦克风</string>
+    <string name="devices_headphones">耳机</string>
+    <string name="devices_headset">耳麦</string>
 </resources>

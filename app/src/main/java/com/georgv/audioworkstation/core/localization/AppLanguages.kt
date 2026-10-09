@@ -3,8 +3,12 @@ package com.georgv.audioworkstation.core.localization
 import android.content.Context
 import android.content.res.Configuration
 import android.os.LocaleList
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.os.LocaleListCompat
+import com.georgv.audioworkstation.core.localization.data.languageDataStore
+import com.georgv.audioworkstation.core.localization.data.languageTagKey
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
+import java.util.Locale
 
 /** Locales the app ships. Tags outside this set use English, matching the language chip. */
 internal fun supportedLanguageTag(tag: String): String = when {
@@ -13,23 +17,14 @@ internal fun supportedLanguageTag(tag: String): String = when {
     else -> "en"
 }
 
-/**
- * Applies [tag] to the process so menus, dialogs, and notifications resolve the same
- * resources as the rest of the UI. Compose popups read the activity context, not [ProvideAppLocale].
- */
-internal fun applyAppLanguage(tag: String) {
-    val desired = supportedLanguageTag(tag)
-    val applied = AppCompatDelegate.getApplicationLocales().toLanguageTags()
-    val appliedIsDifferent = applied.isEmpty() || supportedLanguageTag(applied) != desired
-    if (appliedIsDifferent) {
-        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(desired))
-    }
+/** Notification and service strings follow the saved language without recreating the activity. */
+internal fun Context.withAppLanguage(): Context {
+    val config = Configuration(resources.configuration)
+    config.setLocales(LocaleList.forLanguageTags(storedLanguageTag()))
+    return createConfigurationContext(config)
 }
 
-internal fun Context.withAppLanguage(): Context {
-    val locales = AppCompatDelegate.getApplicationLocales()
-    if (locales.isEmpty) return this
-    val config = Configuration(resources.configuration)
-    config.setLocales(LocaleList.forLanguageTags(locales.toLanguageTags()))
-    return createConfigurationContext(config)
+private fun Context.storedLanguageTag(): String = runBlocking {
+    val saved = languageDataStore.data.map { it[languageTagKey] }.first()
+    saved ?: Locale.getDefault().toLanguageTag()
 }

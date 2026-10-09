@@ -43,8 +43,6 @@
     <string name="community_gmail">Sign in with Gmail</string>
     <string name="community_sign_out">Sign out</string>
     <string name="community_signed_in">Signed in as %1$s</string>
-    <string name="screen_devices_placeholder_body">Audio devices and Bluetooth controls will appear here.</string>
-
     <!-- Create Project screen -->
     <string name="create_project_name_label">Project name</string>
     <string name="create_project_name_placeholder">Enter project name</string>
@@ -195,56 +193,15 @@
     <string name="error_gmail_sign_in_failed">Gmail sign-in failed.</string>
     <string name="error_sign_out_failed">Sign-out failed.</string>
 
-    <!-- Devices -->
-    <string name="devices_refresh">Refresh</string>
-    <string name="devices_route_latency">Route latency (measurement only — compensation disabled)</string>
-    <string name="devices_error">Error: %1$s</string>
-    <string name="devices_load_failed">Failed to load latency summary.</string>
-    <string name="devices_no_latency">No latency data for current route.</string>
-    <string name="devices_route">Route</string>
-    <string name="devices_sample_rate">Sample rate</string>
-    <string name="devices_sample_rate_value">%1$d Hz</string>
-    <string name="devices_profile_state">Profile state</string>
-    <string name="devices_data_complete">Data complete</string>
-    <string name="devices_yes">Yes</string>
-    <string name="devices_no">No</string>
-    <string name="devices_output_floor_median">Output floor (median)</string>
-    <string name="devices_output_floor_p95">Output floor (p95)</string>
-    <string name="devices_capture_delay_median">Capture delay (median)</string>
-    <string name="devices_round_trip_median">Round trip (median)</string>
-    <string name="devices_jitter_median">Jitter (median)</string>
-    <string name="devices_app_output_overhead_p95">App output overhead (p95)</string>
-    <string name="devices_app_input_overhead_p95">App input overhead (p95)</string>
-    <string name="devices_low_latency_output">Low latency output</string>
-    <string name="devices_low_latency_input">Low latency input</string>
-    <string name="devices_best_backend">Best known backend</string>
-    <string name="devices_backend_unspecified">Unspecified</string>
-    <string name="devices_high_latency_route">High latency route</string>
-    <string name="devices_data_confidence">Data confidence</string>
-    <string name="devices_confidence_value">%1$.2f</string>
-    <string name="devices_missing_data">Missing data</string>
-    <string name="devices_warnings">Warnings:</string>
-    <string name="devices_backend_inventory">Backend inventory:</string>
-    <string name="devices_latency_unknown">unknown</string>
-    <string name="devices_latency_ms">%1$.1f ms</string>
-    <string name="devices_backend_entry">%1$s %2$s perf=%3$s granted=%4$s buf=%5$d latency=%6$s</string>
-    <string name="devices_profile_empty">Empty</string>
-    <string name="devices_profile_partial">Partial</string>
-    <string name="devices_profile_measured">Measured</string>
-    <string name="devices_profile_validated">Validated</string>
-    <string name="devices_profile_inconsistent">Inconsistent</string>
-    <string name="devices_profile_high_latency">High-latency route</string>
-    <string name="devices_warning_low_latency_denied">Low latency denied</string>
-    <string name="devices_warning_bluetooth">Bluetooth route</string>
-    <string name="devices_warning_output_latency_high">Output latency high</string>
-    <string name="devices_warning_capture_delay_unknown">Capture delay unknown</string>
-    <string name="devices_warning_measurement_inconsistent">Measurement inconsistent</string>
-    <string name="devices_missing_profile">profile</string>
-    <string name="devices_missing_output_stream_config">output stream config</string>
-    <string name="devices_missing_input_stream_config">input stream config</string>
-    <string name="devices_missing_output_hardware_floor">output hardware floor</string>
-    <string name="devices_missing_true_capture_delay">capture delay</string>
-    <string name="devices_missing_round_trip">round trip</string>
-    <string name="devices_missing_jitter">jitter</string>
-    <string name="devices_missing_startup_metrics">startup metrics</string>
+    <string name="devices_output">Output</string>
+    <string name="devices_input">Input</string>
+    <string name="devices_kind_integrated">Phone</string>
+    <string name="devices_kind_bluetooth">Bluetooth</string>
+    <string name="devices_kind_wired">Wired</string>
+    <string name="devices_kind_usb">USB</string>
+    <string name="devices_speaker">Speaker</string>
+    <string name="devices_earpiece">Earpiece</string>
+    <string name="devices_microphone">Microphone</string>
+    <string name="devices_headphones">Headphones</string>
+    <string name="devices_headset">Headset</string>
 </resources>

@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -493,7 +492,7 @@ fun TrackCard(
                                 tint = iconTint,
                             )
                         }
-                        DropdownMenu(
+                        AppDropdownMenu(
                             expanded =
                                 !dragPreview &&
                                     trackActionsEnabled &&
@@ -508,8 +507,6 @@ fun TrackCard(
                                     menuDropdownShape,
                                 ),
                             shape = menuDropdownShape,
-                            containerColor = AppColors.Bg,
-                            tonalElevation = 0.dp,
                         ) {
                             TrackOverflowMenuBody(
                                 modifier = Modifier.padding(Dimens.Stroke),

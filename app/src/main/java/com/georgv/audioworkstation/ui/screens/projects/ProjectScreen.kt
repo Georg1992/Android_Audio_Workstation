@@ -63,6 +63,7 @@ import com.georgv.audioworkstation.core.content.resolveDisplayName
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.AppMusicLoadingPlaceholder
+import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.components.LocalRecordingBlocksLogin
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
 import com.georgv.audioworkstation.ui.components.MixdownAudioButton
@@ -646,6 +647,7 @@ private fun ProjectScreenHeavyLayer(
 ) {
     val structuralState by vm.structuralUiState.collectAsStateWithLifecycle()
     val realtimeState by vm.realtimeUiState.collectAsStateWithLifecycle()
+    val locale = rememberAppLocaleScope()
     val sampleRateMismatchDialog by vm.sampleRateMismatchDialogState.collectAsStateWithLifecycle()
     val mixdownVm: ProjectMixdownViewModel = hiltViewModel()
     val mixdownByProjectId by mixdownVm.mixdownByProjectIdState.collectAsStateWithLifecycle()
@@ -737,40 +739,48 @@ private fun ProjectScreenHeavyLayer(
             containerColor = AppColors.Bg,
             tonalElevation = 0.dp,
             title = {
-                Text(
-                    text = stringResource(R.string.project_mixdown_confirm_title),
-                    style = AppText.TileTitle,
-                    color = AppColors.Line,
-                )
+                locale.Provide {
+                    Text(
+                        text = stringResource(R.string.project_mixdown_confirm_title),
+                        style = AppText.TileTitle,
+                        color = AppColors.Line,
+                    )
+                }
             },
             text = {
-                Text(
-                    text = stringResource(R.string.project_mixdown_confirm_message),
-                    style = AppText.TileSubtitle,
-                    color = AppColors.Line,
-                )
-            },
-            dismissButton = {
-                TextButton(onClick = { showMixdownDialog = false }) {
+                locale.Provide {
                     Text(
-                        text = stringResource(R.string.action_cancel),
+                        text = stringResource(R.string.project_mixdown_confirm_message),
                         style = AppText.TileSubtitle,
                         color = AppColors.Line,
                     )
                 }
             },
+            dismissButton = {
+                locale.Provide {
+                    TextButton(onClick = { showMixdownDialog = false }) {
+                        Text(
+                            text = stringResource(R.string.action_cancel),
+                            style = AppText.TileSubtitle,
+                            color = AppColors.Line,
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    Log.d(MixConfirmNavTag, "dialog_confirm_clicked")
-                    showMixdownDialog = false
-                    Log.d(MixConfirmNavTag, "calling_parent_callback")
-                    onConfirmMixdown(projectId, structuralState.selectedTrackIds)
-                }) {
-                    Text(
-                        text = stringResource(R.string.action_mix),
-                        style = AppText.TileSubtitle,
-                        color = AppColors.Line,
-                    )
+                locale.Provide {
+                    TextButton(onClick = {
+                        Log.d(MixConfirmNavTag, "dialog_confirm_clicked")
+                        showMixdownDialog = false
+                        Log.d(MixConfirmNavTag, "calling_parent_callback")
+                        onConfirmMixdown(projectId, structuralState.selectedTrackIds)
+                    }) {
+                        Text(
+                            text = stringResource(R.string.action_mix),
+                            style = AppText.TileSubtitle,
+                            color = AppColors.Line,
+                        )
+                    }
                 }
             },
         )
