@@ -32,6 +32,7 @@
     <string name="screen_community">社区</string>
     <string name="screen_devices">设备</string>
     <string name="screen_community_placeholder_body">社区功能将在此处提供。</string>
+    <string name="community_profile_name_label">个人资料名称</string>
     <string name="community_email_label">邮箱</string>
     <string name="community_password_label">密码</string>
     <string name="community_sign_in">登录</string>
@@ -90,6 +91,8 @@
     <string name="action_mix">混音</string>
 
     <!-- Content descriptions (accessibility) -->
+    <string name="cd_show_password">显示密码</string>
+    <string name="cd_hide_password">隐藏密码</string>
     <string name="cd_back">返回</string>
     <string name="cd_play">播放</string>
     <string name="cd_pause">暂停</string>

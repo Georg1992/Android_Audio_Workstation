@@ -10,6 +10,7 @@ import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.CognitoRejected
 import com.georgv.audioworkstation.online.CognitoSignInCancelled
 import com.georgv.audioworkstation.online.GoogleCognitoSignIn
+import com.georgv.audioworkstation.online.profileName
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class CommunityForm(
+    val profileName: String = "",
     val email: String = "",
     val password: String = "",
     val confirmPassword: String = "",
@@ -32,7 +34,9 @@ data class CommunityForm(
 )
 
 data class CommunityUiState(
+    val sessionKnown: Boolean = false,
     val signedInEmail: String? = null,
+    val profileName: String = "",
     val email: String = "",
     val password: String = "",
     val confirmPassword: String = "",
@@ -55,7 +59,9 @@ class CommunityViewModel @Inject constructor(
     val uiState: StateFlow<CommunityUiState> =
         combine(sessions.state, form, busy) { session, fields, isBusy ->
             CommunityUiState(
+                sessionKnown = true,
                 signedInEmail = session?.email,
+                profileName = fields.profileName,
                 email = fields.email,
                 password = fields.password,
                 confirmPassword = fields.confirmPassword,
@@ -68,6 +74,10 @@ class CommunityViewModel @Inject constructor(
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             CommunityUiState(),
         )
+
+    fun onProfileNameChange(value: String) {
+        form.update { it.copy(profileName = value) }
+    }
 
     fun onEmailChange(value: String) {
         form.update { it.copy(email = value) }
@@ -98,7 +108,7 @@ class CommunityViewModel @Inject constructor(
             return
         }
         submit(R.string.error_create_account_failed) {
-            accounts.register(email, fields.password)
+            accounts.register(email, fields.password, profileName(fields.profileName, email))
             form.update { it.copy(awaitingCode = true, confirmationCode = "") }
             messages.send(UiMessage(R.string.community_check_email))
         }
@@ -136,14 +146,6 @@ class CommunityViewModel @Inject constructor(
     fun signInWithGoogle() {
         submit(R.string.error_gmail_sign_in_failed) {
             sessions.save(google.signIn())
-        }
-    }
-
-    fun signOut() {
-        submit(R.string.error_sign_out_failed) {
-            val session = sessions.current() ?: return@submit
-            accounts.signOut(session.refreshToken)
-            sessions.clear()
         }
     }
 

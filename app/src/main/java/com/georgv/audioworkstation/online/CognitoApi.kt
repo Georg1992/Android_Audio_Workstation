@@ -6,12 +6,15 @@ import org.json.JSONException
 import org.json.JSONObject
 
 internal object CognitoApi {
-    fun signUp(email: String, password: String): String =
+    fun signUp(email: String, password: String, name: String): String =
         JSONObject()
             .put("ClientId", CognitoConfig.CLIENT_ID)
             .put("Username", email)
             .put("Password", password)
-            .put("UserAttributes", JSONArray().put(attribute("email", email)))
+            .put(
+                "UserAttributes",
+                JSONArray().put(attribute("email", email)).put(attribute("name", name)),
+            )
             .toString()
 
     fun confirm(email: String, code: String): String =
@@ -65,15 +68,32 @@ internal object CognitoApi {
         val claims = JSONObject(String(decode(idToken.split('.')[PAYLOAD]), Charsets.UTF_8))
         val subject = claims.optString("sub")
         val email = claims.optString("email")
-        if (subject.isBlank() || email.isBlank() || !verified(claims.opt("email_verified"))) {
+        if (subject.isBlank() || email.isBlank() || !trustedEmail(claims)) {
             throw CognitoRejected("Unknown", "sign-in token has no verified email")
         }
+        val requested = if (googleAccount(claims)) "" else claims.optString("name")
         return AccountSession(
             token = accessToken,
             accountId = subject,
             email = email,
+            name = profileName(requested, email),
             refreshToken = refreshToken,
         )
+    }
+
+    private fun trustedEmail(claims: JSONObject): Boolean =
+        when {
+            googleAccount(claims) -> true
+            else -> verified(claims.opt("email_verified"))
+        }
+
+    private fun googleAccount(claims: JSONObject): Boolean {
+        val identities = claims.optJSONArray("identities") ?: return false
+        for (index in 0 until identities.length()) {
+            val provider = identities.optJSONObject(index)?.optString("providerName")
+            if (provider == "Google") return true
+        }
+        return false
     }
 
     private fun verified(value: Any?): Boolean = value == true || value == "true"

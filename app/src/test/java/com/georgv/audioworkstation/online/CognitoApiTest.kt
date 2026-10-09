@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.online
 
 import java.util.Base64
 import org.json.JSONObject
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,13 +11,15 @@ import org.junit.Test
 class CognitoApiTest {
     @Test
     fun signUpSendsTheEmailAsTheUsername() {
-        val body = JSONObject(CognitoApi.signUp("ada@example.com", "Secret123"))
+        val body = JSONObject(CognitoApi.signUp("ada@example.com", "Secret123", "Ada"))
         assertEquals("15je0c9k5gv0vjfek5v1fmcdf6", body.getString("ClientId"))
         assertEquals("ada@example.com", body.getString("Username"))
         assertEquals("Secret123", body.getString("Password"))
-        val attribute = body.getJSONArray("UserAttributes").getJSONObject(0)
-        assertEquals("email", attribute.getString("Name"))
-        assertEquals("ada@example.com", attribute.getString("Value"))
+        val attributes = body.getJSONArray("UserAttributes")
+        assertEquals("email", attributes.getJSONObject(0).getString("Name"))
+        assertEquals("ada@example.com", attributes.getJSONObject(0).getString("Value"))
+        assertEquals("name", attributes.getJSONObject(1).getString("Name"))
+        assertEquals("Ada", attributes.getJSONObject(1).getString("Value"))
     }
 
     @Test
@@ -50,7 +53,38 @@ class CognitoApiTest {
         assertEquals("access", session.token)
         assertEquals("sub-1", session.accountId)
         assertEquals("ada@example.com", session.email)
+        assertEquals("ada", session.name)
         assertEquals("refresh", session.refreshToken)
+    }
+
+    @Test
+    fun passwordSessionKeepsTheProfileName() {
+        val claims = JSONObject()
+            .put("sub", "sub-1")
+            .put("email", "ada@example.com")
+            .put("email_verified", true)
+            .put("name", "Ada Lovelace")
+        val session = CognitoApi.accountFromTokens("access", "refresh", idToken(claims))
+        assertEquals("Ada Lovelace", session.name)
+    }
+
+    @Test
+    fun gmailSessionTrustsTheGoogleIdentity() {
+        val session = CognitoApi.accountFromTokens(
+            "access",
+            "refresh",
+            idToken(gmailClaims()),
+        )
+        assertEquals("self@gmail.com", session.email)
+        assertEquals("self", session.name)
+    }
+
+    @Test
+    fun passwordSessionRejectsAnUnverifiedEmail() {
+        val error = runCatching {
+            CognitoApi.accountFromTokens("access", "refresh", idToken(unverifiedClaims()))
+        }.exceptionOrNull()
+        assertTrue(error is CognitoRejected)
     }
 
     @Test
@@ -72,4 +106,28 @@ class CognitoApiTest {
         assertTrue(acceptableEmail("ada@example.com"))
         assertFalse(acceptableEmail("ada"))
     }
+}
+
+private fun gmailClaims(): JSONObject =
+    JSONObject()
+        .put("sub", "sub-google")
+        .put("email", "self@gmail.com")
+        .put("name", "Google User")
+        .put("email_verified", false)
+        .put(
+            "identities",
+            JSONArray().put(JSONObject().put("providerName", "Google")),
+        )
+
+private fun unverifiedClaims(): JSONObject =
+    JSONObject()
+        .put("sub", "sub-1")
+        .put("email", "ada@example.com")
+        .put("email_verified", false)
+
+private fun idToken(claims: JSONObject): String {
+    val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
+        claims.toString().toByteArray(Charsets.UTF_8),
+    )
+    return "header.$payload.sig"
 }
