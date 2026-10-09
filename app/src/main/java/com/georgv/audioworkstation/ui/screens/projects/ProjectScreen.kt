@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ContentResolverAudioImportSource
 import com.georgv.audioworkstation.core.content.resolveDisplayName
+import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.AppMusicLoadingPlaceholder
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
@@ -209,6 +210,30 @@ private fun ProjectScreenContent(
             projectId,
             "elapsedMs=${SystemClock.uptimeMillis() - vmResolveStartMs}",
         )
+    }
+
+    LaunchedEffect(projectId, quickRecord) {
+        if (!quickRecord) return@LaunchedEffect
+        var sawTake = false
+        vm.structuralUiState.collect { screen ->
+            if (screen.recordingTrackId != null) {
+                sawTake = true
+                return@collect
+            }
+            val playableIds =
+                screen.tracks
+                    .filter { track -> !track.isRecording && track.hasPersistedPlayableAudio() }
+                    .map { track -> track.id }
+                    .toSet()
+            val mixIds =
+                QuickRecordStop.tracksToMix(
+                    quickRecord = true,
+                    takeStopped = sawTake && !screen.isRecordingStartup,
+                    playableTrackIds = playableIds,
+                ) ?: return@collect
+            sawTake = false
+            onConfirmMixdown(projectId, mixIds)
+        }
     }
 
     val state by vm.uiState.collectAsStateWithLifecycle(

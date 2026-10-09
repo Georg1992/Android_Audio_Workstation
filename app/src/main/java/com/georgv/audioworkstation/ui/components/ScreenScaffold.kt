@@ -141,8 +141,8 @@ private fun CompactScreenTopBar(
                             .padding(end = Dimens.PanelPadding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    actions()
                     AccountBarButton()
+                    actions()
                 }
             }
         }
