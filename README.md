@@ -60,6 +60,10 @@ Release builds use R8 minification and resource shrinking; configure release sig
 ./gradlew :app:detekt
 ```
 
+## Sign-in
+
+Community registers and signs in inside the app. Cognito stores the account. The user pool is `us-east-1_CaWxPoiz1` and the public app client is `15je0c9k5gv0vjfek5v1fmcdf6`. Registration emails a confirmation code. Gmail opens Google’s account chooser and returns through `audioworkstation://callback`. The app stores the access token, refresh token, account id, and email on the phone.
+
 ## CI
 
 `.github/workflows/android-ci.yml` installs JDK 17, Android SDK platform 36, build-tools 36.0.0, CMake 3.22.1, and the pinned NDK, then runs `assembleDebug`, `detekt`, and `testDebugUnitTest`, and uploads the debug APK as an artifact.

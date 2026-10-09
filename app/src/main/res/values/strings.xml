@@ -28,6 +28,20 @@
     <string name="screen_community">Community</string>
     <string name="screen_devices">Devices</string>
     <string name="screen_community_placeholder_body">Community features will appear here.</string>
+    <string name="community_profile_name_label">Profile name</string>
+    <string name="community_email_label">Email</string>
+    <string name="community_password_label">Password</string>
+    <string name="community_sign_in">Sign in</string>
+    <string name="community_sign_in_hint">Create an account with your email, or sign in.</string>
+    <string name="community_check_email">Enter the confirmation code from your email.</string>
+    <string name="community_code_label">Confirmation code</string>
+    <string name="community_confirm">Confirm</string>
+    <string name="community_create_account">Create account</string>
+    <string name="community_confirm_password_label">Confirm password</string>
+    <string name="community_register">Register</string>
+    <string name="community_gmail">Sign in with Gmail</string>
+    <string name="community_sign_out">Sign out</string>
+    <string name="community_signed_in">Signed in as %1$s</string>
     <string name="screen_devices_placeholder_body">Audio devices and Bluetooth controls will appear here.</string>
 
     <!-- Create Project screen -->
@@ -74,6 +88,8 @@
     <string name="action_mix">Mix</string>
 
     <!-- Content descriptions (accessibility) -->
+    <string name="cd_show_password">Show password</string>
+    <string name="cd_hide_password">Hide password</string>
     <string name="cd_back">Back</string>
     <string name="cd_play">Play</string>
     <string name="cd_pause">Pause</string>
@@ -161,4 +177,14 @@
     <string name="error_mixdown_unsupported_audio">Mixdown requires 16-bit mono or stereo WAV at the project sample rate.</string>
     <string name="error_mixdown_failed">Mixdown failed.</string>
     <string name="error_mix_preview_failed">Could not play mix preview.</string>
+    <string name="error_sign_in_failed">Sign-in failed.</string>
+    <string name="error_create_account_failed">Could not create the account.</string>
+    <string name="error_invalid_email">Enter a valid email.</string>
+    <string name="error_password_mismatch">Passwords do not match.</string>
+    <string name="error_password_invalid">Use at least 8 characters, with an uppercase letter, a lowercase letter, and a number.</string>
+    <string name="error_account_exists">An account with this email already exists.</string>
+    <string name="error_confirmation_code">The confirmation code is not valid.</string>
+    <string name="error_gmail_not_configured">Gmail sign-in needs a desktop OAuth client in local.properties.</string>
+    <string name="error_gmail_sign_in_failed">Gmail sign-in failed.</string>
+    <string name="error_sign_out_failed">Sign-out failed.</string>
 </resources>

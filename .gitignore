@@ -67,3 +67,6 @@ app/RelWithDebInfo/
 # === Kotlin/Compose/Gradle caches ===
 .kotlin/
 **/.kotlin/
+
+# === Online API runtime data ===
+online-data/

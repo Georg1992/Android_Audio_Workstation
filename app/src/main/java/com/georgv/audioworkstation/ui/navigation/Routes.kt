@@ -7,6 +7,7 @@ object Routes {
     const val PROJECT = "project"
     const val PROJECT_WITH_ID = "project/{projectId}?quick={quick}"
     const val COMMUNITY = "community"
+    const val COMMUNITY_HOME = "community_home"
     const val DEVICES = "devices"
     const val LIBRARY = "library"
     const val TRACK_EDIT = "track_edit"

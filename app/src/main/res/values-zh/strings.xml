@@ -32,6 +32,20 @@
     <string name="screen_community">社区</string>
     <string name="screen_devices">设备</string>
     <string name="screen_community_placeholder_body">社区功能将在此处提供。</string>
+    <string name="community_profile_name_label">个人资料名称</string>
+    <string name="community_email_label">邮箱</string>
+    <string name="community_password_label">密码</string>
+    <string name="community_sign_in">登录</string>
+    <string name="community_sign_in_hint">使用邮箱创建账户，或直接登录。</string>
+    <string name="community_check_email">请输入邮件中的确认码。</string>
+    <string name="community_code_label">确认码</string>
+    <string name="community_confirm">确认</string>
+    <string name="community_create_account">创建账户</string>
+    <string name="community_confirm_password_label">确认密码</string>
+    <string name="community_register">注册</string>
+    <string name="community_gmail">使用 Gmail 登录</string>
+    <string name="community_sign_out">退出</string>
+    <string name="community_signed_in">已登录：%1$s</string>
     <string name="screen_devices_placeholder_body">音频设备与蓝牙控制将在此处提供。</string>
 
     <!-- Create Project screen -->
@@ -77,6 +91,8 @@
     <string name="action_mix">混音</string>
 
     <!-- Content descriptions (accessibility) -->
+    <string name="cd_show_password">显示密码</string>
+    <string name="cd_hide_password">隐藏密码</string>
     <string name="cd_back">返回</string>
     <string name="cd_play">播放</string>
     <string name="cd_pause">暂停</string>
@@ -156,4 +172,14 @@
     <string name="error_mixdown_unsupported_audio">混音需要与项目采样率一致的 16 位单声道或立体声 WAV。</string>
     <string name="error_mixdown_failed">混音失败。</string>
     <string name="error_mix_preview_failed">无法播放混音预览。</string>
+    <string name="error_sign_in_failed">登录失败。</string>
+    <string name="error_create_account_failed">无法创建账户。</string>
+    <string name="error_invalid_email">请输入有效邮箱。</string>
+    <string name="error_password_mismatch">两次密码不一致。</string>
+    <string name="error_password_invalid">密码至少 8 位，并包含大写字母、小写字母和数字。</string>
+    <string name="error_account_exists">该邮箱已注册。</string>
+    <string name="error_confirmation_code">确认码无效。</string>
+    <string name="error_gmail_not_configured">请在 local.properties 中配置 Gmail 的 OAuth 客户端。</string>
+    <string name="error_gmail_sign_in_failed">Gmail 登录失败。</string>
+    <string name="error_sign_out_failed">退出失败。</string>
 </resources>

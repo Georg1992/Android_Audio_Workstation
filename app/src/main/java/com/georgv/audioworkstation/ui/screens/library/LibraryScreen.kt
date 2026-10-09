@@ -62,7 +62,7 @@ import java.io.File
 fun LibraryScreen(
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit,
-    vm: LibraryViewModel = hiltViewModel()
+    vm: LibraryViewModel = hiltViewModel(),
 ) {
     NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
 
@@ -98,15 +98,17 @@ fun LibraryScreen(
 
             LibraryProjectContent(
                 state = state,
-                onProjectCardBodyClick = vm::onProjectCardBodyClick,
-                onOpenProject = { projectId ->
-                    scope.launch {
-                        vm.warmUpProject(projectId)
-                        delay(LibraryProjectOpenWarmupMs)
-                        onOpenProject(projectId)
-                    }
-                },
-                onDeleteClick = { pendingDeleteProject = it },
+                handlers = LibraryRowHandlers(
+                    onBodyClick = vm::onProjectCardBodyClick,
+                    onOpen = { projectId ->
+                        scope.launch {
+                            vm.warmUpProject(projectId)
+                            delay(LibraryProjectOpenWarmupMs)
+                            onOpenProject(projectId)
+                        }
+                    },
+                    onDelete = { pendingDeleteProject = it },
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -165,12 +167,16 @@ fun LibraryScreen(
     }
 }
 
+private data class LibraryRowHandlers(
+    val onBodyClick: (LibraryProjectItem) -> Unit,
+    val onOpen: (String) -> Unit,
+    val onDelete: (LibraryProjectItem) -> Unit,
+)
+
 @Composable
 private fun LibraryProjectContent(
     state: ScreenState<LibraryContent>,
-    onProjectCardBodyClick: (LibraryProjectItem) -> Unit,
-    onOpenProject: (String) -> Unit,
-    onDeleteClick: (LibraryProjectItem) -> Unit,
+    handlers: LibraryRowHandlers,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(state.availability, state.content.projects.size) {
@@ -221,9 +227,9 @@ private fun LibraryProjectContent(
                 itemsIndexed(projects, key = { _, item -> item.project.id }) { _, item ->
                     LibraryProjectRow(
                         item = item,
-                        onBodyClick = { onProjectCardBodyClick(item) },
-                        onOpenProjectClick = { onOpenProject(item.project.id) },
-                        onDeleteClick = { onDeleteClick(item) },
+                        onBodyClick = { handlers.onBodyClick(item) },
+                        onOpenProjectClick = { handlers.onOpen(item.project.id) },
+                        onDeleteClick = { handlers.onDelete(item) },
                     )
                 }
             }
