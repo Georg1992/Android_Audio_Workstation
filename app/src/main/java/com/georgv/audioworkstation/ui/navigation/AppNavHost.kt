@@ -1,20 +1,37 @@
 package com.georgv.audioworkstation.ui.navigation
 
 import android.util.Log
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.core.ui.resolve
+import com.georgv.audioworkstation.ui.components.AccountBarController
+import com.georgv.audioworkstation.ui.components.AccountBarViewModel
+import com.georgv.audioworkstation.ui.components.LocalAccountBar
+import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeScreen
 import com.georgv.audioworkstation.ui.screens.community.CommunityScreen
 import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
 import com.georgv.audioworkstation.ui.screens.mainmenu.MainMenuScreen
-import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
 import com.georgv.audioworkstation.ui.screens.projects.CreateProjectScreen
 import com.georgv.audioworkstation.ui.screens.projects.ProjectScreen
 import com.georgv.audioworkstation.ui.screens.projects.TrackEditScreen
@@ -26,7 +43,53 @@ fun AppNavHost(
     onSetLanguage: (String) -> Unit,
     navController: NavHostController
 ) {
+    val accountBar: AccountBarViewModel = hiltViewModel()
+    val accountState by accountBar.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    LaunchedEffect(accountBar) {
+        accountBar.userMessages.collect { message ->
+            snackbarHostState.showSnackbar(message.resolve(context))
+        }
+    }
+    CompositionLocalProvider(
+        LocalAccountBar provides
+            AccountBarController(
+                state = accountState,
+                openLogin = {
+                    val route = navController.currentBackStackEntry?.destination?.route
+                    if (LoginRoute.opensFrom(route)) {
+                        navController.navigate(Routes.LOGIN) { launchSingleTop = true }
+                    }
+                },
+                signOut = accountBar::signOut,
+            ),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AppDestinations(
+                currentLanguageTag = currentLanguageTag,
+                onSetLanguage = onSetLanguage,
+                navController = navController,
+            )
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppDestinations(
+    currentLanguageTag: String,
+    onSetLanguage: (String) -> Unit,
+    navController: NavHostController,
+) {
     NavHost(
+        modifier = Modifier.fillMaxSize(),
         navController = navController,
         startDestination = Routes.MAIN_MENU,
         enterTransition = { navForwardEnterTransition() },
@@ -142,6 +205,13 @@ fun AppNavHost(
                         launchSingleTop = true
                     }
                 },
+            )
+        }
+
+        composable(Routes.LOGIN) {
+            CommunityScreen(
+                onBack = { navController.popBackStack() },
+                onSignedIn = { navController.popBackStack() },
             )
         }
 

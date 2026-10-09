@@ -85,6 +85,29 @@ private fun CompactScreenTopBar(
                     .fillMaxWidth()
                     .height(Dimens.TopBarHeight),
         ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = Dimens.TopBarHeight),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (topBarAlertMessage != null) {
+                    Text(
+                        text = topBarAlertMessage,
+                        style = AppText.TopBarTitle,
+                        color = AppColors.Line,
+                        maxLines = 1,
+                    )
+                } else {
+                    titleContent?.invoke() ?: Text(
+                        text = title,
+                        style = AppText.TopBarTitle,
+                        color = AppColors.Line,
+                        maxLines = 1,
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -112,32 +135,14 @@ private fun CompactScreenTopBar(
                 }
                 Box(modifier = Modifier.weight(1f))
                 Row(
-                    modifier = Modifier.height(Dimens.TopBarHeight),
+                    modifier =
+                        Modifier
+                            .height(Dimens.TopBarHeight)
+                            .padding(end = Dimens.PanelPadding),
                     verticalAlignment = Alignment.CenterVertically,
-                    content = actions,
-                )
-            }
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = Dimens.TopBarHeight),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (topBarAlertMessage != null) {
-                    Text(
-                        text = topBarAlertMessage,
-                        style = AppText.TopBarTitle,
-                        color = AppColors.Line,
-                        maxLines = 1,
-                    )
-                } else {
-                    titleContent?.invoke() ?: Text(
-                        text = title,
-                        style = AppText.TopBarTitle,
-                        color = AppColors.Line,
-                        maxLines = 1,
-                    )
+                ) {
+                    actions()
+                    AccountBarButton()
                 }
             }
         }

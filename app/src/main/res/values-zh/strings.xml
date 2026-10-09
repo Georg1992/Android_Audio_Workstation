@@ -35,6 +35,7 @@
     <string name="community_profile_name_label">个人资料名称</string>
     <string name="community_email_label">邮箱</string>
     <string name="community_password_label">密码</string>
+    <string name="bar_login">登录</string>
     <string name="community_sign_in">登录</string>
     <string name="community_sign_in_hint">使用邮箱创建账户，或直接登录。</string>
     <string name="community_check_email">请输入邮件中的确认码。</string>

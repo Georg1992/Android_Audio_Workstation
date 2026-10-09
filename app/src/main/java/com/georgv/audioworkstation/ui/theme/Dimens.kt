@@ -25,6 +25,7 @@ object Dimens {
     // top bar (content row below status bar)
     val TopBarHeight = 30.dp
     val TopBarNavIconInset = 5.dp
+    val AccountBarMaxWidth = 96.dp
 
     // language icon
     val LangChipSize = 28.dp

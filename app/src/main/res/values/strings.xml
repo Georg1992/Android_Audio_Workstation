@@ -31,6 +31,7 @@
     <string name="community_profile_name_label">Profile name</string>
     <string name="community_email_label">Email</string>
     <string name="community_password_label">Password</string>
+    <string name="bar_login">Login</string>
     <string name="community_sign_in">Sign in</string>
     <string name="community_sign_in_hint">Create an account with your email, or sign in.</string>
     <string name="community_check_email">Enter the confirmation code from your email.</string>
