@@ -2,7 +2,12 @@ package com.georgv.audioworkstation.online
 
 import android.content.Context
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
+import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.network.UrlConnectionHttpTransport
+import com.georgv.audioworkstation.online.share.HttpProjectShare
+import com.georgv.audioworkstation.online.share.ProjectShare
+import com.georgv.audioworkstation.online.share.ShareConfig
+import com.georgv.audioworkstation.online.share.UrlConnectionShareObjects
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -43,5 +48,17 @@ abstract class OnlineModule {
                 transport = UrlConnectionHttpTransport(CognitoConfig.ENDPOINT),
                 io = dispatchers.io,
             )
+
+        @Provides
+        @Singleton
+        fun provideProjectShare(
+            sessions: AccountSessionStore,
+            projects: ProjectRepository,
+        ): ProjectShare = HttpProjectShare(
+            sessions = sessions,
+            projects = projects,
+            api = UrlConnectionHttpTransport(ShareConfig.API_BASE),
+            objects = UrlConnectionShareObjects(),
+        )
     }
 }

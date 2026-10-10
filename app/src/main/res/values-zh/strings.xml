@@ -101,6 +101,9 @@
     <string name="cd_import_audio">导入音频</string>
     <string name="cd_mixdown_project">混音并导出项目</string>
     <string name="cd_open_project">打开项目</string>
+    <string name="cd_share_project">分享项目</string>
+    <string name="library_share_done">项目已分享</string>
+    <string name="error_share_project_failed">分享项目失败</string>
     <string name="cd_loop_on">循环已开启</string>
     <string name="cd_loop_off">循环已关闭</string>
     <string name="cd_record_target_on">录音目标已开启</string>

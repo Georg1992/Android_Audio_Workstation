@@ -10,18 +10,23 @@ import com.georgv.audioworkstation.core.ui.DataAvailability
 import com.georgv.audioworkstation.core.ui.ScreenState
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.AccountSessionStore
+import com.georgv.audioworkstation.online.share.ProjectShare
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
@@ -31,6 +36,8 @@ class LibraryViewModel @Inject constructor(
     private val repo: ProjectRepository,
     private val mixdownCoordinator: ProjectMixdownCoordinator,
     private val mixPreviewPlayer: LibraryMixPreviewPlayer,
+    private val sessions: AccountSessionStore,
+    private val projectShare: ProjectShare,
 ) : ViewModel() {
 
     private val projectsFirstEmissionLogged = AtomicBoolean(false)
@@ -95,6 +102,41 @@ class LibraryViewModel @Inject constructor(
 
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     val userMessages = messages.receiveAsFlow()
+
+    /** The library list itself does not change with the account. Share is only offered while signed in. */
+    val shareEnabled: StateFlow<Boolean> =
+        sessions.state
+            .map { session -> session != null }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val sharingIds = MutableStateFlow<Set<String>>(emptySet())
+    val sharingProjectIds: StateFlow<Set<String>> = sharingIds
+
+    fun shareProject(projectId: String) {
+        var started = false
+        sharingIds.update { current ->
+            if (projectId in current) {
+                current
+            } else {
+                started = true
+                current + projectId
+            }
+        }
+        if (!started) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                projectShare.share(projectId)
+                messages.send(UiMessage(R.string.library_share_done))
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                logWarning(TAG, "shareProject failed: $projectId", error)
+                messages.send(UiMessage(R.string.error_share_project_failed))
+            } finally {
+                sharingIds.update { current -> current - projectId }
+            }
+        }
+    }
 
     fun deleteProject(projectId: String) {
         viewModelScope.launch {

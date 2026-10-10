@@ -16,7 +16,11 @@ import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.AccountSession
+import com.georgv.audioworkstation.online.AccountSessionStore
+import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.core.audio.FakeAudioController
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -53,7 +57,7 @@ class LibraryViewModelTest {
             projects = listOf(project("project-a", "Alpha", 1L)),
         )
         val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
-        val vm = LibraryViewModel(repo, mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(repo, mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
 
         assertEquals(DataAvailability.Pending, vm.uiState.value.availability)
         assertTrue(vm.uiState.value.isInitialLoad)
@@ -64,7 +68,7 @@ class LibraryViewModelTest {
         val newerProject = project(id = "project-b", name = "Beta", createdAt = 2L)
         val olderProject = project(id = "project-a", name = "Alpha", createdAt = 1L)
         val dao = FakeLibraryProjectDao(projects = listOf(olderProject, newerProject))
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -78,7 +82,7 @@ class LibraryViewModelTest {
     @Test
     fun `empty projects after Ready is content empty not initial load`() = runTest {
         val dao = FakeLibraryProjectDao(projects = emptyList())
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -105,7 +109,7 @@ class LibraryViewModelTest {
 
         assertTrue(repo.projectsReady.value)
 
-        val vm = LibraryViewModel(repo, mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(repo, mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         assertEquals(DataAvailability.Ready, vm.uiState.value.availability)
         assertEquals(2, vm.uiState.value.content.projects.size)
         assertFalse(vm.uiState.value.isInitialLoad)
@@ -119,7 +123,7 @@ class LibraryViewModelTest {
                 project(id = "project-b", name = "Beta", createdAt = 2L)
             )
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -137,7 +141,7 @@ class LibraryViewModelTest {
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
             failDeleteProject = true
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
 
         vm.deleteProject("project-a")
         advanceUntilIdle()
@@ -151,7 +155,7 @@ class LibraryViewModelTest {
         val dao = FakeLibraryProjectDao(
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val item = vm.uiState.value.content.projects.first()
         vm.onProjectCardBodyClick(item)
         advanceUntilIdle()
@@ -177,7 +181,7 @@ class LibraryViewModelTest {
         val coordinator = mixdownCoordinator(paths, repo)
         coordinator.refreshKnownMixdownPaths(listOf(projectId))
         advanceUntilIdle()
-        val vm = LibraryViewModel(repo, coordinator, LibraryMixPreviewPlayer())
+        val vm = LibraryViewModel(repo, coordinator, LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
 
@@ -274,6 +278,22 @@ private class FakeLibraryProjectDao(
     override suspend fun updateTracks(tracks: List<TrackEntity>) = Unit
 
     override suspend fun deleteTrack(trackId: String) = Unit
+}
+
+private class IdleAccountSessionStore : AccountSessionStore {
+    override val state: Flow<AccountSession?> = flowOf(null)
+
+    override suspend fun current(): AccountSession? = null
+
+    override suspend fun save(session: AccountSession) = Unit
+
+    override suspend fun clear() = Unit
+}
+
+private class IdleProjectShare : ProjectShare {
+    override suspend fun share(projectId: String) = Unit
+
+    override suspend fun restoreMissing(projectId: String) = Unit
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

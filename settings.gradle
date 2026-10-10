@@ -16,4 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Android_Audio_Workstation"
 include(":app")
+include(":share-api")
 

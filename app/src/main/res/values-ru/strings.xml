@@ -97,6 +97,9 @@
     <string name="cd_import_audio">Импорт аудио</string>
     <string name="cd_mixdown_project">Микс и экспорт проекта</string>
     <string name="cd_open_project">Открыть проект</string>
+    <string name="cd_share_project">Поделиться проектом</string>
+    <string name="library_share_done">Проект отправлен</string>
+    <string name="error_share_project_failed">Не удалось поделиться проектом</string>
     <string name="cd_loop_on">Цикл включён</string>
     <string name="cd_loop_off">Цикл выключен</string>
     <string name="cd_record_target_on">Цель записи включена</string>

@@ -98,6 +98,9 @@
     <string name="cd_import_audio">Import audio</string>
     <string name="cd_mixdown_project">Mix and export project</string>
     <string name="cd_open_project">Open project</string>
+    <string name="cd_share_project">Share project</string>
+    <string name="library_share_done">Project shared</string>
+    <string name="error_share_project_failed">Could not share the project</string>
     <string name="cd_loop_on">Loop on</string>
     <string name="cd_loop_off">Loop off</string>
     <string name="cd_record_target_on">Record target on</string>

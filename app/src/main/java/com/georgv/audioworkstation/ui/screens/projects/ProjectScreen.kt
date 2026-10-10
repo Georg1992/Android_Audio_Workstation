@@ -78,6 +78,7 @@ import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
 import com.georgv.audioworkstation.core.diagnostics.QuickRecordDiagnostics
+import com.georgv.audioworkstation.online.share.SharedFileRestoreViewModel
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import androidx.compose.runtime.SideEffect
 import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
@@ -204,7 +205,12 @@ private fun ProjectScreenContent(
 ) {
     val vmResolveStartMs = remember(projectId) { SystemClock.uptimeMillis() }
     val vm: ProjectViewModel = hiltViewModel()
+    val restore: SharedFileRestoreViewModel = hiltViewModel()
     val topBarAlertState = rememberTopBarAlertState()
+
+    LaunchedEffect(projectId) {
+        restore.restore(projectId)
+    }
 
     LaunchedEffect(projectId, quickRecord) {
         if (!quickRecord) return@LaunchedEffect

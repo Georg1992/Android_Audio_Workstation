@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,6 +69,8 @@ fun LibraryScreen(
     NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
 
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val shareEnabled by vm.shareEnabled.collectAsStateWithLifecycle()
+    val sharingProjectIds by vm.sharingProjectIds.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -110,6 +113,9 @@ fun LibraryScreen(
                         }
                     },
                     onDelete = { pendingDeleteProject = it },
+                    onShare = vm::shareProject,
+                    shareEnabled = shareEnabled,
+                    sharingProjectIds = sharingProjectIds,
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -181,6 +187,14 @@ private data class LibraryRowHandlers(
     val onBodyClick: (LibraryProjectItem) -> Unit,
     val onOpen: (String) -> Unit,
     val onDelete: (LibraryProjectItem) -> Unit,
+    val onShare: (String) -> Unit,
+    val shareEnabled: Boolean,
+    val sharingProjectIds: Set<String>,
+)
+
+private data class LibraryShareAction(
+    val sharing: Boolean,
+    val onShare: () -> Unit,
 )
 
 @Composable
@@ -240,6 +254,14 @@ private fun LibraryProjectContent(
                         onBodyClick = { handlers.onBodyClick(item) },
                         onOpenProjectClick = { handlers.onOpen(item.project.id) },
                         onDeleteClick = { handlers.onDelete(item) },
+                        share = if (handlers.shareEnabled) {
+                            LibraryShareAction(
+                                sharing = item.project.id in handlers.sharingProjectIds,
+                                onShare = { handlers.onShare(item.project.id) },
+                            )
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -254,6 +276,7 @@ private fun LibraryProjectRow(
     onBodyClick: () -> Unit,
     onOpenProjectClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    share: LibraryShareAction?,
 ) {
     val projectName =
         item.project.name?.takeIf { it.isNotBlank() }
@@ -333,6 +356,19 @@ private fun LibraryProjectRow(
                         contentDescription = stringResource(R.string.cd_open_project),
                         tint = AppColors.Line,
                     )
+                }
+                if (share != null) {
+                    IconButton(onClick = share.onShare, enabled = !share.sharing) {
+                        Icon(
+                            imageVector = Icons.Filled.Share,
+                            contentDescription = stringResource(R.string.cd_share_project),
+                            tint = if (share.sharing) {
+                                AppColors.Line.copy(alpha = AppOpacity.disabled)
+                            } else {
+                                AppColors.Line
+                            },
+                        )
+                    }
                 }
                 IconButton(onClick = onDeleteClick) {
                     Icon(
