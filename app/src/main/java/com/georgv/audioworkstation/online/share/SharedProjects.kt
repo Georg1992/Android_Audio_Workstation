@@ -6,6 +6,8 @@ import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.accessTokenExpired
 import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 data class SharedProject(
@@ -22,7 +24,7 @@ internal class HttpSharedProjects(
     private val accounts: CognitoAccounts,
     private val api: HttpTransport,
 ) : SharedProjects {
-    override suspend fun list(): List<SharedProject> {
+    override suspend fun list(): List<SharedProject> = withContext(Dispatchers.IO) {
         val session = openSession()
         val result = api.exchange(
             HttpCall(
@@ -35,7 +37,7 @@ internal class HttpSharedProjects(
             ),
         )
         if (result.status !in 200..299) error("share api status ${result.status}")
-        return sharedProjects(result.body)
+        sharedProjects(result.body)
     }
 
     private suspend fun openSession(): AccountSession {

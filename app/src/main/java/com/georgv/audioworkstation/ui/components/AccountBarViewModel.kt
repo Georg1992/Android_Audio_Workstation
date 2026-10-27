@@ -40,8 +40,14 @@ class AccountBarViewModel @Inject constructor(
     fun signOut() {
         submit {
             val session = sessions.current() ?: return@submit
-            accounts.signOut(session.refreshToken)
             sessions.clear()
+            try {
+                accounts.signOut(session.refreshToken)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                logWarning(TAG, "token revoke failed", error)
+            }
         }
     }
 

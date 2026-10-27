@@ -56,6 +56,23 @@ class SharedProjectsTest {
         collect.cancel()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun signOutClearsSessionWhenRevokeFails() = runTest {
+        val sessions = MemorySessions(session)
+        val vm = CommunityHomeViewModel(
+            sessions = sessions,
+            accounts = RevokeFails,
+            sharedProjects = FixedProjects(emptyList()),
+        )
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        vm.signOut()
+        advanceUntilIdle()
+        assertEquals(null, vm.uiState.value.email)
+        collect.cancel()
+    }
+
     private class FixedProjects(private val projects: List<SharedProject>) : SharedProjects {
         override suspend fun list(): List<SharedProject> = projects
     }
@@ -74,6 +91,18 @@ class SharedProjectsTest {
         override suspend fun clear() {
             sessions.value = null
         }
+    }
+
+    private object RevokeFails : CognitoAccounts {
+        override suspend fun register(email: String, password: String, name: String) = error("unused")
+
+        override suspend fun confirm(email: String, code: String) = error("unused")
+
+        override suspend fun signIn(email: String, password: String): AccountSession = error("unused")
+
+        override suspend fun refresh(session: AccountSession): AccountSession = error("unused")
+
+        override suspend fun signOut(refreshToken: String) = error("revoke failed")
     }
 
     private object UnusedAccounts : CognitoAccounts {

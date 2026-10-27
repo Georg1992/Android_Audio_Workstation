@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.screens.community
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -76,19 +77,21 @@ fun CommunityHomeScreen(
                     style = AppText.TileSubtitle,
                     color = AppColors.Line,
                 )
-                LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                ) {
-                    items(state.projects, key = { project -> project.id }) { project ->
-                        val title = project.title.ifBlank {
-                            stringResource(R.string.library_untitled_project)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                    ) {
+                        items(state.projects, key = { project -> project.id }) { project ->
+                            val title = project.title.ifBlank {
+                                stringResource(R.string.library_untitled_project)
+                            }
+                            Text(
+                                text = title,
+                                style = AppText.TileTitle,
+                                color = AppColors.Line,
+                            )
                         }
-                        Text(
-                            text = title,
-                            style = AppText.TileTitle,
-                            color = AppColors.Line,
-                        )
                     }
                 }
                 CommunityAction(
