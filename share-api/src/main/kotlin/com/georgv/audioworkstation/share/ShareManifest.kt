@@ -3,6 +3,11 @@ package com.georgv.audioworkstation.share
 import java.sql.Connection
 import java.sql.DriverManager
 
+internal data class SharedProjectRecord(
+    val id: String,
+    val title: String,
+)
+
 internal class ShareManifest(config: ShareApiConfig) {
     private val url = config.databaseUrl
     private val user = config.databaseUser
@@ -101,6 +106,21 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
         }
     }
+
+    fun listProjects(): List<SharedProjectRecord> =
+        connection().use { db ->
+            db.prepareStatement(
+                "SELECT id, title FROM shared_project ORDER BY title, id",
+            ).use { query ->
+                query.executeQuery().use { rows ->
+                    val projects = ArrayList<SharedProjectRecord>()
+                    while (rows.next()) {
+                        projects += SharedProjectRecord(rows.getString(1), rows.getString(2))
+                    }
+                    projects
+                }
+            }
+        }
 
     fun hasFile(projectId: String, ownerAccount: String, contentHash: String): Boolean =
         connection().use { db ->

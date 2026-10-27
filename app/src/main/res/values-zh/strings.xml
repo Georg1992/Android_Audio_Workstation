@@ -198,6 +198,7 @@
     <string name="error_gmail_not_configured">请在 local.properties 中配置 Gmail 的 OAuth 客户端。</string>
     <string name="error_gmail_sign_in_failed">Gmail 登录失败。</string>
     <string name="error_sign_out_failed">退出失败。</string>
+    <string name="error_shared_projects_failed">无法加载已分享的项目。</string>
 
     <string name="devices_output">输出</string>
     <string name="devices_input">输入</string>

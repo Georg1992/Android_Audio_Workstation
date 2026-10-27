@@ -4,7 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -73,11 +76,21 @@ fun CommunityHomeScreen(
                     style = AppText.TileSubtitle,
                     color = AppColors.Line,
                 )
-                Text(
-                    text = stringResource(R.string.screen_community_placeholder_body),
-                    style = AppText.TileSubtitle,
-                    color = AppColors.Line,
-                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                ) {
+                    items(state.projects, key = { project -> project.id }) { project ->
+                        val title = project.title.ifBlank {
+                            stringResource(R.string.library_untitled_project)
+                        }
+                        Text(
+                            text = title,
+                            style = AppText.TileTitle,
+                            color = AppColors.Line,
+                        )
+                    }
+                }
                 CommunityAction(
                     text = stringResource(R.string.community_sign_out),
                     fillColor = AppColors.SurfacePanel,

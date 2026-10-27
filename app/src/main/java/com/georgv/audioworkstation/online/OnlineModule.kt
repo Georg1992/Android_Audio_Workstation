@@ -5,8 +5,10 @@ import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.network.UrlConnectionHttpTransport
 import com.georgv.audioworkstation.online.share.HttpProjectShare
+import com.georgv.audioworkstation.online.share.HttpSharedProjects
 import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.online.share.ShareConfig
+import com.georgv.audioworkstation.online.share.SharedProjects
 import com.georgv.audioworkstation.online.share.UrlConnectionShareObjects
 import dagger.Binds
 import dagger.Module
@@ -61,6 +63,17 @@ abstract class OnlineModule {
             projects = projects,
             api = UrlConnectionHttpTransport(ShareConfig.API_BASE),
             objects = UrlConnectionShareObjects(),
+        )
+
+        @Provides
+        @Singleton
+        fun provideSharedProjects(
+            sessions: AccountSessionStore,
+            accounts: CognitoAccounts,
+        ): SharedProjects = HttpSharedProjects(
+            sessions = sessions,
+            accounts = accounts,
+            api = UrlConnectionHttpTransport(ShareConfig.API_BASE),
         )
     }
 }

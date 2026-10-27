@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.share
 
 import com.sun.net.httpserver.HttpExchange
 import java.nio.charset.StandardCharsets
+import org.json.JSONArray
 import org.json.JSONObject
 
 internal class ShareHttp(
@@ -21,6 +22,11 @@ internal class ShareHttp(
                 send(exchange, 200, """{"ok":true}""")
                 return
             }
+            if (method == "GET" && path == "/shared-projects") {
+                accountId(exchange)
+                listProjects(exchange)
+                return
+            }
             if (method != "POST") throw ShareFailure(404, "not found")
             val accountId = accountId(exchange)
             when {
@@ -35,6 +41,14 @@ internal class ShareHttp(
         } catch (error: Exception) {
             send(exchange, 500, """{"error":"share failed"}""")
         }
+    }
+
+    private fun listProjects(exchange: HttpExchange) {
+        val projects = JSONArray()
+        for (project in manifest.listProjects()) {
+            projects.put(JSONObject().put("id", project.id).put("title", project.title))
+        }
+        send(exchange, 200, JSONObject().put("projects", projects).toString())
     }
 
     private fun createProject(exchange: HttpExchange, accountId: String) {

@@ -7,6 +7,8 @@ import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
+import com.georgv.audioworkstation.online.share.SharedProject
+import com.georgv.audioworkstation.online.share.SharedProjects
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -23,6 +25,7 @@ data class CommunityHomeUiState(
     val sessionKnown: Boolean = false,
     val email: String? = null,
     val name: String? = null,
+    val projects: List<SharedProject> = emptyList(),
     val busy: Boolean = false,
 )
 
@@ -30,17 +33,39 @@ data class CommunityHomeUiState(
 class CommunityHomeViewModel @Inject constructor(
     private val sessions: AccountSessionStore,
     private val accounts: CognitoAccounts,
+    private val sharedProjects: SharedProjects,
 ) : ViewModel() {
     private val busy = MutableStateFlow(false)
+    private val projects = MutableStateFlow<List<SharedProject>>(emptyList())
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     val userMessages = messages.receiveAsFlow()
 
+    init {
+        viewModelScope.launch {
+            sessions.state.collect { session ->
+                if (session == null) {
+                    projects.value = emptyList()
+                    return@collect
+                }
+                try {
+                    projects.value = sharedProjects.list()
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (error: Exception) {
+                    logWarning(TAG, "shared projects failed", error)
+                    messages.send(UiMessage(R.string.error_shared_projects_failed))
+                }
+            }
+        }
+    }
+
     val uiState: StateFlow<CommunityHomeUiState> =
-        combine(sessions.state, busy) { session, isBusy ->
+        combine(sessions.state, busy, projects) { session, isBusy, shared ->
             CommunityHomeUiState(
                 sessionKnown = true,
                 email = session?.email,
                 name = session?.name,
+                projects = shared,
                 busy = isBusy,
             )
         }.stateIn(

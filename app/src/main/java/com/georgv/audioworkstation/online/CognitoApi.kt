@@ -98,25 +98,25 @@ internal object CognitoApi {
         )
     }
 
-    private fun trustedEmail(claims: JSONObject): Boolean =
-        when {
-            googleAccount(claims) -> true
-            else -> verified(claims.opt("email_verified"))
-        }
-
-    private fun googleAccount(claims: JSONObject): Boolean {
-        val identities = claims.optJSONArray("identities") ?: return false
-        for (index in 0 until identities.length()) {
-            val provider = identities.optJSONObject(index)?.optString("providerName")
-            if (provider == "Google") return true
-        }
-        return false
-    }
-
-    private fun verified(value: Any?): Boolean = value == true || value == "true"
-
     private const val PAYLOAD = 1
 }
+
+private fun trustedEmail(claims: JSONObject): Boolean =
+    when {
+        googleAccount(claims) -> true
+        else -> verified(claims.opt("email_verified"))
+    }
+
+private fun googleAccount(claims: JSONObject): Boolean {
+    val identities = claims.optJSONArray("identities") ?: return false
+    for (index in 0 until identities.length()) {
+        val provider = identities.optJSONObject(index)?.optString("providerName")
+        if (provider == "Google") return true
+    }
+    return false
+}
+
+private fun verified(value: Any?): Boolean = value == true || value == "true"
 
 /** True when the access token's exp is within a minute of now. A token with no exp is not treated as expired. */
 internal fun accessTokenExpired(token: String, nowEpochSeconds: Long): Boolean {

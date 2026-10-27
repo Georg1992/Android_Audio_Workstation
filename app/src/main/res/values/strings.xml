@@ -195,6 +195,7 @@
     <string name="error_gmail_not_configured">Gmail sign-in needs a desktop OAuth client in local.properties.</string>
     <string name="error_gmail_sign_in_failed">Gmail sign-in failed.</string>
     <string name="error_sign_out_failed">Sign-out failed.</string>
+    <string name="error_shared_projects_failed">Could not load shared projects.</string>
 
     <string name="devices_output">Output</string>
     <string name="devices_input">Input</string>
