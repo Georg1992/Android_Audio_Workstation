@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,7 +28,6 @@ import com.georgv.audioworkstation.ui.components.ProjectCardClicks
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.ShownCard
 import com.georgv.audioworkstation.ui.theme.AppColors
-import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,19 +76,7 @@ fun CommunityHomeScreen(
                 .padding(Dimens.ScreenContentPadding),
             verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
         ) {
-            val email = state.email
-            val name = state.name
-            if (email != null && name != null) {
-                Text(
-                    text = stringResource(R.string.community_signed_in, name),
-                    style = AppText.TileTitle,
-                    color = AppColors.Line,
-                )
-                Text(
-                    text = email,
-                    style = AppText.TileSubtitle,
-                    color = AppColors.Line,
-                )
+            if (state.email != null && state.name != null) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),

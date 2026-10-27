@@ -42,7 +42,6 @@
     <string name="community_register">Зарегистрироваться</string>
     <string name="community_gmail">Войти через Gmail</string>
     <string name="community_sign_out">Выйти</string>
-    <string name="community_signed_in">Вы вошли как %1$s</string>
     <string name="screen_library_card">Карточка</string>
     <string name="library_card_tags_hint">Теги через запятую</string>
     <string name="library_card_choose_image">Выбрать изображение</string>
