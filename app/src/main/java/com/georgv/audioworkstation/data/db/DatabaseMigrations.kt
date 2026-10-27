@@ -257,3 +257,11 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
         )
     }
 }
+
+/** Library card labels and background image. Existing projects start with neither. */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE projects ADD COLUMN cardTags TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE projects ADD COLUMN cardImagePath TEXT")
+    }
+}

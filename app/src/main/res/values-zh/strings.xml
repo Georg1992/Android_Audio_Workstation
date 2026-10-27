@@ -47,6 +47,12 @@
     <string name="community_gmail">使用 Gmail 登录</string>
     <string name="community_sign_out">退出</string>
     <string name="community_signed_in">已登录：%1$s</string>
+    <string name="screen_library_card">卡片</string>
+    <string name="library_card_tags_hint">用逗号分隔标签</string>
+    <string name="library_card_choose_image">选择图片</string>
+    <string name="library_card_image_selected">已选择图片</string>
+    <string name="library_card_save">保存</string>
+    <string name="cd_customize_card">自定义卡片</string>
     <!-- Create Project screen -->
     <string name="create_project_name_label">项目名称</string>
     <string name="create_project_name_placeholder">输入项目名称</string>
@@ -199,6 +205,10 @@
     <string name="error_gmail_sign_in_failed">Gmail 登录失败。</string>
     <string name="error_sign_out_failed">退出失败。</string>
     <string name="error_shared_projects_failed">无法加载已分享的项目。</string>
+    <string name="error_card_save_failed">无法保存卡片。</string>
+    <string name="error_card_playback_failed">无法播放此卡片。</string>
+    <string name="error_card_not_on_phone">此项目不在这台手机上。</string>
+    <string name="error_card_image_failed">无法加载卡片图片。</string>
 
     <string name="devices_output">输出</string>
     <string name="devices_input">输入</string>

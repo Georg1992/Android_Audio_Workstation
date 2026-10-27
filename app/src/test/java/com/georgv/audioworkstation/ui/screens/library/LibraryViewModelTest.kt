@@ -294,6 +294,8 @@ private class IdleProjectShare : ProjectShare {
     override suspend fun share(projectId: String) = Unit
 
     override suspend fun restoreMissing(projectId: String) = Unit
+
+    override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) = Unit
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

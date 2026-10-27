@@ -3,7 +3,12 @@ package com.georgv.audioworkstation.online.share
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
+import com.georgv.audioworkstation.online.share.CardMedia
+import com.georgv.audioworkstation.ui.screens.community.CardPlayback
+import com.georgv.audioworkstation.ui.screens.community.CardTransport
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeViewModel
+import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -35,10 +40,13 @@ class SharedProjectsTest {
     @Test
     fun listKeepsIdAndTitle() {
         val projects = sharedProjects(
-            """{"projects":[{"id":"project-a","title":"Song"},{"id":"project-b","title":""}]}""",
+            """{"projects":[{"id":"project-a","title":"Song","tags":["live"],"imageHash":null},{"id":"project-b","title":"","tags":[],"imageHash":"abc"}]}""",
         )
         assertEquals(listOf("project-a", "project-b"), projects.map { it.id })
         assertEquals(listOf("Song", ""), projects.map { it.title })
+        assertEquals(listOf("live"), projects[0].tags)
+        assertEquals(null, projects[0].imageHash)
+        assertEquals("abc", projects[1].imageHash)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -47,7 +55,12 @@ class SharedProjectsTest {
         val vm = CommunityHomeViewModel(
             sessions = MemorySessions(session),
             accounts = UnusedAccounts,
-            sharedProjects = FixedProjects(listOf(SharedProject("project-a", "Song"))),
+            sharedProjects = FixedProjects(
+                listOf(SharedProject("project-a", "Song", emptyList(), null)),
+            ),
+            localProjects = NoLocalProjects,
+            player = IdlePlayback,
+            media = IdleMedia,
         )
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
@@ -64,6 +77,9 @@ class SharedProjectsTest {
             sessions = sessions,
             accounts = RevokeFails,
             sharedProjects = FixedProjects(emptyList()),
+            localProjects = NoLocalProjects,
+            player = IdlePlayback,
+            media = IdleMedia,
         )
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
@@ -75,6 +91,10 @@ class SharedProjectsTest {
 
     private class FixedProjects(private val projects: List<SharedProject>) : SharedProjects {
         override suspend fun list(): List<SharedProject> = projects
+
+        override suspend fun imageUrl(id: String): String = error("unused")
+
+        override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
     }
 
     private class MemorySessions(session: AccountSession?) : AccountSessionStore {
@@ -115,6 +135,26 @@ class SharedProjectsTest {
         override suspend fun refresh(session: AccountSession): AccountSession = error("unused")
 
         override suspend fun signOut(refreshToken: String) = error("unused")
+    }
+
+    private object NoLocalProjects : LocalProjectLookup {
+        override suspend fun exists(projectId: String): Boolean = false
+    }
+
+    private object IdlePlayback : CardPlayback {
+        override fun play(projectId: String, file: File) = error("unused")
+
+        override fun stop() = Unit
+
+        override fun seekTo(positionMs: Int) = Unit
+
+        override fun read(): CardTransport = CardTransport()
+    }
+
+    private object IdleMedia : CardMedia {
+        override suspend fun audio(projectId: String): File = error("unused")
+
+        override suspend fun image(projectId: String, hash: String): File = error("unused")
     }
 
     private companion object {

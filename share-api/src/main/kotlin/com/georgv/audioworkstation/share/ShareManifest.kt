@@ -6,6 +6,9 @@ import java.sql.DriverManager
 internal data class SharedProjectRecord(
     val id: String,
     val title: String,
+    val tags: String,
+    val imageHash: String?,
+    val ownerAccount: String,
 )
 
 internal class ShareManifest(config: ShareApiConfig) {
@@ -24,6 +27,12 @@ internal class ShareManifest(config: ShareApiConfig) {
                       title TEXT NOT NULL
                     )
                     """.trimIndent(),
+                )
+                statement.executeUpdate(
+                    "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS tags TEXT NOT NULL DEFAULT ''",
+                )
+                statement.executeUpdate(
+                    "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS image_hash TEXT",
                 )
                 statement.executeUpdate(
                     """
@@ -110,17 +119,108 @@ internal class ShareManifest(config: ShareApiConfig) {
     fun listProjects(): List<SharedProjectRecord> =
         connection().use { db ->
             db.prepareStatement(
-                "SELECT id, title FROM shared_project ORDER BY title, id",
+                """
+                SELECT id, title, tags, image_hash, owner_account
+                FROM shared_project
+                ORDER BY title, id
+                """.trimIndent(),
             ).use { query ->
                 query.executeQuery().use { rows ->
                     val projects = ArrayList<SharedProjectRecord>()
                     while (rows.next()) {
-                        projects += SharedProjectRecord(rows.getString(1), rows.getString(2))
+                        val image = rows.getString(4)
+                        projects += SharedProjectRecord(
+                            id = rows.getString(1),
+                            title = rows.getString(2),
+                            tags = rows.getString(3),
+                            imageHash = if (rows.wasNull()) null else image,
+                            ownerAccount = rows.getString(5),
+                        )
                     }
                     projects
                 }
             }
         }
+
+    fun updateCard(id: String, ownerAccount: String, title: String, tags: String) {
+        requireOwner(id, ownerAccount)
+        connection().use { db ->
+            db.prepareStatement(
+                "UPDATE shared_project SET title = ?, tags = ? WHERE id = ?",
+            ).use { update ->
+                update.setString(1, title)
+                update.setString(2, tags)
+                update.setString(3, id)
+                update.executeUpdate()
+            }
+        }
+    }
+
+    fun setImage(id: String, ownerAccount: String, imageHash: String) {
+        requireOwner(id, ownerAccount)
+        connection().use { db ->
+            db.prepareStatement(
+                "UPDATE shared_project SET image_hash = ? WHERE id = ?",
+            ).use { update ->
+                update.setString(1, imageHash)
+                update.setString(2, id)
+                update.executeUpdate()
+            }
+        }
+    }
+
+    fun imageHash(id: String): String? =
+        connection().use { db ->
+            db.prepareStatement(
+                "SELECT image_hash FROM shared_project WHERE id = ?",
+            ).use { query ->
+                query.setString(1, id)
+                query.executeQuery().use { rows ->
+                    if (!rows.next()) throw ShareFailure(404, "not found")
+                    val image = rows.getString(1)
+                    if (rows.wasNull()) null else image
+                }
+            }
+        }
+
+    fun fileHashes(id: String): List<String> =
+        connection().use { db ->
+            val exists = db.prepareStatement(
+                "SELECT 1 FROM shared_project WHERE id = ?",
+            ).use { query ->
+                query.setString(1, id)
+                query.executeQuery().use { rows -> rows.next() }
+            }
+            if (!exists) throw ShareFailure(404, "not found")
+            db.prepareStatement(
+                """
+                SELECT content_hash FROM shared_file
+                WHERE shared_project_id = ?
+                ORDER BY client_track_id
+                """.trimIndent(),
+            ).use { query ->
+                query.setString(1, id)
+                query.executeQuery().use { rows ->
+                    val hashes = ArrayList<String>()
+                    while (rows.next()) hashes += rows.getString(1)
+                    hashes
+                }
+            }
+        }
+
+    fun deleteProject(id: String, ownerAccount: String) {
+        requireOwner(id, ownerAccount)
+        connection().use { db ->
+            db.prepareStatement("DELETE FROM shared_file WHERE shared_project_id = ?").use { delete ->
+                delete.setString(1, id)
+                delete.executeUpdate()
+            }
+            db.prepareStatement("DELETE FROM shared_project WHERE id = ?").use { delete ->
+                delete.setString(1, id)
+                delete.executeUpdate()
+            }
+        }
+    }
 
     fun hasFile(projectId: String, ownerAccount: String, contentHash: String): Boolean =
         connection().use { db ->

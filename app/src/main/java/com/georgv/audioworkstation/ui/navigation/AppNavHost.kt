@@ -30,6 +30,7 @@ import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeScreen
 import com.georgv.audioworkstation.ui.screens.community.CommunityScreen
 import com.georgv.audioworkstation.ui.screens.devices.DevicesScreen
+import com.georgv.audioworkstation.ui.screens.library.LibraryCardScreen
 import com.georgv.audioworkstation.ui.screens.library.LibraryScreen
 import com.georgv.audioworkstation.ui.screens.mainmenu.MainMenuScreen
 import com.georgv.audioworkstation.ui.screens.projects.CreateProjectScreen
@@ -193,6 +194,19 @@ private fun AppDestinations(
                 onOpenProject = { projectId ->
                     navController.navigate("${Routes.PROJECT}/$projectId?quick=false")
                 },
+                onCustomize = { projectId ->
+                    navController.navigate("library_card/$projectId")
+                },
+            )
+        }
+
+        composable(
+            route = Routes.LIBRARY_CARD,
+            arguments = listOf(navArgument("projectId") { type = NavType.StringType }),
+        ) {
+            LibraryCardScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
 
@@ -223,6 +237,9 @@ private fun AppDestinations(
                         popUpTo(Routes.COMMUNITY_HOME) { inclusive = true }
                         launchSingleTop = true
                     }
+                },
+                onOpenProject = { projectId ->
+                    navController.navigate("${Routes.PROJECT}/$projectId?quick=false")
                 },
             )
         }

@@ -18,22 +18,14 @@ internal class ShareHttp(
             }
             val path = exchange.requestURI.path
             val method = exchange.requestMethod
-            if (method == "GET" && path == "/health") {
-                send(exchange, 200, """{"ok":true}""")
-                return
-            }
-            if (method == "GET" && path == "/shared-projects") {
-                accountId(exchange)
-                listProjects(exchange)
-                return
-            }
-            if (method != "POST") throw ShareFailure(404, "not found")
-            val accountId = accountId(exchange)
             when {
-                path == "/shared-projects" -> createProject(exchange, accountId)
-                path.endsWith("/uploads") -> requestUpload(exchange, accountId, projectId(path))
-                path.endsWith("/files") -> commitFile(exchange, accountId, projectId(path))
-                path.endsWith("/downloads") -> download(exchange, accountId, projectId(path))
+                method == "GET" && path == "/health" -> send(exchange, 200, """{"ok":true}""")
+                method == "GET" && path == "/shared-projects" -> {
+                    accountId(exchange)
+                    listProjects(exchange)
+                }
+                method == "POST" && path == "/shared-projects" -> createProject(exchange, accountId(exchange))
+                path.startsWith("/shared-projects/") -> routeProject(exchange, method, path)
                 else -> throw ShareFailure(404, "not found")
             }
         } catch (failure: ShareFailure) {
@@ -43,36 +35,121 @@ internal class ShareHttp(
         }
     }
 
+    private fun routeProject(exchange: HttpExchange, method: String, path: String) {
+        val parts = path.split("/")
+        if (parts.size < 3 || parts[1] != "shared-projects") throw ShareFailure(404, "not found")
+        val projectId = id(parts[2], "project id")
+        val accountId = accountId(exchange)
+        val action = parts.drop(3)
+        when {
+            method == "POST" && action == listOf("card") -> updateCard(exchange, accountId, projectId)
+            method == "POST" && action == listOf("uploads") -> requestUpload(exchange, accountId, projectId)
+            method == "POST" && action == listOf("files") -> commitFile(exchange, accountId, projectId)
+            method == "POST" && action == listOf("downloads") -> download(exchange, accountId, projectId)
+            method == "POST" && action == listOf("image") -> beginImage(exchange, accountId, projectId)
+            method == "POST" && action == listOf("image", "commit") -> commitImage(exchange, accountId, projectId)
+            method == "GET" && action == listOf("image") -> readImage(exchange, projectId)
+            method == "POST" && action == listOf("playback") -> playback(exchange, projectId)
+            else -> throw ShareFailure(404, "not found")
+        }
+    }
+
     private fun listProjects(exchange: HttpExchange) {
         val projects = JSONArray()
         for (project in manifest.listProjects()) {
-            projects.put(JSONObject().put("id", project.id).put("title", project.title))
+            val row = JSONObject()
+                .put("id", project.id)
+                .put("title", project.title)
+                .put("tags", storedTags(project.tags))
+            if (project.imageHash == null) {
+                row.put("imageHash", JSONObject.NULL)
+            } else {
+                row.put("imageHash", project.imageHash)
+            }
+            projects.put(row)
         }
         send(exchange, 200, JSONObject().put("projects", projects).toString())
     }
 
+    private fun updateCard(exchange: HttpExchange, accountId: String, projectId: String) {
+        val body = json(exchange)
+        val cardTitle = title(body.optString("title"))
+        val tags = tags(body.optJSONArray("tags"))
+        manifest.updateCard(projectId, accountId, cardTitle, tags)
+        send(exchange, 200, """{"id":"$projectId"}""")
+    }
+
+    private fun beginImage(exchange: HttpExchange, accountId: String, projectId: String) {
+        manifest.requireOwner(projectId, accountId)
+        val body = json(exchange)
+        val hash = storageKey(body.optString("contentHash"))
+        val bytes = size(body.optLong("size", -1))
+        val stat = objects.stat(hash)
+        if (stat.exists && stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        if (stat.exists) {
+            manifest.setImage(projectId, accountId, hash)
+            send(exchange, 200, """{"storageKey":"$hash","alreadyStored":true}""")
+            return
+        }
+        sendUpload(exchange, hash, bytes)
+    }
+
+    private fun commitImage(exchange: HttpExchange, accountId: String, projectId: String) {
+        manifest.requireOwner(projectId, accountId)
+        val body = json(exchange)
+        val hash = storageKey(body.optString("contentHash"))
+        val key = storageKey(body.optString("storageKey"))
+        if (key != hash) throw ShareFailure(400, "storage key must be the content hash")
+        val bytes = size(body.optLong("size", -1))
+        val stat = objects.stat(hash)
+        if (!stat.exists) throw ShareFailure(409, "object missing")
+        if (stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        manifest.setImage(projectId, accountId, hash)
+        send(exchange, 200, """{"storageKey":"$hash"}""")
+    }
+
+    private fun readImage(exchange: HttpExchange, projectId: String) {
+        val hash = manifest.imageHash(projectId) ?: throw ShareFailure(404, "not found")
+        send(exchange, 200, JSONObject().put("downloadUrl", objects.downloadUrl(hash)).toString())
+    }
+
+    private fun playback(exchange: HttpExchange, projectId: String) {
+        val files = JSONArray()
+        for (hash in manifest.fileHashes(projectId)) {
+            files.put(
+                JSONObject()
+                    .put("contentHash", hash)
+                    .put("downloadUrl", objects.downloadUrl(hash)),
+            )
+        }
+        send(exchange, 200, JSONObject().put("files", files).toString())
+    }
+
     private fun createProject(exchange: HttpExchange, accountId: String) {
         val body = json(exchange)
-        val id = id(body.optString("id"), "project id")
-        val title = title(body.optString("title"))
-        manifest.saveProject(id, accountId, title)
-        send(exchange, 200, """{"id":"$id"}""")
+        val projectId = id(body.optString("id"), "project id")
+        val cardTitle = title(body.optString("title"))
+        manifest.saveProject(projectId, accountId, cardTitle)
+        send(exchange, 200, """{"id":"$projectId"}""")
     }
 
     private fun requestUpload(exchange: HttpExchange, accountId: String, projectId: String) {
         manifest.requireOwner(projectId, accountId)
         val body = json(exchange)
         val hash = storageKey(body.optString("contentHash"))
-        val size = size(body.optLong("size", -1))
+        val bytes = size(body.optLong("size", -1))
         id(body.optString("trackId"), "track id")
         val stat = objects.stat(hash)
-        if (stat.exists && stat.size != size) throw ShareFailure(409, "size mismatch")
-        val grant = uploadGrant(hash, stat.exists)
-        if (grant.alreadyStored) {
+        if (stat.exists && stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        if (stat.exists) {
             send(exchange, 200, """{"storageKey":"$hash","alreadyStored":true}""")
             return
         }
-        val target = objects.uploadTarget(hash, size)
+        sendUpload(exchange, hash, bytes)
+    }
+
+    private fun sendUpload(exchange: HttpExchange, hash: String, bytes: Long) {
+        val target = objects.uploadTarget(hash, bytes)
         val headers = JSONObject()
         target.headers.forEach { (name, value) -> headers.put(name, value) }
         val response = JSONObject()
@@ -90,11 +167,11 @@ internal class ShareHttp(
         val hash = storageKey(body.optString("contentHash"))
         val key = storageKey(body.optString("storageKey"))
         if (key != hash) throw ShareFailure(400, "storage key must be the content hash")
-        val size = size(body.optLong("size", -1))
+        val bytes = size(body.optLong("size", -1))
         val stat = objects.stat(hash)
         if (!stat.exists) throw ShareFailure(409, "object missing")
-        if (stat.size != size) throw ShareFailure(409, "size mismatch")
-        manifest.saveFile(projectId, trackId, hash, key, size)
+        if (stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        manifest.saveFile(projectId, trackId, hash, key, bytes)
         send(exchange, 200, """{"storageKey":"$hash"}""")
     }
 
@@ -109,12 +186,6 @@ internal class ShareHttp(
         val header = exchange.requestHeaders.getFirst("Authorization") ?: throw ShareFailure(401, "unauthorized")
         if (!header.startsWith("Bearer ")) throw ShareFailure(401, "unauthorized")
         return tokens.accountId(header.removePrefix("Bearer ").trim())
-    }
-
-    private fun projectId(path: String): String {
-        val parts = path.split("/")
-        if (parts.size != 4 || parts[1] != "shared-projects") throw ShareFailure(404, "not found")
-        return id(parts[2], "project id")
     }
 
     private fun json(exchange: HttpExchange): JSONObject {
@@ -139,6 +210,23 @@ internal class ShareHttp(
         return value
     }
 
+    private fun tags(array: JSONArray?): String {
+        if (array == null) throw ShareFailure(400, "tags are invalid")
+        if (array.length() > MAX_TAGS) throw ShareFailure(400, "too many tags")
+        val clean = JSONArray()
+        for (index in 0 until array.length()) {
+            val tag = array.optString(index).trim()
+            if (tag.isEmpty() || tag.length > MAX_TAG_LENGTH) throw ShareFailure(400, "tag is invalid")
+            clean.put(tag)
+        }
+        return clean.toString()
+    }
+
+    private fun storedTags(value: String): JSONArray {
+        if (value.isBlank()) return JSONArray()
+        return JSONArray(value)
+    }
+
     private fun size(value: Long): Long {
         if (value <= 0L) throw ShareFailure(400, "size is invalid")
         return value
@@ -155,6 +243,8 @@ internal class ShareHttp(
         const val GATEWAY_HEADER = "X-Share-Gateway"
         const val MAX_BODY = 65_536
         const val MAX_TITLE = 200
+        const val MAX_TAGS = 12
+        const val MAX_TAG_LENGTH = 24
         val Id = Regex("^[A-Za-z0-9_-]{1,80}$")
     }
 }

@@ -21,5 +21,11 @@ data class ProjectEntity(
      * Lamport-style logical clock for ordering edits made on different
      * devices. Bumped by future sync code on every meaningful project edit.
      */
-    val editLamport: Long = 0L
+    val editLamport: Long = 0L,
+
+    /** Comma-separated labels the owner sets on the library card. */
+    val cardTags: String = "",
+
+    /** Local image file used as the card background. */
+    val cardImagePath: String? = null,
 )

@@ -43,6 +43,12 @@
     <string name="community_gmail">Войти через Gmail</string>
     <string name="community_sign_out">Выйти</string>
     <string name="community_signed_in">Вы вошли как %1$s</string>
+    <string name="screen_library_card">Карточка</string>
+    <string name="library_card_tags_hint">Теги через запятую</string>
+    <string name="library_card_choose_image">Выбрать изображение</string>
+    <string name="library_card_image_selected">Изображение выбрано</string>
+    <string name="library_card_save">Сохранить</string>
+    <string name="cd_customize_card">Настроить карточку</string>
     <!-- Create Project screen -->
     <string name="create_project_name_label">Название проекта</string>
     <string name="create_project_name_placeholder">Введите название проекта</string>
@@ -195,6 +201,10 @@
     <string name="error_gmail_sign_in_failed">Не удалось войти через Gmail.</string>
     <string name="error_sign_out_failed">Не удалось выйти.</string>
     <string name="error_shared_projects_failed">Не удалось загрузить общие проекты.</string>
+    <string name="error_card_save_failed">Не удалось сохранить карточку.</string>
+    <string name="error_card_playback_failed">Не удалось воспроизвести карточку.</string>
+    <string name="error_card_not_on_phone">Этого проекта нет на этом телефоне.</string>
+    <string name="error_card_image_failed">Не удалось загрузить изображение карточки.</string>
 
     <string name="devices_output">Выход</string>
     <string name="devices_input">Вход</string>

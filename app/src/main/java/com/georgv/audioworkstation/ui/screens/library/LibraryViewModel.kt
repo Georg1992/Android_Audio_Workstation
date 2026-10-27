@@ -16,7 +16,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
@@ -111,6 +114,35 @@ class LibraryViewModel @Inject constructor(
 
     private val sharingIds = MutableStateFlow<Set<String>>(emptySet())
     val sharingProjectIds: StateFlow<Set<String>> = sharingIds
+    val previewTransport: StateFlow<MixTransport> = mixPreviewPlayer.transportState
+    private var watchJob: Job? = null
+
+    fun play(item: LibraryProjectItem) {
+        val path = item.mixdown.mixdownWavPath
+        if (path == null) {
+            viewModelScope.launch { messages.send(UiMessage(R.string.library_no_mix_yet)) }
+            return
+        }
+        val blocked = item.mixdown.isMixing || !item.mixdown.hasMixPreview || !File(path).isFile
+        if (blocked) {
+            viewModelScope.launch { messages.send(UiMessage(R.string.library_no_mix_yet)) }
+            return
+        }
+        val started = mixPreviewPlayer.play(item.project.id, path)
+        if (!started) {
+            viewModelScope.launch { messages.send(UiMessage(R.string.error_mix_preview_failed)) }
+            return
+        }
+        watchPreview()
+    }
+
+    fun stopPreview() {
+        mixPreviewPlayer.stop()
+    }
+
+    fun seekPreview(positionMs: Int) {
+        mixPreviewPlayer.seekTo(positionMs)
+    }
 
     fun shareProject(projectId: String) {
         var started = false
@@ -190,12 +222,25 @@ class LibraryViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        watchJob?.cancel()
         mixPreviewPlayer.stopAll()
         super.onCleared()
     }
 
+    private fun watchPreview() {
+        watchJob?.cancel()
+        watchJob = viewModelScope.launch {
+            while (isActive) {
+                mixPreviewPlayer.tick()
+                if (!mixPreviewPlayer.transportState.value.playing) break
+                delay(PREVIEW_TICK_MS)
+            }
+        }
+    }
+
     private companion object {
         const val TAG = "LibraryViewModel"
+        const val PREVIEW_TICK_MS = 100L
 
         fun initialLibraryScreenState(
             repo: ProjectRepository,

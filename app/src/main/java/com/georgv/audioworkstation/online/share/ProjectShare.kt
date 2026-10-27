@@ -4,4 +4,6 @@ interface ProjectShare {
     suspend fun share(projectId: String)
 
     suspend fun restoreMissing(projectId: String)
+
+    suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?)
 }

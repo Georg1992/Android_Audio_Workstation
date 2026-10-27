@@ -1,29 +1,24 @@
 package com.georgv.audioworkstation.ui.screens.library
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,7 +32,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -47,28 +41,33 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.ScreenState
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
+import com.georgv.audioworkstation.ui.components.ProjectCard
+import com.georgv.audioworkstation.ui.components.ProjectCardClicks
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
-import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
+import com.georgv.audioworkstation.ui.components.ShownCard
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
+import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.components.warmLoadingBoxAsset
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
+import com.georgv.audioworkstation.online.share.cardTagList
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.roundToInt
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     onBack: () -> Unit,
     onOpenProject: (String) -> Unit,
+    onCustomize: (String) -> Unit,
     vm: LibraryViewModel = hiltViewModel(),
 ) {
     NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
 
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val transport by vm.previewTransport.collectAsStateWithLifecycle()
     val shareEnabled by vm.shareEnabled.collectAsStateWithLifecycle()
     val sharingProjectIds by vm.sharingProjectIds.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -103,8 +102,11 @@ fun LibraryScreen(
 
             LibraryProjectContent(
                 state = state,
+                transport = transport,
                 handlers = LibraryRowHandlers(
-                    onBodyClick = vm::onProjectCardBodyClick,
+                    onPlay = vm::play,
+                    onStop = vm::stopPreview,
+                    onSeek = vm::seekPreview,
                     onOpen = { projectId ->
                         scope.launch {
                             vm.warmUpProject(projectId)
@@ -113,6 +115,7 @@ fun LibraryScreen(
                         }
                     },
                     onDelete = { pendingDeleteProject = it },
+                    onCustomize = onCustomize,
                     onShare = vm::shareProject,
                     shareEnabled = shareEnabled,
                     sharingProjectIds = sharingProjectIds,
@@ -184,22 +187,21 @@ fun LibraryScreen(
 }
 
 private data class LibraryRowHandlers(
-    val onBodyClick: (LibraryProjectItem) -> Unit,
+    val onPlay: (LibraryProjectItem) -> Unit,
+    val onStop: () -> Unit,
+    val onSeek: (Int) -> Unit,
     val onOpen: (String) -> Unit,
     val onDelete: (LibraryProjectItem) -> Unit,
+    val onCustomize: (String) -> Unit,
     val onShare: (String) -> Unit,
     val shareEnabled: Boolean,
     val sharingProjectIds: Set<String>,
 )
 
-private data class LibraryShareAction(
-    val sharing: Boolean,
-    val onShare: () -> Unit,
-)
-
 @Composable
 private fun LibraryProjectContent(
     state: ScreenState<LibraryContent>,
+    transport: MixTransport,
     handlers: LibraryRowHandlers,
     modifier: Modifier = Modifier,
 ) {
@@ -249,132 +251,66 @@ private fun LibraryProjectContent(
                 verticalArrangement = Arrangement.spacedBy(Dimens.Gap)
             ) {
                 itemsIndexed(projects, key = { _, item -> item.project.id }) { _, item ->
-                    LibraryProjectRow(
-                        item = item,
-                        onBodyClick = { handlers.onBodyClick(item) },
-                        onOpenProjectClick = { handlers.onOpen(item.project.id) },
-                        onDeleteClick = { handlers.onDelete(item) },
-                        share = if (handlers.shareEnabled) {
-                            LibraryShareAction(
-                                sharing = item.project.id in handlers.sharingProjectIds,
-                                onShare = { handlers.onShare(item.project.id) },
-                            )
-                        } else {
-                            null
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LibraryProjectRow(
-    item: LibraryProjectItem,
-    onBodyClick: () -> Unit,
-    onOpenProjectClick: () -> Unit,
-    onDeleteClick: () -> Unit,
-    share: LibraryShareAction?,
-) {
-    val projectName =
-        item.project.name?.takeIf { it.isNotBlank() }
-            ?: stringResource(R.string.library_untitled_project)
-    val mixdown = item.mixdown
-    val mixFileExists = mixdown.mixdownWavPath?.let { File(it).isFile } == true
-    val previewEnabled = mixdown.hasMixPreview && mixFileExists && !mixdown.isMixing
-    val subtitleResId =
-        libraryCardSubtitleResId(
-            mixdown = mixdown,
-            isCurrentlyPlaying = item.isPreviewPlaying,
-            mixFileExists = mixFileExists,
-        )
-    val shape = RoundedCornerShape(Dimens.TileRadius)
-
-    Surface(
-        onClick = onBodyClick,
-        enabled = !mixdown.isMixing,
-        shape = shape,
-        color = AppColors.SurfacePanel,
-        shadowElevation = Dimens.Stroke,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(Dimens.Stroke, AppColors.Line, shape)
-                .padding(Dimens.TileInnerPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = projectName,
-                    style = AppText.TileTitle,
-                    color = AppColors.Line
-                )
-                Text(
-                    text =
-                        if (mixdown.isMixing) {
-                            stringResource(
-                                R.string.library_mixing_progress_percent,
-                                (mixdown.progress * 100f).roundToInt(),
-                            )
-                        } else {
-                            stringResource(subtitleResId)
-                        },
-                    style = AppText.TileSubtitle,
-                    color =
-                        if (previewEnabled || mixdown.isMixing) {
-                            AppColors.iconMuted
-                        } else {
-                            AppColors.iconMuted.copy(alpha = AppOpacity.disabled)
-                        },
-                    modifier = Modifier.alpha(if (previewEnabled || mixdown.isMixing) 1f else AppOpacity.disabled),
-                )
-                if (mixdown.isMixing) {
-                    LinearProgressIndicator(
-                        progress = { mixdown.progress.coerceIn(0f, 1f) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = Dimens.Gap / 2),
-                        color = AppColors.Line,
-                        trackColor = AppColors.iconMuted.copy(alpha = 0.24f),
-                    )
-                }
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onOpenProjectClick) {
-                    Icon(
-                        imageVector = Icons.Filled.FolderOpen,
-                        contentDescription = stringResource(R.string.cd_open_project),
-                        tint = AppColors.Line,
-                    )
-                }
-                if (share != null) {
-                    IconButton(onClick = share.onShare, enabled = !share.sharing) {
-                        Icon(
-                            imageVector = Icons.Filled.Share,
-                            contentDescription = stringResource(R.string.cd_share_project),
-                            tint = if (share.sharing) {
-                                AppColors.Line.copy(alpha = AppOpacity.disabled)
+                    val active = transport.projectId == item.project.id
+                    val mixing = item.mixdown.isMixing
+                    val title = item.project.name?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.library_untitled_project)
+                    ProjectCard(
+                        card = ShownCard(
+                            title = title,
+                            tags = cardTagList(item.project.cardTags),
+                            imagePath = item.project.cardImagePath,
+                            positionMs = if (active) transport.positionMs else 0,
+                            durationMs = if (active) transport.durationMs else 0,
+                            status = if (mixing) {
+                                stringResource(
+                                    R.string.library_mixing_progress_percent,
+                                    (item.mixdown.progress * 100f).roundToInt(),
+                                )
                             } else {
-                                AppColors.Line
+                                null
                             },
-                        )
-                    }
-                }
-                IconButton(onClick = onDeleteClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = stringResource(R.string.action_delete),
-                        tint = AppColors.Red
+                            progress = if (mixing) item.mixdown.progress else null,
+                        ),
+                        clicks = ProjectCardClicks(
+                            onPlay = { handlers.onPlay(item) },
+                            onStop = handlers.onStop,
+                            onSeek = handlers.onSeek,
+                            onOpen = { handlers.onOpen(item.project.id) },
+                        ),
+                        actions = {
+                            IconButton(onClick = { handlers.onDelete(item) }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.action_delete),
+                                    tint = AppColors.Red,
+                                )
+                            }
+                            IconButton(onClick = { handlers.onCustomize(item.project.id) }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = stringResource(R.string.cd_customize_card),
+                                    tint = AppColors.Line,
+                                )
+                            }
+                            if (handlers.shareEnabled) {
+                                val sharing = item.project.id in handlers.sharingProjectIds
+                                IconButton(
+                                    onClick = { handlers.onShare(item.project.id) },
+                                    enabled = !sharing,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Share,
+                                        contentDescription = stringResource(R.string.cd_share_project),
+                                        tint = if (sharing) {
+                                            AppColors.Line.copy(alpha = AppOpacity.disabled)
+                                        } else {
+                                            AppColors.Line
+                                        },
+                                    )
+                                }
+                            }
+                        },
                     )
                 }
             }

@@ -10,6 +10,7 @@ import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
 import kotlinx.coroutines.flow.first
+import org.json.JSONArray
 import org.json.JSONObject
 
 internal class HttpProjectShare(
@@ -64,9 +65,14 @@ internal class HttpProjectShare(
                 track.copy(contentHash = hash, syncStatus = SyncStatus.SYNCED)
             },
         )
+        publishCard(session, project.id, project.name.orEmpty(), project.cardTags, project.cardImagePath)
         projects.upsertProject(
             project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
         )
+    }
+
+    override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) {
+        publishCard(openSession("Sign in to update the card"), projectId, title, tags, imagePath)
     }
 
     override suspend fun restoreMissing(projectId: String) {
@@ -108,6 +114,49 @@ internal class HttpProjectShare(
         )
         if (result.status !in 200..299) error("share api status ${result.status}")
         return JSONObject(result.body)
+    }
+
+    private fun publishCard(
+        session: AccountSession,
+        projectId: String,
+        title: String,
+        tags: String,
+        imagePath: String?,
+    ) {
+        val tagJson = JSONArray()
+        checkedCardTags(tags).forEach { tag -> tagJson.put(tag) }
+        post(
+            session,
+            "/shared-projects/$projectId/card",
+            JSONObject().put("title", title).put("tags", tagJson).toString(),
+        )
+        val path = imagePath ?: return
+        val file = File(path)
+        if (!file.isFile) error("card image is missing")
+        uploadImage(session, projectId, file)
+    }
+
+    private fun uploadImage(session: AccountSession, projectId: String, file: File) {
+        val hash = sha256Hex(file)
+        val upload = post(
+            session,
+            "/shared-projects/$projectId/image",
+            JSONObject().put("contentHash", hash).put("size", file.length()).toString(),
+        )
+        if (!upload.getBoolean("alreadyStored")) {
+            val url = upload.getString("uploadUrl")
+            if (url.isBlank()) error("share api did not return an upload url")
+            objects.put(url, headers(upload), file)
+        }
+        post(
+            session,
+            "/shared-projects/$projectId/image/commit",
+            JSONObject()
+                .put("contentHash", hash)
+                .put("storageKey", hash)
+                .put("size", file.length())
+                .toString(),
+        )
     }
 
     private fun headers(upload: JSONObject): Map<String, String> {
