@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,7 +55,6 @@ import com.georgv.audioworkstation.ui.components.warmLoadingBoxAsset
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.online.share.cardTagList
 import com.georgv.audioworkstation.ui.theme.AppColors
-import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.roundToInt
@@ -396,17 +397,26 @@ private fun LibraryProjectContent(
                                 val sharing = item.project.id in handlers.sharingProjectIds
                                 val shared = item.project.syncStatus == SyncStatus.SYNCED
                                 val tint = if (shared) AppColors.Green else AppColors.Line
+                                val description = stringResource(
+                                    if (shared) R.string.cd_unshare_project else R.string.cd_share_project,
+                                )
                                 IconButton(
                                     onClick = { handlers.onShare(item) },
                                     enabled = !sharing,
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Share,
-                                        contentDescription = stringResource(
-                                            if (shared) R.string.cd_unshare_project else R.string.cd_share_project,
-                                        ),
-                                        tint = if (sharing) tint.copy(alpha = AppOpacity.disabled) else tint,
-                                    )
+                                    if (sharing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(Dimens.TransportIconSize),
+                                            color = tint,
+                                            strokeWidth = Dimens.TrackActionLedSize,
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Filled.Share,
+                                            contentDescription = description,
+                                            tint = tint,
+                                        )
+                                    }
                                 }
                             }
                         },
