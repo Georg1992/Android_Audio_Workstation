@@ -9,15 +9,18 @@ import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
+import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpResult
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
+import java.util.Base64
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -87,6 +90,7 @@ class ShareSelectionTest {
         )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
+            accounts = IdleAccounts(),
             projects = ProjectRepository(dao, NoopFiles),
             api = ScriptedApi(
                 listOf(
@@ -123,23 +127,60 @@ class ShareSelectionTest {
             project = ProjectEntity(id = "project-a", name = "New"),
             tracks = listOf(track("track-a", audio.path)),
         )
+        val api = ScriptedApi(
+            listOf(
+                """{"id":"project-a"}""",
+                """{"storageKey":"$ABC_HASH","alreadyStored":false,"uploadUrl":"https://example.invalid/put","headers":{"Content-Type":"application/octet-stream"}}""",
+                """{"storageKey":"$ABC_HASH"}""",
+            ),
+        )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
+            accounts = IdleAccounts(),
             projects = ProjectRepository(dao, NoopFiles),
-            api = ScriptedApi(
-                listOf(
-                    """{"id":"project-a"}""",
-                    """{"storageKey":"$ABC_HASH","alreadyStored":false,"uploadUrl":"https://example.invalid/put","headers":{"Content-Type":"application/octet-stream"}}""",
-                    """{"storageKey":"$ABC_HASH"}""",
-                ),
-            ),
+            api = api,
             objects = objects,
         )
         try {
             share.share("project-a")
             assertEquals(1, objects.puts)
+            assertEquals(listOf("access-token", "access-token", "access-token"), api.tokens)
             assertTrue(audio.isFile)
             assertEquals("abc", audio.readText())
+        } finally {
+            audio.delete()
+        }
+    }
+
+    @Test
+    fun anExpiredAccessTokenIsReplacedBeforeTheShareCall() = runBlocking {
+        val audio = File.createTempFile("share-expired", ".wav")
+        audio.writeText("abc")
+        val stored = MemorySession(session.copy(token = jwtWithExp(1)))
+        val api = ScriptedApi(
+            listOf(
+                """{"id":"project-a"}""",
+                """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
+                """{"storageKey":"$ABC_HASH"}""",
+            ),
+        )
+        val share = HttpProjectShare(
+            sessions = stored,
+            accounts = RefreshAccounts(session.copy(token = "fresh-access")),
+            projects = ProjectRepository(
+                MemoryProjectDao(
+                    project = ProjectEntity(id = "project-a", name = "Expired"),
+                    tracks = listOf(track("track-a", audio.path)),
+                ),
+                NoopFiles,
+            ),
+            api = api,
+            objects = RecordingObjects(),
+        )
+        try {
+            share.share("project-a")
+            assertEquals(listOf("fresh-access", "fresh-access", "fresh-access"), api.tokens)
+            assertEquals("fresh-access", stored.current()?.token)
         } finally {
             audio.delete()
         }
@@ -192,11 +233,52 @@ class ShareSelectionTest {
 
     private class ScriptedApi(private val bodies: List<String>) : HttpTransport {
         private var index = 0
+        val tokens = ArrayList<String?>()
 
         override fun exchange(call: HttpCall): HttpResult {
+            tokens += call.token
             val body = bodies[index]
             index += 1
             return HttpResult(200, body)
+        }
+    }
+
+    private class IdleAccounts : CognitoAccounts {
+        override suspend fun register(email: String, password: String, name: String) = error("unused")
+
+        override suspend fun confirm(email: String, code: String) = error("unused")
+
+        override suspend fun signIn(email: String, password: String) = error("unused")
+
+        override suspend fun refresh(session: AccountSession) = error("refresh was not requested")
+
+        override suspend fun signOut(refreshToken: String) = error("unused")
+    }
+
+    private class RefreshAccounts(private val refreshed: AccountSession) : CognitoAccounts {
+        override suspend fun register(email: String, password: String, name: String) = error("unused")
+
+        override suspend fun confirm(email: String, code: String) = error("unused")
+
+        override suspend fun signIn(email: String, password: String) = error("unused")
+
+        override suspend fun refresh(session: AccountSession) = refreshed
+
+        override suspend fun signOut(refreshToken: String) = error("unused")
+    }
+
+    private class MemorySession(initial: AccountSession) : AccountSessionStore {
+        private var session: AccountSession? = initial
+        override val state: Flow<AccountSession?> = MutableStateFlow(initial)
+
+        override suspend fun current(): AccountSession? = session
+
+        override suspend fun save(session: AccountSession) {
+            this.session = session
+        }
+
+        override suspend fun clear() {
+            session = null
         }
     }
 
@@ -264,6 +346,13 @@ class ShareSelectionTest {
 
     private companion object {
         const val ABC_HASH = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        fun jwtWithExp(exp: Long): String {
+            val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                JSONObject().put("exp", exp).toString().toByteArray(Charsets.UTF_8),
+            )
+            return "header.$payload.sig"
+        }
+
         val session = AccountSession(
             token = "access-token",
             accountId = "account-1",

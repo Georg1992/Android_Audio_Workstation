@@ -53,9 +53,11 @@ abstract class OnlineModule {
         @Singleton
         fun provideProjectShare(
             sessions: AccountSessionStore,
+            accounts: CognitoAccounts,
             projects: ProjectRepository,
         ): ProjectShare = HttpProjectShare(
             sessions = sessions,
+            accounts = accounts,
             projects = projects,
             api = UrlConnectionHttpTransport(ShareConfig.API_BASE),
             objects = UrlConnectionShareObjects(),

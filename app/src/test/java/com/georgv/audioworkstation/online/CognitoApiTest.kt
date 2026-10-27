@@ -23,6 +23,51 @@ class CognitoApiTest {
     }
 
     @Test
+    fun refreshExchangesTheStoredRefreshToken() {
+        val body = JSONObject(CognitoApi.refresh("refresh-1"))
+        assertEquals("REFRESH_TOKEN_AUTH", body.getString("AuthFlow"))
+        assertEquals("15je0c9k5gv0vjfek5v1fmcdf6", body.getString("ClientId"))
+        assertEquals("refresh-1", body.getJSONObject("AuthParameters").getString("REFRESH_TOKEN"))
+    }
+
+    @Test
+    fun refreshKeepsTheStoredRefreshTokenWhenCognitoOmitsOne() {
+        val current = AccountSession(
+            token = "old-access",
+            accountId = "sub-1",
+            email = "ada@example.com",
+            name = "Ada",
+            refreshToken = "refresh-1",
+        )
+        val session = CognitoApi.refreshed(
+            current,
+            JSONObject()
+                .put(
+                    "AuthenticationResult",
+                    JSONObject()
+                        .put("AccessToken", "new-access")
+                        .put("IdToken", idToken(
+                            JSONObject()
+                                .put("sub", "sub-1")
+                                .put("email", "ada@example.com")
+                                .put("email_verified", true)
+                                .put("name", "Ada"),
+                        )),
+                )
+                .toString(),
+        )
+        assertEquals("new-access", session.token)
+        assertEquals("refresh-1", session.refreshToken)
+    }
+
+    @Test
+    fun anAccessTokenPastExpNeedsARefresh() {
+        assertTrue(accessTokenExpired(accessToken(1_000), 2_000))
+        assertFalse(accessTokenExpired(accessToken(5_000), 2_000))
+        assertFalse(accessTokenExpired("not-a-jwt", 2_000))
+    }
+
+    @Test
     fun signInUsesThePasswordFlow() {
         val body = JSONObject(CognitoApi.signIn("ada@example.com", "Secret123"))
         assertEquals("USER_PASSWORD_AUTH", body.getString("AuthFlow"))
@@ -124,6 +169,13 @@ private fun unverifiedClaims(): JSONObject =
         .put("sub", "sub-1")
         .put("email", "ada@example.com")
         .put("email_verified", false)
+
+private fun accessToken(exp: Long): String {
+    val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
+        JSONObject().put("exp", exp).toString().toByteArray(Charsets.UTF_8),
+    )
+    return "header.$payload.sig"
+}
 
 private fun idToken(claims: JSONObject): String {
     val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(

@@ -34,6 +34,13 @@ internal object CognitoApi {
             )
             .toString()
 
+    fun refresh(refreshToken: String): String =
+        JSONObject()
+            .put("AuthFlow", "REFRESH_TOKEN_AUTH")
+            .put("ClientId", CognitoConfig.CLIENT_ID)
+            .put("AuthParameters", JSONObject().put("REFRESH_TOKEN", refreshToken))
+            .toString()
+
     fun revoke(refreshToken: String): String =
         JSONObject()
             .put("ClientId", CognitoConfig.CLIENT_ID)
@@ -41,14 +48,24 @@ internal object CognitoApi {
             .toString()
 
     fun session(json: String): AccountSession {
-        val auth = JSONObject(json).optJSONObject("AuthenticationResult")
-            ?: throw CognitoRejected("Unknown", "sign-in did not return tokens")
+        val auth = authenticationResult(json)
         return accountFromTokens(
             auth.optString("AccessToken"),
             auth.optString("RefreshToken"),
             auth.optString("IdToken"),
         )
     }
+
+    /** Cognito omits the refresh token when an existing one is exchanged. */
+    fun refreshed(current: AccountSession, json: String): AccountSession {
+        val auth = authenticationResult(json)
+        val refreshToken = auth.optString("RefreshToken").ifBlank { current.refreshToken }
+        return accountFromTokens(auth.optString("AccessToken"), refreshToken, auth.optString("IdToken"))
+    }
+
+    private fun authenticationResult(json: String): JSONObject =
+        JSONObject(json).optJSONObject("AuthenticationResult")
+            ?: throw CognitoRejected("Unknown", "sign-in did not return tokens")
 
     fun accountFromTokens(accessToken: String, refreshToken: String, idToken: String): AccountSession {
         if (accessToken.isBlank() || refreshToken.isBlank() || idToken.isBlank()) {
@@ -100,6 +117,32 @@ internal object CognitoApi {
 
     private const val PAYLOAD = 1
 }
+
+/** True when the access token's exp is within a minute of now. A token with no exp is not treated as expired. */
+internal fun accessTokenExpired(token: String, nowEpochSeconds: Long): Boolean {
+    val exp = jwtExpiry(token) ?: return false
+    return exp <= nowEpochSeconds + ExpiryMarginSeconds
+}
+
+private fun jwtExpiry(token: String): Long? {
+    val payload = token.split('.').getOrNull(1) ?: return null
+    val text = try {
+        String(decode(payload), Charsets.UTF_8)
+    } catch (_: IllegalArgumentException) {
+        return null
+    }
+    val claims = try {
+        JSONObject(text)
+    } catch (_: JSONException) {
+        return null
+    }
+    if (!claims.has("exp")) return null
+    val exp = claims.optLong("exp", -1)
+    if (exp < 0L) return null
+    return exp
+}
+
+private const val ExpiryMarginSeconds = 60L
 
 class CognitoRejected(val type: String, message: String) : Exception(message)
 

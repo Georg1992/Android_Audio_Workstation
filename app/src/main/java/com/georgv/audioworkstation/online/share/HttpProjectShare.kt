@@ -4,6 +4,8 @@ import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
+import com.georgv.audioworkstation.online.CognitoAccounts
+import com.georgv.audioworkstation.online.accessTokenExpired
 import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
@@ -12,12 +14,13 @@ import org.json.JSONObject
 
 internal class HttpProjectShare(
     private val sessions: AccountSessionStore,
+    private val accounts: CognitoAccounts,
     private val projects: ProjectRepository,
     private val api: HttpTransport,
     private val objects: ShareObjectTransport,
 ) : ProjectShare {
     override suspend fun share(projectId: String) {
-        val session = sessions.current() ?: error("Sign in to share a project")
+        val session = openSession("Sign in to share a project")
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
         val files = tracksToShare(projects.observeTracks(projectId).first())
         post(
@@ -69,7 +72,7 @@ internal class HttpProjectShare(
     override suspend fun restoreMissing(projectId: String) {
         val missing = tracksToRestore(projects.observeTracks(projectId).first())
         if (missing.isEmpty()) return
-        val session = sessions.current() ?: error("Sign in to download a shared take")
+        val session = openSession("Sign in to download a shared take")
         for (track in missing) {
             val hash = track.contentHash ?: error("shared take ${track.id} has no content hash")
             val response = post(
@@ -81,6 +84,14 @@ internal class HttpProjectShare(
             if (url.isBlank()) error("share api did not return a download url")
             objects.download(url, File(track.wavFilePath))
         }
+    }
+
+    private suspend fun openSession(signedOut: String): AccountSession {
+        val session = sessions.current() ?: error(signedOut)
+        if (!accessTokenExpired(session.token, System.currentTimeMillis() / 1000)) return session
+        val refreshed = accounts.refresh(session)
+        sessions.save(refreshed)
+        return refreshed
     }
 
     private fun post(session: AccountSession, path: String, json: String): JSONObject {

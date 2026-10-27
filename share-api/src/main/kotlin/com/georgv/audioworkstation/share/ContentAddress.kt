@@ -16,3 +16,14 @@ internal data class UploadGrant(
 /** A hash that is already in the bucket is not uploaded again. */
 internal fun uploadGrant(contentHash: String, objectExists: Boolean): UploadGrant =
     UploadGrant(storageKey = storageKey(contentHash), alreadyStored = objectExists)
+
+/**
+ * HeadObject says an object is missing in two ways. 404 is the normal answer.
+ * 403 is the answer when the caller can read an object that exists but cannot
+ * list the bucket, which is how S3 hides keys that are not there.
+ */
+internal fun absentObject(status: Int): Boolean =
+    status == HiddenMissing || status == NotFound
+
+private const val NotFound = 404
+private const val HiddenMissing = 403

@@ -12,6 +12,8 @@ interface CognitoAccounts {
 
     suspend fun signIn(email: String, password: String): AccountSession
 
+    suspend fun refresh(session: AccountSession): AccountSession
+
     suspend fun signOut(refreshToken: String)
 }
 
@@ -30,6 +32,11 @@ class ApiCognitoAccounts(
     override suspend fun signIn(email: String, password: String): AccountSession =
         withContext(io) {
             CognitoApi.session(post(SIGN_IN, CognitoApi.signIn(email, password)))
+        }
+
+    override suspend fun refresh(session: AccountSession): AccountSession =
+        withContext(io) {
+            CognitoApi.refreshed(session, post(SIGN_IN, CognitoApi.refresh(session.refreshToken)))
         }
 
     override suspend fun signOut(refreshToken: String) {

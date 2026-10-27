@@ -32,7 +32,7 @@ internal class SharedObjects(config: ShareApiConfig) {
             val head = s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build())
             ObjectStat(exists = true, size = head.contentLength())
         } catch (missing: S3Exception) {
-            if (missing.statusCode() != 404) throw missing
+            if (!absentObject(missing.statusCode())) throw missing
             ObjectStat(exists = false, size = -1)
         }
     }

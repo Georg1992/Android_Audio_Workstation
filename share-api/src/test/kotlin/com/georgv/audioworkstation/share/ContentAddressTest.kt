@@ -29,6 +29,13 @@ class ContentAddressTest {
     }
 
     @Test
+    fun aMissingObjectIsHiddenAsForbiddenWhenTheBucketCannotBeListed() {
+        assertTrue(absentObject(404))
+        assertTrue(absentObject(403))
+        assertFalse(absentObject(500))
+    }
+
+    @Test
     fun aHashThatIsNotSha256IsRejected() {
         try {
             storageKey("not-a-hash")
