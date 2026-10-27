@@ -24,6 +24,7 @@ data class SharedProject(
     val title: String,
     val tags: List<String>,
     val imageHash: String?,
+    val ownerName: String,
 )
 
 data class SharedPlayback(
@@ -92,6 +93,7 @@ internal fun sharedProjects(body: String): List<SharedProject> {
             title = row.getString("title"),
             tags = jsonTags(row.getJSONArray("tags")),
             imageHash = if (row.isNull("imageHash")) null else row.getString("imageHash"),
+            ownerName = row.getString("ownerName"),
         )
     }
     return projects

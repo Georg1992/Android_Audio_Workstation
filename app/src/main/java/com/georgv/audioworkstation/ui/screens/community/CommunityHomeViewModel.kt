@@ -176,6 +176,7 @@ class CommunityHomeViewModel @Inject constructor(
             projects.value = emptyList()
             return
         }
+        localProjects.publishOwnerNames()
         projects.value = sharedProjects.list()
     }
 

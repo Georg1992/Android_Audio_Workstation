@@ -88,9 +88,11 @@ fun CommunityHomeScreen(
                                 if (hash != null) vm.loadImage(project.id, hash)
                             }
                             val active = transport.projectId == project.id
-                            val title = project.title.ifBlank {
-                                stringResource(R.string.library_untitled_project)
-                            }
+                            val title = stringResource(
+                                R.string.community_project_by,
+                                project.title.ifBlank { stringResource(R.string.library_untitled_project) },
+                                project.ownerName,
+                            )
                             ProjectCard(
                                 card = ShownCard(
                                     title = title,

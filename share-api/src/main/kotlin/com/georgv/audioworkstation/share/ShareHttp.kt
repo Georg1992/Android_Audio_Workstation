@@ -43,6 +43,7 @@ internal class ShareHttp(
         val action = parts.drop(3)
         when {
             method == "POST" && action == listOf("card") -> updateCard(exchange, accountId, projectId)
+            method == "POST" && action == listOf("owner") -> setOwner(exchange, accountId, projectId)
             method == "POST" && action == listOf("uploads") -> requestUpload(exchange, accountId, projectId)
             method == "POST" && action == listOf("files") -> commitFile(exchange, accountId, projectId)
             method == "POST" && action == listOf("downloads") -> download(exchange, accountId, projectId)
@@ -67,6 +68,7 @@ internal class ShareHttp(
             } else {
                 row.put("imageHash", project.imageHash)
             }
+            row.put("ownerName", project.ownerName)
             projects.put(row)
         }
         send(exchange, 200, JSONObject().put("projects", projects).toString())
@@ -76,7 +78,8 @@ internal class ShareHttp(
         val body = json(exchange)
         val cardTitle = title(body.optString("title"))
         val tags = tags(body.optJSONArray("tags"))
-        manifest.updateCard(projectId, accountId, cardTitle, tags)
+        val name = ownerName(body.optString("ownerName"))
+        manifest.updateCard(projectId, accountId, cardTitle, tags, name)
         send(exchange, 200, """{"id":"$projectId"}""")
     }
 
@@ -135,7 +138,8 @@ internal class ShareHttp(
         val body = json(exchange)
         val projectId = id(body.optString("id"), "project id")
         val cardTitle = title(body.optString("title"))
-        manifest.saveProject(projectId, accountId, cardTitle)
+        val name = ownerName(body.optString("ownerName"))
+        manifest.saveProject(projectId, accountId, cardTitle, name)
         send(exchange, 200, """{"id":"$projectId"}""")
     }
 
@@ -216,6 +220,18 @@ internal class ShareHttp(
         return value
     }
 
+    private fun setOwner(exchange: HttpExchange, accountId: String, projectId: String) {
+        val name = ownerName(json(exchange).optString("name"))
+        manifest.setOwnerName(projectId, accountId, name)
+        send(exchange, 200, """{"id":"$projectId"}""")
+    }
+
+    private fun ownerName(value: String): String {
+        val name = value.trim()
+        if (name.isEmpty() || name.length > MAX_NAME) throw ShareFailure(400, "name is invalid")
+        return name
+    }
+
     private fun tags(array: JSONArray?): String {
         if (array == null) throw ShareFailure(400, "tags are invalid")
         if (array.length() > MAX_TAGS) throw ShareFailure(400, "too many tags")
@@ -249,6 +265,7 @@ internal class ShareHttp(
         const val GATEWAY_HEADER = "X-Share-Gateway"
         const val MAX_BODY = 65_536
         const val MAX_TITLE = 200
+        const val MAX_NAME = 80
         const val MAX_TAGS = 12
         const val MAX_TAG_LENGTH = 24
         val Id = Regex("^[A-Za-z0-9_-]{1,80}$")

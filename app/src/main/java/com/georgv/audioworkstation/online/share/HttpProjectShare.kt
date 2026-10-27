@@ -27,7 +27,11 @@ internal class HttpProjectShare(
         post(
             session,
             "/shared-projects",
-            JSONObject().put("id", project.id).put("title", project.name.orEmpty()).toString(),
+            JSONObject()
+                .put("id", project.id)
+                .put("title", project.name.orEmpty())
+                .put("ownerName", session.name)
+                .toString(),
         )
         val hashes = LinkedHashMap<String, String>()
         for (file in files) {
@@ -80,6 +84,15 @@ internal class HttpProjectShare(
 
     override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) {
         publishCard(openSession("Sign in to update the card"), projectId, title, tags, imagePath)
+    }
+
+    override suspend fun publishOwner(projectId: String) {
+        val session = openSession("Sign in to share a project")
+        post(
+            session,
+            "/shared-projects/$projectId/owner",
+            JSONObject().put("name", session.name).toString(),
+        )
     }
 
     override suspend fun restoreMissing(projectId: String) {
@@ -149,7 +162,7 @@ internal class HttpProjectShare(
         post(
             session,
             "/shared-projects/$projectId/card",
-            JSONObject().put("title", title).put("tags", tagJson).toString(),
+            JSONObject().put("title", title).put("tags", tagJson).put("ownerName", session.name).toString(),
         )
         val path = imagePath ?: return
         val file = File(path)

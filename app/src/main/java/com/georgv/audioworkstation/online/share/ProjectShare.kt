@@ -8,4 +8,6 @@ interface ProjectShare {
     suspend fun restoreMissing(projectId: String)
 
     suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?)
+
+    suspend fun publishOwner(projectId: String)
 }

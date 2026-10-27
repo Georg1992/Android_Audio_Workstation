@@ -9,6 +9,7 @@ internal data class SharedProjectRecord(
     val tags: String,
     val imageHash: String?,
     val ownerAccount: String,
+    val ownerName: String,
 )
 
 internal class ShareManifest(config: ShareApiConfig) {
@@ -35,6 +36,9 @@ internal class ShareManifest(config: ShareApiConfig) {
                     "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS image_hash TEXT",
                 )
                 statement.executeUpdate(
+                    "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS owner_name TEXT NOT NULL DEFAULT ''",
+                )
+                statement.executeUpdate(
                     """
                     CREATE TABLE IF NOT EXISTS shared_file (
                       shared_project_id TEXT NOT NULL REFERENCES shared_project(id),
@@ -50,7 +54,7 @@ internal class ShareManifest(config: ShareApiConfig) {
         }
     }
 
-    fun saveProject(id: String, ownerAccount: String, title: String) {
+    fun saveProject(id: String, ownerAccount: String, title: String, ownerName: String) {
         connection().use { db ->
             val owner = db.prepareStatement("SELECT owner_account FROM shared_project WHERE id = ?").use { query ->
                 query.setString(1, id)
@@ -58,19 +62,23 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
             if (owner == null) {
                 db.prepareStatement(
-                    "INSERT INTO shared_project (id, owner_account, title) VALUES (?, ?, ?)",
+                    "INSERT INTO shared_project (id, owner_account, title, owner_name) VALUES (?, ?, ?, ?)",
                 ).use { insert ->
                     insert.setString(1, id)
                     insert.setString(2, ownerAccount)
                     insert.setString(3, title)
+                    insert.setString(4, ownerName)
                     insert.executeUpdate()
                 }
                 return
             }
             if (owner != ownerAccount) throw ShareFailure(403, "forbidden")
-            db.prepareStatement("UPDATE shared_project SET title = ? WHERE id = ?").use { update ->
+            db.prepareStatement(
+                "UPDATE shared_project SET title = ?, owner_name = ? WHERE id = ?",
+            ).use { update ->
                 update.setString(1, title)
-                update.setString(2, id)
+                update.setString(2, ownerName)
+                update.setString(3, id)
                 update.executeUpdate()
             }
         }
@@ -120,7 +128,7 @@ internal class ShareManifest(config: ShareApiConfig) {
         connection().use { db ->
             db.prepareStatement(
                 """
-                SELECT id, title, tags, image_hash, owner_account
+                SELECT id, title, tags, image_hash, owner_account, owner_name
                 FROM shared_project
                 ORDER BY title, id
                 """.trimIndent(),
@@ -135,6 +143,7 @@ internal class ShareManifest(config: ShareApiConfig) {
                             tags = rows.getString(3),
                             imageHash = if (rows.wasNull()) null else image,
                             ownerAccount = rows.getString(5),
+                            ownerName = rows.getString(6),
                         )
                     }
                     projects
@@ -142,15 +151,29 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
         }
 
-    fun updateCard(id: String, ownerAccount: String, title: String, tags: String) {
+    fun updateCard(id: String, ownerAccount: String, title: String, tags: String, ownerName: String) {
         requireOwner(id, ownerAccount)
         connection().use { db ->
             db.prepareStatement(
-                "UPDATE shared_project SET title = ?, tags = ? WHERE id = ?",
+                "UPDATE shared_project SET title = ?, tags = ?, owner_name = ? WHERE id = ?",
             ).use { update ->
                 update.setString(1, title)
                 update.setString(2, tags)
-                update.setString(3, id)
+                update.setString(3, ownerName)
+                update.setString(4, id)
+                update.executeUpdate()
+            }
+        }
+    }
+
+    fun setOwnerName(id: String, ownerAccount: String, ownerName: String) {
+        requireOwner(id, ownerAccount)
+        connection().use { db ->
+            db.prepareStatement(
+                "UPDATE shared_project SET owner_name = ? WHERE id = ?",
+            ).use { update ->
+                update.setString(1, ownerName)
+                update.setString(2, id)
                 update.executeUpdate()
             }
         }

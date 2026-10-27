@@ -40,13 +40,14 @@ class SharedProjectsTest {
     @Test
     fun listKeepsIdAndTitle() {
         val projects = sharedProjects(
-            """{"projects":[{"id":"project-a","title":"Song","tags":["live"],"imageHash":null},{"id":"project-b","title":"","tags":[],"imageHash":"abc"}]}""",
+            """{"projects":[{"id":"project-a","title":"Song","tags":["live"],"imageHash":null,"ownerName":"Ada"},{"id":"project-b","title":"","tags":[],"imageHash":"abc","ownerName":"Georg"}]}""",
         )
         assertEquals(listOf("project-a", "project-b"), projects.map { it.id })
         assertEquals(listOf("Song", ""), projects.map { it.title })
         assertEquals(listOf("live"), projects[0].tags)
         assertEquals(null, projects[0].imageHash)
         assertEquals("abc", projects[1].imageHash)
+        assertEquals(listOf("Ada", "Georg"), projects.map { it.ownerName })
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -56,7 +57,7 @@ class SharedProjectsTest {
             sessions = MemorySessions(session),
             accounts = UnusedAccounts,
             sharedProjects = FixedProjects(
-                listOf(SharedProject("project-a", "Song", emptyList(), null)),
+                listOf(SharedProject("project-a", "Song", emptyList(), null, "Ada")),
             ),
             localProjects = NoLocalProjects,
             player = IdlePlayback,
@@ -139,6 +140,8 @@ class SharedProjectsTest {
 
     private object NoLocalProjects : LocalProjectLookup {
         override suspend fun exists(projectId: String): Boolean = false
+
+        override suspend fun publishOwnerNames() = Unit
     }
 
     private object IdlePlayback : CardPlayback {
