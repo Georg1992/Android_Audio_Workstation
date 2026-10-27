@@ -61,6 +61,8 @@
     <string name="action_cancel">Отмена</string>
     <string name="action_create_project">Создать проект</string>
     <string name="action_delete">Удалить</string>
+    <string name="action_share">Поделиться</string>
+    <string name="action_stop_sharing">Закрыть доступ</string>
     <string name="action_cancel_import">Отменить импорт</string>
     <string name="action_rename">Переименовать</string>
     <string name="action_edit">Редактировать</string>
@@ -103,8 +105,15 @@
     <string name="cd_mixdown_project">Микс и экспорт проекта</string>
     <string name="cd_open_project">Открыть проект</string>
     <string name="cd_share_project">Поделиться проектом</string>
+    <string name="cd_unshare_project">Закрыть доступ</string>
+    <string name="library_share_project_title">Поделиться проектом?</string>
+    <string name="library_share_project_message">Проект появится в Сообществе.</string>
+    <string name="library_unshare_project_title">Закрыть доступ к проекту?</string>
+    <string name="library_unshare_project_message">Он исчезнет из Сообщества. Проект останется на этом телефоне.</string>
     <string name="library_share_done">Проект отправлен</string>
+    <string name="library_unshare_done">Проект больше не в Сообществе</string>
     <string name="error_share_project_failed">Не удалось поделиться проектом</string>
+    <string name="error_unshare_project_failed">Не удалось закрыть доступ к проекту</string>
     <string name="cd_loop_on">Цикл включён</string>
     <string name="cd_loop_off">Цикл выключен</string>
     <string name="cd_record_target_on">Цель записи включена</string>

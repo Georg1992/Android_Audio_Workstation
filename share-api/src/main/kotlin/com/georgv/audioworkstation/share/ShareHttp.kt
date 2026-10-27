@@ -50,6 +50,7 @@ internal class ShareHttp(
             method == "POST" && action == listOf("image", "commit") -> commitImage(exchange, accountId, projectId)
             method == "GET" && action == listOf("image") -> readImage(exchange, projectId)
             method == "POST" && action == listOf("playback") -> playback(exchange, projectId)
+            method == "DELETE" && action.isEmpty() -> removeProject(exchange, accountId, projectId)
             else -> throw ShareFailure(404, "not found")
         }
     }
@@ -123,6 +124,11 @@ internal class ShareHttp(
             )
         }
         send(exchange, 200, JSONObject().put("files", files).toString())
+    }
+
+    private fun removeProject(exchange: HttpExchange, accountId: String, projectId: String) {
+        manifest.deleteProject(projectId, accountId)
+        send(exchange, 200, """{"id":"$projectId"}""")
     }
 
     private fun createProject(exchange: HttpExchange, accountId: String) {

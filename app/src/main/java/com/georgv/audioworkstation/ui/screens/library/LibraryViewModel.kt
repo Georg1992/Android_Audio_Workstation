@@ -145,28 +145,14 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun shareProject(projectId: String) {
-        var started = false
-        sharingIds.update { current ->
-            if (projectId in current) {
-                current
-            } else {
-                started = true
-                current + projectId
-            }
+        runWhileSharing(projectId, R.string.library_share_done, R.string.error_share_project_failed) {
+            projectShare.share(projectId)
         }
-        if (!started) return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                projectShare.share(projectId)
-                messages.send(UiMessage(R.string.library_share_done))
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Exception) {
-                logWarning(TAG, "shareProject failed: $projectId", error)
-                messages.send(UiMessage(R.string.error_share_project_failed))
-            } finally {
-                sharingIds.update { current -> current - projectId }
-            }
+    }
+
+    fun unshareProject(projectId: String) {
+        runWhileSharing(projectId, R.string.library_unshare_done, R.string.error_unshare_project_failed) {
+            projectShare.unshare(projectId)
         }
     }
 
@@ -225,6 +211,37 @@ class LibraryViewModel @Inject constructor(
         watchJob?.cancel()
         mixPreviewPlayer.stopAll()
         super.onCleared()
+    }
+
+    private fun runWhileSharing(
+        projectId: String,
+        doneMessage: Int,
+        failedMessage: Int,
+        work: suspend () -> Unit,
+    ) {
+        var started = false
+        sharingIds.update { current ->
+            if (projectId in current) {
+                current
+            } else {
+                started = true
+                current + projectId
+            }
+        }
+        if (!started) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                work()
+                messages.send(UiMessage(doneMessage))
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                logWarning(TAG, "share action failed: $projectId", error)
+                messages.send(UiMessage(failedMessage))
+            } finally {
+                sharingIds.update { current -> current - projectId }
+            }
+        }
     }
 
     private fun watchPreview() {

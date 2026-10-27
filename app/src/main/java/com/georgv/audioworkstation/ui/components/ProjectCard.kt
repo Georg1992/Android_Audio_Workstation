@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
@@ -84,56 +85,69 @@ fun ProjectCard(
             Box(modifier = Modifier.fillMaxSize().background(AppColors.SurfacePanel))
         }
         Column(modifier = Modifier.fillMaxSize()) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if (image != null) AppColors.Bg.copy(alpha = 0.72f) else AppColors.SurfacePanel)
-                    .padding(Dimens.TileInnerPadding),
+                    .padding(start = Dimens.TileInnerPadding, top = Dimens.TightGap, bottom = Dimens.TightGap),
+                verticalAlignment = Alignment.Top,
             ) {
-                Text(text = card.title, style = AppText.TileTitle, color = AppColors.Line, maxLines = 2)
-                if (card.tags.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(top = Dimens.TightGap),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
-                    ) {
-                        card.tags.forEach { tag ->
-                            Surface(
-                                shape = RoundedCornerShape(Dimens.SmallRadius),
-                                color = AppColors.SurfacePanel,
-                                modifier = Modifier.border(
-                                    Dimens.Stroke,
-                                    AppColors.Line,
-                                    RoundedCornerShape(Dimens.SmallRadius),
-                                ),
-                            ) {
-                                Text(
-                                    text = tag,
-                                    style = AppText.TileSubtitle,
-                                    color = AppColors.Line,
-                                    modifier = Modifier.padding(
-                                        horizontal = Dimens.Gap,
-                                        vertical = Dimens.TightGap,
+                Column(modifier = Modifier.weight(1f).padding(top = Dimens.PanelPadding)) {
+                    Text(text = card.title, style = AppText.TileTitle, color = AppColors.Line, maxLines = 2)
+                    if (card.tags.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(top = Dimens.TightGap),
+                            horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
+                        ) {
+                            card.tags.forEach { tag ->
+                                Surface(
+                                    shape = RoundedCornerShape(Dimens.SmallRadius),
+                                    color = AppColors.SurfacePanel,
+                                    modifier = Modifier.border(
+                                        Dimens.Stroke,
+                                        AppColors.Line,
+                                        RoundedCornerShape(Dimens.SmallRadius),
                                     ),
-                                )
+                                ) {
+                                    Text(
+                                        text = tag,
+                                        style = AppText.TileSubtitle,
+                                        color = AppColors.Line,
+                                        modifier = Modifier.padding(
+                                            horizontal = Dimens.Gap,
+                                            vertical = Dimens.TightGap,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }
+                    val status = card.status
+                    if (status != null) {
+                        Text(text = status, style = AppText.TileSubtitle, color = AppColors.iconMuted)
+                    }
+                    val progress = card.progress
+                    if (progress != null) {
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().padding(top = Dimens.TightGap),
+                            color = AppColors.Line,
+                            trackColor = AppColors.iconMuted,
+                        )
+                    }
                 }
-                val status = card.status
-                if (status != null) {
-                    Text(text = status, style = AppText.TileSubtitle, color = AppColors.iconMuted)
-                }
-                val progress = card.progress
-                if (progress != null) {
-                    LinearProgressIndicator(
-                        progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(top = Dimens.TightGap),
-                        color = AppColors.Line,
-                        trackColor = AppColors.iconMuted,
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = clicks.onOpen) {
+                        Icon(
+                            imageVector = Icons.Filled.FolderOpen,
+                            contentDescription = stringResource(R.string.cd_open_project),
+                            tint = AppColors.Line,
+                        )
+                    }
+                    actions()
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -145,7 +159,7 @@ fun ProjectCard(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = clicks.onPlay) {
                         Icon(
@@ -174,16 +188,6 @@ fun ProjectCard(
                             inactiveTrackColor = AppColors.iconMuted,
                         ),
                     )
-                }
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    IconButton(onClick = clicks.onOpen) {
-                        Icon(
-                            imageVector = Icons.Filled.FolderOpen,
-                            contentDescription = stringResource(R.string.cd_open_project),
-                            tint = AppColors.Line,
-                        )
-                    }
-                    actions()
                 }
             }
         }

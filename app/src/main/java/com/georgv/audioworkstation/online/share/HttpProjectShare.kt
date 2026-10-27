@@ -71,6 +71,13 @@ internal class HttpProjectShare(
         )
     }
 
+    override suspend fun unshare(projectId: String) {
+        val session = openSession("Sign in to stop sharing a project")
+        val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
+        delete(session, "/shared-projects/${project.id}")
+        projects.upsertProject(project.copy(syncStatus = SyncStatus.LOCAL, ownerUserId = null))
+    }
+
     override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) {
         publishCard(openSession("Sign in to update the card"), projectId, title, tags, imagePath)
     }
@@ -114,6 +121,20 @@ internal class HttpProjectShare(
         )
         if (result.status !in 200..299) error("share api status ${result.status}")
         return JSONObject(result.body)
+    }
+
+    private fun delete(session: AccountSession, path: String) {
+        val result = api.exchange(
+            HttpCall(
+                method = "DELETE",
+                path = path,
+                token = session.token,
+                contentType = null,
+                contentLength = 0,
+                writeBody = null,
+            ),
+        )
+        if (result.status !in 200..299) error("share api status ${result.status}")
     }
 
     private fun publishCard(

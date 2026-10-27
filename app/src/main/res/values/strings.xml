@@ -61,6 +61,8 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_create_project">Create Project</string>
     <string name="action_delete">Delete</string>
+    <string name="action_share">Share</string>
+    <string name="action_stop_sharing">Stop sharing</string>
     <string name="action_cancel_import">Cancel import</string>
     <string name="action_rename">Rename</string>
     <string name="action_edit">Edit</string>
@@ -104,8 +106,15 @@
     <string name="cd_mixdown_project">Mix and export project</string>
     <string name="cd_open_project">Open project</string>
     <string name="cd_share_project">Share project</string>
+    <string name="cd_unshare_project">Stop sharing</string>
+    <string name="library_share_project_title">Share this project?</string>
+    <string name="library_share_project_message">This project will appear in Community.</string>
+    <string name="library_unshare_project_title">Stop sharing this project?</string>
+    <string name="library_unshare_project_message">It will leave Community. The project stays on this phone.</string>
     <string name="library_share_done">Project shared</string>
+    <string name="library_unshare_done">Project is no longer shared</string>
     <string name="error_share_project_failed">Could not share the project</string>
+    <string name="error_unshare_project_failed">Could not stop sharing the project</string>
     <string name="cd_loop_on">Loop on</string>
     <string name="cd_loop_off">Loop off</string>
     <string name="cd_record_target_on">Record target on</string>

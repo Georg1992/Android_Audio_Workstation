@@ -65,6 +65,8 @@
     <string name="action_cancel">取消</string>
     <string name="action_create_project">创建项目</string>
     <string name="action_delete">删除</string>
+    <string name="action_share">分享</string>
+    <string name="action_stop_sharing">停止分享</string>
     <string name="action_cancel_import">取消导入</string>
     <string name="action_rename">重命名</string>
     <string name="action_edit">编辑</string>
@@ -107,8 +109,15 @@
     <string name="cd_mixdown_project">混音并导出项目</string>
     <string name="cd_open_project">打开项目</string>
     <string name="cd_share_project">分享项目</string>
+    <string name="cd_unshare_project">停止分享</string>
+    <string name="library_share_project_title">分享此项目？</string>
+    <string name="library_share_project_message">此项目将出现在社区中。</string>
+    <string name="library_unshare_project_title">停止分享此项目？</string>
+    <string name="library_unshare_project_message">它将离开社区。项目仍保留在此手机上。</string>
     <string name="library_share_done">项目已分享</string>
+    <string name="library_unshare_done">项目已不再分享</string>
     <string name="error_share_project_failed">分享项目失败</string>
+    <string name="error_unshare_project_failed">无法停止分享此项目</string>
     <string name="cd_loop_on">循环已开启</string>
     <string name="cd_loop_off">循环已关闭</string>
     <string name="cd_record_target_on">录音目标已开启</string>

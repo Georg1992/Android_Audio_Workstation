@@ -39,8 +39,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.ScreenState
+import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
+import com.georgv.audioworkstation.ui.components.AppLocaleScope
 import com.georgv.audioworkstation.ui.components.ProjectCard
 import com.georgv.audioworkstation.ui.components.ProjectCardClicks
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
@@ -79,6 +81,7 @@ fun LibraryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var pendingDeleteProject by remember { mutableStateOf<LibraryProjectItem?>(null) }
+    var pendingShare by remember { mutableStateOf<PendingShare?>(null) }
     val locale = rememberAppLocaleScope()
 
     LaunchedEffect(vm) {
@@ -116,7 +119,13 @@ fun LibraryScreen(
                     },
                     onDelete = { pendingDeleteProject = it },
                     onCustomize = onCustomize,
-                    onShare = vm::shareProject,
+                    onShare = { item ->
+                        pendingShare = if (item.project.syncStatus == SyncStatus.SYNCED) {
+                            PendingShare.Stop(item.project.id)
+                        } else {
+                            PendingShare.Start(item.project.id)
+                        }
+                    },
                     shareEnabled = shareEnabled,
                     sharingProjectIds = sharingProjectIds,
                 ),
@@ -183,7 +192,97 @@ fun LibraryScreen(
                 }
             )
         }
+
+        pendingShare?.let { pending ->
+            ShareConfirmDialog(
+                pending = pending,
+                locale = locale,
+                onDismiss = { pendingShare = null },
+                onConfirm = {
+                    when (pending) {
+                        is PendingShare.Start -> vm.shareProject(pending.projectId)
+                        is PendingShare.Stop -> vm.unshareProject(pending.projectId)
+                    }
+                    pendingShare = null
+                },
+            )
+        }
     }
+}
+
+private sealed interface PendingShare {
+    val projectId: String
+
+    data class Start(override val projectId: String) : PendingShare
+
+    data class Stop(override val projectId: String) : PendingShare
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShareConfirmDialog(
+    pending: PendingShare,
+    locale: AppLocaleScope,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val title = when (pending) {
+        is PendingShare.Start -> R.string.library_share_project_title
+        is PendingShare.Stop -> R.string.library_unshare_project_title
+    }
+    val message = when (pending) {
+        is PendingShare.Start -> R.string.library_share_project_message
+        is PendingShare.Stop -> R.string.library_unshare_project_message
+    }
+    val confirm = when (pending) {
+        is PendingShare.Start -> R.string.action_share
+        is PendingShare.Stop -> R.string.action_stop_sharing
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AppColors.Bg,
+        tonalElevation = 0.dp,
+        title = {
+            locale.Provide {
+                Text(
+                    text = stringResource(title),
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
+                )
+            }
+        },
+        text = {
+            locale.Provide {
+                Text(
+                    text = stringResource(message),
+                    style = AppText.TileSubtitle,
+                    color = AppColors.Line,
+                )
+            }
+        },
+        dismissButton = {
+            locale.Provide {
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = stringResource(R.string.action_cancel),
+                        style = AppText.TileSubtitle,
+                        color = AppColors.Line,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            locale.Provide {
+                TextButton(onClick = onConfirm) {
+                    Text(
+                        text = stringResource(confirm),
+                        style = AppText.TileSubtitle,
+                        color = AppColors.Line,
+                    )
+                }
+            }
+        },
+    )
 }
 
 private data class LibraryRowHandlers(
@@ -193,7 +292,7 @@ private data class LibraryRowHandlers(
     val onOpen: (String) -> Unit,
     val onDelete: (LibraryProjectItem) -> Unit,
     val onCustomize: (String) -> Unit,
-    val onShare: (String) -> Unit,
+    val onShare: (LibraryProjectItem) -> Unit,
     val shareEnabled: Boolean,
     val sharingProjectIds: Set<String>,
 )
@@ -295,18 +394,18 @@ private fun LibraryProjectContent(
                             }
                             if (handlers.shareEnabled) {
                                 val sharing = item.project.id in handlers.sharingProjectIds
+                                val shared = item.project.syncStatus == SyncStatus.SYNCED
+                                val tint = if (shared) AppColors.Green else AppColors.Line
                                 IconButton(
-                                    onClick = { handlers.onShare(item.project.id) },
+                                    onClick = { handlers.onShare(item) },
                                     enabled = !sharing,
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Share,
-                                        contentDescription = stringResource(R.string.cd_share_project),
-                                        tint = if (sharing) {
-                                            AppColors.Line.copy(alpha = AppOpacity.disabled)
-                                        } else {
-                                            AppColors.Line
-                                        },
+                                        contentDescription = stringResource(
+                                            if (shared) R.string.cd_unshare_project else R.string.cd_share_project,
+                                        ),
+                                        tint = if (sharing) tint.copy(alpha = AppOpacity.disabled) else tint,
                                     )
                                 }
                             }
