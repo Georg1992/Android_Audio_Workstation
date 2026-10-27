@@ -18,15 +18,11 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
@@ -111,14 +107,9 @@ private fun CardField(
     label: String,
     enabled: Boolean,
 ) {
-    // Keep the caret in this field. Routing each key through the card state puts a delete back.
-    var field by remember { mutableStateOf<TextFieldValue?>(null) }
     TextField(
-        value = field ?: TextFieldValue(text = value, selection = TextRange(value.length)),
-        onValueChange = { next ->
-            field = next
-            onValueChange(next.text)
-        },
+        value = value,
+        onValueChange = onValueChange,
         singleLine = true,
         enabled = enabled,
         label = { Text(text = label) },
