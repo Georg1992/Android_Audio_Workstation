@@ -13,16 +13,23 @@ import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.ui.DataAvailability
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
+import androidx.lifecycle.SavedStateHandle
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
+import com.georgv.audioworkstation.online.share.CardImageStore
 import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.core.audio.FakeAudioController
-import kotlinx.coroutines.flow.flowOf
+import android.net.Uri
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -197,6 +204,63 @@ class LibraryViewModelTest {
         )
     }
 
+    @Test
+    fun `saving a shared card publishes and does not report a save failure`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Alpha", createdAt = 1L)
+                    .copy(syncStatus = SyncStatus.SYNCED),
+            ),
+        )
+        val published = CompletableDeferred<String>()
+        val publishThread = CompletableDeferred<Thread>()
+        val share = object : ProjectShare {
+            override suspend fun share(projectId: String) = Unit
+            override suspend fun unshare(projectId: String) = Unit
+            override suspend fun restoreMissing(projectId: String) = Unit
+            override suspend fun updateCard(
+                projectId: String,
+                title: String,
+                tags: String,
+                imagePath: String?,
+            ) {
+                publishThread.complete(Thread.currentThread())
+                published.complete(title)
+            }
+        }
+        val vm = LibraryCardViewModel(
+            SavedStateHandle(mapOf("projectId" to "project-a")),
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            share,
+            TempDirAudioFilePathProvider(),
+            IdleCardImages,
+        )
+        val errors = java.util.Collections.synchronizedList(mutableListOf<Int>())
+        val saved = CompletableDeferred<Unit>()
+        val watch = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        watch.launch { vm.userMessages.collect { errors += it.resId } }
+        watch.launch { vm.savedEvent.collect { saved.complete(Unit) } }
+        advanceUntilIdle()
+
+        vm.setTitle("Renamed")
+        vm.save()
+        advanceUntilIdle()
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while ((!published.isCompleted || !saved.isCompleted) && System.nanoTime() < deadline) {
+            Thread.sleep(20)
+        }
+
+        try {
+            assertEquals("Renamed", published.getCompleted())
+            assertTrue(publishThread.getCompleted() != Thread.currentThread())
+            assertTrue(errors.toString(), saved.isCompleted)
+            assertTrue(errors.isEmpty())
+            assertEquals("Renamed", dao.observeProject("project-a").first()?.name)
+        } finally {
+            watch.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
     private fun project(
         id: String,
         name: String,
@@ -278,6 +342,10 @@ private class FakeLibraryProjectDao(
     override suspend fun updateTracks(tracks: List<TrackEntity>) = Unit
 
     override suspend fun deleteTrack(trackId: String) = Unit
+}
+
+private object IdleCardImages : CardImageStore {
+    override fun copy(uri: Uri): File = error("unused")
 }
 
 private class IdleAccountSessionStore : AccountSessionStore {

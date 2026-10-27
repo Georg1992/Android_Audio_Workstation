@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -104,7 +105,7 @@ class LibraryCardViewModel @Inject constructor(
     fun save() {
         if (busy.value || !loaded.value) return
         busy.value = true
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val project = projects.observeProject(projectId).first()
                     ?: error("Project $projectId is not on this phone")
