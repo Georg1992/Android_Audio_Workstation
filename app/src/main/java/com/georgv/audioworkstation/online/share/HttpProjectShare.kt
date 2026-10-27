@@ -9,7 +9,9 @@ import com.georgv.audioworkstation.online.accessTokenExpired
 import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -87,12 +89,14 @@ internal class HttpProjectShare(
     }
 
     override suspend fun publishOwner(projectId: String) {
-        val session = openSession("Sign in to share a project")
-        post(
-            session,
-            "/shared-projects/$projectId/owner",
-            JSONObject().put("name", session.name).toString(),
-        )
+        withContext(Dispatchers.IO) {
+            val session = openSession("Sign in to share a project")
+            post(
+                session,
+                "/shared-projects/$projectId/owner",
+                JSONObject().put("name", session.name).toString(),
+            )
+        }
     }
 
     override suspend fun restoreMissing(projectId: String) {
