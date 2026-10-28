@@ -10,4 +10,6 @@ interface ProjectShare {
     suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?)
 
     suspend fun publishOwner(projectId: String)
+
+    suspend fun publishMix(projectId: String)
 }

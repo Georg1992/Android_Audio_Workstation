@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.online.share
 
+import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
@@ -21,6 +22,7 @@ internal class HttpProjectShare(
     private val projects: ProjectRepository,
     private val api: HttpTransport,
     private val objects: ShareObjectTransport,
+    private val paths: AudioFilePathProvider,
 ) : ProjectShare {
     override suspend fun share(projectId: String) {
         val session = openSession("Sign in to share a project")
@@ -72,6 +74,7 @@ internal class HttpProjectShare(
             },
         )
         publishCard(session, project.id, project.name.orEmpty(), project.cardTags, project.cardImagePath)
+        uploadHashed(session, project.id, "mix", mixFile(project.id))
         projects.upsertProject(
             project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
         )
@@ -96,6 +99,12 @@ internal class HttpProjectShare(
                 "/shared-projects/$projectId/owner",
                 JSONObject().put("name", session.name).toString(),
             )
+        }
+    }
+
+    override suspend fun publishMix(projectId: String) {
+        withContext(Dispatchers.IO) {
+            uploadHashed(openSession("Sign in to share a project"), projectId, "mix", mixFile(projectId))
         }
     }
 
@@ -171,14 +180,21 @@ internal class HttpProjectShare(
         val path = imagePath ?: return
         val file = File(path)
         if (!file.isFile) error("card image is missing")
-        uploadImage(session, projectId, file)
+        uploadHashed(session, projectId, "image", file)
     }
 
-    private fun uploadImage(session: AccountSession, projectId: String, file: File) {
+    private fun mixFile(projectId: String): File {
+        val path = paths.mixdownOutputPath(projectId) ?: error("shared project has no mix")
+        val file = File(path)
+        if (!file.isFile) error("shared project has no mix")
+        return file
+    }
+
+    private fun uploadHashed(session: AccountSession, projectId: String, kind: String, file: File) {
         val hash = sha256Hex(file)
         val upload = post(
             session,
-            "/shared-projects/$projectId/image",
+            "/shared-projects/$projectId/$kind",
             JSONObject().put("contentHash", hash).put("size", file.length()).toString(),
         )
         if (!upload.getBoolean("alreadyStored")) {
@@ -188,7 +204,7 @@ internal class HttpProjectShare(
         }
         post(
             session,
-            "/shared-projects/$projectId/image/commit",
+            "/shared-projects/$projectId/$kind/commit",
             JSONObject()
                 .put("contentHash", hash)
                 .put("storageKey", hash)

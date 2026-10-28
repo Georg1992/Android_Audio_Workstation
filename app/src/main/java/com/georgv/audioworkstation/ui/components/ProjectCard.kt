@@ -139,7 +139,13 @@ fun ProjectCard(
                         Text(text = status, style = AppText.TileSubtitle, color = AppColors.iconMuted)
                     }
                     val progress = card.progress
-                    if (progress != null) {
+                    if (card.loading) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().padding(top = Dimens.TightGap),
+                            color = AppColors.Line,
+                            trackColor = AppColors.iconMuted,
+                        )
+                    } else if (progress != null) {
                         LinearProgressIndicator(
                             progress = { progress.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().padding(top = Dimens.TightGap),
@@ -212,6 +218,7 @@ data class ShownCard(
     val status: String? = null,
     val progress: Float? = null,
     val detail: String? = null,
+    val loading: Boolean = false,
 )
 
 data class ProjectCardClicks(

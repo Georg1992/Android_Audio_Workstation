@@ -39,6 +39,9 @@ internal class ShareManifest(config: ShareApiConfig) {
                     "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS owner_name TEXT NOT NULL DEFAULT ''",
                 )
                 statement.executeUpdate(
+                    "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS mix_hash TEXT",
+                )
+                statement.executeUpdate(
                     """
                     CREATE TABLE IF NOT EXISTS shared_file (
                       shared_project_id TEXT NOT NULL REFERENCES shared_project(id),
@@ -178,6 +181,33 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
         }
     }
+
+    fun setMix(id: String, ownerAccount: String, mixHash: String) {
+        requireOwner(id, ownerAccount)
+        connection().use { db ->
+            db.prepareStatement(
+                "UPDATE shared_project SET mix_hash = ? WHERE id = ?",
+            ).use { update ->
+                update.setString(1, mixHash)
+                update.setString(2, id)
+                update.executeUpdate()
+            }
+        }
+    }
+
+    fun mixHash(id: String): String? =
+        connection().use { db ->
+            db.prepareStatement(
+                "SELECT mix_hash FROM shared_project WHERE id = ?",
+            ).use { query ->
+                query.setString(1, id)
+                query.executeQuery().use { rows ->
+                    if (!rows.next()) throw ShareFailure(404, "not found")
+                    val mix = rows.getString(1)
+                    if (rows.wasNull()) null else mix
+                }
+            }
+        }
 
     fun setImage(id: String, ownerAccount: String, imageHash: String) {
         requireOwner(id, ownerAccount)

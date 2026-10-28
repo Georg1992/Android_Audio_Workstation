@@ -50,6 +50,8 @@ internal class ShareHttp(
             method == "POST" && action == listOf("image") -> beginImage(exchange, accountId, projectId)
             method == "POST" && action == listOf("image", "commit") -> commitImage(exchange, accountId, projectId)
             method == "GET" && action == listOf("image") -> readImage(exchange, projectId)
+            method == "POST" && action == listOf("mix") -> beginMix(exchange, accountId, projectId)
+            method == "POST" && action == listOf("mix", "commit") -> commitMix(exchange, accountId, projectId)
             method == "POST" && action == listOf("playback") -> playback(exchange, projectId)
             method == "DELETE" && action.isEmpty() -> removeProject(exchange, accountId, projectId)
             else -> throw ShareFailure(404, "not found")
@@ -117,15 +119,42 @@ internal class ShareHttp(
         send(exchange, 200, JSONObject().put("downloadUrl", objects.downloadUrl(hash)).toString())
     }
 
-    private fun playback(exchange: HttpExchange, projectId: String) {
-        val files = JSONArray()
-        for (hash in manifest.fileHashes(projectId)) {
-            files.put(
-                JSONObject()
-                    .put("contentHash", hash)
-                    .put("downloadUrl", objects.downloadUrl(hash)),
-            )
+    private fun beginMix(exchange: HttpExchange, accountId: String, projectId: String) {
+        manifest.requireOwner(projectId, accountId)
+        val body = json(exchange)
+        val hash = storageKey(body.optString("contentHash"))
+        val bytes = size(body.optLong("size", -1))
+        val stat = objects.stat(hash)
+        if (stat.exists && stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        if (stat.exists) {
+            manifest.setMix(projectId, accountId, hash)
+            send(exchange, 200, """{"storageKey":"$hash","alreadyStored":true}""")
+            return
         }
+        sendUpload(exchange, hash, bytes)
+    }
+
+    private fun commitMix(exchange: HttpExchange, accountId: String, projectId: String) {
+        manifest.requireOwner(projectId, accountId)
+        val body = json(exchange)
+        val hash = storageKey(body.optString("contentHash"))
+        val key = storageKey(body.optString("storageKey"))
+        if (key != hash) throw ShareFailure(400, "storage key must be the content hash")
+        val bytes = size(body.optLong("size", -1))
+        val stat = objects.stat(hash)
+        if (!stat.exists) throw ShareFailure(409, "object missing")
+        if (stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        manifest.setMix(projectId, accountId, hash)
+        send(exchange, 200, """{"storageKey":"$hash"}""")
+    }
+
+    private fun playback(exchange: HttpExchange, projectId: String) {
+        val hash = manifest.mixHash(projectId) ?: throw ShareFailure(404, "not found")
+        val files = JSONArray().put(
+            JSONObject()
+                .put("contentHash", hash)
+                .put("downloadUrl", objects.downloadUrl(hash)),
+        )
         send(exchange, 200, JSONObject().put("files", files).toString())
     }
 

@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -28,6 +30,7 @@ import com.georgv.audioworkstation.ui.components.ProjectCardClicks
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.ShownCard
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,6 +81,14 @@ fun CommunityHomeScreen(
         ) {
             if (state.email != null && state.name != null) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (state.preparing && state.projects.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.community_mix_loading),
+                            style = AppText.TileSubtitle,
+                            color = AppColors.iconMuted,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
@@ -91,10 +102,13 @@ fun CommunityHomeScreen(
                             val title = project.title.ifBlank {
                                 stringResource(R.string.library_untitled_project)
                             }
+                            val loading = state.loadingProjectId == project.id || state.preparing
                             ProjectCard(
                                 card = ShownCard(
                                     title = title,
                                     detail = stringResource(R.string.community_project_by, project.ownerName),
+                                    status = if (loading) stringResource(R.string.community_mix_loading) else null,
+                                    loading = loading,
                                     tags = project.tags,
                                     imagePath = hash?.let { images[it] },
                                     positionMs = if (active) transport.positionMs else 0,

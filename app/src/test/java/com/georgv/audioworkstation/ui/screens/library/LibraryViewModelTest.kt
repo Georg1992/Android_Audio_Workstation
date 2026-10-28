@@ -229,6 +229,8 @@ class LibraryViewModelTest {
             }
 
             override suspend fun publishOwner(projectId: String) = Unit
+
+            override suspend fun publishMix(projectId: String) = Unit
         }
         val vm = LibraryCardViewModel(
             SavedStateHandle(mapOf("projectId" to "project-a")),
@@ -370,6 +372,8 @@ private class IdleProjectShare : ProjectShare {
     override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) = Unit
 
     override suspend fun publishOwner(projectId: String) = Unit
+
+    override suspend fun publishMix(projectId: String) = Unit
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

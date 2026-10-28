@@ -142,6 +142,8 @@ class SharedProjectsTest {
         override suspend fun exists(projectId: String): Boolean = false
 
         override suspend fun publishOwnerNames() = Unit
+
+        override suspend fun publishMixes() = Unit
     }
 
     private object IdlePlayback : CardPlayback {

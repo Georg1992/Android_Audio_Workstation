@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.online
 
 import android.content.Context
+import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.network.UrlConnectionHttpTransport
@@ -83,12 +84,14 @@ abstract class OnlineModule {
             sessions: AccountSessionStore,
             accounts: CognitoAccounts,
             projects: ProjectRepository,
+            paths: AudioFilePathProvider,
         ): ProjectShare = HttpProjectShare(
             sessions = sessions,
             accounts = accounts,
             projects = projects,
             api = UrlConnectionHttpTransport(ShareConfig.API_BASE),
             objects = UrlConnectionShareObjects(),
+            paths = paths,
         )
 
         @Provides

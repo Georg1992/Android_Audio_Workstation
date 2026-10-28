@@ -43,6 +43,7 @@
     <string name="community_gmail">Войти через Gmail</string>
     <string name="community_sign_out">Выйти</string>
     <string name="community_project_by">от %1$s</string>
+    <string name="community_mix_loading">Загрузка микса…</string>
     <string name="screen_library_card">Карточка</string>
     <string name="library_card_tags_hint">Теги через запятую</string>
     <string name="library_card_choose_image">Выбрать изображение</string>

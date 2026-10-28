@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.online.share
 
+import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
@@ -82,7 +83,9 @@ class ShareSelectionTest {
     @Test
     fun alreadyStoredShareKeepsTheLocalFileAndDoesNotUpload() = runBlocking {
         val audio = File.createTempFile("share-kept", ".wav")
+        val mix = File.createTempFile("share-kept-mix", ".wav")
         audio.writeText("abc")
+        mix.writeText("mix")
         val objects = RecordingObjects()
         val dao = MemoryProjectDao(
             project = ProjectEntity(id = "project-a", name = "Kept"),
@@ -97,9 +100,13 @@ class ShareSelectionTest {
                     """{"id":"project-a"}""",
                     """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
                     """{"storageKey":"$ABC_HASH"}""",
+                    """{"id":"project-a"}""",
+                    """{"storageKey":"mix","alreadyStored":true}""",
+                    """{"storageKey":"mix"}""",
                 ),
             ),
             objects = objects,
+            paths = FixedPaths(mix.absolutePath),
         )
         try {
             share.share("project-a")
@@ -115,13 +122,16 @@ class ShareSelectionTest {
             assertNull(project.remoteUrl)
         } finally {
             audio.delete()
+            mix.delete()
         }
     }
 
     @Test
     fun aNewHashIsUploadedOnceAndTheLocalFileStays() = runBlocking {
         val audio = File.createTempFile("share-new", ".wav")
+        val mix = File.createTempFile("share-new-mix", ".wav")
         audio.writeText("abc")
+        mix.writeText("mix")
         val objects = RecordingObjects()
         val dao = MemoryProjectDao(
             project = ProjectEntity(id = "project-a", name = "New"),
@@ -132,6 +142,9 @@ class ShareSelectionTest {
                 """{"id":"project-a"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":false,"uploadUrl":"https://example.invalid/put","headers":{"Content-Type":"application/octet-stream"}}""",
                 """{"storageKey":"$ABC_HASH"}""",
+                """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
             ),
         )
         val share = HttpProjectShare(
@@ -140,28 +153,35 @@ class ShareSelectionTest {
             projects = ProjectRepository(dao, NoopFiles),
             api = api,
             objects = objects,
+            paths = FixedPaths(mix.absolutePath),
         )
         try {
             share.share("project-a")
             assertEquals(1, objects.puts)
-            assertEquals(listOf("access-token", "access-token", "access-token"), api.tokens)
+            assertEquals(List(6) { "access-token" }, api.tokens)
             assertTrue(audio.isFile)
             assertEquals("abc", audio.readText())
         } finally {
             audio.delete()
+            mix.delete()
         }
     }
 
     @Test
     fun anExpiredAccessTokenIsReplacedBeforeTheShareCall() = runBlocking {
         val audio = File.createTempFile("share-expired", ".wav")
+        val mix = File.createTempFile("share-expired-mix", ".wav")
         audio.writeText("abc")
+        mix.writeText("mix")
         val stored = MemorySession(session.copy(token = jwtWithExp(1)))
         val api = ScriptedApi(
             listOf(
                 """{"id":"project-a"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
                 """{"storageKey":"$ABC_HASH"}""",
+                """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
             ),
         )
         val share = HttpProjectShare(
@@ -176,13 +196,15 @@ class ShareSelectionTest {
             ),
             api = api,
             objects = RecordingObjects(),
+            paths = FixedPaths(mix.absolutePath),
         )
         try {
             share.share("project-a")
-            assertEquals(listOf("fresh-access", "fresh-access", "fresh-access"), api.tokens)
+            assertEquals(List(6) { "fresh-access" }, api.tokens)
             assertEquals("fresh-access", stored.current()?.token)
         } finally {
             audio.delete()
+            mix.delete()
         }
     }
 
@@ -218,6 +240,16 @@ class ShareSelectionTest {
         importStatus = importStatus,
         contentHash = contentHash,
     )
+
+    private class FixedPaths(private val mix: String) : AudioFilePathProvider {
+        override fun projectRecordingDirectory(projectId: String): String = error("unused")
+
+        override fun trackOutputPath(projectId: String, trackId: String): String = error("unused")
+
+        override fun trackRecordingTempPath(projectId: String, trackId: String): String = error("unused")
+
+        override fun mixdownOutputPath(projectId: String): String = mix
+    }
 
     private class RecordingObjects : ShareObjectTransport {
         var puts = 0

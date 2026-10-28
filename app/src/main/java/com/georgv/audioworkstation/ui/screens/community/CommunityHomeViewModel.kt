@@ -31,6 +31,8 @@ data class CommunityHomeUiState(
     val name: String? = null,
     val projects: List<SharedProject> = emptyList(),
     val busy: Boolean = false,
+    val preparing: Boolean = false,
+    val loadingProjectId: String? = null,
 )
 
 @HiltViewModel
@@ -43,6 +45,8 @@ class CommunityHomeViewModel @Inject constructor(
     private val media: CardMedia,
 ) : ViewModel() {
     private val busy = MutableStateFlow(false)
+    private val preparing = MutableStateFlow(false)
+    private val loadingProjectId = MutableStateFlow<String?>(null)
     private val projects = MutableStateFlow<List<SharedProject>>(emptyList())
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     private val opens = Channel<String>(capacity = Channel.BUFFERED)
@@ -70,13 +74,21 @@ class CommunityHomeViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<CommunityHomeUiState> =
-        combine(sessions.state, busy, projects) { session, isBusy, shared ->
+        combine(
+            sessions.state,
+            busy,
+            projects,
+            preparing,
+            loadingProjectId,
+        ) { session, isBusy, shared, isPreparing, loadingId ->
             CommunityHomeUiState(
                 sessionKnown = true,
                 email = session?.email,
                 name = session?.name,
                 projects = shared,
                 busy = isBusy,
+                preparing = isPreparing,
+                loadingProjectId = loadingId,
             )
         }.stateIn(
             viewModelScope,
@@ -97,7 +109,9 @@ class CommunityHomeViewModel @Inject constructor(
     }
 
     fun play(projectId: String) {
+        if (loadingProjectId.value != null) return
         viewModelScope.launch {
+            loadingProjectId.value = projectId
             try {
                 val file = media.audio(projectId)
                 player.play(projectId, file)
@@ -107,6 +121,8 @@ class CommunityHomeViewModel @Inject constructor(
                 throw cancel
             } catch (error: Exception) {
                 report(R.string.error_card_playback_failed, error)
+            } finally {
+                loadingProjectId.value = null
             }
         }
     }
@@ -176,8 +192,14 @@ class CommunityHomeViewModel @Inject constructor(
             projects.value = emptyList()
             return
         }
-        localProjects.publishOwnerNames()
-        projects.value = sharedProjects.list()
+        preparing.value = true
+        try {
+            localProjects.publishOwnerNames()
+            localProjects.publishMixes()
+            projects.value = sharedProjects.list()
+        } finally {
+            preparing.value = false
+        }
     }
 
     private fun watch() {

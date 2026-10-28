@@ -43,6 +43,7 @@
     <string name="community_gmail">Sign in with Gmail</string>
     <string name="community_sign_out">Sign out</string>
     <string name="community_project_by">by %1$s</string>
+    <string name="community_mix_loading">Loading the mix…</string>
     <string name="screen_library_card">Card</string>
     <string name="library_card_tags_hint">Comma-separated tags</string>
     <string name="library_card_choose_image">Choose image</string>
