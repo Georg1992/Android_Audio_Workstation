@@ -94,6 +94,15 @@ fun ProjectCard(
             ) {
                 Column(modifier = Modifier.weight(1f).padding(top = Dimens.PanelPadding)) {
                     Text(text = card.title, style = AppText.TileTitle, color = AppColors.Line, maxLines = 2)
+                    val detail = card.detail
+                    if (detail != null) {
+                        Text(
+                            text = detail,
+                            style = AppText.TileSubtitle,
+                            color = AppColors.iconMuted,
+                            maxLines = 1,
+                        )
+                    }
                     if (card.tags.isNotEmpty()) {
                         Row(
                             modifier = Modifier
@@ -202,6 +211,7 @@ data class ShownCard(
     val durationMs: Int,
     val status: String? = null,
     val progress: Float? = null,
+    val detail: String? = null,
 )
 
 data class ProjectCardClicks(
