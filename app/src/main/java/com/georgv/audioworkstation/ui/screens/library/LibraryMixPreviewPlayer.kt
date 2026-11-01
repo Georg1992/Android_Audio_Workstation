@@ -1,18 +1,19 @@
 package com.georgv.audioworkstation.ui.screens.library
 
-import com.georgv.audioworkstation.core.audio.AudibleMs
 import com.georgv.audioworkstation.core.audio.MeterPort
-import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
-import com.georgv.audioworkstation.core.audio.ProjectSampleRate
-import com.georgv.audioworkstation.core.audio.TrackPlaybackLane
+import com.georgv.audioworkstation.core.audio.TransportTimelinePolicy
 import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
-import com.georgv.audioworkstation.core.audio.readWavPcmFileInfo
-import com.georgv.audioworkstation.core.audio.withAudibleStartPositionMs
+import com.georgv.audioworkstation.core.audio.playbackStartAllowedAtPlayhead
+import com.georgv.audioworkstation.core.audio.sessionPlaybackSchedulingEndMsForTracks
+import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.coroutines.withIo
+import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +23,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Library card mix playback through the same native engine as the project screen.
- * A scrub pauses that engine, then starts it again from the released playhead.
+ * Library card playback through the same native track mix as the project screen.
+ * A scrub pauses that engine, then starts the tracks again from the released playhead.
  */
 @Singleton
 class LibraryMixPreviewPlayer @Inject constructor(
@@ -33,11 +34,14 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private val dispatchers: AppDispatchers,
 ) {
     private val engine = Mutex()
-    private var clip: MixClip? = null
+    private var armedProject: ProjectEntity? = null
+    private var armedTracks: List<TrackEntity> = emptyList()
     private var loadedProjectId: String? = null
+    private var timelineEndMs = 0L
     private var positionMs = 0
     private var holding = false
     private var heardEngine = false
+    private var outputLatencyMs = 0.0
 
     private val playingProjectId = MutableStateFlow<String?>(null)
     val playingProjectIdState: StateFlow<String?> = playingProjectId.asStateFlow()
@@ -47,24 +51,22 @@ class LibraryMixPreviewPlayer @Inject constructor(
 
     fun isPlaying(projectId: String): Boolean = playingProjectId.value == projectId
 
-    suspend fun togglePreview(projectId: String, wavPath: String): Boolean {
-        if (playingProjectId.value == projectId) {
+    suspend fun togglePreview(project: ProjectEntity, tracks: List<TrackEntity>): Boolean {
+        if (playingProjectId.value == project.id) {
             stopAll()
             return false
         }
-        return play(projectId, wavPath)
+        return play(project, tracks)
     }
 
-    suspend fun play(projectId: String, wavPath: String): Boolean = engine.withLock {
-        if (playingProjectId.value == projectId && !holding) return true
-        if (loadedProjectId != projectId || clip == null) {
-            if (!loadClip(projectId, wavPath)) return false
-            positionMs = 0
-        }
-        val loaded = clip ?: return false
-        if (positionMs.toLong() >= loaded.durationMs) positionMs = 0
-        prepareSession(loaded.sampleRate)
-        playingProjectId.value = projectId
+    suspend fun play(project: ProjectEntity, tracks: List<TrackEntity>): Boolean = engine.withLock {
+        if (playingProjectId.value == project.id && !holding) return true
+        val previousId = loadedProjectId
+        if (!rememberTracks(project, tracks)) return false
+        if (previousId != project.id) positionMs = 0
+        if (positionMs.toLong() >= timelineEndMs && armedTracks.none { it.isLoop }) positionMs = 0
+        prepareSession(project.sampleRate)
+        playingProjectId.value = project.id
         holding = false
         heardEngine = false
         val started = armBody(positionMs)
@@ -95,8 +97,9 @@ class LibraryMixPreviewPlayer @Inject constructor(
 
     suspend fun seekTo(positionMs: Int) {
         engine.withLock {
-            val loaded = clip ?: return
-            val duration = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            val endMs = timelineEndMs
+            if (armedProject == null || endMs <= 0L) return
+            val duration = endMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             this.positionMs = positionMs.coerceIn(0, duration)
             holding = false
             if (playingProjectId.value != null) {
@@ -110,7 +113,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
 
     suspend fun tick() {
         engine.withLock {
-            if (playingProjectId.value == null || holding || clip == null) return
+            if (playingProjectId.value == null || holding || timelineEndMs <= 0L) return
             val sample = withAudioIo(dispatchers, "MeterPort.transportPositionMs") {
                 val running = playback.isPlaybackEngineRunning()
                 val audible = if (running) {
@@ -120,14 +123,14 @@ class LibraryMixPreviewPlayer @Inject constructor(
                 }
                 running to audible
             }
-            val loaded = clip ?: return
+            val endMs = timelineEndMs
             val (running, audible) = sample
             if (running) {
                 heardEngine = true
-                positionMs = audible.coerceIn(0L, loaded.durationMs).toInt()
+                positionMs = audible.coerceIn(0L, endMs).toInt()
             } else if (heardEngine) {
                 playingProjectId.value = null
-                positionMs = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                positionMs = endMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             }
             publishLocked()
         }
@@ -140,11 +143,14 @@ class LibraryMixPreviewPlayer @Inject constructor(
 
     suspend fun stopAll() = engine.withLock {
         haltBody()
-        clip = null
+        armedProject = null
+        armedTracks = emptyList()
         loadedProjectId = null
+        timelineEndMs = 0L
         positionMs = 0
         holding = false
         heardEngine = false
+        outputLatencyMs = 0.0
         playingProjectId.value = null
         publishLocked()
     }
@@ -158,53 +164,53 @@ class LibraryMixPreviewPlayer @Inject constructor(
     }
 
     private suspend fun armBody(positionMs: Int): Boolean {
-        val loaded = clip ?: return false
+        val current = armedProject ?: return false
+        val playable = armedTracks
+        val timelineEnd = timelineEndMs
+        if (playable.isEmpty() || timelineEnd <= 0L) return false
+        val audible = TransportTimelinePolicy.playbackStartPositionMsForTracks(
+            scrubbedPlayheadMs = positionMs.toLong().coerceIn(0L, timelineEnd),
+            timelineVisibleDurationMs = timelineEnd,
+            tracks = playable,
+        )
+        if (!playbackStartAllowedAtPlayhead(audible.value, timelineEnd, playable)) return false
         return withAudioIo(dispatchers, "PlaybackPort.startPlayback") {
-            playback.stopPlayback()
+            val liveLatency = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
+            val latencyMs = if (liveLatency > 0.0) liveLatency else outputLatencyMs
             PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
-            val latencyMs = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
-            val audibleMs = AudibleMs(positionMs.toLong().coerceIn(0L, loaded.durationMs))
-            val spec = MultiPlaybackSpec(
-                sampleRate = loaded.sampleRate,
-                lanes = listOf(
-                    TrackPlaybackLane(
-                        trackId = loaded.projectId,
-                        wavFilePath = loaded.path,
-                        gain = 1f,
-                        timelineClipDurationMs = loaded.durationMs,
-                    ),
-                ),
-                sessionTimelineEndMs = loaded.durationMs,
-            ).withAudibleStartPositionMs(audibleMs, latencyMs)
+            val spec = current.toLiveEnginePlaybackSpec(
+                tracks = playable,
+                startPositionMs = PlaybackTransportSync.mixTransportMs(audible, latencyMs),
+            ) ?: return@withAudioIo false
+            playback.stopPlayback()
             playback.startPlayback(spec)
         }
     }
 
     private suspend fun haltBody() {
         withAudioIo(dispatchers, "PlaybackPort.stopPlayback") {
+            val liveLatency = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
+            if (liveLatency > 0.0) outputLatencyMs = liveLatency
             playback.stopPlayback()
         }
     }
 
-    private suspend fun loadClip(projectId: String, wavPath: String): Boolean {
-        val info = withIo(dispatchers, "read mix wav") { readWavPcmFileInfo(wavPath) } ?: return false
-        if (!info.isSupportedProjectPcm || info.durationMs <= 0L) return false
-        val knownRate = ProjectSampleRate.entries.any { rate -> rate.hz == info.sampleRateHz }
-        if (!knownRate) return false
-        clip = MixClip(
-            projectId = projectId,
-            path = wavPath,
-            sampleRate = info.sampleRateHz,
-            durationMs = info.durationMs,
-        )
-        loadedProjectId = projectId
+    private fun rememberTracks(project: ProjectEntity, tracks: List<TrackEntity>): Boolean {
+        val playable = tracks.filter { track -> track.hasPersistedPlayableAudio() }
+        if (playable.isEmpty()) return false
+        val endMs = sessionPlaybackSchedulingEndMsForTracks(playable)
+        if (endMs <= 0L) return false
+        armedProject = project
+        armedTracks = playable
+        loadedProjectId = project.id
+        timelineEndMs = endMs
         return true
     }
 
     private fun publishLocked() {
         val id = loadedProjectId
-        val loaded = clip
-        if (id == null || loaded == null || loaded.durationMs <= 0L) {
+        val endMs = timelineEndMs
+        if (id == null || endMs <= 0L) {
             transport.value = MixTransport()
             return
         }
@@ -212,7 +218,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
             projectId = id,
             playing = playingProjectId.value != null,
             positionMs = positionMs,
-            durationMs = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+            durationMs = endMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
         )
     }
 }
@@ -222,11 +228,4 @@ data class MixTransport(
     val playing: Boolean = false,
     val positionMs: Int = 0,
     val durationMs: Int = 0,
-)
-
-private data class MixClip(
-    val projectId: String,
-    val path: String,
-    val sampleRate: Int,
-    val durationMs: Long,
 )

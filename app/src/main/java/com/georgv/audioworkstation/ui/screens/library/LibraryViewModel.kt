@@ -130,7 +130,8 @@ class LibraryViewModel @Inject constructor(
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val started = mixPreviewPlayer.play(item.project.id, path)
+            val tracks = repo.observeTracks(item.project.id).first()
+            val started = mixPreviewPlayer.play(item.project, tracks)
             if (!started) {
                 messages.send(UiMessage(R.string.error_mix_preview_failed))
                 return@launch
@@ -195,10 +196,10 @@ class LibraryViewModel @Inject constructor(
                 }
 
             LibraryCardBodyClickOutcome.TogglePreview -> {
-                val wavPath = item.mixdown.mixdownWavPath ?: return
                 val wasPlaying = item.isPreviewPlaying
-                viewModelScope.launch {
-                    val started = mixPreviewPlayer.togglePreview(item.project.id, wavPath)
+                viewModelScope.launch(Dispatchers.IO) {
+                    val tracks = repo.observeTracks(item.project.id).first()
+                    val started = mixPreviewPlayer.togglePreview(item.project, tracks)
                     if (!started && !wasPlaying) {
                         messages.send(UiMessage(R.string.error_mix_preview_failed))
                     }
