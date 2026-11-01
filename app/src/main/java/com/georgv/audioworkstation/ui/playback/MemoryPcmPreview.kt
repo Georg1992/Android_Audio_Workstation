@@ -127,7 +127,11 @@ class MemoryPcmPreview {
                 continue
             }
             if (step.kind == StepKind.Seek) {
-                seekTrack(audio, step.playing)
+                seekTrack(audio)
+                if (step.playing) {
+                    val follow = synchronized(lock) { readStepLocked() }
+                    if (follow != null && follow.kind == StepKind.Write) writeAudio(audio, follow)
+                }
                 continue
             }
             writeAudio(audio, step)
@@ -141,7 +145,7 @@ class MemoryPcmPreview {
             seekMs = null
             readByte = bytesAt(pending)
             generation += 1
-            if (!playing) return Step(StepKind.Seek, playing = false, serial = generation)
+            return Step(StepKind.Seek, playing = playing, serial = generation)
         }
         if (!playing || readByte >= pcm.size) {
             if (playing && readByte >= pcm.size && pcm.isNotEmpty()) {
@@ -168,24 +172,20 @@ class MemoryPcmPreview {
         }
     }
 
-    private fun seekTrack(audio: AudioTrack, resume: Boolean) {
+    private fun seekTrack(audio: AudioTrack) {
         try {
             audio.pause()
             audio.flush()
-            if (resume) audio.play()
         } catch (error: IllegalStateException) {
             logWarning(TAG, "seek failed", error)
         }
     }
 
     private fun writeAudio(audio: AudioTrack, step: Step) {
-        if (audio.playState != AudioTrack.PLAYSTATE_PLAYING) audio.play()
         val written = audio.write(pcm, step.offset, step.length, AudioTrack.WRITE_NON_BLOCKING)
+        var resume = false
         val starved = synchronized(lock) {
-            if (closed || step.serial != generation || written < 0) {
-                if (written < 0) playing = false
-                return@synchronized false
-            }
+            if (closed || step.serial != generation || written < 0) return@synchronized false
             if (written > 0 && readByte == step.offset) {
                 readByte = step.offset + written
             }
@@ -193,8 +193,10 @@ class MemoryPcmPreview {
                 playing = false
                 ended = true
             }
+            resume = playing && written > 0
             written == 0
         }
+        if (resume && audio.playState != AudioTrack.PLAYSTATE_PLAYING) audio.play()
         if (starved) pauseForWork()
     }
 
