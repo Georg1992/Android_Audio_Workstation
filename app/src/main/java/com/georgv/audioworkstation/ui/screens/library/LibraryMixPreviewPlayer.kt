@@ -36,7 +36,6 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private val engine = Mutex()
     private var armedProject: ProjectEntity? = null
     private var armedTracks: List<TrackEntity> = emptyList()
-    private var loadedProjectId: String? = null
     private var timelineEndMs = 0L
     private var positionMs = 0
     private var holding = false
@@ -51,17 +50,9 @@ class LibraryMixPreviewPlayer @Inject constructor(
 
     fun isPlaying(projectId: String): Boolean = playingProjectId.value == projectId
 
-    suspend fun togglePreview(project: ProjectEntity, tracks: List<TrackEntity>): Boolean {
-        if (playingProjectId.value == project.id) {
-            stopAll()
-            return false
-        }
-        return play(project, tracks)
-    }
-
     suspend fun play(project: ProjectEntity, tracks: List<TrackEntity>): Boolean = engine.withLock {
         if (playingProjectId.value == project.id && !holding) return true
-        val previousId = loadedProjectId
+        val previousId = armedProject?.id
         if (!rememberTracks(project, tracks)) return false
         if (previousId != project.id) positionMs = 0
         if (positionMs.toLong() >= timelineEndMs && armedTracks.none { it.isLoop }) positionMs = 0
@@ -145,7 +136,6 @@ class LibraryMixPreviewPlayer @Inject constructor(
         haltBody()
         armedProject = null
         armedTracks = emptyList()
-        loadedProjectId = null
         timelineEndMs = 0L
         positionMs = 0
         holding = false
@@ -198,24 +188,21 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private fun rememberTracks(project: ProjectEntity, tracks: List<TrackEntity>): Boolean {
         val playable = tracks.filter { track -> track.hasPersistedPlayableAudio() }
         if (playable.isEmpty()) return false
-        val endMs = sessionPlaybackSchedulingEndMsForTracks(playable)
-        if (endMs <= 0L) return false
         armedProject = project
         armedTracks = playable
-        loadedProjectId = project.id
-        timelineEndMs = endMs
+        timelineEndMs = sessionPlaybackSchedulingEndMsForTracks(playable)
         return true
     }
 
     private fun publishLocked() {
-        val id = loadedProjectId
+        val project = armedProject
         val endMs = timelineEndMs
-        if (id == null || endMs <= 0L) {
+        if (project == null || endMs <= 0L) {
             transport.value = MixTransport()
             return
         }
         transport.value = MixTransport(
-            projectId = id,
+            projectId = project.id,
             playing = playingProjectId.value != null,
             positionMs = positionMs,
             durationMs = endMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),

@@ -90,9 +90,6 @@
     <string name="library_delete_project_title">删除项目？</string>
     <string name="library_delete_project_message">这将永久删除 %1$s 及其所有音轨。</string>
     <string name="library_no_mix_yet">尚无混音</string>
-    <string name="library_preview_mix_hint">点击预览混音</string>
-    <string name="library_preview_playing_hint">点击停止预览</string>
-    <string name="library_mixing_progress">混音中…</string>
     <string name="library_mixing_progress_percent">混音中… %1$d%%</string>
 
     <string name="project_mixdown_confirm_title">混音项目？</string>

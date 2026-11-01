@@ -86,9 +86,6 @@
     <string name="library_delete_project_title">Delete project?</string>
     <string name="library_delete_project_message">This will permanently delete %1$s and all its tracks.</string>
     <string name="library_no_mix_yet">No mix yet</string>
-    <string name="library_preview_mix_hint">Tap to preview mix</string>
-    <string name="library_preview_playing_hint">Tap to stop preview</string>
-    <string name="library_mixing_progress">Mixing…</string>
     <string name="library_mixing_progress_percent">Mixing… %1$d%%</string>
 
     <!-- Project mixdown -->

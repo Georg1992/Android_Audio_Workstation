@@ -158,13 +158,13 @@ class LibraryViewModelTest {
     }
 
     @Test
-    fun `card body click without mix emits no mix yet message`() = runTest {
+    fun `play without mix emits no mix yet message`() = runTest {
         val dao = FakeLibraryProjectDao(
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
         )
         val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val item = vm.uiState.value.content.projects.first()
-        vm.onProjectCardBodyClick(item)
+        vm.play(item)
         advanceUntilIdle()
         assertEquals(R.string.library_no_mix_yet, vm.userMessages.first().resId)
     }
@@ -193,15 +193,8 @@ class LibraryViewModelTest {
         advanceUntilIdle()
 
         val item = vm.uiState.value.content.projects.first()
+        assertTrue(item.mixdown.hasMixPreview)
         assertTrue(File(item.mixdown.mixdownWavPath!!).isFile)
-        assertEquals(
-            LibraryCardBodyClickOutcome.TogglePreview,
-            resolveLibraryCardBodyClick(
-                mixdown = item.mixdown,
-                isCurrentlyPlaying = false,
-                mixFileExists = true,
-            ),
-        )
     }
 
     @Test

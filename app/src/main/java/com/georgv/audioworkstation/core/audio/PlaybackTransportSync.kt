@@ -50,17 +50,3 @@ object PlaybackTransportSync {
     fun audiblePlayheadMsFromRaw(meter: MeterPort, rawMixTransportMs: Long): AudibleMs =
         audiblePlayheadMs(meter, mixTransportMsFromRaw(rawMixTransportMs))
 }
-
-/** Converts audible start intent to native mix transport for engine arm/seek. */
-fun MultiPlaybackSpec.withAudibleStartPositionMs(
-    audibleStartMs: AudibleMs,
-    outputLatencyMs: Double,
-): MultiPlaybackSpec =
-    copy(startPositionMs = PlaybackTransportSync.mixTransportMs(audibleStartMs, outputLatencyMs).value)
-
-/** Convenience for call sites still holding raw audible ms. */
-fun MultiPlaybackSpec.withAudibleStartPositionMs(
-    audibleStartMs: Long,
-    outputLatencyMs: Double,
-): MultiPlaybackSpec =
-    withAudibleStartPositionMs(AudibleMs(audibleStartMs.coerceAtLeast(0L)), outputLatencyMs)

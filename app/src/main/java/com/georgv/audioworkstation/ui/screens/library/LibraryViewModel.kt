@@ -120,12 +120,8 @@ class LibraryViewModel @Inject constructor(
 
     fun play(item: LibraryProjectItem) {
         val path = item.mixdown.mixdownWavPath
-        if (path == null) {
-            viewModelScope.launch { messages.send(UiMessage(R.string.library_no_mix_yet)) }
-            return
-        }
-        val blocked = item.mixdown.isMixing || !item.mixdown.hasMixPreview || !File(path).isFile
-        if (blocked) {
+        val mixReady = path != null && item.mixdown.hasMixPreview && File(path).isFile
+        if (item.mixdown.isMixing || !mixReady) {
             viewModelScope.launch { messages.send(UiMessage(R.string.library_no_mix_yet)) }
             return
         }
@@ -176,34 +172,6 @@ class LibraryViewModel @Inject constructor(
             } catch (error: Exception) {
                 logWarning(TAG, "deleteProject failed: $projectId", error)
                 messages.send(UiMessage(R.string.error_delete_project_failed))
-            }
-        }
-    }
-
-    fun onProjectCardBodyClick(item: LibraryProjectItem) {
-        val mixFileExists = item.mixdown.mixdownWavPath?.let { File(it).isFile } == true
-        val outcome =
-            resolveLibraryCardBodyClick(
-                mixdown = item.mixdown,
-                isCurrentlyPlaying = item.isPreviewPlaying,
-                mixFileExists = mixFileExists,
-            )
-        when (outcome) {
-            LibraryCardBodyClickOutcome.IgnoredWhileMixing -> Unit
-            LibraryCardBodyClickOutcome.NoMixAvailable ->
-                viewModelScope.launch {
-                    messages.send(UiMessage(R.string.library_no_mix_yet))
-                }
-
-            LibraryCardBodyClickOutcome.TogglePreview -> {
-                val wasPlaying = item.isPreviewPlaying
-                viewModelScope.launch(Dispatchers.IO) {
-                    val tracks = repo.observeTracks(item.project.id).first()
-                    val started = mixPreviewPlayer.togglePreview(item.project, tracks)
-                    if (!started && !wasPlaying) {
-                        messages.send(UiMessage(R.string.error_mix_preview_failed))
-                    }
-                }
             }
         }
     }

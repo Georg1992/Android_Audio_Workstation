@@ -40,25 +40,6 @@ class PlaybackTransportSyncTest {
     }
 
     @Test
-    fun `withAudibleStartPositionMs converts start position for native arm`() {
-        val spec =
-            MultiPlaybackSpec(
-                sampleRate = 48_000,
-                lanes =
-                    listOf(
-                        TrackPlaybackLane(
-                            trackId = "a",
-                            wavFilePath = "a.wav",
-                            gain = 1f,
-                        ),
-                    ),
-                startPositionMs = 0L,
-            )
-        val armed = spec.withAudibleStartPositionMs(audibleStartMs = 200L, outputLatencyMs = 84.0)
-        assertEquals(284L, armed.startPositionMs)
-    }
-
-    @Test
     fun `requirePreparedCapability fails when gate has no capability`() {
         val gate =
             object : SessionTransportCapabilityGate {

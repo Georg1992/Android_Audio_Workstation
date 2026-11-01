@@ -86,9 +86,6 @@
     <string name="library_delete_project_title">Удалить проект?</string>
     <string name="library_delete_project_message">Это навсегда удалит %1$s и все его дорожки.</string>
     <string name="library_no_mix_yet">Микса пока нет</string>
-    <string name="library_preview_mix_hint">Нажмите для прослушивания микса</string>
-    <string name="library_preview_playing_hint">Нажмите, чтобы остановить</string>
-    <string name="library_mixing_progress">Микширование…</string>
     <string name="library_mixing_progress_percent">Микширование… %1$d%%</string>
 
     <string name="project_mixdown_confirm_title">Смикшировать проект?</string>
