@@ -373,6 +373,7 @@ private fun LibraryProjectContent(
                                 null
                             },
                             progress = if (mixing) item.mixdown.progress else null,
+                            playing = item.isPreviewPlaying,
                         ),
                         clicks = ProjectCardClicks(
                             onPlay = { handlers.onPlay(item) },

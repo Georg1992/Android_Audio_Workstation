@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -196,21 +197,18 @@ fun ProjectCard(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
                 ) {
-                    IconButton(onClick = clicks.onPlay) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = stringResource(R.string.cd_play),
-                            tint = AppColors.Line,
-                        )
-                    }
-                    IconButton(onClick = clicks.onStop) {
-                        Icon(
-                            imageVector = Icons.Filled.Stop,
-                            contentDescription = stringResource(R.string.cd_stop),
-                            tint = AppColors.Line,
-                        )
-                    }
+                    CardPlaybackButton(
+                        role = CardPlaybackRole.Play,
+                        engaged = !card.playing,
+                        onClick = clicks.onPlay,
+                    )
+                    CardPlaybackButton(
+                        role = CardPlaybackRole.Stop,
+                        engaged = card.playing,
+                        onClick = clicks.onStop,
+                    )
                     Slider(
                         value = displayed,
                         onValueChange = { next ->
@@ -251,6 +249,42 @@ fun ProjectCard(
     }
 }
 
+private enum class CardPlaybackRole {
+    Play,
+    Stop,
+}
+
+@Composable
+private fun CardPlaybackButton(
+    role: CardPlaybackRole,
+    engaged: Boolean,
+    onClick: () -> Unit,
+) {
+    val play = role == CardPlaybackRole.Play
+    val fill = if (play) AppColors.Green else AppColors.Line
+    val mark = if (play) AppColors.Line else AppColors.SurfaceRaised
+    TrackActionButton(
+        active = engaged,
+        enabled = true,
+        accentColor = mark,
+        onClick = onClick,
+        size = Dimens.TransportButtonSize,
+        surfaceColor = AppColors.Bg,
+        activeBackgroundColor = fill,
+        activeBorderColor = AppColors.Line,
+        activeIconColor = mark,
+        showActiveGlow = false,
+        showActiveLed = false,
+    ) { tint ->
+        Icon(
+            imageVector = if (play) Icons.Filled.PlayArrow else Icons.Filled.Stop,
+            contentDescription = stringResource(if (play) R.string.cd_play else R.string.cd_stop),
+            tint = tint,
+            modifier = Modifier.size(Dimens.TransportIconSize),
+        )
+    }
+}
+
 private const val MillisPerSecond = 1000
 private const val SecondsPerMinute = 60
 
@@ -271,6 +305,7 @@ data class ShownCard(
     val progress: Float? = null,
     val detail: String? = null,
     val loading: Boolean = false,
+    val playing: Boolean = false,
 )
 
 data class ProjectCardClicks(

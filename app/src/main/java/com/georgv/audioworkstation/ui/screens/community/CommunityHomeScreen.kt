@@ -113,6 +113,7 @@ fun CommunityHomeScreen(
                                     imagePath = hash?.let { images[it] },
                                     positionMs = if (active) transport.positionMs else 0,
                                     durationMs = if (active) transport.durationMs else 0,
+                                    playing = active && transport.playing,
                                 ),
                                 clicks = ProjectCardClicks(
                                     onPlay = { vm.play(project.id) },
