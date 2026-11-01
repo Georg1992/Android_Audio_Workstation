@@ -6,8 +6,6 @@ import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
-import com.georgv.audioworkstation.online.accessTokenExpired
-import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -16,14 +14,14 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal class HttpProjectShare(
+class HttpProjectShare(
     private val sessions: AccountSessionStore,
     private val accounts: CognitoAccounts,
     private val projects: ProjectRepository,
     private val api: HttpTransport,
     private val objects: ShareObjectTransport,
     private val paths: AudioFilePathProvider,
-) : ProjectShare {
+) : ProjectShare, SharedCardUpdate, SharedTakeRestore, OwnedProjectPublish {
     override suspend fun share(projectId: String) {
         val session = openSession("Sign in to share a project")
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
@@ -125,42 +123,14 @@ internal class HttpProjectShare(
         }
     }
 
-    private suspend fun openSession(signedOut: String): AccountSession {
-        val session = sessions.current() ?: error(signedOut)
-        if (!accessTokenExpired(session.token, System.currentTimeMillis() / 1000)) return session
-        val refreshed = accounts.refresh(session)
-        sessions.save(refreshed)
-        return refreshed
-    }
+    private suspend fun openSession(signedOut: String): AccountSession =
+        openShareSession(sessions, accounts, signedOut)
 
-    private fun post(session: AccountSession, path: String, json: String): JSONObject {
-        val bytes = json.toByteArray(Charsets.UTF_8)
-        val result = api.exchange(
-            HttpCall(
-                method = "POST",
-                path = path,
-                token = session.token,
-                contentType = "application/json",
-                contentLength = bytes.size.toLong(),
-                writeBody = { it.write(bytes) },
-            ),
-        )
-        if (result.status !in 200..299) error("share api status ${result.status}")
-        return JSONObject(result.body)
-    }
+    private fun post(session: AccountSession, path: String, json: String): JSONObject =
+        JSONObject(api.exchangeAuthorized(session, "POST", path, json))
 
     private fun delete(session: AccountSession, path: String) {
-        val result = api.exchange(
-            HttpCall(
-                method = "DELETE",
-                path = path,
-                token = session.token,
-                contentType = null,
-                contentLength = 0,
-                writeBody = null,
-            ),
-        )
-        if (result.status !in 200..299) error("share api status ${result.status}")
+        api.exchangeAuthorized(session, "DELETE", path)
     }
 
     private fun publishCard(

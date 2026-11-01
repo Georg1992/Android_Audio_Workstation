@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class SharedFileRestoreViewModel @Inject constructor(
-    private val share: ProjectShare,
+    private val share: SharedTakeRestore,
 ) : ViewModel() {
     fun restore(projectId: String) {
         viewModelScope.launch(Dispatchers.IO) {

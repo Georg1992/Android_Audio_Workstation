@@ -4,7 +4,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-internal interface ShareObjectTransport {
+interface ShareObjectTransport {
     fun put(url: String, headers: Map<String, String>, file: File)
 
     fun download(url: String, destination: File)

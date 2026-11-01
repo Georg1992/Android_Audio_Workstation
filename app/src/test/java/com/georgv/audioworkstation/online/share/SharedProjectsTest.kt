@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.ui.screens.community.CardPlayback
 import com.georgv.audioworkstation.ui.screens.community.CardTransport
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeViewModel
 import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
+import com.georgv.audioworkstation.ui.screens.community.OwnedShareRefresh
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,6 +61,7 @@ class SharedProjectsTest {
                 listOf(SharedProject("project-a", "Song", emptyList(), null, "Ada")),
             ),
             localProjects = NoLocalProjects,
+            ownedShares = NoLocalProjects,
             player = IdlePlayback,
             media = IdleMedia,
         )
@@ -79,6 +81,7 @@ class SharedProjectsTest {
             accounts = RevokeFails,
             sharedProjects = FixedProjects(emptyList()),
             localProjects = NoLocalProjects,
+            ownedShares = NoLocalProjects,
             player = IdlePlayback,
             media = IdleMedia,
         )
@@ -138,7 +141,7 @@ class SharedProjectsTest {
         override suspend fun signOut(refreshToken: String) = error("unused")
     }
 
-    private object NoLocalProjects : LocalProjectLookup {
+    private object NoLocalProjects : LocalProjectLookup, OwnedShareRefresh {
         override suspend fun exists(projectId: String): Boolean = false
 
         override suspend fun publishOwnerNames() = Unit

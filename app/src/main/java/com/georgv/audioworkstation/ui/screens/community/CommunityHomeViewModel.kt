@@ -7,6 +7,7 @@ import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
+import com.georgv.audioworkstation.online.signOutLocallyThenRevoke
 import com.georgv.audioworkstation.online.share.CardMedia
 import com.georgv.audioworkstation.online.share.SharedProject
 import com.georgv.audioworkstation.online.share.SharedProjects
@@ -43,6 +44,7 @@ class CommunityHomeViewModel @Inject constructor(
     private val accounts: CognitoAccounts,
     private val sharedProjects: SharedProjects,
     private val localProjects: LocalProjectLookup,
+    private val ownedShares: OwnedShareRefresh,
     private val player: CardPlayback,
     private val media: CardMedia,
 ) : ViewModel() {
@@ -171,13 +173,7 @@ class CommunityHomeViewModel @Inject constructor(
 
     fun signOut() {
         submit {
-            val session = sessions.current() ?: return@submit
-            sessions.clear()
-            try {
-                accounts.signOut(session.refreshToken)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Exception) {
+            signOutLocallyThenRevoke(sessions, accounts) { error ->
                 logWarning(TAG, "token revoke failed", error)
             }
         }
@@ -196,8 +192,8 @@ class CommunityHomeViewModel @Inject constructor(
         }
         preparing.value = true
         try {
-            localProjects.publishOwnerNames()
-            localProjects.publishMixes()
+            ownedShares.publishOwnerNames()
+            ownedShares.publishMixes()
             projects.value = sharedProjects.list()
         } finally {
             preparing.value = false

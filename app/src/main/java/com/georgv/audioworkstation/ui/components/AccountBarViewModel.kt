@@ -7,6 +7,7 @@ import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
+import com.georgv.audioworkstation.online.signOutLocallyThenRevoke
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -39,13 +40,7 @@ class AccountBarViewModel @Inject constructor(
 
     fun signOut() {
         submit {
-            val session = sessions.current() ?: return@submit
-            sessions.clear()
-            try {
-                accounts.signOut(session.refreshToken)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Exception) {
+            signOutLocallyThenRevoke(sessions, accounts) { error ->
                 logWarning(TAG, "token revoke failed", error)
             }
         }

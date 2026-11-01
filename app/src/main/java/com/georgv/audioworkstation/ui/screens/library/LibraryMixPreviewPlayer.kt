@@ -142,10 +142,8 @@ class LibraryMixPreviewPlayer @Inject constructor(
     }
 
     private suspend fun prepareSession(sampleRate: Int) {
-        withAudioIo(dispatchers, "prepare session transport capability") {
-            withIo(dispatchers, "prepare session transport capability") {
-                sessionTransportGate.prepareForLiveSession(sampleRate)
-            }
+        withIo(dispatchers, "prepare session transport capability") {
+            sessionTransportGate.prepareForLiveSession(sampleRate)
         }
     }
 

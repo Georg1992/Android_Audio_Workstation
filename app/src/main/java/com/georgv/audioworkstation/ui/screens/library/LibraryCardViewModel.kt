@@ -11,7 +11,7 @@ import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.share.CardImageStore
-import com.georgv.audioworkstation.online.share.ProjectShare
+import com.georgv.audioworkstation.online.share.SharedCardUpdate
 import com.georgv.audioworkstation.online.share.checkedCardTags
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -40,7 +40,7 @@ data class LibraryCardUiState(
 class LibraryCardViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val projects: ProjectRepository,
-    private val share: ProjectShare,
+    private val share: SharedCardUpdate,
     private val paths: AudioFilePathProvider,
     private val images: CardImageStore,
 ) : ViewModel() {

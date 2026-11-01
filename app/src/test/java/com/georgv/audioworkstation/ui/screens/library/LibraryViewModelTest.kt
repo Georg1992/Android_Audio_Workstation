@@ -22,6 +22,7 @@ import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.CardImageStore
 import com.georgv.audioworkstation.online.share.ProjectShare
+import com.georgv.audioworkstation.online.share.SharedCardUpdate
 import com.georgv.audioworkstation.core.audio.FakeAudioController
 import android.net.Uri
 import kotlinx.coroutines.CompletableDeferred
@@ -207,10 +208,7 @@ class LibraryViewModelTest {
         )
         val published = CompletableDeferred<String>()
         val publishThread = CompletableDeferred<Thread>()
-        val share = object : ProjectShare {
-            override suspend fun share(projectId: String) = Unit
-            override suspend fun unshare(projectId: String) = Unit
-            override suspend fun restoreMissing(projectId: String) = Unit
+        val share = object : SharedCardUpdate {
             override suspend fun updateCard(
                 projectId: String,
                 title: String,
@@ -220,10 +218,6 @@ class LibraryViewModelTest {
                 publishThread.complete(Thread.currentThread())
                 published.complete(title)
             }
-
-            override suspend fun publishOwner(projectId: String) = Unit
-
-            override suspend fun publishMix(projectId: String) = Unit
         }
         val vm = LibraryCardViewModel(
             SavedStateHandle(mapOf("projectId" to "project-a")),
@@ -359,14 +353,6 @@ private class IdleProjectShare : ProjectShare {
     override suspend fun share(projectId: String) = Unit
 
     override suspend fun unshare(projectId: String) = Unit
-
-    override suspend fun restoreMissing(projectId: String) = Unit
-
-    override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) = Unit
-
-    override suspend fun publishOwner(projectId: String) = Unit
-
-    override suspend fun publishMix(projectId: String) = Unit
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

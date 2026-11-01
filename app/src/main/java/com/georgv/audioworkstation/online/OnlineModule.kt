@@ -13,13 +13,17 @@ import com.georgv.audioworkstation.online.share.CardMedia
 import com.georgv.audioworkstation.online.share.HttpCardMedia
 import com.georgv.audioworkstation.online.share.HttpProjectShare
 import com.georgv.audioworkstation.online.share.HttpSharedProjects
+import com.georgv.audioworkstation.online.share.OwnedProjectPublish
 import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.online.share.ShareConfig
+import com.georgv.audioworkstation.online.share.SharedCardUpdate
 import com.georgv.audioworkstation.online.share.SharedProjects
+import com.georgv.audioworkstation.online.share.SharedTakeRestore
 import com.georgv.audioworkstation.online.share.UrlConnectionShareObjects
 import com.georgv.audioworkstation.ui.screens.community.CardPlayback
 import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
 import com.georgv.audioworkstation.ui.screens.community.MediaCardPlayback
+import com.georgv.audioworkstation.ui.screens.community.OwnedShareRefresh
 import com.georgv.audioworkstation.ui.screens.community.RoomLocalProjects
 import dagger.Binds
 import dagger.Module
@@ -54,6 +58,10 @@ abstract class OnlineModule {
 
     @Binds
     @Singleton
+    abstract fun bindOwnedShareRefresh(impl: RoomLocalProjects): OwnedShareRefresh
+
+    @Binds
+    @Singleton
     abstract fun bindCardImages(impl: AppCardImageStore): CardImageStore
 
     companion object {
@@ -80,12 +88,12 @@ abstract class OnlineModule {
 
         @Provides
         @Singleton
-        fun provideProjectShare(
+        fun provideHttpProjectShare(
             sessions: AccountSessionStore,
             accounts: CognitoAccounts,
             projects: ProjectRepository,
             paths: AudioFilePathProvider,
-        ): ProjectShare = HttpProjectShare(
+        ): HttpProjectShare = HttpProjectShare(
             sessions = sessions,
             accounts = accounts,
             projects = projects,
@@ -93,6 +101,18 @@ abstract class OnlineModule {
             objects = UrlConnectionShareObjects(),
             paths = paths,
         )
+
+        @Provides
+        fun provideProjectShare(share: HttpProjectShare): ProjectShare = share
+
+        @Provides
+        fun provideSharedCardUpdate(share: HttpProjectShare): SharedCardUpdate = share
+
+        @Provides
+        fun provideSharedTakeRestore(share: HttpProjectShare): SharedTakeRestore = share
+
+        @Provides
+        fun provideOwnedProjectPublish(share: HttpProjectShare): OwnedProjectPublish = share
 
         @Provides
         @Singleton
