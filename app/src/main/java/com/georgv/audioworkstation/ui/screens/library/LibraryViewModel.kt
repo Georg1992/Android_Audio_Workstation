@@ -128,12 +128,14 @@ class LibraryViewModel @Inject constructor(
             viewModelScope.launch { messages.send(UiMessage(R.string.library_no_mix_yet)) }
             return
         }
-        val started = mixPreviewPlayer.play(item.project.id, path)
-        if (!started) {
-            viewModelScope.launch { messages.send(UiMessage(R.string.error_mix_preview_failed)) }
-            return
+        viewModelScope.launch(Dispatchers.IO) {
+            val started = mixPreviewPlayer.play(item.project.id, path)
+            if (!started) {
+                messages.send(UiMessage(R.string.error_mix_preview_failed))
+                return@launch
+            }
+            watchPreview()
         }
-        watchPreview()
     }
 
     fun stopPreview() {

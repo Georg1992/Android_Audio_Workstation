@@ -13,6 +13,7 @@ import com.georgv.audioworkstation.online.share.SharedProjects
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class CommunityHomeUiState(
     val sessionKnown: Boolean = false,
@@ -113,8 +115,8 @@ class CommunityHomeViewModel @Inject constructor(
         viewModelScope.launch {
             loadingProjectId.value = projectId
             try {
-                val file = media.audio(projectId)
-                player.play(projectId, file)
+                val file = withContext(Dispatchers.IO) { media.audio(projectId) }
+                withContext(Dispatchers.IO) { player.play(projectId, file) }
                 transportState.value = player.read()
                 watch()
             } catch (cancel: CancellationException) {

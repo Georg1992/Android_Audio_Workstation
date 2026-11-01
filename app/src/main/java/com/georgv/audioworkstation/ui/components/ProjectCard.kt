@@ -216,6 +216,7 @@ fun ProjectCard(
                         onValueChange = { next ->
                             dragging = true
                             heldFraction = next
+                            if (duration > 0) clicks.onSeek((next * duration).toInt())
                         },
                         onValueChangeFinished = {
                             val released = heldFraction

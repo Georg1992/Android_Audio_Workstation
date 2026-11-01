@@ -1,8 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.library
 
-import android.media.MediaPlayer
-import com.georgv.audioworkstation.core.util.logWarning
-import java.io.File
+import com.georgv.audioworkstation.ui.playback.MemoryPcmPreview
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,14 +9,13 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Single shared WAV preview for Library project cards.
+ * The mix is kept in memory so scrubbing moves the playhead immediately.
  */
 @Singleton
 class LibraryMixPreviewPlayer @Inject constructor() {
     private val mediaPlayerLock = Any()
-    private var mediaPlayer: MediaPlayer? = null
+    private val memory = MemoryPcmPreview()
     private var loadedProjectId: String? = null
-    private var pendingPositionMs: Int? = null
-    private var seekSerial = 0
 
     private val playingProjectId = MutableStateFlow<String?>(null)
     val playingProjectIdState: StateFlow<String?> = playingProjectId.asStateFlow()
@@ -34,135 +31,60 @@ class LibraryMixPreviewPlayer @Inject constructor() {
      * @return true when playback started, false when stopped or failed.
      */
     fun togglePreview(projectId: String, wavPath: String): Boolean {
-        synchronized(mediaPlayerLock) {
-            if (playingProjectId.value == projectId) {
-                stopLocked()
-                return false
-            }
-            stopLocked()
-            return startLocked(projectId, wavPath)
+        val stopCurrent = synchronized(mediaPlayerLock) { playingProjectId.value == projectId }
+        if (stopCurrent) {
+            synchronized(mediaPlayerLock) { releaseLocked() }
+            return false
         }
+        return play(projectId, wavPath)
     }
 
     fun play(projectId: String, wavPath: String): Boolean {
-        synchronized(mediaPlayerLock) {
-            val current = mediaPlayer
-            if (current != null && loadedProjectId == projectId) {
-                pendingPositionMs = null
-                seekSerial += 1
-                current.setOnSeekCompleteListener(null)
-                current.start()
-                playingProjectId.value = projectId
-                publishLocked()
-                return true
-            }
-            releaseLocked()
-            return startLocked(projectId, wavPath)
+        val reuse = synchronized(mediaPlayerLock) {
+            loadedProjectId == projectId && memory.transport().durationMs > 0
+        }
+        if (!reuse && !memory.load(wavPath)) return false
+        return synchronized(mediaPlayerLock) {
+            loadedProjectId = projectId
+            playingProjectId.value = projectId
+            memory.play()
+            publishLocked()
+            true
         }
     }
 
     fun stop() {
         synchronized(mediaPlayerLock) {
-            val current = mediaPlayer ?: return
             playingProjectId.value = null
-            pendingPositionMs = 0
-            seekSerial += 1
-            current.pause()
-            current.seekTo(0)
+            memory.stop()
             publishLocked()
         }
     }
 
-    /**
-     * Moves the playhead to [positionMs]. A seek pauses [MediaPlayer], so a session that is
-     * still playing starts again when that seek finishes.
-     */
     fun seekTo(positionMs: Int) {
-        synchronized(mediaPlayerLock) {
-            val current = mediaPlayer ?: return
-            val duration = current.duration
-            val target = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
-            pendingPositionMs = target
-            val serial = ++seekSerial
-            current.setOnSeekCompleteListener { completed ->
-                synchronized(mediaPlayerLock) {
-                    if (mediaPlayer !== completed || serial != seekSerial) return@synchronized
-                    pendingPositionMs = null
-                    if (playingProjectId.value != null) completed.start()
-                    publishLocked()
-                }
-            }
-            current.seekTo(target)
-            publishLocked()
-        }
+        memory.seekTo(positionMs)
+        synchronized(mediaPlayerLock) { publishLocked() }
     }
 
     fun tick() {
         synchronized(mediaPlayerLock) {
-            val current = mediaPlayer
-            val sessionPlaying = playingProjectId.value != null && pendingPositionMs == null
-            if (current != null && sessionPlaying && !current.isPlaying) current.start()
+            if (memory.transport().ended) playingProjectId.value = null
             publishLocked()
         }
     }
 
     fun stopIfPlaying(projectId: String) {
         synchronized(mediaPlayerLock) {
-            if (playingProjectId.value == projectId) {
-                stopLocked()
-            }
+            if (playingProjectId.value == projectId) releaseLocked()
         }
     }
 
     fun stopAll() {
-        synchronized(mediaPlayerLock) {
-            stopLocked()
-        }
-    }
-
-    private fun startLocked(projectId: String, wavPath: String): Boolean {
-        val file = File(wavPath)
-        if (!file.isFile) return false
-        return try {
-            val player = MediaPlayer()
-            mediaPlayer = player
-            player.setDataSource(wavPath)
-            player.setOnCompletionListener {
-                synchronized(mediaPlayerLock) {
-                    if (mediaPlayer === player) {
-                        playingProjectId.value = null
-                        pendingPositionMs = 0
-                        seekSerial += 1
-                        player.pause()
-                        player.seekTo(0)
-                        publishLocked()
-                    }
-                }
-            }
-            player.prepare()
-            player.start()
-            loadedProjectId = projectId
-            playingProjectId.value = projectId
-            publishLocked()
-            true
-        } catch (error: Exception) {
-            logWarning(TAG, "play failed: $projectId", error)
-            releaseLocked()
-            false
-        }
-    }
-
-    private fun stopLocked() {
-        releaseLocked()
+        synchronized(mediaPlayerLock) { releaseLocked() }
     }
 
     private fun releaseLocked() {
-        seekSerial += 1
-        pendingPositionMs = null
-        runCatching { mediaPlayer?.setOnSeekCompleteListener(null) }
-        runCatching { mediaPlayer?.stop() }
-        runCatching { mediaPlayer?.release() }
-        mediaPlayer = null
+        memory.release()
         loadedProjectId = null
         playingProjectId.value = null
         publishLocked()
@@ -173,20 +95,15 @@ class LibraryMixPreviewPlayer @Inject constructor() {
     }
 
     private fun snapshotLocked(): MixTransport {
-        val current = mediaPlayer
         val id = loadedProjectId
-        if (current == null || id == null) return MixTransport()
-        val pending = pendingPositionMs
+        val state = memory.transport()
+        if (id == null || state.durationMs <= 0) return MixTransport()
         return MixTransport(
             projectId = id,
             playing = playingProjectId.value != null,
-            positionMs = if (pending != null) pending else current.currentPosition,
-            durationMs = current.duration,
+            positionMs = state.positionMs,
+            durationMs = state.durationMs,
         )
-    }
-
-    private companion object {
-        const val TAG = "LibraryMixPreviewPlayer"
     }
 }
 
