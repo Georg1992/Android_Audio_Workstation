@@ -110,6 +110,7 @@ fun LibraryScreen(
                 handlers = LibraryRowHandlers(
                     onPlay = vm::play,
                     onStop = vm::stopPreview,
+                    onScrubStarted = vm::holdPreview,
                     onSeek = vm::seekPreview,
                     onOpen = { projectId ->
                         scope.launch {
@@ -289,6 +290,7 @@ private fun ShareConfirmDialog(
 private data class LibraryRowHandlers(
     val onPlay: (LibraryProjectItem) -> Unit,
     val onStop: () -> Unit,
+    val onScrubStarted: () -> Unit,
     val onSeek: (Int) -> Unit,
     val onOpen: (String) -> Unit,
     val onDelete: (LibraryProjectItem) -> Unit,
@@ -375,6 +377,7 @@ private fun LibraryProjectContent(
                         clicks = ProjectCardClicks(
                             onPlay = { handlers.onPlay(item) },
                             onStop = handlers.onStop,
+                            onScrubStarted = handlers.onScrubStarted,
                             onSeek = handlers.onSeek,
                             onOpen = { handlers.onOpen(item.project.id) },
                         ),

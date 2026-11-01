@@ -64,7 +64,7 @@ class LibraryViewModelTest {
             projects = listOf(project("project-a", "Alpha", 1L)),
         )
         val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
-        val vm = LibraryViewModel(repo, mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(repo, mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
 
         assertEquals(DataAvailability.Pending, vm.uiState.value.availability)
         assertTrue(vm.uiState.value.isInitialLoad)
@@ -75,7 +75,7 @@ class LibraryViewModelTest {
         val newerProject = project(id = "project-b", name = "Beta", createdAt = 2L)
         val olderProject = project(id = "project-a", name = "Alpha", createdAt = 1L)
         val dao = FakeLibraryProjectDao(projects = listOf(olderProject, newerProject))
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -89,7 +89,7 @@ class LibraryViewModelTest {
     @Test
     fun `empty projects after Ready is content empty not initial load`() = runTest {
         val dao = FakeLibraryProjectDao(projects = emptyList())
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -116,7 +116,7 @@ class LibraryViewModelTest {
 
         assertTrue(repo.projectsReady.value)
 
-        val vm = LibraryViewModel(repo, mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(repo, mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         assertEquals(DataAvailability.Ready, vm.uiState.value.availability)
         assertEquals(2, vm.uiState.value.content.projects.size)
         assertFalse(vm.uiState.value.isInitialLoad)
@@ -130,7 +130,7 @@ class LibraryViewModelTest {
                 project(id = "project-b", name = "Beta", createdAt = 2L)
             )
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -148,7 +148,7 @@ class LibraryViewModelTest {
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
             failDeleteProject = true
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
 
         vm.deleteProject("project-a")
         advanceUntilIdle()
@@ -162,7 +162,7 @@ class LibraryViewModelTest {
         val dao = FakeLibraryProjectDao(
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         val item = vm.uiState.value.content.projects.first()
         vm.onProjectCardBodyClick(item)
         advanceUntilIdle()
@@ -188,7 +188,7 @@ class LibraryViewModelTest {
         val coordinator = mixdownCoordinator(paths, repo)
         coordinator.refreshKnownMixdownPaths(listOf(projectId))
         advanceUntilIdle()
-        val vm = LibraryViewModel(repo, coordinator, LibraryMixPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
+        val vm = LibraryViewModel(repo, coordinator, libraryPreviewPlayer(), IdleAccountSessionStore(), IdleProjectShare())
         backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
 

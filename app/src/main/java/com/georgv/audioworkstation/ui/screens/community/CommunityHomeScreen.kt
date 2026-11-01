@@ -117,6 +117,7 @@ fun CommunityHomeScreen(
                                 clicks = ProjectCardClicks(
                                     onPlay = { vm.play(project.id) },
                                     onStop = vm::stop,
+                                    onScrubStarted = {},
                                     onSeek = vm::seek,
                                     onOpen = { vm.open(project.id) },
                                 ),

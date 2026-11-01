@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 
@@ -139,11 +140,15 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun stopPreview() {
-        mixPreviewPlayer.stop()
+        viewModelScope.launch { mixPreviewPlayer.stop() }
     }
 
     fun seekPreview(positionMs: Int) {
-        mixPreviewPlayer.seekTo(positionMs)
+        viewModelScope.launch { mixPreviewPlayer.seekTo(positionMs) }
+    }
+
+    fun holdPreview() {
+        viewModelScope.launch { mixPreviewPlayer.holdForScrub() }
     }
 
     fun shareProject(projectId: String) {
@@ -191,9 +196,10 @@ class LibraryViewModel @Inject constructor(
 
             LibraryCardBodyClickOutcome.TogglePreview -> {
                 val wavPath = item.mixdown.mixdownWavPath ?: return
-                val started = mixPreviewPlayer.togglePreview(item.project.id, wavPath)
-                if (!started && !item.isPreviewPlaying) {
-                    viewModelScope.launch {
+                val wasPlaying = item.isPreviewPlaying
+                viewModelScope.launch {
+                    val started = mixPreviewPlayer.togglePreview(item.project.id, wavPath)
+                    if (!started && !wasPlaying) {
                         messages.send(UiMessage(R.string.error_mix_preview_failed))
                     }
                 }
@@ -211,7 +217,7 @@ class LibraryViewModel @Inject constructor(
 
     override fun onCleared() {
         watchJob?.cancel()
-        mixPreviewPlayer.stopAll()
+        runBlocking { mixPreviewPlayer.stopAll() }
         super.onCleared()
     }
 

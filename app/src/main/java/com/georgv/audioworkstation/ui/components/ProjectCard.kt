@@ -214,6 +214,7 @@ fun ProjectCard(
                     Slider(
                         value = displayed,
                         onValueChange = { next ->
+                            if (!dragging) clicks.onScrubStarted()
                             dragging = true
                             heldFraction = next
                         },
@@ -275,6 +276,7 @@ data class ShownCard(
 data class ProjectCardClicks(
     val onPlay: () -> Unit,
     val onStop: () -> Unit,
+    val onScrubStarted: () -> Unit,
     val onSeek: (Int) -> Unit,
     val onOpen: () -> Unit,
 )
