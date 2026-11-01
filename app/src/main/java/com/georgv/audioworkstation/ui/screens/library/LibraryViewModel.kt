@@ -126,8 +126,7 @@ class LibraryViewModel @Inject constructor(
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val tracks = repo.observeTracks(item.project.id).first()
-            val started = mixPreviewPlayer.play(item.project, tracks)
+            val started = mixPreviewPlayer.play(item.project.id, path)
             if (!started) {
                 messages.send(UiMessage(R.string.error_mix_preview_failed))
                 return@launch

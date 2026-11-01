@@ -6,10 +6,11 @@ import com.georgv.audioworkstation.core.audio.capability.CapabilityProfileState
 import com.georgv.audioworkstation.core.audio.capability.CapabilityValidationFlags
 import com.georgv.audioworkstation.core.audio.capability.ResolvedAudioCapability
 import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
+import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
-import com.georgv.audioworkstation.data.db.entities.ProjectEntity
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import java.io.File
+import java.nio.file.Files
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,41 +19,39 @@ import org.junit.Test
 
 class LibraryMixPreviewPlayerTest {
     @Test
-    fun `play arms the project tracks on the timeline`() = runTest {
+    fun `play arms the finished mix file`() = runTest {
         val audio = FakeAudioController()
         val player = libraryPreviewPlayer(audio)
-        val project = ProjectEntity(id = "project-a", sampleRate = ProjectSampleRate.RATE_44_100.hz)
+        val mix = mixFile()
 
-        assertTrue(player.play(project, showcaseTracks()))
+        assertTrue(player.play("project-a", mix.absolutePath))
 
         val spec = audio.lastMultiPlaybackSpec
         assertEquals(1, audio.startPlaybackCalls)
         assertEquals(ProjectSampleRate.RATE_44_100.hz, spec?.sampleRate)
-        assertEquals("/mix/song.wav", spec?.lanes?.get(0)?.wavFilePath)
-        assertEquals(0L, spec?.lanes?.get(0)?.timelineClipStartMs)
-        assertEquals("/mix/take.wav", spec?.lanes?.get(1)?.wavFilePath)
-        assertEquals(196L, spec?.lanes?.get(1)?.timelineClipStartMs)
+        assertEquals(1, spec?.lanes?.size)
+        assertEquals(mix.absolutePath, spec?.lanes?.single()?.wavFilePath)
+        assertEquals(0L, spec?.lanes?.single()?.timelineClipStartMs)
         assertEquals(0L, spec?.startPositionMs)
-        assertEquals(213_394L, spec?.sessionTimelineEndMs)
-        assertEquals(213_394, player.transportState.value.durationMs)
+        assertEquals(player.transportState.value.durationMs.toLong(), spec?.sessionTimelineEndMs)
         assertTrue(player.transportState.value.playing)
     }
 
     @Test
-    fun `scrub restarts the tracks from the released playhead`() = runTest {
+    fun `scrub restarts the mix from the released playhead`() = runTest {
         val audio = FakeAudioController()
         val player = libraryPreviewPlayer(audio)
-        val project = ProjectEntity(id = "project-a", sampleRate = ProjectSampleRate.RATE_44_100.hz)
-        player.play(project, showcaseTracks())
+        val mix = mixFile()
+        player.play("project-a", mix.absolutePath)
 
         player.holdForScrub()
         assertTrue(player.isPlaying("project-a"))
 
-        player.seekTo(400)
+        player.seekTo(40)
         assertEquals(2, audio.startPlaybackCalls)
-        assertEquals(400L, audio.lastMultiPlaybackSpec?.startPositionMs)
-        assertEquals(196L, audio.lastMultiPlaybackSpec?.lanes?.get(1)?.timelineClipStartMs)
-        assertEquals(400, player.transportState.value.positionMs)
+        assertEquals(mix.absolutePath, audio.lastMultiPlaybackSpec?.lanes?.single()?.wavFilePath)
+        assertEquals(40L, audio.lastMultiPlaybackSpec?.startPositionMs)
+        assertEquals(40, player.transportState.value.positionMs)
         assertTrue(player.transportState.value.playing)
     }
 
@@ -60,49 +59,40 @@ class LibraryMixPreviewPlayerTest {
     fun `clock follows the engine transport and ends when the engine stops`() = runTest {
         val audio = FakeAudioController()
         val player = libraryPreviewPlayer(audio)
-        val project = ProjectEntity(id = "project-a", sampleRate = ProjectSampleRate.RATE_44_100.hz)
-        player.play(project, showcaseTracks())
+        player.play("project-a", mixFile().absolutePath)
+        val durationMs = player.transportState.value.durationMs
 
-        audio.transportPositionMsValue = 250L
+        audio.transportPositionMsValue = 25L
         player.tick()
-        assertEquals(250, player.transportState.value.positionMs)
+        assertEquals(25, player.transportState.value.positionMs)
 
         audio.completePlayback()
         player.tick()
         assertFalse(player.isPlaying("project-a"))
-        assertEquals(213_394, player.transportState.value.positionMs)
+        assertEquals(durationMs, player.transportState.value.positionMs)
     }
 
     @Test
-    fun `project without playable tracks does not start the engine`() = runTest {
+    fun `missing mix file does not start the engine`() = runTest {
         val audio = FakeAudioController()
         val player = libraryPreviewPlayer(audio)
-        val project = ProjectEntity(id = "project-a")
 
-        assertFalse(player.play(project, emptyList()))
+        assertFalse(player.play("project-a", File("missing-mix.wav").absolutePath))
         assertEquals(0, audio.startPlaybackCalls)
     }
 }
 
-private fun showcaseTracks(): List<TrackEntity> =
-    listOf(
-        TrackEntity(
-            id = "song",
-            projectId = "project-a",
-            wavFilePath = "/mix/song.wav",
-            duration = 213_394L,
-            position = 0,
-        ),
-        TrackEntity(
-            id = "take",
-            projectId = "project-a",
-            wavFilePath = "/mix/take.wav",
-            duration = 14_994L,
-            timelineStartOffsetMs = 216L,
-            overdubPlaybackSyncOffsetMs = 20L,
-            position = 1,
-        ),
+private fun mixFile(): File {
+    val wav = Files.createTempDirectory("library-mix").toFile().resolve("mixdown.wav")
+    writeConstantPcm16Wav(
+        file = wav,
+        sampleValue = 1_000,
+        frameCount = 4_410,
+        channelCount = 2,
+        sampleRateHz = ProjectSampleRate.RATE_44_100.hz,
     )
+    return wav
+}
 
 internal fun libraryPreviewPlayer(
     audio: FakeAudioController = FakeAudioController(),
