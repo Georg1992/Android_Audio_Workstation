@@ -19,11 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -177,13 +175,6 @@ fun ProjectCard(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = clicks.onOpen) {
-                        Icon(
-                            imageVector = Icons.Filled.FolderOpen,
-                            contentDescription = stringResource(R.string.cd_open_project),
-                            tint = AppColors.Line,
-                        )
-                    }
                     actions()
                 }
             }
@@ -313,5 +304,4 @@ data class ProjectCardClicks(
     val onStop: () -> Unit,
     val onScrubStarted: () -> Unit,
     val onSeek: (Int) -> Unit,
-    val onOpen: () -> Unit,
 )

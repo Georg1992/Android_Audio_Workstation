@@ -28,10 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -63,7 +60,6 @@ import kotlin.math.roundToInt
 @Composable
 fun LibraryScreen(
     onBack: () -> Unit,
-    onOpenProject: (String) -> Unit,
     onCustomize: (String) -> Unit,
     vm: LibraryViewModel = hiltViewModel(),
 ) {
@@ -80,7 +76,6 @@ fun LibraryScreen(
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var pendingDeleteProject by remember { mutableStateOf<LibraryProjectItem?>(null) }
     var pendingShare by remember { mutableStateOf<PendingShare?>(null) }
     val locale = rememberAppLocaleScope()
@@ -112,13 +107,6 @@ fun LibraryScreen(
                     onStop = vm::stopPreview,
                     onScrubStarted = vm::holdPreview,
                     onSeek = vm::seekPreview,
-                    onOpen = { projectId ->
-                        scope.launch {
-                            vm.warmUpProject(projectId)
-                            delay(LibraryProjectOpenWarmupMs)
-                            onOpenProject(projectId)
-                        }
-                    },
                     onDelete = { pendingDeleteProject = it },
                     onCustomize = onCustomize,
                     onShare = { item ->
@@ -292,7 +280,6 @@ private data class LibraryRowHandlers(
     val onStop: () -> Unit,
     val onScrubStarted: () -> Unit,
     val onSeek: (Int) -> Unit,
-    val onOpen: (String) -> Unit,
     val onDelete: (LibraryProjectItem) -> Unit,
     val onCustomize: (String) -> Unit,
     val onShare: (LibraryProjectItem) -> Unit,
@@ -380,7 +367,6 @@ private fun LibraryProjectContent(
                             onStop = handlers.onStop,
                             onScrubStarted = handlers.onScrubStarted,
                             onSeek = handlers.onSeek,
-                            onOpen = { handlers.onOpen(item.project.id) },
                         ),
                         actions = {
                             IconButton(onClick = { handlers.onDelete(item) }) {
@@ -430,6 +416,3 @@ private fun LibraryProjectContent(
         }
     }
 }
-
-/** Brief warm-up before Library → Project so the tap ripple renders before navigation. */
-private const val LibraryProjectOpenWarmupMs = 70L

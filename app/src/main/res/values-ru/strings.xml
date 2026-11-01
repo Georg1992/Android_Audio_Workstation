@@ -80,7 +80,6 @@
     <!-- Library screen -->
     <string name="library_empty_state">Проектов пока нет.</string>
     <string name="library_loading_state">Загрузка проектов…</string>
-    <string name="library_open_project_hint">Нажмите, чтобы открыть проект</string>
     <string name="library_untitled_project">Проект без названия</string>
     <string name="default_new_project_name">Новый проект</string>
     <string name="library_delete_project_title">Удалить проект?</string>

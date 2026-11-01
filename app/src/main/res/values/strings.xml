@@ -80,7 +80,6 @@
     <!-- Library screen -->
     <string name="library_empty_state">No projects yet.</string>
     <string name="library_loading_state">Loading projects…</string>
-    <string name="library_open_project_hint">Tap to open project</string>
     <string name="library_untitled_project">Untitled Project</string>
     <string name="default_new_project_name">New Project</string>
     <string name="library_delete_project_title">Delete project?</string>
