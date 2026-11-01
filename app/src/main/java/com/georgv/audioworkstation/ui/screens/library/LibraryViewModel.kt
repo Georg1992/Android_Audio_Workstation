@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -171,6 +172,14 @@ class LibraryViewModel @Inject constructor(
                 logWarning(TAG, "deleteProject failed: $projectId", error)
                 messages.send(UiMessage(R.string.error_delete_project_failed))
             }
+        }
+    }
+
+    /** Prefetch project metadata before Library → Project navigation. */
+    fun warmUpProject(projectId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.observeProject(projectId).first()
+            repo.observeTracks(projectId).first()
         }
     }
 

@@ -191,6 +191,9 @@ private fun AppDestinations(
         composable(Routes.LIBRARY) {
             LibraryScreen(
                 onBack = { navController.popBackStack() },
+                onOpenProject = { projectId ->
+                    navController.navigate("${Routes.PROJECT}/$projectId?quick=false")
+                },
                 onCustomize = { projectId ->
                     navController.navigate("library_card/$projectId")
                 },
