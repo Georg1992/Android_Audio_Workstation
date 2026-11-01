@@ -17,6 +17,8 @@ class LibraryMixPreviewPlayer @Inject constructor() {
     private val mediaPlayerLock = Any()
     private var mediaPlayer: MediaPlayer? = null
     private var loadedProjectId: String? = null
+    private var pendingPositionMs: Int? = null
+    private var seekSerial = 0
 
     private val playingProjectId = MutableStateFlow<String?>(null)
     val playingProjectIdState: StateFlow<String?> = playingProjectId.asStateFlow()
@@ -46,6 +48,9 @@ class LibraryMixPreviewPlayer @Inject constructor() {
         synchronized(mediaPlayerLock) {
             val current = mediaPlayer
             if (current != null && loadedProjectId == projectId) {
+                pendingPositionMs = null
+                seekSerial += 1
+                current.setOnSeekCompleteListener(null)
                 current.start()
                 playingProjectId.value = projectId
                 publishLocked()
@@ -59,17 +64,35 @@ class LibraryMixPreviewPlayer @Inject constructor() {
     fun stop() {
         synchronized(mediaPlayerLock) {
             val current = mediaPlayer ?: return
+            playingProjectId.value = null
+            pendingPositionMs = 0
+            seekSerial += 1
             current.pause()
             current.seekTo(0)
-            playingProjectId.value = null
             publishLocked()
         }
     }
 
+    /**
+     * Moves the playhead to [positionMs]. A seek pauses [MediaPlayer], so a session that is
+     * still playing starts again when that seek finishes.
+     */
     fun seekTo(positionMs: Int) {
         synchronized(mediaPlayerLock) {
             val current = mediaPlayer ?: return
-            current.seekTo(positionMs)
+            val duration = current.duration
+            val target = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
+            pendingPositionMs = target
+            val serial = ++seekSerial
+            current.setOnSeekCompleteListener { completed ->
+                synchronized(mediaPlayerLock) {
+                    if (mediaPlayer !== completed || serial != seekSerial) return@synchronized
+                    pendingPositionMs = null
+                    if (playingProjectId.value != null) completed.start()
+                    publishLocked()
+                }
+            }
+            current.seekTo(target)
             publishLocked()
         }
     }
@@ -104,9 +127,11 @@ class LibraryMixPreviewPlayer @Inject constructor() {
             player.setOnCompletionListener {
                 synchronized(mediaPlayerLock) {
                     if (mediaPlayer === player) {
+                        playingProjectId.value = null
+                        pendingPositionMs = 0
+                        seekSerial += 1
                         player.pause()
                         player.seekTo(0)
-                        playingProjectId.value = null
                         publishLocked()
                     }
                 }
@@ -129,6 +154,9 @@ class LibraryMixPreviewPlayer @Inject constructor() {
     }
 
     private fun releaseLocked() {
+        seekSerial += 1
+        pendingPositionMs = null
+        runCatching { mediaPlayer?.setOnSeekCompleteListener(null) }
         runCatching { mediaPlayer?.stop() }
         runCatching { mediaPlayer?.release() }
         mediaPlayer = null
@@ -145,10 +173,11 @@ class LibraryMixPreviewPlayer @Inject constructor() {
         val current = mediaPlayer
         val id = loadedProjectId
         if (current == null || id == null) return MixTransport()
+        val pending = pendingPositionMs
         return MixTransport(
             projectId = id,
-            playing = current.isPlaying,
-            positionMs = current.currentPosition,
+            playing = playingProjectId.value != null,
+            positionMs = if (pending != null) pending else current.currentPosition,
             durationMs = current.duration,
         )
     }

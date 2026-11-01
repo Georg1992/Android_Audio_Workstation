@@ -106,6 +106,7 @@
     <string name="cd_play">播放</string>
     <string name="cd_pause">暂停</string>
     <string name="cd_stop">停止</string>
+    <string name="card_playback_clock">%1$s / %2$s</string>
     <string name="cd_record">录音</string>
     <string name="cd_import_audio">导入音频</string>
     <string name="cd_mixdown_project">混音并导出项目</string>

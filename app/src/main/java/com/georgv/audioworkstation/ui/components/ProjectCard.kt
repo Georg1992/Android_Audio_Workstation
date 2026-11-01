@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
@@ -66,6 +67,26 @@ fun ProjectCard(
     }
     val duration = card.durationMs
     val fraction = if (duration > 0) card.positionMs.toFloat() / duration.toFloat() else 0f
+    var dragging by remember { mutableStateOf(false) }
+    var heldFraction by remember { mutableStateOf<Float?>(null) }
+    var positionAtRelease by remember { mutableStateOf<Int?>(null) }
+    val held = heldFraction
+    val displayed = (held ?: fraction).coerceIn(0f, 1f)
+    val shownPositionMs = if (held != null && duration > 0) (displayed * duration).toInt() else card.positionMs
+    LaunchedEffect(dragging, duration, card.positionMs) {
+        if (duration <= 0) {
+            dragging = false
+            heldFraction = null
+            positionAtRelease = null
+            return@LaunchedEffect
+        }
+        if (dragging) return@LaunchedEffect
+        val marked = positionAtRelease ?: return@LaunchedEffect
+        if (card.positionMs != marked) {
+            heldFraction = null
+            positionAtRelease = null
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -191,9 +212,17 @@ fun ProjectCard(
                         )
                     }
                     Slider(
-                        value = fraction.coerceIn(0f, 1f),
+                        value = displayed,
                         onValueChange = { next ->
+                            dragging = true
+                            heldFraction = next
                             if (duration > 0) clicks.onSeek((next * duration).toInt())
+                        },
+                        onValueChangeFinished = {
+                            val released = heldFraction
+                            positionAtRelease = card.positionMs
+                            dragging = false
+                            if (released != null && duration > 0) clicks.onSeek((released * duration).toInt())
                         },
                         enabled = duration > 0,
                         modifier = Modifier.weight(1f),
@@ -204,9 +233,32 @@ fun ProjectCard(
                         ),
                     )
                 }
+                if (duration > 0) {
+                    Text(
+                        text = stringResource(
+                            R.string.card_playback_clock,
+                            playbackClock(shownPositionMs),
+                            playbackClock(duration),
+                        ),
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
+}
+
+private const val MillisPerSecond = 1000
+private const val SecondsPerMinute = 60
+
+private fun playbackClock(positionMs: Int): String {
+    val totalSeconds = positionMs.coerceAtLeast(0) / MillisPerSecond
+    val minutes = totalSeconds / SecondsPerMinute
+    val seconds = totalSeconds % SecondsPerMinute
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 data class ShownCard(

@@ -10,6 +10,9 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
     private val lock = Any()
     private var player: MediaPlayer? = null
     private var projectId: String? = null
+    private var active = false
+    private var pendingPositionMs: Int? = null
+    private var seekSerial = 0
 
     override fun play(projectId: String, file: File) {
         synchronized(lock) {
@@ -19,6 +22,9 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
             created.setOnCompletionListener {
                 synchronized(lock) {
                     if (player === created) {
+                        active = false
+                        pendingPositionMs = 0
+                        seekSerial += 1
                         created.pause()
                         created.seekTo(0)
                     }
@@ -28,21 +34,41 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
             created.start()
             player = created
             this.projectId = projectId
+            active = true
+            pendingPositionMs = null
         }
     }
 
     override fun stop() {
         synchronized(lock) {
             val current = player ?: return
+            active = false
+            pendingPositionMs = 0
+            seekSerial += 1
             current.pause()
             current.seekTo(0)
         }
     }
 
+    /**
+     * Moves the playhead to [positionMs]. A seek pauses [MediaPlayer], so playback that is
+     * still active starts again when that seek finishes.
+     */
     override fun seekTo(positionMs: Int) {
         synchronized(lock) {
             val current = player ?: return
-            current.seekTo(positionMs)
+            val duration = current.duration
+            val target = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
+            pendingPositionMs = target
+            val serial = ++seekSerial
+            current.setOnSeekCompleteListener { completed ->
+                synchronized(lock) {
+                    if (player !== completed || serial != seekSerial) return@synchronized
+                    pendingPositionMs = null
+                    if (active) completed.start()
+                }
+            }
+            current.seekTo(target)
         }
     }
 
@@ -51,10 +77,11 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
             val current = player
             val id = projectId
             if (current == null || id == null) return CardTransport()
+            val pending = pendingPositionMs
             return CardTransport(
                 projectId = id,
-                playing = current.isPlaying,
-                positionMs = current.currentPosition,
+                playing = active,
+                positionMs = if (pending != null) pending else current.currentPosition,
                 durationMs = current.duration,
             )
         }
@@ -62,8 +89,12 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
 
     private fun releaseLocked() {
         val current = player
+        seekSerial += 1
         player = null
         projectId = null
+        active = false
+        pendingPositionMs = null
+        current?.setOnSeekCompleteListener(null)
         current?.release()
     }
 }

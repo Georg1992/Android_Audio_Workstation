@@ -103,6 +103,7 @@
     <string name="cd_play">Play</string>
     <string name="cd_pause">Pause</string>
     <string name="cd_stop">Stop</string>
+    <string name="card_playback_clock">%1$s / %2$s</string>
     <string name="cd_record">Record</string>
     <string name="cd_import_audio">Import audio</string>
     <string name="cd_mixdown_project">Mix and export project</string>

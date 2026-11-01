@@ -102,6 +102,7 @@
     <string name="cd_play">Воспроизвести</string>
     <string name="cd_pause">Пауза</string>
     <string name="cd_stop">Остановить</string>
+    <string name="card_playback_clock">%1$s / %2$s</string>
     <string name="cd_record">Записать</string>
     <string name="cd_import_audio">Импорт аудио</string>
     <string name="cd_mixdown_project">Микс и экспорт проекта</string>

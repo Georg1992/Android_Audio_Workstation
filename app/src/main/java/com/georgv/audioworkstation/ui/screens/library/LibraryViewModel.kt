@@ -249,7 +249,7 @@ class LibraryViewModel @Inject constructor(
         watchJob = viewModelScope.launch {
             while (isActive) {
                 mixPreviewPlayer.tick()
-                if (!mixPreviewPlayer.transportState.value.playing) break
+                if (mixPreviewPlayer.playingProjectIdState.value == null) break
                 delay(PREVIEW_TICK_MS)
             }
         }
