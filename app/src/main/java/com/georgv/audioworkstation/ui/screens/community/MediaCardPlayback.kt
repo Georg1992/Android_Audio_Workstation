@@ -78,6 +78,7 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
             val id = projectId
             if (current == null || id == null) return CardTransport()
             val pending = pendingPositionMs
+            if (active && pending == null && !current.isPlaying) current.start()
             return CardTransport(
                 projectId = id,
                 playing = active,

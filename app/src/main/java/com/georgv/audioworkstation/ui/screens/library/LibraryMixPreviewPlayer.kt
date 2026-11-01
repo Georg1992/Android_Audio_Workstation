@@ -99,6 +99,9 @@ class LibraryMixPreviewPlayer @Inject constructor() {
 
     fun tick() {
         synchronized(mediaPlayerLock) {
+            val current = mediaPlayer
+            val sessionPlaying = playingProjectId.value != null && pendingPositionMs == null
+            if (current != null && sessionPlaying && !current.isPlaying) current.start()
             publishLocked()
         }
     }
