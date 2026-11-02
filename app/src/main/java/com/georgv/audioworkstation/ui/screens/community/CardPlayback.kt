@@ -11,5 +11,7 @@ interface CardPlayback {
 
     fun read(): CardTransport
 
+    fun pullFailure(): Exception?
+
     fun release()
 }

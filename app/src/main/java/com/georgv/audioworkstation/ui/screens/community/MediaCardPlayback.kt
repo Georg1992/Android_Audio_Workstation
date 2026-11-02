@@ -38,6 +38,8 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
         stream.release()
     }
 
+    override fun pullFailure(): Exception? = stream.pullFailure()
+
     override fun read(): CardTransport {
         val state = stream.transport()
         synchronized(lock) {

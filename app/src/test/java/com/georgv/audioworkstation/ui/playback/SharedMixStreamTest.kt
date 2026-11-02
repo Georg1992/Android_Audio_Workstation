@@ -8,11 +8,12 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.net.InetSocketAddress
+import java.net.UnknownHostException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,198 +21,241 @@ import org.junit.Test
 
 class SharedMixStreamTest {
     @Test
-    fun playStartsFromASmallBufferAndLeavesTheRestUnread() {
-        val wav = mixWav()
+    fun playStartsFromTheFirstPiece() {
+        val wav = largeWav()
+        val ranges = CopyOnWriteArrayList<Requested>()
         val release = CountDownLatch(1)
-        val read = AtomicInteger(0)
-        val source = object : MixSource {
-            override fun open(url: String, offset: Long): InputStream =
-                LimitedStream(wav, HeaderBytes + StartBytes, read, release)
-        }
+        val source = memory(wav, ranges, blockAt = pieceStart(1), release = release)
         val output = FakeOutput()
-        val stream = SharedMixStream(source, output, aheadBytes = AheadBytes, startBytes = StartBytes)
-        val returned = CountDownLatch(1)
-        val worker = Thread {
-            stream.play("https://mix.example/song")
-            returned.countDown()
-        }
-        worker.start()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces)
         try {
-            assertTrue(returned.await(2, TimeUnit.SECONDS))
+            stream.play(Url)
+            Thread.sleep(SettleMs)
             assertTrue(output.started)
             assertTrue(output.played)
-            assertEquals(HeaderBytes + StartBytes, read.get())
-            assertTrue(wav.size > read.get())
+            assertEquals(listOf(0L, pieceStart(0)), ranges.map { it.start })
+            assertEquals(pieceEnd(0), ranges[1].endInclusive)
+            assertTrue(ranges.size < wav.size)
         } finally {
+            release.countDown()
             stream.release()
-            worker.join(JoinMs)
         }
     }
 
     @Test
-    fun readAheadStaysInsideTheWindowWhilePlaybackIsSlow() {
+    fun readAheadStaysInsideASmallStretch() {
         val wav = largeWav()
-        val read = AtomicInteger(0)
-        val source = object : MixSource {
-            override fun open(url: String, offset: Long): InputStream = CountingStream(wav, offset, read)
-        }
+        val ranges = CopyOnWriteArrayList<Requested>()
+        val source = memory(wav, ranges)
         val output = PermitOutput()
-        val stream = SharedMixStream(source, output, aheadBytes = AheadBytes, startBytes = StartBytes)
-        val returned = CountDownLatch(1)
-        val worker = Thread {
-            stream.play("https://mix.example/song")
-            returned.countDown()
-        }
-        worker.start()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces)
         try {
-            assertTrue(returned.await(2, TimeUnit.SECONDS))
-            assertTrue(waitUntil { read.get() >= HeaderBytes + StartBytes && stable(read) })
-            val parked = read.get()
-            val window = HeaderBytes + AheadBytes + ChunkBytes * 3
-            assertTrue(parked <= window)
-            assertTrue(parked < wav.size / 2)
+            stream.play(Url)
+            assertTrue(waitUntil { pieceStarts(ranges).size == AheadPieces + 1 && stable(ranges) })
+            val parked = pieceStarts(ranges).size
+            assertTrue(parked < PieceCount / 2)
             output.allow(WritesAfterStart)
-            assertTrue(waitUntil { read.get() > parked })
-            assertTrue(read.get() < wav.size)
+            assertTrue(waitUntil { pieceStarts(ranges).size > parked })
+            assertTrue(pieceStarts(ranges).size < PieceCount)
         } finally {
             output.allow(WritesAfterStart)
             stream.release()
-            worker.join(JoinMs)
         }
     }
 
     @Test
-    fun seekRequestsThePcmOffsetInTheMix() {
-        val wav = mixWav()
+    fun seekDropsTheBufferAndRequestsThePieceAtTheNewTime() {
+        val wav = largeWav()
         val info = WavStreamHeader.read(ByteArrayInputStream(wav)) ?: error("wav header")
-        val frames = SeekMs.toLong() * info.sampleRateHz / MsPerSecond
-        val expected = info.dataOffset + frames * info.blockAlign
-        assertEquals(1044L, expected)
-        val offsets = CopyOnWriteArrayList<Long>()
-        val seen = CountDownLatch(1)
-        val source = object : MixSource {
-            override fun open(url: String, offset: Long): InputStream {
-                offsets += offset
-                if (offset == expected) seen.countDown()
-                val prefix = if (offset == 0L) wav.copyOf(HeaderBytes + StartBytes) else ByteArray(0)
-                return GatedStream(prefix, CountDownLatch(1), AtomicBoolean(false))
+        val bytes = MixPieces.pieceBytes(info.sampleRateHz, info.blockAlign)
+        val span = MixPieces.span(info, bytes, MixPieces.indexAt(MixPieces.pcmByte(info, SeekMs), bytes))
+        check(span != null)
+        assertEquals(TargetStart, span.fileStart)
+        assertEquals(TargetEnd, span.fileEndInclusive)
+        val ranges = CopyOnWriteArrayList<Requested>()
+        val output = PermitOutput()
+        val stream = SharedMixStream(memory(wav, ranges), output, aheadPieces = AheadPieces)
+        try {
+            stream.play(Url)
+            assertTrue(waitUntil { pieceStarts(ranges) == FirstPieces && stable(ranges) })
+            stream.seekTo(SeekMs)
+            assertEquals(SeekMs, stream.transport().positionMs)
+            assertTrue(waitUntil { ranges.any { it.start == TargetStart } })
+            val next = ranges.first { it.start == TargetStart }
+            assertEquals(TargetEnd, next.endInclusive)
+            assertFalse(pieceStarts(ranges).contains(ExactPcmOffset))
+            output.allow(WritesAfterStart)
+            assertTrue(waitUntil { stream.transport().positionMs > SeekMs })
+            assertTrue(stream.transport().playing)
+        } finally {
+            output.allow(WritesAfterStart)
+            stream.release()
+        }
+    }
+
+    @Test
+    fun slowConnectionKeepsBufferedAudioAndResumesTheSamePiece() {
+        val wav = largeWav()
+        val ranges = CopyOnWriteArrayList<Requested>()
+        val failures = AtomicInteger(0)
+        val online = AtomicBoolean(false)
+        val source = memory(wav, ranges) { start ->
+            if (start == pieceStart(1) && !online.get()) {
+                failures.incrementAndGet()
+                UnknownHostException("Unable to resolve host")
+            } else {
+                null
             }
         }
-        val stream = SharedMixStream(source, FakeOutput(), aheadBytes = AheadBytes, startBytes = StartBytes)
-        val returned = CountDownLatch(1)
-        val worker = Thread {
-            stream.play("https://mix.example/song")
-            returned.countDown()
-        }
-        worker.start()
+        val output = PermitOutput()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces)
         try {
-            assertTrue(returned.await(2, TimeUnit.SECONDS))
-            stream.seekTo(SeekMs)
-            assertTrue(seen.await(2, TimeUnit.SECONDS))
-            assertEquals(listOf(0L, expected), offsets)
+            stream.play(Url)
+            assertTrue(waitUntil { failures.get() > 0 })
+            assertTrue(stream.pullFailure() == null)
+            assertTrue(stream.transport().playing)
+            output.allow(1)
+            val stalled = waitForFailure(stream)
+            assertTrue(stalled is UnknownHostException)
+            assertTrue(stream.transport().playing)
+            assertTrue(stream.pullFailure() == null)
+            online.set(true)
+            output.allow(WritesAfterStart)
+            assertTrue(waitUntil { stream.transport().positionMs > FirstPieceMs })
+            assertTrue(stream.transport().playing)
+            assertTrue(ranges.filter { it.start == pieceStart(1) }.size > 1)
+        } finally {
+            online.set(true)
+            output.allow(WritesAfterStart)
+            stream.release()
+        }
+    }
+
+    @Test
+    fun playThrowsTheConnectionErrorWhenTheFirstPieceCannotStart() {
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                throw UnknownHostException("Unable to resolve host")
+            }
+        }
+        val stream = SharedMixStream(source, FakeOutput(), startWaitMs = StartWaitMs)
+        try {
+            val failure = runCatching { stream.play(Url) }.exceptionOrNull()
+            assertTrue(failure is UnknownHostException)
         } finally {
             stream.release()
-            worker.join(JoinMs)
+        }
+    }
+
+    @Test
+    fun seekClosesABlockedPieceRead() {
+        val wav = largeWav()
+        val held = AtomicReference<HoldStream>()
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                if (start == pieceStart(1) && held.get() == null) {
+                    val block = HoldStream()
+                    held.set(block)
+                    return block
+                }
+                return slice(wav, start, endInclusive)
+            }
+        }
+        val stream = SharedMixStream(source, FakeOutput(), aheadPieces = AheadPieces)
+        try {
+            stream.play(Url)
+            val block = waitForHold(held)
+            assertTrue(block.entered.await(WaitMs, java.util.concurrent.TimeUnit.MILLISECONDS))
+            stream.seekTo(SeekMs)
+            assertTrue(waitUntil { block.closed.get() })
+        } finally {
+            held.get()?.close()
+            stream.release()
         }
     }
 
     @Test
     fun stopClearsPlayingAndPosition() {
-        val wav = mixWav()
+        val wav = largeWav()
         val release = CountDownLatch(1)
-        val source = object : MixSource {
-            override fun open(url: String, offset: Long): InputStream =
-                GatedStream(wav.copyOf(HeaderBytes + PcmLead), release, AtomicBoolean(false))
-        }
-        val stream = SharedMixStream(source, FakeOutput(), aheadBytes = AheadBytes, startBytes = StartBytes)
-        val returned = CountDownLatch(1)
-        val worker = Thread {
-            stream.play("https://mix.example/song")
-            returned.countDown()
-        }
-        worker.start()
+        val stream = SharedMixStream(
+            memory(wav, CopyOnWriteArrayList(), blockAt = pieceStart(1), release = release),
+            FakeOutput(),
+            aheadPieces = AheadPieces,
+        )
         try {
-            assertTrue(returned.await(2, TimeUnit.SECONDS))
+            stream.play(Url)
             assertTrue(waitUntil { stream.transport().positionMs > 0 })
             stream.stop()
             val transport = stream.transport()
             assertFalse(transport.playing)
             assertEquals(0, transport.positionMs)
         } finally {
+            release.countDown()
             stream.release()
-            worker.join(JoinMs)
         }
-    }
-
-    @Test
-    fun closeUnblocksABlockedRead() {
-        val release = CountDownLatch(1)
-        val stream = GatedStream(ByteArray(0), release, AtomicBoolean(false))
-        val failed = AtomicBoolean(false)
-        val worker = Thread {
-            try {
-                stream.read()
-            } catch (closed: IOException) {
-                failed.set(closed.message == "closed")
-            }
-        }
-        worker.start()
-        assertTrue(waitUntil { worker.state == Thread.State.WAITING || worker.state == Thread.State.TIMED_WAITING })
-        stream.close()
-        worker.join(JoinMs)
-        assertTrue(failed.get())
     }
 
     @Test
     fun rangedResponseThatIsNotPartialThrows() {
-        val wav = mixWav()
+        val wav = largeWav()
         val ranges = CopyOnWriteArrayList<String?>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/mix") { exchange ->
-            ranges += exchange.requestHeaders.getFirst("Range")
+            ranges.add(exchange.requestHeaders.getFirst("Range"))
             exchange.sendResponseHeaders(200, wav.size.toLong())
             exchange.responseBody.use { it.write(wav) }
         }
         server.start()
         try {
-            val source = UrlMixSource()
-            val url = "http://127.0.0.1:${server.address.port}/mix"
-            source.open(url, 0L).close()
-            val failure = runCatching { source.open(url, 1044L) }.exceptionOrNull()
+            val failure = runCatching { UrlMixSource().open(url(server), RangeStart, RangeEnd) }.exceptionOrNull()
             assertTrue(failure is IllegalStateException)
-            assertEquals("bytes=1044-", ranges.last())
+            assertEquals("bytes=$RangeStart-$RangeEnd", ranges.last())
         } finally {
             server.stop(0)
         }
     }
 
     @Test
-    fun partialRangeStartsAtTheRequestedByte() {
-        val wav = mixWav()
+    fun partialRangeIsTheClosedPiece() {
+        val wav = largeWav()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/mix") { exchange ->
-            val range = exchange.requestHeaders.getFirst("Range")
-            if (range == null) {
-                exchange.sendResponseHeaders(200, wav.size.toLong())
-                exchange.responseBody.use { it.write(wav) }
-            } else {
-                val start = range.removePrefix("bytes=").substringBefore("-").toInt()
-                val body = wav.copyOfRange(start, wav.size)
-                val end = wav.size - 1
-                exchange.responseHeaders.add("Content-Range", "bytes $start-$end/${wav.size}")
-                exchange.sendResponseHeaders(206, body.size.toLong())
-                exchange.responseBody.use { it.write(body) }
-            }
+            val header = exchange.requestHeaders.getFirst("Range")
+            val start = header.removePrefix("bytes=").substringBefore("-").toInt()
+            val end = header.substringAfter("-").toInt()
+            val body = wav.copyOfRange(start, end + 1)
+            exchange.responseHeaders.add("Content-Range", "bytes $start-$end/${wav.size}")
+            exchange.sendResponseHeaders(206, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
         }
         server.start()
         try {
-            val source = UrlMixSource()
-            val url = "http://127.0.0.1:${server.address.port}/mix"
-            val bytes = source.open(url, 1044L).use { it.readNBytes(2) }
-            assertEquals(2, bytes.size)
+            val bytes = UrlMixSource().open(url(server), RangeStart, RangeEnd).use { it.readBytes() }
+            assertEquals(wav.copyOfRange(RangeStart.toInt(), RangeEnd.toInt() + 1).asList(), bytes.asList())
         } finally {
             server.stop(0)
         }
+    }
+
+    private fun waitForFailure(stream: SharedMixStream): Exception? {
+        val deadline = System.currentTimeMillis() + WaitMs
+        while (System.currentTimeMillis() < deadline) {
+            val failure = stream.pullFailure()
+            if (failure != null) return failure
+            Thread.sleep(PollMs)
+        }
+        return stream.pullFailure()
+    }
+
+    private fun waitForHold(held: AtomicReference<HoldStream>): HoldStream {
+        val deadline = System.currentTimeMillis() + WaitMs
+        while (System.currentTimeMillis() < deadline) {
+            val block = held.get()
+            if (block != null) return block
+            Thread.sleep(PollMs)
+        }
+        return held.get() ?: error("piece read did not start")
     }
 
     private fun waitUntil(probe: () -> Boolean): Boolean {
@@ -223,67 +267,58 @@ class SharedMixStreamTest {
         return probe()
     }
 
-    private fun stable(read: AtomicInteger): Boolean {
-        val first = read.get()
+    private fun stable(ranges: CopyOnWriteArrayList<Requested>): Boolean {
+        val first = ranges.size
         Thread.sleep(PollMs)
-        return read.get() == first
+        return ranges.size == first
     }
 
-    private class CountingStream(
-        private val wav: ByteArray,
-        offset: Long,
-        private val read: AtomicInteger,
-    ) : InputStream() {
-        private var index = offset.toInt()
+    private fun pieceStarts(ranges: List<Requested>): List<Long> =
+        ranges.filter { it.start >= HeaderBytes }.map { it.start }
 
-        override fun read(): Int {
-            val one = ByteArray(1)
-            val count = read(one, 0, 1)
-            if (count < 0) return -1
-            return one[0].toInt() and 0xFF
-        }
-
-        override fun read(buffer: ByteArray, off: Int, len: Int): Int {
-            if (index >= wav.size) return -1
-            val count = minOf(len, wav.size - index)
-            wav.copyInto(buffer, off, index, index + count)
-            index += count
-            read.addAndGet(count)
-            return count
-        }
-    }
-
-    private class LimitedStream(
-        private val wav: ByteArray,
-        private val limit: Int,
-        private val read: AtomicInteger,
-        private val release: CountDownLatch,
-    ) : InputStream() {
-        private var index = 0
-
-        override fun read(): Int {
-            val one = ByteArray(1)
-            val count = read(one, 0, 1)
-            if (count < 0) return -1
-            return one[0].toInt() and 0xFF
-        }
-
-        override fun read(buffer: ByteArray, off: Int, len: Int): Int {
-            if (index >= limit) {
+    private fun memory(
+        wav: ByteArray,
+        ranges: CopyOnWriteArrayList<Requested>,
+        blockAt: Long = Long.MAX_VALUE,
+        release: CountDownLatch = CountDownLatch(0),
+        fail: (Long) -> IOException? = { null },
+    ): MixSource = object : MixSource {
+        override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+            val failure = fail(start)
+            if (failure != null) {
+                ranges.add(Requested(start, endInclusive))
+                throw failure
+            }
+            if (start >= blockAt) {
                 release.await()
                 throw IOException("closed")
             }
-            val count = minOf(len, limit - index, wav.size - index)
-            wav.copyInto(buffer, off, index, index + count)
-            index += count
-            read.set(index)
-            return count
-        }
-
-        override fun close() {
-            release.countDown()
+            ranges.add(Requested(start, endInclusive))
+            return slice(wav, start, endInclusive)
         }
     }
+
+    private fun slice(wav: ByteArray, start: Long, endInclusive: Long): InputStream {
+        val from = start.toInt().coerceAtMost(wav.size)
+        val to = (endInclusive + 1).toInt().coerceAtMost(wav.size)
+        return ByteArrayInputStream(wav.copyOfRange(from, to))
+    }
+
+    private fun url(server: HttpServer): String = "http://127.0.0.1:${server.address.port}/mix"
+
+    private fun largeWav(): ByteArray = wavFrames(FrameCount)
+
+    private fun wavFrames(frameCount: Int): ByteArray {
+        val file = File.createTempFile("mix", ".wav")
+        writeConstantPcm16Wav(file, 1, frameCount = frameCount, sampleRateHz = SampleRate)
+        return file.readBytes().also { file.delete() }
+    }
+
+    private fun pieceStart(index: Int): Long = HeaderBytes + index.toLong() * PieceBytes
+
+    private fun pieceEnd(index: Int): Long = pieceStart(index) + PieceBytes - 1
+
+    private class Requested(val start: Long, val endInclusive: Long)
 
     private class PermitOutput : PcmOutput {
         private val permits = AtomicInteger(0)
@@ -304,9 +339,7 @@ class SharedMixStreamTest {
 
         override fun play() = Unit
 
-        override fun release() {
-            allow(WritesAfterStart)
-        }
+        override fun release() = Unit
     }
 
     private class FakeOutput : PcmOutput {
@@ -328,59 +361,52 @@ class SharedMixStreamTest {
         override fun release() = Unit
     }
 
-    private class GatedStream(
-        private val prefix: ByteArray,
-        private val release: CountDownLatch,
-        private val bodyEntered: AtomicBoolean,
-    ) : InputStream() {
-        private var index = 0
+    private class HoldStream : InputStream() {
+        val entered = CountDownLatch(1)
+        val closed = AtomicBoolean(false)
+        private val release = CountDownLatch(1)
 
         override fun read(): Int {
             val one = ByteArray(1)
             val count = read(one, 0, 1)
             if (count < 0) return -1
-            return one[0].toInt() and 0xFF
+            return one[0].toInt() and ByteMask
         }
 
         override fun read(buffer: ByteArray, off: Int, len: Int): Int {
             if (len == 0) return 0
-            if (index < prefix.size) {
-                val count = minOf(len, prefix.size - index)
-                prefix.copyInto(buffer, off, index, index + count)
-                index += count
-                return count
-            }
-            bodyEntered.set(true)
+            entered.countDown()
             release.await()
             throw IOException("closed")
         }
 
         override fun close() {
+            closed.set(true)
             release.countDown()
         }
     }
 
-    private fun mixWav(): ByteArray = wavFrames(2_000)
-
-    private fun largeWav(): ByteArray = wavFrames(80_000)
-
-    private fun wavFrames(frameCount: Int): ByteArray {
-        val file = File.createTempFile("mix", ".wav")
-        writeConstantPcm16Wav(file, 1, frameCount = frameCount, sampleRateHz = 1_000)
-        return file.readBytes().also { file.delete() }
-    }
-
     private companion object {
-        const val HeaderBytes = 44
-        const val PcmLead = 800
-        const val StartBytes = 256
-        const val AheadBytes = 1_024
-        const val ChunkBytes = 4_096
+        const val Url = "https://mix.example/song"
+        const val HeaderBytes = 44L
+        const val PieceBytes = 4_000L
+        const val AheadPieces = 2
+        const val FrameCount = 80_000
+        const val PieceCount = 40
+        const val SampleRate = 1_000
+        const val SeekMs = 10_500
+        const val FirstPieceMs = 2_000
+        const val TargetStart = 20_044L
+        const val TargetEnd = 24_043L
+        const val ExactPcmOffset = 21_044L
+        const val RangeStart = 1_044L
+        const val RangeEnd = 2_047L
         const val WritesAfterStart = 8
-        const val SeekMs = 500
-        const val MsPerSecond = 1_000
-        const val JoinMs = 1_000L
-        const val WaitMs = 2_000L
+        const val StartWaitMs = 500L
+        const val WaitMs = 3_000L
         const val PollMs = 10L
+        const val SettleMs = 40L
+        const val ByteMask = 0xFF
+        val FirstPieces = listOf(44L, 4_044L, 8_044L)
     }
 }

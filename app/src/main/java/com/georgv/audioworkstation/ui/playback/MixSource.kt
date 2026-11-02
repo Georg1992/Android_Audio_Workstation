@@ -6,17 +6,16 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 internal interface MixSource {
-    fun open(url: String, offset: Long): InputStream
+    fun open(url: String, start: Long, endInclusive: Long): InputStream
 }
 
 internal class UrlMixSource : MixSource {
-    override fun open(url: String, offset: Long): InputStream {
-        val connection = connect(url, offset)
+    override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+        val connection = connect(url, start, endInclusive)
         var keep = false
         try {
             val status = connection.responseCode
-            val accepted = if (offset > 0L) status == Partial else status == Ok
-            if (!accepted) error("mix stream status $status")
+            if (status != Partial) error("mix stream status $status")
             keep = true
             return ClosingStream(connection, connection.inputStream)
         } finally {
@@ -24,19 +23,18 @@ internal class UrlMixSource : MixSource {
         }
     }
 
-    private fun connect(url: String, offset: Long): HttpURLConnection {
+    private fun connect(url: String, start: Long, endInclusive: Long): HttpURLConnection {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = ConnectTimeoutMs
         connection.readTimeout = ReadTimeoutMs
         connection.instanceFollowRedirects = false
         connection.useCaches = false
-        if (offset > 0L) connection.setRequestProperty("Range", "bytes=$offset-")
+        connection.setRequestProperty("Range", "bytes=$start-$endInclusive")
         return connection
     }
 
     private companion object {
-        const val Ok = 200
         const val Partial = 206
         const val ConnectTimeoutMs = 15_000
         const val ReadTimeoutMs = 30_000

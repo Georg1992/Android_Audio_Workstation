@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.share.CardMedia
 import com.georgv.audioworkstation.ui.playback.CardTransport
@@ -74,6 +75,8 @@ class CommunityCardPlaybackViewModel @Inject constructor(
         watchJob?.cancel()
         watchJob = viewModelScope.launch {
             while (isActive) {
+                val failure = player.pullFailure()
+                if (failure != null) report(failure)
                 val read = player.read()
                 transportState.value = read
                 if (!read.playing) break
@@ -84,7 +87,7 @@ class CommunityCardPlaybackViewModel @Inject constructor(
 
     private suspend fun report(error: Exception) {
         logWarning(TAG, "community card failed", error)
-        messages.send(UiMessage(R.string.error_card_playback_failed))
+        messages.send(UiMessage(reportedFailure(error, R.string.error_card_playback_failed)))
     }
 
     private companion object {
