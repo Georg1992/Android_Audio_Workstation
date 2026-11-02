@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
@@ -166,7 +167,7 @@ class CommunityViewModel @Inject constructor(
                 onRejected(error)
             } catch (error: Exception) {
                 logWarning(TAG, "account request failed", error)
-                messages.send(UiMessage(failure))
+                messages.send(UiMessage(reportedFailure(error, failure)))
             } finally {
                 busy.value = false
             }

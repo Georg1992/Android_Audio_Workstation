@@ -197,6 +197,7 @@
     <string name="error_mixdown_unsupported_audio">Микширование требует 16‑бит WAV (моно/стерео) с частотой проекта.</string>
     <string name="error_mixdown_failed">Не удалось выполнить микширование.</string>
     <string name="error_mix_preview_failed">Не удалось воспроизвести превью микса.</string>
+    <string name="error_no_connection">Нет соединения. Проверьте подключение к интернету.</string>
     <string name="error_sign_in_failed">Не удалось войти.</string>
     <string name="error_create_account_failed">Не удалось создать аккаунт.</string>
     <string name="error_invalid_email">Укажите корректную почту.</string>

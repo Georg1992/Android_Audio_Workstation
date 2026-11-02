@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
@@ -56,7 +57,7 @@ class CommunityHomeViewModel @Inject constructor(
                 } catch (cancel: CancellationException) {
                     throw cancel
                 } catch (error: Exception) {
-                    report(R.string.error_shared_projects_failed, error)
+                    report(reportedFailure(error, R.string.error_shared_projects_failed), error)
                 }
             }
         }
@@ -90,7 +91,7 @@ class CommunityHomeViewModel @Inject constructor(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
-                report(R.string.error_shared_projects_failed, error)
+                report(reportedFailure(error, R.string.error_shared_projects_failed), error)
             }
         }
     }

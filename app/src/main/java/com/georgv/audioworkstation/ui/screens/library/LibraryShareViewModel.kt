@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.ProjectShare
@@ -74,7 +75,7 @@ class LibraryShareViewModel @Inject constructor(
                 throw cancel
             } catch (error: Exception) {
                 logWarning(TAG, "share action failed: $projectId", error)
-                messages.send(UiMessage(failedMessage))
+                messages.send(UiMessage(reportedFailure(error, failedMessage)))
             } finally {
                 sharingIds.update { current -> current - projectId }
             }

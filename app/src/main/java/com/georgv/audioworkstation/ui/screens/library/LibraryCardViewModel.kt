@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -139,7 +140,7 @@ class LibraryCardViewModel @Inject constructor(
 
     private suspend fun report(error: Exception) {
         logWarning(TAG, "card save failed", error)
-        messages.send(UiMessage(R.string.error_card_save_failed))
+        messages.send(UiMessage(reportedFailure(error, R.string.error_card_save_failed)))
     }
 
     private companion object {

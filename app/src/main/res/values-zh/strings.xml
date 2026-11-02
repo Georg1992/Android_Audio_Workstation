@@ -201,6 +201,7 @@
     <string name="error_mixdown_unsupported_audio">混音需要与项目采样率一致的 16 位单声道或立体声 WAV。</string>
     <string name="error_mixdown_failed">混音失败。</string>
     <string name="error_mix_preview_failed">无法播放混音预览。</string>
+    <string name="error_no_connection">无法连接。请检查网络连接。</string>
     <string name="error_sign_in_failed">登录失败。</string>
     <string name="error_create_account_failed">无法创建账户。</string>
     <string name="error_invalid_email">请输入有效邮箱。</string>

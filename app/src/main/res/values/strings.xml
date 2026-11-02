@@ -198,6 +198,7 @@
     <string name="error_mixdown_unsupported_audio">Mixdown requires 16-bit mono or stereo WAV at the project sample rate.</string>
     <string name="error_mixdown_failed">Mixdown failed.</string>
     <string name="error_mix_preview_failed">Could not play mix preview.</string>
+    <string name="error_no_connection">Could not connect. Check your internet connection.</string>
     <string name="error_sign_in_failed">Sign-in failed.</string>
     <string name="error_create_account_failed">Could not create the account.</string>
     <string name="error_invalid_email">Enter a valid email.</string>

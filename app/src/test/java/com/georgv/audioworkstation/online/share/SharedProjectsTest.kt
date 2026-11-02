@@ -1,15 +1,18 @@
 package com.georgv.audioworkstation.online.share
 
+import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeViewModel
 import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
 import com.georgv.audioworkstation.ui.screens.community.OwnedShareRefresh
+import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -84,6 +87,40 @@ class SharedProjectsTest {
         assertEquals(null, vm.uiState.value.email)
         collect.cancel()
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun communityLoadReportsAConnectionProblem() = runTest {
+        val vm = communityHome(UnknownHostException("Unable to resolve host"))
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
+        collect.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun communityLoadKeepsTheLoadFailureWhenTheServerRejectsIt() = runTest {
+        val vm = communityHome(IllegalStateException("share api status 500"))
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertEquals(R.string.error_shared_projects_failed, vm.userMessages.first().resId)
+        collect.cancel()
+    }
+
+    private fun communityHome(failure: Exception) = CommunityHomeViewModel(
+        sessions = MemorySessions(session),
+        accounts = UnusedAccounts,
+        sharedProjects = object : SharedProjects {
+            override suspend fun list(): List<SharedProject> = throw failure
+
+            override suspend fun imageUrl(id: String): String = error("unused")
+
+            override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
+        },
+        localProjects = NoLocalProjects,
+        ownedShares = NoLocalProjects,
+    )
 
     private class FixedProjects(private val projects: List<SharedProject>) : SharedProjects {
         override suspend fun list(): List<SharedProject> = projects

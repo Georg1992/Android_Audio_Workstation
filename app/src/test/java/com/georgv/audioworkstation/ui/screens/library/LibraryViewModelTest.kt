@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
 import com.georgv.audioworkstation.core.ui.DataAvailability
+import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import androidx.lifecycle.SavedStateHandle
@@ -18,10 +19,15 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.AccountSession
+import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.CardImageStore
+import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.online.share.SharedCardUpdate
 import com.georgv.audioworkstation.core.audio.FakeAudioController
 import android.net.Uri
+import java.net.ConnectException
+import java.net.UnknownHostException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +36,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -249,6 +256,89 @@ class LibraryViewModelTest {
         }
     }
 
+    @Test
+    fun `share reports a connection problem when the host cannot be reached`() = runTest {
+        val vm = shareVm(ThrowingProjectShare(UnknownHostException("Unable to resolve host")))
+        assertEquals(R.string.error_no_connection, awaitMessage(vm.userMessages) { vm.shareProject("project-a") })
+    }
+
+    @Test
+    fun `unshare reports a connection problem when the route is down`() = runTest {
+        val failure = ConnectException("Failed to connect to share.example.com/203.0.113.5:443")
+        failure.initCause(Exception("connect failed: ENETUNREACH (Network is unreachable)"))
+        val vm = shareVm(ThrowingProjectShare(failure))
+        assertEquals(R.string.error_no_connection, awaitMessage(vm.userMessages) { vm.unshareProject("project-a") })
+    }
+
+    @Test
+    fun `share keeps its own failure when the server rejects the project`() = runTest {
+        val vm = shareVm(ThrowingProjectShare(IllegalStateException("share api status 500")))
+        assertEquals(
+            R.string.error_share_project_failed,
+            awaitMessage(vm.userMessages) { vm.shareProject("project-a") },
+        )
+    }
+
+    @Test
+    fun `saving a shared card reports a connection problem when the host cannot be reached`() = runTest {
+        val vm = cardVm(UnknownHostException("Unable to resolve host"))
+        advanceUntilIdle()
+        vm.setTitle("Renamed")
+        assertEquals(R.string.error_no_connection, awaitMessage(vm.userMessages) { vm.save() })
+    }
+
+    @Test
+    fun `saving a shared card keeps the save failure when the server rejects it`() = runTest {
+        val vm = cardVm(IllegalStateException("share api status 500"))
+        advanceUntilIdle()
+        vm.setTitle("Renamed")
+        assertEquals(R.string.error_card_save_failed, awaitMessage(vm.userMessages) { vm.save() })
+    }
+
+    private fun shareVm(share: ProjectShare): LibraryShareViewModel =
+        LibraryShareViewModel(IdleAccountSessionStore(), share)
+
+    private fun cardVm(failure: Exception): LibraryCardViewModel {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Alpha", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCED),
+            ),
+        )
+        return LibraryCardViewModel(
+            SavedStateHandle(mapOf("projectId" to "project-a")),
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            object : SharedCardUpdate {
+                override suspend fun updateCard(
+                    projectId: String,
+                    title: String,
+                    tags: String,
+                    imagePath: String?,
+                ) {
+                    throw failure
+                }
+            },
+            TempDirAudioFilePathProvider(),
+            IdleCardImages,
+        )
+    }
+
+    private fun awaitMessage(messages: Flow<UiMessage>, block: () -> Unit): Int {
+        val seen = java.util.Collections.synchronizedList(mutableListOf<Int>())
+        val job = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            messages.collect { seen += it.resId }
+        }
+        try {
+            block()
+            val deadline = System.nanoTime() + 5_000_000_000L
+            while (seen.isEmpty() && System.nanoTime() < deadline) {
+                Thread.sleep(20)
+            }
+            return seen.single()
+        } finally {
+            job.cancel()
+        }
+    }
+
     private fun project(
         id: String,
         name: String,
@@ -334,6 +424,22 @@ private class FakeLibraryProjectDao(
 
 private object IdleCardImages : CardImageStore {
     override fun copy(uri: Uri): File = error("unused")
+}
+
+private class IdleAccountSessionStore : AccountSessionStore {
+    override val state: Flow<AccountSession?> = flowOf(null)
+
+    override suspend fun current(): AccountSession? = null
+
+    override suspend fun save(session: AccountSession) = Unit
+
+    override suspend fun clear() = Unit
+}
+
+private class ThrowingProjectShare(private val failure: Exception) : ProjectShare {
+    override suspend fun share(projectId: String): Unit = throw failure
+
+    override suspend fun unshare(projectId: String): Unit = throw failure
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
