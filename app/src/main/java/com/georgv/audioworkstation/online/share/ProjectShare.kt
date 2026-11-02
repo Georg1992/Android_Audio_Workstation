@@ -18,4 +18,7 @@ interface OwnedProjectPublish {
     suspend fun publishOwner(projectId: String)
 
     suspend fun publishMix(projectId: String)
+
+    /** Deletes this account's share. Returns false when the account does not own it. */
+    suspend fun unpublish(projectId: String): Boolean
 }

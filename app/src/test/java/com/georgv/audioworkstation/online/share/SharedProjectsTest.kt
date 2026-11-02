@@ -1,12 +1,18 @@
 package com.georgv.audioworkstation.online.share
 
 import com.georgv.audioworkstation.R
+import com.georgv.audioworkstation.core.audio.NoopProjectFileStore
+import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
+import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
+import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeViewModel
 import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
 import com.georgv.audioworkstation.ui.screens.community.OwnedShareRefresh
+import com.georgv.audioworkstation.ui.screens.community.RoomLocalProjects
 import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,6 +26,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestWatcher
@@ -86,6 +93,81 @@ class SharedProjectsTest {
         advanceUntilIdle()
         assertEquals(null, vm.uiState.value.email)
         collect.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun communityDropsAnOwnedShareThatIsNotOnThePhone() = runTest {
+        val vm = CommunityHomeViewModel(
+            sessions = MemorySessions(session),
+            accounts = UnusedAccounts,
+            sharedProjects = FixedProjects(
+                listOf(
+                    SharedProject("boom", "Boom", emptyList(), null, "selftitled1"),
+                    SharedProject("other", "Song", emptyList(), null, "Ada"),
+                ),
+            ),
+            localProjects = NoLocalProjects,
+            ownedShares = object : OwnedShareRefresh {
+                override suspend fun publishOwnerNames() = Unit
+
+                override suspend fun publishMixes() = Unit
+
+                override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = setOf("boom")
+            },
+        )
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertEquals(listOf("Song"), vm.uiState.value.projects.map { it.title })
+        collect.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun communityKeepsTheConnectionMessageWhenAnAbsentShareCannotBeUnpublished() = runTest {
+        val vm = CommunityHomeViewModel(
+            sessions = MemorySessions(session),
+            accounts = UnusedAccounts,
+            sharedProjects = FixedProjects(
+                listOf(SharedProject("boom", "Boom", emptyList(), null, "selftitled1")),
+            ),
+            localProjects = NoLocalProjects,
+            ownedShares = object : OwnedShareRefresh {
+                override suspend fun publishOwnerNames() = Unit
+
+                override suspend fun publishMixes() = Unit
+
+                override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> {
+                    throw UnknownHostException("Unable to resolve host")
+                }
+            },
+        )
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
+        assertTrue(vm.uiState.value.projects.isEmpty())
+        collect.cancel()
+    }
+
+    @Test
+    fun absentOwnedShareIsUnpublishedAndAProjectOnThePhoneStaysShared() = runTest {
+        val dao = FakeProjectDao(projects = listOf(ProjectEntity(id = "showcase", name = "Showcase")))
+        val share = RecordingOwnedPublish(owned = setOf("boom"))
+        val local = RoomLocalProjects(
+            ProjectRepository(dao, NoopProjectFileStore),
+            MemorySessions(session),
+            share,
+            TempDirAudioFilePathProvider(),
+        )
+        val removed = local.unpublishAbsent(
+            listOf(
+                SharedProject("boom", "Boom", emptyList(), null, "selftitled1"),
+                SharedProject("other", "Song", emptyList(), null, "Ada"),
+                SharedProject("showcase", "Showcase", emptyList(), null, "selftitled1"),
+            ),
+        )
+        assertEquals(setOf("boom"), removed)
+        assertEquals(listOf("boom", "other"), share.unpublished)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -170,12 +252,27 @@ class SharedProjectsTest {
         override suspend fun signOut(refreshToken: String) = error("unused")
     }
 
+    private class RecordingOwnedPublish(private val owned: Set<String>) : OwnedProjectPublish {
+        val unpublished = mutableListOf<String>()
+
+        override suspend fun publishOwner(projectId: String) = Unit
+
+        override suspend fun publishMix(projectId: String) = Unit
+
+        override suspend fun unpublish(projectId: String): Boolean {
+            unpublished += projectId
+            return projectId in owned
+        }
+    }
+
     private object NoLocalProjects : LocalProjectLookup, OwnedShareRefresh {
         override suspend fun exists(projectId: String): Boolean = false
 
         override suspend fun publishOwnerNames() = Unit
 
         override suspend fun publishMixes() = Unit
+
+        override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
     }
 
     private companion object {

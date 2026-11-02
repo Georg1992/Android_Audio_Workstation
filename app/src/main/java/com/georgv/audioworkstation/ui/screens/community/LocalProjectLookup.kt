@@ -6,6 +6,7 @@ import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.OwnedProjectPublish
+import com.georgv.audioworkstation.online.share.SharedProject
 import com.georgv.audioworkstation.online.share.sha256Hex
 import java.io.File
 import javax.inject.Inject
@@ -20,6 +21,8 @@ interface OwnedShareRefresh {
     suspend fun publishOwnerNames()
 
     suspend fun publishMixes()
+
+    suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String>
 }
 
 @Singleton
@@ -51,6 +54,15 @@ class RoomLocalProjects @Inject constructor(
             share.publishMix(project.id)
             published.markMix(project.id, hash)
         }
+    }
+
+    override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> {
+        val removed = LinkedHashSet<String>()
+        for (project in projects) {
+            if (this.projects.projectExists(project.id)) continue
+            if (share.unpublish(project.id)) removed += project.id
+        }
+        return removed
     }
 
     private suspend fun ownedSynced(): List<ProjectEntity> {

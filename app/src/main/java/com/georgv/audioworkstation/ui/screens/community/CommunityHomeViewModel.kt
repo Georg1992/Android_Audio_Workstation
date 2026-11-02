@@ -129,7 +129,9 @@ class CommunityHomeViewModel @Inject constructor(
         try {
             ownedShares.publishOwnerNames()
             ownedShares.publishMixes()
-            projects.value = sharedProjects.list()
+            val listed = sharedProjects.list()
+            val removed = ownedShares.unpublishAbsent(listed)
+            projects.value = listed.filter { project -> project.id !in removed }
         } finally {
             preparing.value = false
         }

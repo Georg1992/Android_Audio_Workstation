@@ -15,6 +15,7 @@ import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpResult
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
+import java.net.UnknownHostException
 import java.util.Base64
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,11 +24,38 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ShareSelectionTest {
+    @Test
+    fun unpublishDeletesAnOwnedShareWithoutALocalProject() = runBlocking {
+        val api = StatusApi(200)
+        val share = httpShare(api)
+        assertTrue(share.unpublish("boom"))
+        assertEquals("DELETE", api.method)
+        assertEquals("/shared-projects/boom", api.path)
+    }
+
+    @Test
+    fun unpublishLeavesAShareThisAccountDoesNotOwn() = runBlocking {
+        val share = httpShare(StatusApi(403))
+        assertFalse(share.unpublish("other"))
+    }
+
+    @Test
+    fun unpublishDoesNotTreatAConnectionFailureAsSomeoneElsesShare() = runBlocking {
+        val share = httpShare(StatusApi(failure = UnknownHostException("Unable to resolve host")))
+        try {
+            share.unpublish("boom")
+            error("unpublish should fail when the host cannot be reached")
+        } catch (error: UnknownHostException) {
+            assertEquals("Unable to resolve host", error.message)
+        }
+    }
+
     @Test
     fun sha256OfAbcIsTheKnownDigest() {
         val file = File.createTempFile("share-abc", ".wav")
@@ -260,6 +288,27 @@ class ShareSelectionTest {
 
         override fun download(url: String, destination: File) {
             error("download was not requested")
+        }
+    }
+
+    private fun httpShare(api: HttpTransport) = HttpProjectShare(
+        sessions = FixedSession(session),
+        accounts = IdleAccounts(),
+        projects = ProjectRepository(MemoryProjectDao(ProjectEntity(id = "local", name = "Local"), emptyList()), NoopFiles),
+        api = api,
+        objects = RecordingObjects(),
+        paths = FixedPaths(""),
+    )
+
+    private class StatusApi(private val status: Int = 200, private val failure: Exception? = null) : HttpTransport {
+        var method: String? = null
+        var path: String? = null
+
+        override fun exchange(call: HttpCall): HttpResult {
+            method = call.method
+            path = call.path
+            failure?.let { throw it }
+            return HttpResult(status, "")
         }
     }
 

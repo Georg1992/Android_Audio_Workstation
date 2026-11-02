@@ -6,6 +6,7 @@ import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
+import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +107,25 @@ class HttpProjectShare(
         }
     }
 
+    override suspend fun unpublish(projectId: String): Boolean = withContext(Dispatchers.IO) {
+        val session = openSession("Sign in to stop sharing a project")
+        val result = api.exchange(
+            HttpCall(
+                method = "DELETE",
+                path = "/shared-projects/$projectId",
+                token = session.token,
+                contentType = null,
+                contentLength = 0L,
+                writeBody = null,
+            ),
+        )
+        when (result.status) {
+            NotOwner -> false
+            in HttpOk -> true
+            else -> error("share api status ${result.status}")
+        }
+    }
+
     override suspend fun restoreMissing(projectId: String) {
         val missing = tracksToRestore(projects.observeTracks(projectId).first())
         if (missing.isEmpty()) return
@@ -190,5 +210,10 @@ class HttpProjectShare(
             headers[name] = json.getString(name)
         }
         return headers
+    }
+
+    private companion object {
+        const val NotOwner = 403
+        val HttpOk = 200..299
     }
 }
