@@ -39,8 +39,10 @@ import com.georgv.audioworkstation.core.audio.wavImportSource
 import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.share.SharedCardUpdate
 import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.core.audio.waveform.WavWaveformPeakExtractor
 import com.georgv.audioworkstation.ui.components.sessionTimelineEndMsForTracks
@@ -73,6 +75,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.net.UnknownHostException
+import javax.inject.Provider
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -774,6 +778,138 @@ class ProjectViewModelTest {
         assertEquals(createdAt, persisted?.createdAt)
         collectJob.cancel()
     }
+
+    @Test
+    fun `renameProject publishes the shared card before the local name changes`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(
+                projects = listOf(
+                    project(name = "Old Project").copy(syncStatus = SyncStatus.SYNCED, cardTags = "live"),
+                ),
+            )
+            var publishedTitle = ""
+            var publishedTags = ""
+            var nameDuringPublish: String? = null
+            val vm = createViewModel(
+                dao,
+                sharedCards = object : SharedCardUpdate {
+                    override suspend fun updateCard(
+                        projectId: String,
+                        title: String,
+                        tags: String,
+                        imagePath: String?,
+                    ) {
+                        nameDuringPublish = dao.observeProject(PROJECT_ID).first()?.name
+                        publishedTitle = title
+                        publishedTags = tags
+                    }
+                },
+            )
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.renameProject("New Project")
+            advanceUntilIdle()
+
+            assertEquals("New Project", publishedTitle)
+            assertEquals("live", publishedTags)
+            assertEquals("Old Project", nameDuringPublish)
+            assertEquals("New Project", dao.observeProject(PROJECT_ID).first()?.name)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `renameProject keeps a shared project when the host cannot be reached`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(
+                projects = listOf(project(name = "Old Project").copy(syncStatus = SyncStatus.SYNCED)),
+            )
+            val vm = createViewModel(
+                dao,
+                sharedCards = object : SharedCardUpdate {
+                    override suspend fun updateCard(
+                        projectId: String,
+                        title: String,
+                        tags: String,
+                        imagePath: String?,
+                    ) {
+                        throw UnknownHostException("Unable to resolve host")
+                    }
+                },
+            )
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.renameProject("New Project")
+            advanceUntilIdle()
+
+            assertEquals("Old Project", dao.observeProject(PROJECT_ID).first()?.name)
+            assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `renameProject keeps the shared name when the server rejects the card`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(
+                projects = listOf(project(name = "Old Project").copy(syncStatus = SyncStatus.SYNCED)),
+            )
+            val vm = createViewModel(
+                dao,
+                sharedCards = object : SharedCardUpdate {
+                    override suspend fun updateCard(
+                        projectId: String,
+                        title: String,
+                        tags: String,
+                        imagePath: String?,
+                    ) {
+                        error("share api status 500")
+                    }
+                },
+            )
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.renameProject("New Project")
+            advanceUntilIdle()
+
+            assertEquals("Old Project", dao.observeProject(PROJECT_ID).first()?.name)
+            assertEquals(R.string.error_rename_project_failed, vm.userMessages.first().resId)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `renameProject of a local project does not publish the card`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val dao = FakeProjectDao(projects = listOf(project(name = "Old Project")))
+            var published = false
+            val vm = createViewModel(
+                dao,
+                sharedCards = object : SharedCardUpdate {
+                    override suspend fun updateCard(
+                        projectId: String,
+                        title: String,
+                        tags: String,
+                        imagePath: String?,
+                    ) {
+                        published = true
+                    }
+                },
+            )
+            val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+            vm.bind(PROJECT_ID)
+            advanceUntilIdle()
+            vm.renameProject("New Project")
+            advanceUntilIdle()
+
+            assertFalse(published)
+            assertEquals("New Project", dao.observeProject(PROJECT_ID).first()?.name)
+            collectJob.cancel()
+        }
 
     @Test
     fun `commitTrackGain persists gain to dao`() = runTest(mainDispatcherRule.dispatcher) {
@@ -2780,8 +2916,14 @@ class ProjectViewModelTest {
         waveformPeakExtractor: WavWaveformPeakExtractor = defaultWaveformPeakExtractor,
         testDispatchers: TestAppDispatchers = TestAppDispatchers.unified(mainDispatcherRule.dispatcher),
         microphoneCaptureForeground: MicrophoneCaptureForeground = InactiveMicrophoneCaptureForeground,
+        sharedCards: SharedCardUpdate? = null,
     ): ProjectViewModel {
-        val repo = ProjectRepository(dao, NoopProjectFileStore)
+        val repo = ProjectRepository(
+            dao,
+            NoopProjectFileStore,
+            sharedCards = sharedCards?.let { cards -> Provider { cards } },
+            io = mainDispatcherRule.dispatcher,
+        )
         val audioImportCoordinator =
             testProjectAudioImportCoordinator(
                 repo,

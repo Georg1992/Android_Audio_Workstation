@@ -24,6 +24,7 @@ import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.CardImageStore
 import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.online.share.SharedCardUpdate
+import javax.inject.Provider
 import com.georgv.audioworkstation.core.audio.FakeAudioController
 import android.net.Uri
 import java.net.ConnectException
@@ -68,7 +69,7 @@ class LibraryViewModelTest {
             projects = listOf(project("project-a", "Alpha", 1L)),
         )
         val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
-        val vm = LibraryViewModel(repo, mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(repo, mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
 
         assertEquals(DataAvailability.Pending, vm.uiState.value.availability)
         assertTrue(vm.uiState.value.isInitialLoad)
@@ -79,7 +80,7 @@ class LibraryViewModelTest {
         val newerProject = project(id = "project-b", name = "Beta", createdAt = 2L)
         val olderProject = project(id = "project-a", name = "Alpha", createdAt = 1L)
         val dao = FakeLibraryProjectDao(projects = listOf(olderProject, newerProject))
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -93,7 +94,7 @@ class LibraryViewModelTest {
     @Test
     fun `empty projects after Ready is content empty not initial load`() = runTest {
         val dao = FakeLibraryProjectDao(projects = emptyList())
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
         backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -120,7 +121,7 @@ class LibraryViewModelTest {
 
         assertTrue(repo.projectsReady.value)
 
-        val vm = LibraryViewModel(repo, mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(repo, mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
         assertEquals(DataAvailability.Ready, vm.uiState.value.availability)
         assertEquals(2, vm.uiState.value.content.projects.size)
         assertFalse(vm.uiState.value.isInitialLoad)
@@ -134,7 +135,7 @@ class LibraryViewModelTest {
                 project(id = "project-b", name = "Beta", createdAt = 2L)
             )
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
         val collectJob = backgroundScope.launch { vm.uiState.collect { } }
 
         advanceUntilIdle()
@@ -152,7 +153,7 @@ class LibraryViewModelTest {
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
             failDeleteProject = true
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
 
         vm.deleteProject("project-a")
         advanceUntilIdle()
@@ -162,11 +163,105 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `delete of a shared project unshares it before the local row is removed`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Boom", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCED),
+            ),
+        )
+        val share = RecordingProjectShare { dao.observeProject("project-a").first() }
+        val vm = LibraryViewModel(
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            mixdownCoordinator(),
+            libraryPreviewPlayer(),
+            share,
+        )
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        advanceUntilIdle()
+        vm.deleteProject("project-a")
+        vm.uiState.dropWhile { it.content.projects.isNotEmpty() }.first()
+
+        assertEquals(listOf("project-a"), share.unshared)
+        assertEquals(SyncStatus.SYNCED, share.seenWhileUnsharing.single()?.syncStatus)
+        assertTrue(dao.observeProjects().first().isEmpty())
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `delete of a local project does not unshare it`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
+        )
+        val share = RecordingProjectShare()
+        val vm = LibraryViewModel(
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            mixdownCoordinator(),
+            libraryPreviewPlayer(),
+            share,
+        )
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        advanceUntilIdle()
+        vm.deleteProject("project-a")
+        vm.uiState.dropWhile { it.content.projects.isNotEmpty() }.first()
+
+        assertTrue(share.unshared.isEmpty())
+        assertTrue(dao.observeProjects().first().isEmpty())
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `delete keeps a shared project when unshare cannot reach the host`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Boom", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCED),
+            ),
+        )
+        val share = RecordingProjectShare(failure = UnknownHostException("Unable to resolve host"))
+        val vm = LibraryViewModel(
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            mixdownCoordinator(),
+            libraryPreviewPlayer(),
+            share,
+        )
+
+        vm.deleteProject("project-a")
+        advanceUntilIdle()
+
+        assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
+        assertEquals(listOf("project-a"), dao.observeProjects().first().map { it.id })
+        assertEquals(SyncStatus.SYNCED, dao.observeProject("project-a").first()?.syncStatus)
+    }
+
+    @Test
+    fun `delete keeps a shared project when the server rejects unshare`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Boom", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCED),
+            ),
+        )
+        val share = RecordingProjectShare(failure = IllegalStateException("share api status 500"))
+        val vm = LibraryViewModel(
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            mixdownCoordinator(),
+            libraryPreviewPlayer(),
+            share,
+        )
+
+        vm.deleteProject("project-a")
+        advanceUntilIdle()
+
+        assertEquals(R.string.error_unshare_project_failed, vm.userMessages.first().resId)
+        assertEquals(SyncStatus.SYNCED, dao.observeProject("project-a").first()?.syncStatus)
+    }
+
+    @Test
     fun `play without mix emits no mix yet message`() = runTest {
         val dao = FakeLibraryProjectDao(
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
         )
-        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer())
+        val vm = LibraryViewModel(ProjectRepository(dao, NoopLibraryProjectFileStore), mixdownCoordinator(), libraryPreviewPlayer(), IdleProjectShare())
         val preview = LibraryPreviewViewModel(libraryPreviewPlayer())
         val item = vm.uiState.value.content.projects.first()
         preview.play(item)
@@ -193,7 +288,7 @@ class LibraryViewModelTest {
         val coordinator = mixdownCoordinator(paths, repo)
         coordinator.refreshKnownMixdownPaths(listOf(projectId))
         advanceUntilIdle()
-        val vm = LibraryViewModel(repo, coordinator, libraryPreviewPlayer())
+        val vm = LibraryViewModel(repo, coordinator, libraryPreviewPlayer(), IdleProjectShare())
         backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
 
@@ -212,6 +307,8 @@ class LibraryViewModelTest {
         )
         val published = CompletableDeferred<String>()
         val publishThread = CompletableDeferred<Thread>()
+        var tagsSeen = ""
+        var nameDuringPublish: String? = null
         val share = object : SharedCardUpdate {
             override suspend fun updateCard(
                 projectId: String,
@@ -219,14 +316,15 @@ class LibraryViewModelTest {
                 tags: String,
                 imagePath: String?,
             ) {
+                nameDuringPublish = dao.observeProject(projectId).first()?.name
+                tagsSeen = tags
                 publishThread.complete(Thread.currentThread())
                 published.complete(title)
             }
         }
         val vm = LibraryCardViewModel(
             SavedStateHandle(mapOf("projectId" to "project-a")),
-            ProjectRepository(dao, NoopLibraryProjectFileStore),
-            share,
+            publishingRepository(dao, share),
             TempDirAudioFilePathProvider(),
             IdleCardImages,
         )
@@ -238,6 +336,7 @@ class LibraryViewModelTest {
         advanceUntilIdle()
 
         vm.setTitle("Renamed")
+        vm.setTags("drums, live")
         vm.save()
         advanceUntilIdle()
         val deadline = System.nanoTime() + 5_000_000_000L
@@ -247,10 +346,13 @@ class LibraryViewModelTest {
 
         try {
             assertEquals("Renamed", published.getCompleted())
+            assertEquals("drums, live", tagsSeen)
+            assertEquals("Alpha", nameDuringPublish)
             assertTrue(publishThread.getCompleted() != Thread.currentThread())
             assertTrue(errors.toString(), saved.isCompleted)
             assertTrue(errors.isEmpty())
             assertEquals("Renamed", dao.observeProject("project-a").first()?.name)
+            assertEquals("drums, live", dao.observeProject("project-a").first()?.cardTags)
         } finally {
             watch.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         }
@@ -281,46 +383,108 @@ class LibraryViewModelTest {
 
     @Test
     fun `saving a shared card reports a connection problem when the host cannot be reached`() = runTest {
-        val vm = cardVm(UnknownHostException("Unable to resolve host"))
+        val dao = syncedCardDao()
+        val vm = cardVm(dao, UnknownHostException("Unable to resolve host"))
         advanceUntilIdle()
         vm.setTitle("Renamed")
+        vm.setTags("drums")
         assertEquals(R.string.error_no_connection, awaitMessage(vm.userMessages) { vm.save() })
+        assertEquals("Alpha", dao.observeProject("project-a").first()?.name)
+        assertEquals("", dao.observeProject("project-a").first()?.cardTags)
     }
 
     @Test
     fun `saving a shared card keeps the save failure when the server rejects it`() = runTest {
-        val vm = cardVm(IllegalStateException("share api status 500"))
+        val dao = syncedCardDao()
+        val vm = cardVm(dao, IllegalStateException("share api status 500"))
         advanceUntilIdle()
         vm.setTitle("Renamed")
         assertEquals(R.string.error_card_save_failed, awaitMessage(vm.userMessages) { vm.save() })
+        assertEquals("Alpha", dao.observeProject("project-a").first()?.name)
+    }
+
+    @Test
+    fun `saving a local card does not publish it`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
+        )
+        var published = false
+        val vm = LibraryCardViewModel(
+            SavedStateHandle(mapOf("projectId" to "project-a")),
+            publishingRepository(
+                dao,
+                object : SharedCardUpdate {
+                    override suspend fun updateCard(
+                        projectId: String,
+                        title: String,
+                        tags: String,
+                        imagePath: String?,
+                    ) {
+                        published = true
+                    }
+                },
+            ),
+            TempDirAudioFilePathProvider(),
+            IdleCardImages,
+        )
+        val saved = CompletableDeferred<Unit>()
+        val watch = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        watch.launch { vm.savedEvent.collect { saved.complete(Unit) } }
+        advanceUntilIdle()
+
+        vm.setTitle("Renamed")
+        vm.save()
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (!saved.isCompleted && System.nanoTime() < deadline) {
+            Thread.sleep(20)
+        }
+
+        try {
+            assertTrue(saved.isCompleted)
+            assertFalse(published)
+            assertEquals("Renamed", dao.observeProject("project-a").first()?.name)
+        } finally {
+            watch.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
     }
 
     private fun shareVm(share: ProjectShare): LibraryShareViewModel =
         LibraryShareViewModel(IdleAccountSessionStore(), share)
 
-    private fun cardVm(failure: Exception): LibraryCardViewModel {
-        val dao = FakeLibraryProjectDao(
-            projects = listOf(
-                project(id = "project-a", name = "Alpha", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCED),
-            ),
-        )
-        return LibraryCardViewModel(
+    private fun syncedCardDao(): FakeLibraryProjectDao = FakeLibraryProjectDao(
+        projects = listOf(
+            project(id = "project-a", name = "Alpha", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCED),
+        ),
+    )
+
+    private fun publishingRepository(
+        dao: FakeLibraryProjectDao,
+        cards: SharedCardUpdate,
+    ): ProjectRepository = ProjectRepository(
+        dao,
+        NoopLibraryProjectFileStore,
+        sharedCards = Provider { cards },
+    )
+
+    private fun cardVm(dao: FakeLibraryProjectDao, failure: Exception): LibraryCardViewModel =
+        LibraryCardViewModel(
             SavedStateHandle(mapOf("projectId" to "project-a")),
-            ProjectRepository(dao, NoopLibraryProjectFileStore),
-            object : SharedCardUpdate {
-                override suspend fun updateCard(
-                    projectId: String,
-                    title: String,
-                    tags: String,
-                    imagePath: String?,
-                ) {
-                    throw failure
-                }
-            },
+            publishingRepository(
+                dao,
+                object : SharedCardUpdate {
+                    override suspend fun updateCard(
+                        projectId: String,
+                        title: String,
+                        tags: String,
+                        imagePath: String?,
+                    ) {
+                        throw failure
+                    }
+                },
+            ),
             TempDirAudioFilePathProvider(),
             IdleCardImages,
         )
-    }
 
     private fun awaitMessage(messages: Flow<UiMessage>, block: () -> Unit): Int {
         val seen = java.util.Collections.synchronizedList(mutableListOf<Int>())
@@ -434,6 +598,28 @@ private class IdleAccountSessionStore : AccountSessionStore {
     override suspend fun save(session: AccountSession) = Unit
 
     override suspend fun clear() = Unit
+}
+
+private class IdleProjectShare : ProjectShare {
+    override suspend fun share(projectId: String) = Unit
+
+    override suspend fun unshare(projectId: String) = Unit
+}
+
+private class RecordingProjectShare(
+    private val failure: Exception? = null,
+    private val beforeUnshare: suspend (String) -> ProjectEntity? = { null },
+) : ProjectShare {
+    val unshared = mutableListOf<String>()
+    val seenWhileUnsharing = mutableListOf<ProjectEntity?>()
+
+    override suspend fun share(projectId: String) = Unit
+
+    override suspend fun unshare(projectId: String) {
+        seenWhileUnsharing += beforeUnshare(projectId)
+        unshared += projectId
+        failure?.let { throw it }
+    }
 }
 
 private class ThrowingProjectShare(private val failure: Exception) : ProjectShare {

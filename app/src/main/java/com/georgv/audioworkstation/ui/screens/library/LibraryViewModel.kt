@@ -9,7 +9,10 @@ import com.georgv.audioworkstation.core.audio.ProjectMixdownState
 import com.georgv.audioworkstation.core.ui.DataAvailability
 import com.georgv.audioworkstation.core.ui.ScreenState
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
+import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.share.ProjectShare
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 @HiltViewModel
@@ -30,6 +34,7 @@ class LibraryViewModel @Inject constructor(
     private val repo: ProjectRepository,
     private val mixdownCoordinator: ProjectMixdownCoordinator,
     private val mixPreviewPlayer: LibraryMixPreviewPlayer,
+    private val projectShare: ProjectShare,
 ) : ViewModel() {
 
     private val projectsFirstEmissionLogged = AtomicBoolean(false)
@@ -97,7 +102,16 @@ class LibraryViewModel @Inject constructor(
 
     fun deleteProject(projectId: String) {
         viewModelScope.launch {
+            var removingShare = false
             try {
+                val shared = withContext(Dispatchers.IO) {
+                    repo.observeProject(projectId).first()?.syncStatus == SyncStatus.SYNCED
+                }
+                if (shared) {
+                    removingShare = true
+                    withContext(Dispatchers.IO) { projectShare.unshare(projectId) }
+                    removingShare = false
+                }
                 mixPreviewPlayer.stopIfPlaying(projectId)
                 reportedMixdownErrors.remove(projectId)
                 mixdownCoordinator.clearProject(projectId)
@@ -106,7 +120,12 @@ class LibraryViewModel @Inject constructor(
                 throw cancel
             } catch (error: Exception) {
                 logWarning(TAG, "deleteProject failed: $projectId", error)
-                messages.send(UiMessage(R.string.error_delete_project_failed))
+                val failure = if (removingShare) {
+                    R.string.error_unshare_project_failed
+                } else {
+                    R.string.error_delete_project_failed
+                }
+                messages.send(UiMessage(reportedFailure(error, failure)))
             }
         }
     }

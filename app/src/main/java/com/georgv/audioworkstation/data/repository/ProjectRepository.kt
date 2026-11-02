@@ -4,10 +4,14 @@ import android.os.SystemClock
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
+import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
+import com.georgv.audioworkstation.online.share.SharedCardUpdate
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,13 +22,22 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withContext
 
 @Singleton
-class ProjectRepository @Inject constructor(
+class ProjectRepository(
     private val dao: ProjectDao,
     private val fileStore: ProjectFileStore,
     private val diagnostics: ProjectRepositoryDiagnostics = ProjectRepositoryDiagnostics.None,
+    private val sharedCards: Provider<SharedCardUpdate>? = null,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
+    @Inject constructor(
+        dao: ProjectDao,
+        fileStore: ProjectFileStore,
+        sharedCards: Provider<SharedCardUpdate>,
+    ) : this(dao, fileStore, ProjectRepositoryDiagnostics.None, sharedCards, Dispatchers.IO)
+
     private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Eagerly cached project list — revisiting Library gets last known data immediately. */
@@ -48,6 +61,8 @@ class ProjectRepository @Inject constructor(
     suspend fun projectExists(projectId: String): Boolean = dao.projectExists(projectId)
 
     suspend fun upsertProject(project: ProjectEntity) {
+        val previous = dao.observeProject(project.id).first()
+        publishSharedCard(previous, project)
         diagnostics.dbWriteWhenActive("upsertProject", project.id) {
             if (dao.projectExists(project.id)) {
                 dao.updateProject(project)
@@ -55,6 +70,22 @@ class ProjectRepository @Inject constructor(
                 dao.insertProject(project)
             }
         }
+    }
+
+    private suspend fun publishSharedCard(previous: ProjectEntity?, project: ProjectEntity) {
+        val cards = sharedCards?.get() ?: return
+        val current = previous ?: return
+        if (current.syncStatus != SyncStatus.SYNCED || project.syncStatus != SyncStatus.SYNCED) return
+        if (sameSharedCard(current, project)) return
+        withContext(io) {
+            cards.updateCard(project.id, project.name.orEmpty(), project.cardTags, project.cardImagePath)
+        }
+    }
+
+    private fun sameSharedCard(previous: ProjectEntity, project: ProjectEntity): Boolean {
+        if (previous.name != project.name) return false
+        if (previous.cardTags != project.cardTags) return false
+        return previous.cardImagePath == project.cardImagePath
     }
 
     fun observeTracks(projectId: String): Flow<List<TrackEntity>> =

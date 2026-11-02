@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.core.session
 
 import androidx.annotation.StringRes
 import com.georgv.audioworkstation.core.ui.UiMessage
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import kotlinx.coroutines.CancellationException
 
@@ -20,7 +21,7 @@ internal class ProjectDbActionRunner(
             throw cancel
         } catch (error: Exception) {
             logWarning(logTag, "database action failed", error)
-            emitMessage(UiMessage(errorResId))
+            emitMessage(UiMessage(reportedFailure(error, errorResId)))
             false
         }
     }
@@ -37,7 +38,7 @@ internal class ProjectDbActionRunner(
         } catch (error: Exception) {
             logWarning(logTag, "database action failed", error)
             rollback()
-            emitMessage(UiMessage(errorResId))
+            emitMessage(UiMessage(reportedFailure(error, errorResId)))
         }
     }
 }
