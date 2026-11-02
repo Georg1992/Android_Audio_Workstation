@@ -14,20 +14,6 @@ class AudioCapabilityProfileCollector @Inject constructor(
     private val resolver: AudioCapabilityProfileResolver,
     private val stabilizationAudit: LatencySystemStabilizationAudit,
 ) {
-    suspend fun collectStreamCapabilities(
-        sampleRateHz: Int,
-        pathType: AudioLivePathType = AudioLivePathType.PLAYBACK_ONLY,
-    ) {
-        val outputProbe = nativeEngine.probeOutputStreamCapability()
-        val inputProbe = nativeEngine.probeInputStreamCapability()
-        resolver.mergeStreamCapabilities(
-            sampleRate = sampleRateHz,
-            outputProbe = outputProbe,
-            inputProbe = inputProbe,
-        )
-        finishCollection(sampleRateHz, pathType)
-    }
-
     suspend fun collectFromLiveSessionEnd(
         sampleRateHz: Int,
         pathType: AudioLivePathType = AudioLivePathType.OVERDUB,

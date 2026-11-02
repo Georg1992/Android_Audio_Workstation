@@ -303,23 +303,6 @@ class ProjectRecordingCoordinator @Inject constructor(
         )
     }
 
-    /** @see finalizeTrackAfterStop */
-    fun finalizedTrackAfterStop(
-        currentTrack: TrackEntity,
-        stopSnapshot: RecordingStopSnapshot = RecordingStopSnapshot(
-            firstSampleTransportPositionMs = CapturePort.RecordingFirstSampleTransportUnset,
-            capturedFrameCount = 0L,
-            capturedDurationMs = 0L,
-        ),
-        overdubPlaybackStartMs: Long? = null,
-    ): TrackEntity =
-        finalizeTrackAfterStop(
-            currentTrack,
-            punchContext = null,
-            stopSnapshot = stopSnapshot,
-            overdubPlaybackStartMs = overdubPlaybackStartMs,
-        )
-
     fun discardPunchRecordingTempFile(punchContext: RecordingPunchContext?) {
         val tempPath = punchContext?.tempRecordingPath ?: return
         File(tempPath).delete()

@@ -10,8 +10,7 @@ import javax.inject.Singleton
  * Single entry point for live-session transport latency: resolve [ResolvedAudioCapability]
  * from [AudioCapabilityProfileResolver], derive session hints, push to native once.
  *
- * Read-only UI summaries stay on [DeviceLatencyReadApi]; post-session measurement on
- * [AudioCapabilityProfileCollector] / [RecordingSessionLatencyAudit].
+ * Post-session measurement stays on [AudioCapabilityProfileCollector] / [RecordingSessionLatencyAudit].
  */
 interface SessionTransportCapabilityGate {
     /** Resolve profile for [sampleRate], apply session latencies to native, cache for idempotent ensure. */

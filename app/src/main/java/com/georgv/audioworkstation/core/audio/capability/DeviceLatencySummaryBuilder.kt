@@ -1,15 +1,9 @@
 package com.georgv.audioworkstation.core.audio.capability
 
-import com.georgv.audioworkstation.core.audio.capability.audit.AppLatencyAuditBuilder
 import com.georgv.audioworkstation.core.audio.capability.audit.CapabilityCompletenessEvaluator
-import com.georgv.audioworkstation.core.audio.latency.AudioLivePathType
-import com.georgv.audioworkstation.engine.NativeEngine
 
 object DeviceLatencySummaryBuilder {
-    fun build(
-        resolved: ResolvedAudioCapability,
-        nativeEngine: NativeEngine? = null,
-    ): DeviceLatencySummary {
+    fun build(resolved: ResolvedAudioCapability): DeviceLatencySummary {
         val profile = resolved.profile
         val completeness = CapabilityCompletenessEvaluator.evaluate(profile)
         val history = profile?.measurementHistory ?: CapabilityMeasurementHistory()
@@ -17,13 +11,6 @@ object DeviceLatencySummaryBuilder {
         val roundTripStats = history.roundTripStats()
         val captureStats = history.captureDelayStats()
         val jitterStats = history.jitterStats()
-
-        val appAudit =
-            if (nativeEngine != null && profile != null) {
-                AppLatencyAuditBuilder.build(nativeEngine, AudioLivePathType.OVERDUB, profile)
-            } else {
-                null
-            }
 
         val warnings = buildWarnings(resolved, completeness, profile)
         val missingData = completeness.missingFields
@@ -38,8 +25,8 @@ object DeviceLatencySummaryBuilder {
             inputCaptureMedianMs = captureStats?.medianMs ?: resolved.inputCaptureDelayMs,
             roundTripMedianMs = roundTripStats?.medianMs ?: resolved.roundTripMs,
             jitterMedianMs = jitterStats?.medianMs ?: resolved.jitterMs,
-            appAddedOutputP95Ms = appAudit?.appAddedOutputMsEstimate,
-            appAddedInputP95Ms = appAudit?.appAddedInputMsEstimate,
+            appAddedOutputP95Ms = null,
+            appAddedInputP95Ms = null,
             lowLatencyOutputGranted = resolved.lowLatencyOutputPathGranted,
             lowLatencyInputGranted = resolved.lowLatencyInputPathGranted,
             bestKnownBackend = profile?.derived?.recommendedBackend ?: "Unspecified",

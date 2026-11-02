@@ -40,12 +40,6 @@ class NativeEngine @Inject constructor() {
 
     fun isRecordingCaptureFailed(): Boolean = nativeIsRecordingCaptureFailed()
 
-    fun inputStreamSnapshot(): OboeStreamSnapshot? =
-        parseOboeStreamSnapshot(nativeGetInputStreamSnapshot())
-
-    fun outputStreamSnapshot(): OboeStreamSnapshot? =
-        parseOboeStreamSnapshot(nativeGetOutputStreamSnapshot())
-
     fun probeOutputStreamCapability(): OboeStreamCapabilityProbe? =
         OboeStreamCapabilityProbe.fromNativeValues(nativeProbeOutputStreamCapability())
 
@@ -87,20 +81,6 @@ class NativeEngine @Inject constructor() {
         )
     }
 
-    private fun parseOboeStreamSnapshot(values: LongArray?): OboeStreamSnapshot? {
-        if (values == null || values.size < 8) return null
-        return OboeStreamSnapshot(
-            sampleRateHz = values[0].toInt(),
-            channelCount = values[1].toInt(),
-            framesPerBurst = values[2].toInt(),
-            bufferCapacityInFrames = values[3].toInt(),
-            bufferSizeInFrames = values[4].toInt(),
-            performanceMode = values[5].toInt(),
-            sharingMode = values[6].toInt(),
-            audioSessionId = values[7].toInt(),
-        )
-    }
-
     fun recordingFirstSampleTransportPositionMs(): Long =
         nativeGetRecordingFirstSampleTransportPositionMs()
 
@@ -115,8 +95,6 @@ class NativeEngine @Inject constructor() {
 
     /** Live HAL output latency (ns), or [PlaybackTransportSync.LiveOutputLatencyUnsetNs] when invalid. */
     fun liveOutputLatencyNs(): Long = nativeGetLiveOutputLatencyNs()
-
-    fun lastPlacementClockDeltaMs(): Long = nativeGetLastPlacementClockDeltaMs()
 
     fun startOverdubRecordingSession(
         playbackSpec: MultiPlaybackSpec,
@@ -310,10 +288,6 @@ class NativeEngine @Inject constructor() {
 
     private external fun nativeIsRecordingCaptureFailed(): Boolean
 
-    private external fun nativeGetInputStreamSnapshot(): LongArray?
-
-    private external fun nativeGetOutputStreamSnapshot(): LongArray?
-
     private external fun nativeGetPlaybackSessionTimings(): LongArray?
 
     private external fun nativeProbeOutputStreamCapability(): LongArray?
@@ -358,8 +332,6 @@ class NativeEngine @Inject constructor() {
     private external fun nativeGetSessionPerceivedPlaybackOffsetMs(): Long
 
     private external fun nativeGetLiveOutputLatencyNs(): Long
-
-    private external fun nativeGetLastPlacementClockDeltaMs(): Long
 
     private external fun nativeStartOverdubRecordingSession(
         sampleRate: Int,

@@ -371,11 +371,6 @@ class RecordingSessionController(
 
     fun activeRecordingTrackIdForTransport(): String? = _recordingTrackId.value
 
-    /** Output WAV path for the active take — set when native capture starts, cleared on transport stop. */
-    fun activeRecordingWavPathForTransport(): String? =
-        _recordingOutputWavPath.value?.takeIf { it.isNotBlank() }
-            ?: _optimisticRecordingTrack.value?.wavFilePath?.takeIf { it.isNotBlank() }
-
     /** Transport stop steps 5–6 — clear recording row markers (after engine stops). */
     fun clearRecordingTransportMarkers() {
         _recordingTrackId.value = null

@@ -4,9 +4,6 @@ import android.util.Log
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
 import com.georgv.audioworkstation.core.audio.laneSourceReadOffsetMs
-import com.georgv.audioworkstation.core.audio.playbackTimelineClipStartMs
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
-
 /** Logcat tag shared with native TransportFrameMap diagnostics. */
 object TransportFrameDiagnostics {
     private const val TAG = "TransportFrameMap"
@@ -58,19 +55,6 @@ object TransportFrameDiagnostics {
             TAG,
             "kotlin_recording_stop firstSampleTransportMs=${snapshot.firstSampleTransportPositionMs} " +
                 "capturedFrames=${snapshot.capturedFrameCount} capturedDurationMs=${snapshot.capturedDurationMs}",
-        )
-    }
-
-    fun logFinalizedTrackPlacement(track: TrackEntity, wavFrameCount: Long?) {
-        if (!AudioSyncLogConfig.transportFrameVerboseEnabled) {
-            return
-        }
-        Log.i(
-            TAG,
-            "kotlin_finalized_track trackId=${track.id} timelineStartOffsetMs=${track.timelineStartOffsetMs} " +
-                "playbackClipStartMs=${track.playbackTimelineClipStartMs()} " +
-                "overdubSyncOffsetMs=${track.overdubPlaybackSyncOffsetMs} " +
-                "durationMs=${track.duration} wavFrameCount=${wavFrameCount ?: "unknown"}",
         )
     }
 }

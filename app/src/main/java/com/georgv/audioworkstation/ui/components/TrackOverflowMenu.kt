@@ -1,7 +1,5 @@
 package com.georgv.audioworkstation.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -100,33 +98,6 @@ fun TrackOverflowMenuBody(
             onClick = onRename,
         )
     }
-}
-
-@Composable
-fun TrackOverflowMenu(
-    isImporting: Boolean,
-    onDelete: () -> Unit,
-    onCancelImport: () -> Unit,
-    onRename: () -> Unit,
-    onEdit: (() -> Unit)? = null,
-    editEnabled: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    val menuShape = RoundedCornerShape(Dimens.TileRadius)
-    TrackOverflowMenuBody(
-        isImporting = isImporting,
-        onDelete = onDelete,
-        onCancelImport = onCancelImport,
-        onRename = onRename,
-        onEdit = onEdit,
-        editEnabled = editEnabled,
-        modifier =
-            modifier
-                .wrapContentWidth()
-                .background(AppColors.Bg, menuShape)
-                .border(Dimens.Stroke, AppColors.Line, menuShape)
-                .padding(Dimens.Stroke),
-    )
 }
 
 @Composable

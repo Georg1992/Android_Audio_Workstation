@@ -16,9 +16,4 @@ data class CapabilityMeasurementHistory(
     fun captureDelayStats(): MeasurementSeriesStats? = MeasurementSeriesStats.fromSamples(captureDelayMs)
 
     fun jitterStats(): MeasurementSeriesStats? = MeasurementSeriesStats.fromSamples(jitterMs)
-
-    fun appOutputCostStats(): MeasurementSeriesStats? = MeasurementSeriesStats.fromSamples(appOutputCostP95Us)
-
-    fun appInputProcessingStats(): MeasurementSeriesStats? =
-        MeasurementSeriesStats.fromSamples(appInputProcessingP95Us)
 }

@@ -29,15 +29,6 @@ internal object OboeCapabilityLabels {
             else -> "Other($mode)"
         }
 
-    fun formatLabel(format: Int): String =
-        when (format) {
-            1 -> "I16"
-            2 -> "Float"
-            3 -> "I24"
-            4 -> "I32"
-            else -> "Other($format)"
-        }
-
     fun lowLatencyApplied(probe: OboeStreamCapabilityProbe): Boolean =
         probe.performanceModeActual == 2
 

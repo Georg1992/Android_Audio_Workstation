@@ -1,26 +1,8 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
-import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.ui.components.ActiveRecordingTimelineClip
 import com.georgv.audioworkstation.ui.components.ProjectTimelineProjection
-import com.georgv.audioworkstation.ui.components.WaveformState
 import com.georgv.audioworkstation.ui.components.buildProjectTimelineProjection
-
-internal fun timelineProjectionForTracks(
-    tracks: List<TrackEntity>,
-    waveformStates: Map<String, WaveformState>,
-    selectedTrackIds: Set<String> = tracks.map { it.id }.toSet(),
-    playheadMs: Long = 0L,
-): ProjectTimelineProjection =
-    buildProjectTimelineProjection(
-        tracks = tracks,
-        waveformStatesByTrackId = waveformStates,
-        selectedTrackIds = selectedTrackIds,
-        activeRecording = null,
-        playheadPositionMs = playheadMs,
-        extendVisibleTimelineForAllLoopedPlayback = false,
-        extendVisibleTimelineForRecording = false,
-    )
 
 internal fun buildStructuralTimelineProjection(
     screen: ProjectScreenSnapshot,

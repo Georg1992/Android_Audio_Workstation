@@ -5,7 +5,6 @@ import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.isTrackLoadedInSessionLane
-import com.georgv.audioworkstation.core.audio.laneAudibilityFromSelection
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlinx.coroutines.CoroutineScope
@@ -43,24 +42,12 @@ class PlaybackSessionController(
 
     private var playbackSessionEpoch = 0L
 
-    fun isSessionSpecArmed(): Boolean = _sessionTrackIds.value.isNotEmpty()
-
     fun hasActivePlaybackSession(): Boolean = _playbackSessionActive.value
-
-    fun currentAudibleTrackIds(selectedTrackIds: Set<String>): Set<String> =
-        com.georgv.audioworkstation.core.audio.audibleTrackIds(selectedTrackIds, sessionLaneTrackIds)
 
     fun isTrackLoadedInSession(trackId: String): Boolean =
         _playbackSessionActive.value && isTrackLoadedInSessionLane(trackId, sessionLaneTrackIds)
 
     fun sessionLaneTrackIdSet(): Set<String> = sessionLaneTrackIds.filterNotNull().toSet()
-
-    fun wouldLeaveNoSessionLaneSelected(selectedTrackIds: Set<String>, trackId: String): Boolean {
-        if (!hasActivePlaybackSession() || trackId !in selectedTrackIds) return false
-        val laneTracks = sessionLaneTrackIdSet()
-        if (laneTracks.isEmpty()) return false
-        return (selectedTrackIds - trackId).intersect(laneTracks).isEmpty()
-    }
 
     fun resetWhenProjectChanges() {
         cancelCompletionMonitorForTransportStop()
@@ -77,10 +64,6 @@ class PlaybackSessionController(
     }
 
     fun sessionLaneTrackIdsForTests(): Array<String?> = sessionLaneTrackIds.copyOf()
-
-    fun advancePlaybackSessionEpochForTests() {
-        playbackSessionEpoch++
-    }
 
     fun cancelCompletionMonitorForTransportStop() {
         playbackMonitorJob?.cancel()
@@ -165,12 +148,6 @@ class PlaybackSessionController(
 
     fun livePlaybackLaneIndexForTrack(trackId: String): Int? =
         sessionLaneTrackIds.indexOfFirst { it == trackId }.takeIf { it >= 0 }
-
-    fun syncLaneAudibilityFromSelection(selectedTrackIds: Set<String>) {
-        playback.setArmedPlaybackLaneAudibility(
-            laneAudibilityFromSelection(sessionLaneTrackIds, selectedTrackIds),
-        )
-    }
 
     private fun startPlaybackMonitor(trackIds: Set<String>) {
         playbackMonitorJob?.cancel()

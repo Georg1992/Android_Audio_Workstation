@@ -222,17 +222,6 @@ internal fun ProjectViewModel.emitImportUiMessage(@StringRes resId: Int) {
     emitImportUiMessage(UiMessage(resId))
 }
 
-internal suspend fun ProjectViewModel.ensureProjectForImport(projectId: String): ProjectEntity? =
-    try {
-        importRepo.ensureProject(projectId, "New Project")
-    } catch (cancel: kotlinx.coroutines.CancellationException) {
-        throw cancel
-    } catch (error: Exception) {
-        com.georgv.audioworkstation.core.util.logWarning(ProjectViewModel.TAG, "createProject failed", error)
-        emitImportUiMessage(R.string.error_create_project_failed)
-        null
-    }
-
 internal suspend fun ProjectViewModel.loadProjectForImport(projectId: String): ProjectEntity? =
     try {
         importRepo.observeProject(projectId).first()

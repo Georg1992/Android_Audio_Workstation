@@ -236,31 +236,6 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
         }
 
-    fun fileHashes(id: String): List<String> =
-        connection().use { db ->
-            val exists = db.prepareStatement(
-                "SELECT 1 FROM shared_project WHERE id = ?",
-            ).use { query ->
-                query.setString(1, id)
-                query.executeQuery().use { rows -> rows.next() }
-            }
-            if (!exists) throw ShareFailure(404, "not found")
-            db.prepareStatement(
-                """
-                SELECT content_hash FROM shared_file
-                WHERE shared_project_id = ?
-                ORDER BY client_track_id
-                """.trimIndent(),
-            ).use { query ->
-                query.setString(1, id)
-                query.executeQuery().use { rows ->
-                    val hashes = ArrayList<String>()
-                    while (rows.next()) hashes += rows.getString(1)
-                    hashes
-                }
-            }
-        }
-
     fun deleteProject(id: String, ownerAccount: String) {
         requireOwner(id, ownerAccount)
         connection().use { db ->

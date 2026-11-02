@@ -2,31 +2,6 @@ package com.georgv.audioworkstation.engine
 
 import com.georgv.audioworkstation.core.audio.latency.LatencyTimeConstants
 
-data class OboeStreamSnapshot(
-    val sampleRateHz: Int,
-    val channelCount: Int,
-    val framesPerBurst: Int,
-    val bufferCapacityInFrames: Int,
-    val bufferSizeInFrames: Int,
-    val performanceMode: Int,
-    val sharingMode: Int,
-    val audioSessionId: Int,
-) {
-    fun bufferCapacityMs(): Long? =
-        if (sampleRateHz > 0) {
-            bufferCapacityInFrames * 1000L / sampleRateHz
-        } else {
-            null
-        }
-
-    fun burstMs(): Long? =
-        if (sampleRateHz > 0) {
-            framesPerBurst * 1000L / sampleRateHz
-        } else {
-            null
-        }
-}
-
 data class PlaybackSessionTimings(
     val playbackArmSteadyNs: Long,
     val firstInputSampleSteadyNs: Long,
@@ -57,25 +32,6 @@ data class PlaybackSessionTimings(
 
     fun firstInputToFirstAudibleMs(): Long? =
         deltaMs(firstInputSampleSteadyNs, firstAudibleOutputSteadyNs)
-
-    fun firstAudiblePeakLinear(): Float =
-        firstAudiblePeakMicro.coerceAtLeast(0L).toFloat() / LatencyTimeConstants.MicroLinearScale
-
-    fun transportMs(frame: Long, sampleRateHz: Int): Long? =
-        if (frame < 0L || sampleRateHz <= 0) {
-            null
-        } else {
-            frame * 1000L / sampleRateHz
-        }
-
-    fun playbackArmTransportStartMs(sampleRateHz: Int): Long? =
-        transportMs(playbackArmTransportStartFrame, sampleRateHz)
-
-    fun firstNonSilentTransportMs(sampleRateHz: Int): Long? =
-        transportMs(firstNonSilentTransportFrame, sampleRateHz)
-
-    fun firstAudibleTransportMs(sampleRateHz: Int): Long? =
-        transportMs(firstAudiblePeakTransportFrame, sampleRateHz)
 
     private fun deltaMs(startNs: Long, endNs: Long): Long? =
         if (startNs > 0L && endNs > startNs) {

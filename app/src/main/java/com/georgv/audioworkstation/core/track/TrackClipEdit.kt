@@ -55,13 +55,3 @@ fun trackEditTimelineLayoutDurationMs(
     val minimum = max(sourceDurationMs, 60_000L)
     return max(clipEnd + 30_000L, minimum).coerceAtMost(TimelineMaxDurationMs)
 }
-
-fun timelineMsFromPointerX(
-    pointerXPx: Float,
-    areaWidthPx: Float,
-    layoutDurationMs: Long,
-): Long {
-    if (areaWidthPx <= 0f || layoutDurationMs <= 0L) return 0L
-    val fraction = (pointerXPx.toDouble() / areaWidthPx.toDouble()).coerceIn(0.0, 1.0)
-    return (fraction * layoutDurationMs.toDouble()).toLong().coerceIn(0L, layoutDurationMs)
-}

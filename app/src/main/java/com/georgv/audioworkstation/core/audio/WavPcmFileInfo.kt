@@ -116,11 +116,6 @@ fun msToFramePosition(ms: Long, sampleRateHz: Int): Long {
     return (ms * sampleRateHz.toLong()) / 1_000L
 }
 
-fun framePositionToMs(frames: Long, sampleRateHz: Int): Long {
-    if (frames <= 0L || sampleRateHz <= 0) return 0L
-    return (frames * 1_000L + sampleRateHz.toLong() - 1L) / sampleRateHz.toLong()
-}
-
 internal fun resultingClipDurationMs(
     oldDurationMs: Long,
     spliceStartInClipMs: Long,
