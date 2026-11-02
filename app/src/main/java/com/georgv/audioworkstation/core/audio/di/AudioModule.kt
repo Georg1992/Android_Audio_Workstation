@@ -10,7 +10,10 @@ import com.georgv.audioworkstation.core.audio.AndroidMicrophoneCaptureForeground
 import com.georgv.audioworkstation.core.audio.MeterPort
 import com.georgv.audioworkstation.core.audio.MicrophoneCaptureForeground
 import com.georgv.audioworkstation.core.audio.MixdownPort
-import com.georgv.audioworkstation.core.audio.NativeAudioController
+import com.georgv.audioworkstation.core.audio.NativeCapturePort
+import com.georgv.audioworkstation.core.audio.NativeMeterPort
+import com.georgv.audioworkstation.core.audio.NativeMixdownPort
+import com.georgv.audioworkstation.core.audio.NativePlaybackPort
 import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.RecordingStorageFsQuery
@@ -41,25 +44,25 @@ abstract class AudioModule {
     @Binds
     @Singleton
     abstract fun bindPlaybackPort(
-        controller: NativeAudioController,
+        port: NativePlaybackPort,
     ): PlaybackPort
 
     @Binds
     @Singleton
     abstract fun bindCapturePort(
-        controller: NativeAudioController,
+        port: NativeCapturePort,
     ): CapturePort
 
     @Binds
     @Singleton
     abstract fun bindMixdownPort(
-        controller: NativeAudioController,
+        port: NativeMixdownPort,
     ): MixdownPort
 
     @Binds
     @Singleton
     abstract fun bindMeterPort(
-        controller: NativeAudioController,
+        port: NativeMeterPort,
     ): MeterPort
 
     @Binds

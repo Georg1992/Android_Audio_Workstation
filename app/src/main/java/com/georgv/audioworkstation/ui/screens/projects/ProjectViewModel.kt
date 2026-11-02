@@ -482,6 +482,31 @@ class ProjectViewModel @Inject constructor(
 
     val sampleRateMismatchDialogState = sampleRateMismatchDialog.asStateFlow()
 
+    private val trackEdits by lazy {
+        ProjectTrackEdits(
+            scope = viewModelScope,
+            repo = repo,
+            playbackSession = playbackSession,
+            recordingSession = recordingSession,
+            scopePlayback = scopePlaybackCoordinator,
+            audioParameterQueue = audioParameterQueue,
+            dbActions = dbActions,
+            projectId = projectId,
+            selectedTrackIds = selectedTrackIds,
+            recordTargetTrackId = recordTargetTrackId,
+            optimisticTracks = optimisticTracks,
+            optimisticTrackGains = optimisticTrackGains,
+            optimisticTrackPans = optimisticTrackPans,
+            projectTracks = projectTracks,
+            trackOrderPersistMutex = trackOrderPersistMutex,
+            visibleTracks = { uiState.value.tracks },
+            boundProject = { uiState.value.project },
+            importInProgress = { uiState.value.isImportInProgress },
+            currentVisibleTracks = { currentVisibleTracks() },
+            emitMessage = { message -> emitMessage(message) },
+        )
+    }
+
     private val _destinationReady = MutableStateFlow(false)
     /** True after [scheduleBind] completes for the current route; gates heavy workspace reveal. */
     val destinationReady: StateFlow<Boolean> = _destinationReady.asStateFlow()
@@ -676,24 +701,7 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun renameProject(newName: String) {
-        val pid = projectId.value ?: return
-        val normalizedName = when (val validation = validateName(newName)) {
-            is NameValidationResult.Invalid -> {
-                emitMessage(validation.error.toProjectNameUiMessage())
-                return
-            }
-            is NameValidationResult.Valid -> validation.normalized
-        }
-        viewModelScope.launch {
-            dbActions.run(R.string.error_rename_project_failed) {
-                val base =
-                    uiState.value.project?.takeIf { it.id == pid }
-                        ?: repo.observeProject(pid).first()
-                        ?: ProjectEntity(id = pid)
-                if (normalizedName == (base.name ?: "").trim()) return@run
-                repo.upsertProject(base.copy(name = normalizedName))
-            }
-        }
+        trackEdits.renameProject(newName)
     }
 
     fun cancelImport(trackId: String) {
@@ -727,257 +735,54 @@ class ProjectViewModel @Inject constructor(
     }
 
     fun deleteTrack(trackId: String) {
-        if (recordingSession.recordingTrackId.value == trackId) {
-            emitMessage(R.string.error_stop_recording_to_delete_track)
-            return
-        }
-        if (playbackSession.isTrackLoadedInSession(trackId)) {
-            emitMessage(R.string.error_stop_playback_to_delete_track)
-            return
-        }
-
-        val track = uiState.value.tracks.find { it.id == trackId } ?: return
-        if (track.importStatus == TrackImportStatus.IMPORTING) return
-
-        val previousSelected = selectedTrackIds.value
-        selectedTrackIds.value = selectedTrackIds.value - trackId
-        if (recordTargetTrackId.value == trackId) {
-            recordTargetTrackId.value = null
-        }
-        val remainingTracks = uiState.value.tracks
-            .filter { it.id != trackId }
-            .mapIndexed { i, t -> t.copy(position = i) }
-        viewModelScope.launch {
-            dbActions.runWithRollback(
-                errorResId = R.string.error_delete_track_failed,
-                rollback = { selectedTrackIds.value = previousSelected }
-            ) {
-                repo.deleteTrack(track, remainingTracks)
-            }
-        }
+        trackEdits.deleteTrack(trackId)
     }
 
     fun renameTrack(trackId: String, newName: String) {
-        val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-        val normalizedName = when (val validation = validateName(newName)) {
-            is NameValidationResult.Invalid -> {
-                emitMessage(validation.error.toTrackNameUiMessage())
-                return
-            }
-            is NameValidationResult.Valid -> validation.normalized
-        }
-        if (normalizedName == (currentTrack.name ?: "").trim()) return
-
-        val updatedTrack = currentTrack.copy(name = normalizedName)
-        viewModelScope.launch {
-            dbActions.run(R.string.error_rename_track_failed) {
-                repo.upsertTrack(updatedTrack)
-            }
-        }
+        trackEdits.renameTrack(trackId, newName)
     }
 
     fun toggleTrackLoop(trackId: String) {
-        if (playbackSession.hasActivePlaybackSession()) return
-        val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-        val enabling = !currentTrack.isLoop
-        if (enabling && recordTargetTrackId.value == trackId) {
-            recordTargetTrackId.value = null
-        }
-        val updatedTrack = currentTrack.copy(isLoop = enabling)
-        viewModelScope.launch {
-            dbActions.run(R.string.error_loop_update_failed) {
-                repo.upsertTrack(updatedTrack)
-            }
-        }
+        trackEdits.toggleTrackLoop(trackId)
     }
 
     fun updateTrackLoopRegion(trackId: String, loopStartMs: Long, loopEndMs: Long) {
-        if (playbackSession.hasActivePlaybackSession()) return
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-        if (!currentTrack.isLoop) return
-        val sourceDuration = currentTrack.sourceDurationMs()
-        if (sourceDuration <= 0L) return
-        val (startMs, endMs) = clampLoopRegionMs(loopStartMs, loopEndMs, sourceDuration)
-        val updatedTrack =
-            currentTrack.copy(
-                loopStartMs = startMs,
-                loopEndMs = endMs,
-            )
-        viewModelScope.launch {
-            dbActions.run(R.string.error_loop_update_failed) {
-                repo.upsertTrack(updatedTrack)
-            }
-        }
+        trackEdits.updateTrackLoopRegion(trackId, loopStartMs, loopEndMs)
     }
 
     fun toggleRecordTarget(trackId: String) {
-        if (playbackSession.hasActivePlaybackSession()) return
-        if (recordingSession.hasActiveRecordingTake() || recordingSession.isStartupInFlight()) return
-        if (uiState.value.isImportInProgress) return
-        if (uiState.value.tracks.none { it.id == trackId }) return
-        val selecting = recordTargetTrackId.value != trackId
-        if (selecting) {
-            val currentTrack = uiState.value.tracks.find { it.id == trackId } ?: return
-            if (currentTrack.importStatus != TrackImportStatus.READY) return
-            if (currentTrack.isLoop) {
-                viewModelScope.launch {
-                    dbActions.run(R.string.error_loop_update_failed) {
-                        repo.upsertTrack(currentTrack.copy(isLoop = false))
-                    }
-                }
-            }
-            recordTargetTrackId.value = trackId
-        } else {
-            recordTargetTrackId.value = null
-        }
+        trackEdits.toggleRecordTarget(trackId)
     }
 
-    /**
-     * Live gain change while the user is interacting with the fader.
-     * Pushes the value to the audio engine for immediate playback feedback
-     * but does NOT touch the DB — that would re-emit the tracks list and
-     * cause recomposition cascades that make the fader feel "jumpy".
-     * The final value is persisted via [commitTrackGain] on release.
-     */
+    /** Live gain while the fader moves. [commitTrackGain] writes the database on release. */
     fun setTrackGain(trackId: String, gain: Float) {
-        val contains = uiState.value.tracks.any { it.id == trackId }
-        if (!contains) {
-            return
-        }
-        optimisticTrackGains.value = optimisticTrackGains.value + (trackId to gain.coerceIn(GainRange.Min, GainRange.Max))
-        if (!playbackSession.hasActivePlaybackSession()) {
-            return
-        }
-        val laneIndex = playbackSession.livePlaybackLaneIndexForTrack(trackId) ?: return
-        ThreadingDiagnostics.logLiveParameterEnqueue("setTrackGain lane=$laneIndex")
-        audioParameterQueue.setLaneGain(laneIndex, GainRange.toUnit(gain))
+        trackEdits.setTrackGain(trackId, gain)
     }
 
     /** Commit the latest gain value to the DB. Called when the user releases the fader. */
     fun commitTrackGain(trackId: String, gain: Float) {
-        val currentTrack = projectTracks.value.find { it.id == trackId }
-        if (currentTrack == null) {
-            return
-        }
-        if (gain == currentTrack.gain) {
-            return
-        }
-
-        val updatedTrack = currentTrack.copy(gain = gain)
-        viewModelScope.launch {
-            dbActions.run(R.string.error_gain_update_failed) {
-                repo.upsertTrack(updatedTrack)
-            }
-        }
+        trackEdits.commitTrackGain(trackId, gain)
     }
 
-    /**
-     * Live pan while the knob is dragged: pushes to the audio engine only.
-     * UI state stays in [TrackPanKnob] until [commitTrackPan] on release.
-     */
+    /** Live pan while the knob is dragged. [commitTrackPan] writes the database on release. */
     fun setTrackPan(trackId: String, pan: Float) {
-        if (!uiState.value.tracks.any { it.id == trackId }) {
-            return
-        }
-        val clamped = PanRange.clamp(pan)
-        if (!playbackSession.hasActivePlaybackSession()) {
-            return
-        }
-        val laneIndex = playbackSession.livePlaybackLaneIndexForTrack(trackId) ?: return
-        ThreadingDiagnostics.logLiveParameterEnqueue("setTrackPan lane=$laneIndex")
-        audioParameterQueue.setLanePan(laneIndex, clamped)
+        trackEdits.setTrackPan(trackId, pan)
     }
 
     fun commitTrackPan(trackId: String, pan: Float) {
-        val currentTrack = projectTracks.value.find { it.id == trackId } ?: return
-        val clamped = PanRange.clamp(pan)
-        if (clamped == currentTrack.pan) {
-            optimisticTrackPans.value = optimisticTrackPans.value - trackId
-            return
-        }
-        optimisticTrackPans.value = optimisticTrackPans.value + (trackId to clamped)
-        val updatedTrack = currentTrack.copy(pan = clamped)
-        viewModelScope.launch {
-            dbActions.run(R.string.error_pan_update_failed) {
-                repo.upsertTrack(updatedTrack)
-            }
-        }
+        trackEdits.commitTrackPan(trackId, pan)
     }
 
     fun setTrackOrderSession(projectId: String, orderedTracks: List<TrackEntity>) {
-        if (this.projectId.value != projectId) return
-        if (orderedTracks.isEmpty()) return
-
-        val next =
-            OptimisticTrackOrder.applySession(
-                liveTracks = uiState.value.tracks,
-                proposedOrder = orderedTracks,
-            )
-                ?: return
-        optimisticTracks.value = next
+        trackEdits.setTrackOrderSession(projectId, orderedTracks)
     }
 
     fun persistTrackOrderToDb(projectId: String) {
-        if (this.projectId.value != projectId) return
-        viewModelScope.launch {
-            trackOrderPersistMutex.withLock {
-                if (this@ProjectViewModel.projectId.value != projectId) return@withLock
-                val list =
-                    uiState.value.tracks.mapIndexed { index, track -> track.copy(position = index) }
-                if (list.isEmpty()) return@withLock
-                dbActions.runWithRollback(
-                    errorResId = R.string.error_save_track_order_failed,
-                    rollback = { optimisticTracks.value = null }
-                ) {
-                    repo.updateTracks(list)
-                }
-            }
-        }
+        trackEdits.persistTrackOrderToDb(projectId)
     }
 
     fun toggleSelect(trackId: String) {
-        val track = currentVisibleTracks().find { it.id == trackId } ?: return
-        if (track.importStatus != TrackImportStatus.READY) {
-            return
-        }
-        if (
-            recordingSession.hasActiveRecordingTake() &&
-            trackId == recordingSession.recordingTrackId.value
-        ) {
-            return
-        }
-        val cur = selectedTrackIds.value
-        val next = if (cur.contains(trackId)) cur - trackId else cur + trackId
-        selectedTrackIds.value = next
-        persistReconciledLoopRegionsForScope(next)
-        if (playbackSession.hasActivePlaybackSession()) {
-            viewModelScope.launch {
-                scopePlaybackCoordinator.onSelectionChangedDuringTransport(next)
-            }
-        }
-    }
-
-    private fun persistReconciledLoopRegionsForScope(selectedTrackIds: Set<String>) {
-        val scopeTrackIds =
-            activeMixScopeTrackIds(
-                selectedTrackIds = selectedTrackIds,
-                activeRecordingTrackId = recordingSession.recordingTrackId.value,
-            )
-        val reconciled = reconcileInScopeLoopRegions(currentVisibleTracks(), scopeTrackIds)
-        val updates =
-            reconciled.filter { updated ->
-                val current = currentVisibleTracks().find { it.id == updated.id } ?: return@filter false
-                updated.isLoop != current.isLoop ||
-                    updated.loopStartMs != current.loopStartMs ||
-                    updated.loopEndMs != current.loopEndMs
-            }
-        if (updates.isEmpty()) return
-        viewModelScope.launch {
-            dbActions.run(R.string.error_loop_update_failed) {
-                repo.updateTracks(updates)
-            }
-        }
+        trackEdits.toggleSelect(trackId)
     }
 
     fun importAudio(projectId: String, source: AudioImportSource, suggestedName: String?) {
