@@ -12,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -19,16 +20,16 @@ import org.junit.Test
 
 class SharedMixStreamTest {
     @Test
-    fun playReturnsBeforeTheMixBodyIsRead() {
+    fun playStartsFromASmallBufferAndLeavesTheRestUnread() {
         val wav = mixWav()
         val release = CountDownLatch(1)
-        val bodyEntered = AtomicBoolean(false)
+        val read = AtomicInteger(0)
         val source = object : MixSource {
             override fun open(url: String, offset: Long): InputStream =
-                GatedStream(wav.copyOf(HeaderBytes), release, bodyEntered)
+                LimitedStream(wav, HeaderBytes + StartBytes, read, release)
         }
         val output = FakeOutput()
-        val stream = SharedMixStream(source, output)
+        val stream = SharedMixStream(source, output, aheadBytes = AheadBytes, startBytes = StartBytes)
         val returned = CountDownLatch(1)
         val worker = Thread {
             stream.play("https://mix.example/song")
@@ -39,8 +40,41 @@ class SharedMixStreamTest {
             assertTrue(returned.await(2, TimeUnit.SECONDS))
             assertTrue(output.started)
             assertTrue(output.played)
-            assertEquals(1L, release.count)
+            assertEquals(HeaderBytes + StartBytes, read.get())
+            assertTrue(wav.size > read.get())
         } finally {
+            stream.release()
+            worker.join(JoinMs)
+        }
+    }
+
+    @Test
+    fun readAheadStaysInsideTheWindowWhilePlaybackIsSlow() {
+        val wav = largeWav()
+        val read = AtomicInteger(0)
+        val source = object : MixSource {
+            override fun open(url: String, offset: Long): InputStream = CountingStream(wav, offset, read)
+        }
+        val output = PermitOutput()
+        val stream = SharedMixStream(source, output, aheadBytes = AheadBytes, startBytes = StartBytes)
+        val returned = CountDownLatch(1)
+        val worker = Thread {
+            stream.play("https://mix.example/song")
+            returned.countDown()
+        }
+        worker.start()
+        try {
+            assertTrue(returned.await(2, TimeUnit.SECONDS))
+            assertTrue(waitUntil { read.get() >= HeaderBytes + StartBytes && stable(read) })
+            val parked = read.get()
+            val window = HeaderBytes + AheadBytes + ChunkBytes * 3
+            assertTrue(parked <= window)
+            assertTrue(parked < wav.size / 2)
+            output.allow(WritesAfterStart)
+            assertTrue(waitUntil { read.get() > parked })
+            assertTrue(read.get() < wav.size)
+        } finally {
+            output.allow(WritesAfterStart)
             stream.release()
             worker.join(JoinMs)
         }
@@ -59,11 +93,11 @@ class SharedMixStreamTest {
             override fun open(url: String, offset: Long): InputStream {
                 offsets += offset
                 if (offset == expected) seen.countDown()
-                val prefix = if (offset == 0L) wav.copyOf(HeaderBytes) else ByteArray(0)
+                val prefix = if (offset == 0L) wav.copyOf(HeaderBytes + StartBytes) else ByteArray(0)
                 return GatedStream(prefix, CountDownLatch(1), AtomicBoolean(false))
             }
         }
-        val stream = SharedMixStream(source, FakeOutput())
+        val stream = SharedMixStream(source, FakeOutput(), aheadBytes = AheadBytes, startBytes = StartBytes)
         val returned = CountDownLatch(1)
         val worker = Thread {
             stream.play("https://mix.example/song")
@@ -89,7 +123,7 @@ class SharedMixStreamTest {
             override fun open(url: String, offset: Long): InputStream =
                 GatedStream(wav.copyOf(HeaderBytes + PcmLead), release, AtomicBoolean(false))
         }
-        val stream = SharedMixStream(source, FakeOutput())
+        val stream = SharedMixStream(source, FakeOutput(), aheadBytes = AheadBytes, startBytes = StartBytes)
         val returned = CountDownLatch(1)
         val worker = Thread {
             stream.play("https://mix.example/song")
@@ -189,6 +223,92 @@ class SharedMixStreamTest {
         return probe()
     }
 
+    private fun stable(read: AtomicInteger): Boolean {
+        val first = read.get()
+        Thread.sleep(PollMs)
+        return read.get() == first
+    }
+
+    private class CountingStream(
+        private val wav: ByteArray,
+        offset: Long,
+        private val read: AtomicInteger,
+    ) : InputStream() {
+        private var index = offset.toInt()
+
+        override fun read(): Int {
+            val one = ByteArray(1)
+            val count = read(one, 0, 1)
+            if (count < 0) return -1
+            return one[0].toInt() and 0xFF
+        }
+
+        override fun read(buffer: ByteArray, off: Int, len: Int): Int {
+            if (index >= wav.size) return -1
+            val count = minOf(len, wav.size - index)
+            wav.copyInto(buffer, off, index, index + count)
+            index += count
+            read.addAndGet(count)
+            return count
+        }
+    }
+
+    private class LimitedStream(
+        private val wav: ByteArray,
+        private val limit: Int,
+        private val read: AtomicInteger,
+        private val release: CountDownLatch,
+    ) : InputStream() {
+        private var index = 0
+
+        override fun read(): Int {
+            val one = ByteArray(1)
+            val count = read(one, 0, 1)
+            if (count < 0) return -1
+            return one[0].toInt() and 0xFF
+        }
+
+        override fun read(buffer: ByteArray, off: Int, len: Int): Int {
+            if (index >= limit) {
+                release.await()
+                throw IOException("closed")
+            }
+            val count = minOf(len, limit - index, wav.size - index)
+            wav.copyInto(buffer, off, index, index + count)
+            index += count
+            read.set(index)
+            return count
+        }
+
+        override fun close() {
+            release.countDown()
+        }
+    }
+
+    private class PermitOutput : PcmOutput {
+        private val permits = AtomicInteger(0)
+
+        fun allow(count: Int) {
+            permits.addAndGet(count)
+        }
+
+        override fun start(sampleRateHz: Int, channelCount: Int) = Unit
+
+        override fun write(bytes: ByteArray, offset: Int, length: Int): Int {
+            while (permits.get() == 0) Thread.sleep(PollMs)
+            permits.decrementAndGet()
+            return length
+        }
+
+        override fun pause() = Unit
+
+        override fun play() = Unit
+
+        override fun release() {
+            allow(WritesAfterStart)
+        }
+    }
+
     private class FakeOutput : PcmOutput {
         var started = false
         var played = false
@@ -240,15 +360,23 @@ class SharedMixStreamTest {
         }
     }
 
-    private fun mixWav(): ByteArray {
+    private fun mixWav(): ByteArray = wavFrames(2_000)
+
+    private fun largeWav(): ByteArray = wavFrames(80_000)
+
+    private fun wavFrames(frameCount: Int): ByteArray {
         val file = File.createTempFile("mix", ".wav")
-        writeConstantPcm16Wav(file, 1, frameCount = 2_000, sampleRateHz = 1_000)
+        writeConstantPcm16Wav(file, 1, frameCount = frameCount, sampleRateHz = 1_000)
         return file.readBytes().also { file.delete() }
     }
 
     private companion object {
         const val HeaderBytes = 44
-        const val PcmLead = 400
+        const val PcmLead = 800
+        const val StartBytes = 256
+        const val AheadBytes = 1_024
+        const val ChunkBytes = 4_096
+        const val WritesAfterStart = 8
         const val SeekMs = 500
         const val MsPerSecond = 1_000
         const val JoinMs = 1_000L

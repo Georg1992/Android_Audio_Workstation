@@ -9,24 +9,30 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Plays a shared 16-bit PCM mix from its URL. [play] returns once the WAV header
- * is read and the output has started, then a thread keeps reading the body.
- * Stop closes that stream. Scrub reopens it with a range request.
+ * Plays a shared 16-bit PCM mix from its URL.
+ * Playback starts once a small window is buffered. A reader keeps that window
+ * filled while audio plays, and stops reading when the window is full.
+ * Stop closes the stream. Scrub drops the window and reopens it with a range.
  */
 internal class SharedMixStream(
     private val source: MixSource = UrlMixSource(),
     private val output: PcmOutput = AudioTrackPcmOutput(),
+    private val aheadBytes: Int = AheadBytes,
+    private val startBytes: Int = StartBytes,
 ) {
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lock = Object()
+    private val playBytes = ByteArray(ChunkBytes)
     private var url: String? = null
     private var header: WavPcmFileInfo? = null
     private var stream: InputStream? = null
+    private var ring = PcmRing(aheadBytes)
     private var pcmByte: Long = 0
     private var playing = false
     private var closed = true
     private var pendingSeek: Long? = null
     private var writer: Thread? = null
+    private var filler: Thread? = null
     private var startGate: CountDownLatch? = null
     private var startFailure: Exception? = null
     private var generation = 0
@@ -61,6 +67,7 @@ internal class SharedMixStream(
             open
         }
         open?.close()
+        ring.clear()
     }
 
     fun seekTo(positionMs: Int) {
@@ -81,6 +88,7 @@ internal class SharedMixStream(
             open
         }
         open?.close()
+        ring.clear()
     }
 
     fun transport(): StreamTransport {
@@ -147,7 +155,7 @@ internal class SharedMixStream(
     }
 
     private fun stopWriter() {
-        val (thread, open) = synchronized(lock) {
+        val (thread, open, reader) = synchronized(lock) {
             closed = true
             playing = false
             pendingSeek = null
@@ -156,14 +164,21 @@ internal class SharedMixStream(
             lock.notifyAll()
             val thread = writer
             writer = null
-            thread to open
+            val reader = filler
+            filler = null
+            Triple(thread, open, reader)
         }
         open?.close()
+        ring.close()
         if (thread != null && thread != Thread.currentThread()) thread.join(JoinMs)
+        if (reader != null && reader != Thread.currentThread()) reader.join(JoinMs)
     }
 
     private fun runWriter(serial: Int) {
+        val ahead = PcmRing(maxOf(aheadBytes, startBytes))
+        synchronized(lock) { ring = ahead }
         var open: InputStream? = null
+        var reader: Thread? = null
         try {
             val address = synchronized(lock) { url } ?: return
             open = source.open(address, 0L)
@@ -188,15 +203,9 @@ internal class SharedMixStream(
                 }
                 return
             }
-            if (synchronized(lock) { playing }) {
-                output.play()
-                outputRunning = true
-            }
-            synchronized(lock) {
-                startGate?.countDown()
-                startGate = null
-            }
-            loop(parsed, serial)
+            reader = startFill(serial, parsed, ahead)
+            synchronized(lock) { filler = reader }
+            while (pump(serial)) Unit
         } catch (failure: Exception) {
             val dangling = synchronized(lock) {
                 val extra = open
@@ -214,37 +223,56 @@ internal class SharedMixStream(
                     startGate = null
                 }
             }
+        } finally {
+            ahead.close()
+            reader?.join(JoinMs)
         }
     }
 
-    private fun loop(parsed: WavPcmFileInfo, serial: Int) {
-        val buffer = ByteArray(ChunkBytes)
-        while (pump(parsed, buffer, serial)) Unit
+    private fun startFill(serial: Int, parsed: WavPcmFileInfo, ahead: PcmRing): Thread {
+        val hooks = MixHooks(
+            next = ::stepLocked,
+            reopenAt = { offset -> reopen(parsed, offset, serial) },
+            look = {
+                synchronized(lock) { MixLook(closed, generation, pendingSeek != null, stream) }
+            },
+            clearStream = { current ->
+                synchronized(lock) {
+                    if (stream === current) stream = null
+                }
+            },
+            read = ::readCount,
+        )
+        return Thread({ MixReader(ahead, hooks).read(serial) }, FillName).also { thread ->
+            thread.isDaemon = true
+            thread.start()
+        }
     }
 
-    private fun pump(parsed: WavPcmFileInfo, buffer: ByteArray, serial: Int): Boolean {
-        val step = synchronized(lock) { stepLocked(serial) } ?: return false
-        if (step.reopen) {
-            reopen(parsed, step.offset, serial)
-            return true
-        }
-        if (!step.read) {
+    private fun pump(serial: Int): Boolean {
+        if (synchronized(lock) { closed || serial != generation }) return false
+        val minimum = if (outputRunning) 1 else startBytes
+        val count = ring.take(playBytes, minimum)
+        if (count == PcmRing.Closed) return false
+        if (count == PcmRing.Discarded) {
             armOutput(false)
             return true
         }
-        armOutput(true)
-        val current = synchronized(lock) { stream } ?: return true
-        val count = readCount(current, buffer) ?: return true
-        if (count < 0) {
+        if (count == PcmRing.Ended) {
+            if (synchronized(lock) { startGate != null }) error("mix is not pcm")
+            armOutput(false)
             synchronized(lock) {
-                if (serial == generation && pendingSeek == null) {
-                    playing = false
-                    stream = null
-                }
+                if (pendingSeek == null) playing = false
             }
             return true
         }
-        writeBytes(buffer, count, current, serial)
+        val audible = synchronized(lock) { playing }
+        if (audible && !outputRunning) armOutput(true)
+        synchronized(lock) {
+            startGate?.countDown()
+            startGate = null
+        }
+        if (audible) writeBytes(playBytes, count, serial)
         return true
     }
 
@@ -259,12 +287,12 @@ internal class SharedMixStream(
         }
     }
 
-    private fun stepLocked(serial: Int): Step? {
+    private fun stepLocked(serial: Int): MixStep? {
         if (closed || serial != generation) return null
         val pending = pendingSeek
         if (pending != null && playing) {
             pendingSeek = null
-            return Step(reopen = true, read = false, offset = pending)
+            return MixStep(reopen = true, read = false, offset = pending)
         }
         if (!playing || stream == null) {
             try {
@@ -274,9 +302,9 @@ internal class SharedMixStream(
                 closed = true
                 return null
             }
-            return Step(reopen = false, read = false, offset = 0)
+            return MixStep(reopen = false, read = false, offset = 0)
         }
-        return Step(reopen = false, read = true, offset = 0)
+        return MixStep(reopen = false, read = true, offset = 0)
     }
 
     private fun readCount(current: InputStream, buffer: ByteArray): Int? =
@@ -288,15 +316,19 @@ internal class SharedMixStream(
             null
         }
 
-    private fun writeBytes(buffer: ByteArray, count: Int, current: InputStream, serial: Int) {
+    private fun writeBytes(buffer: ByteArray, count: Int, serial: Int) {
         var offset = 0
         while (offset < count) {
+            val skip = synchronized(lock) {
+                serial != generation || !playing || pendingSeek != null
+            }
+            if (skip) return
             val written = output.write(buffer, offset, count - offset)
             if (written <= 0) return
             offset += written
             synchronized(lock) {
                 val advancing = serial == generation && playing && pendingSeek == null
-                if (advancing && stream === current) pcmByte += written
+                if (advancing) pcmByte += written
             }
         }
     }
@@ -326,24 +358,16 @@ internal class SharedMixStream(
             }
             current
         }
-        if (!keep) {
-            next.close()
-            return
-        }
-        output.pause()
-        outputRunning = false
-        if (synchronized(lock) { playing }) {
-            output.play()
-            outputRunning = true
-        }
+        if (!keep) next.close()
     }
-
-    private class Step(val reopen: Boolean, val read: Boolean, val offset: Long)
 
     private companion object {
         const val Tag = "SharedMixStream"
         const val ThreadName = "shared-mix"
+        const val FillName = "shared-mix-fill"
         const val ChunkBytes = 4096
+        const val AheadBytes = 262_144
+        const val StartBytes = 16_384
         const val StartWaitMs = 5_000L
         const val JoinMs = 1_000L
         const val PollMs = 10L
