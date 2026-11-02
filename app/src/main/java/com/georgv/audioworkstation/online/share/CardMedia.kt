@@ -5,7 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 interface CardMedia {
-    suspend fun audio(projectId: String): File
+    suspend fun mixUrl(projectId: String): String
 
     suspend fun image(projectId: String, hash: String): File
 }
@@ -15,11 +15,9 @@ internal class HttpCardMedia(
     private val cache: CardCache,
     private val objects: ShareObjectTransport,
 ) : CardMedia {
-    override suspend fun audio(projectId: String): File = withContext(Dispatchers.IO) {
+    override suspend fun mixUrl(projectId: String): String = withContext(Dispatchers.IO) {
         val first = projects.playback(projectId).firstOrNull() ?: error("shared project has no audio")
-        val dest = cache.audioFile(first.contentHash)
-        if (!dest.isFile) objects.download(first.downloadUrl, dest)
-        dest
+        first.downloadUrl
     }
 
     override suspend fun image(projectId: String, hash: String): File = withContext(Dispatchers.IO) {

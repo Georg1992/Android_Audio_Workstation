@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.first
 
 interface LocalProjectLookup {
     suspend fun exists(projectId: String): Boolean
+
+    suspend fun present(projectId: String, title: String)
 }
 
 interface OwnedShareRefresh {
@@ -34,6 +36,10 @@ class RoomLocalProjects @Inject constructor(
 ) : LocalProjectLookup, OwnedShareRefresh {
     private val published = PublishedCardMarks()
     override suspend fun exists(projectId: String): Boolean = projects.projectExists(projectId)
+
+    override suspend fun present(projectId: String, title: String) {
+        projects.ensureProject(projectId, title)
+    }
 
     override suspend fun publishOwnerNames() {
         val name = sessions.current()?.name ?: return

@@ -265,8 +265,79 @@ class SharedProjectsTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun openPlacesASharedProjectThatIsNotOnThePhone() = runTest {
+        val lookup = RecordingLookup(existing = emptySet())
+        val vm = CommunityHomeViewModel(
+            sessions = MemorySessions(session),
+            accounts = UnusedAccounts,
+            sharedProjects = FixedProjects(
+                listOf(SharedProject("song", "Song", emptyList(), null, "Ada")),
+            ),
+            localProjects = lookup,
+            ownedShares = NoLocalProjects,
+        )
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        vm.open("song")
+        advanceUntilIdle()
+        assertEquals(listOf("song" to "Song"), lookup.presented)
+        assertEquals("song", vm.openProject.first())
+        collect.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun openKeepsAProjectThatIsAlreadyOnThePhone() = runTest {
+        val lookup = RecordingLookup(existing = setOf("song"))
+        val vm = CommunityHomeViewModel(
+            sessions = MemorySessions(session),
+            accounts = UnusedAccounts,
+            sharedProjects = FixedProjects(
+                listOf(SharedProject("song", "Song", emptyList(), null, "Ada")),
+            ),
+            localProjects = lookup,
+            ownedShares = NoLocalProjects,
+        )
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        vm.open("song")
+        advanceUntilIdle()
+        assertTrue(lookup.presented.isEmpty())
+        assertEquals("song", vm.openProject.first())
+        collect.cancel()
+    }
+
+    @Test
+    fun presentPlacesAMissingSharedProjectAndLeavesAnExistingName() = runTest {
+        val dao = FakeProjectDao(projects = listOf(ProjectEntity(id = "showcase", name = "Showcase")))
+        val local = RoomLocalProjects(
+            ProjectRepository(dao, NoopProjectFileStore),
+            MemorySessions(session),
+            RecordingOwnedPublish(emptySet()),
+            TempDirAudioFilePathProvider(),
+        )
+        local.present("song", "Song")
+        local.present("showcase", "Renamed")
+        assertEquals("Song", dao.observeProject("song").first()?.name)
+        assertEquals("Showcase", dao.observeProject("showcase").first()?.name)
+    }
+
+    private class RecordingLookup(private val existing: Set<String>) : LocalProjectLookup {
+        val presented = mutableListOf<Pair<String, String>>()
+
+        override suspend fun exists(projectId: String): Boolean = projectId in existing
+
+        override suspend fun present(projectId: String, title: String) {
+            presented += projectId to title
+        }
+    }
+
     private object NoLocalProjects : LocalProjectLookup, OwnedShareRefresh {
         override suspend fun exists(projectId: String): Boolean = false
+
+        override suspend fun present(projectId: String, title: String) = Unit
 
         override suspend fun publishOwnerNames() = Unit
 

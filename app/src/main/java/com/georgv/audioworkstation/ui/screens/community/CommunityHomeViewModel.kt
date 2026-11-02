@@ -99,11 +99,11 @@ class CommunityHomeViewModel @Inject constructor(
     fun open(projectId: String) {
         viewModelScope.launch {
             try {
-                if (localProjects.exists(projectId)) {
-                    opens.send(projectId)
-                } else {
-                    messages.send(UiMessage(R.string.error_card_not_on_phone))
+                if (!localProjects.exists(projectId)) {
+                    val title = projects.value.firstOrNull { it.id == projectId }?.title.orEmpty()
+                    localProjects.present(projectId, title)
                 }
+                opens.send(projectId)
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {

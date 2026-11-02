@@ -1,10 +1,9 @@
 package com.georgv.audioworkstation.ui.screens.community
 
 import com.georgv.audioworkstation.ui.playback.CardTransport
-import java.io.File
 
 interface CardPlayback {
-    fun play(projectId: String, file: File)
+    fun play(projectId: String, url: String)
 
     fun stop()
 

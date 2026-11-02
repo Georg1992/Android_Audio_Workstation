@@ -1,53 +1,51 @@
 package com.georgv.audioworkstation.ui.screens.community
 
 import com.georgv.audioworkstation.ui.playback.CardTransport
-import com.georgv.audioworkstation.ui.playback.MemoryPcmPreview
-import java.io.File
+import com.georgv.audioworkstation.ui.playback.SharedMixStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class MediaCardPlayback @Inject constructor() : CardPlayback {
     private val lock = Any()
-    private val memory = MemoryPcmPreview()
+    private val stream = SharedMixStream()
     private var projectId: String? = null
     private var active = false
 
-    override fun play(projectId: String, file: File) {
-        if (!memory.load(file.absolutePath)) error("mix preview failed")
+    override fun play(projectId: String, url: String) {
+        stream.play(url)
         synchronized(lock) {
             this.projectId = projectId
             active = true
-            memory.play()
         }
     }
 
     override fun stop() {
         synchronized(lock) {
             active = false
-            memory.stop()
         }
+        stream.stop()
     }
 
     override fun seekTo(positionMs: Int) {
-        memory.seekTo(positionMs)
+        stream.seekTo(positionMs)
     }
 
     override fun release() {
         synchronized(lock) {
             active = false
         }
-        memory.release()
+        stream.release()
     }
 
     override fun read(): CardTransport {
-        val state = memory.transport()
+        val state = stream.transport()
         synchronized(lock) {
-            if (state.ended) active = false
+            if (!state.playing) active = false
             val id = projectId ?: return CardTransport()
             return CardTransport(
                 projectId = id,
-                playing = active,
+                playing = active && state.playing,
                 positionMs = state.positionMs,
                 durationMs = state.durationMs,
             )

@@ -40,8 +40,8 @@ class CommunityCardPlaybackViewModel @Inject constructor(
         viewModelScope.launch {
             loadingProjectIdState.value = projectId
             try {
-                val file = withContext(Dispatchers.IO) { media.audio(projectId) }
-                withContext(Dispatchers.IO) { player.play(projectId, file) }
+                val url = withContext(Dispatchers.IO) { media.mixUrl(projectId) }
+                withContext(Dispatchers.IO) { player.play(projectId, url) }
                 transportState.value = player.read()
                 watch()
             } catch (cancel: CancellationException) {
