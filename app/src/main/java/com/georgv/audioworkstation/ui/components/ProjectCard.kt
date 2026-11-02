@@ -53,8 +53,9 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ProjectCard(
     card: ShownCard,
-    clicks: ProjectCardClicks,
+    onOpen: () -> Unit,
     actions: @Composable RowScope.() -> Unit,
+    playback: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(Dimens.TileRadius)
     var bitmap by remember(card.imagePath) { mutableStateOf<ImageBitmap?>(null) }
@@ -64,28 +65,6 @@ fun ProjectCard(
             null
         } else {
             withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
-        }
-    }
-    val duration = card.durationMs
-    val fraction = if (duration > 0) card.positionMs.toFloat() / duration.toFloat() else 0f
-    var dragging by remember { mutableStateOf(false) }
-    var heldFraction by remember { mutableStateOf<Float?>(null) }
-    var positionAtRelease by remember { mutableStateOf<Int?>(null) }
-    val held = heldFraction
-    val displayed = (held ?: fraction).coerceIn(0f, 1f)
-    val shownPositionMs = if (held != null && duration > 0) (displayed * duration).toInt() else card.positionMs
-    LaunchedEffect(dragging, duration, card.positionMs) {
-        if (duration <= 0) {
-            dragging = false
-            heldFraction = null
-            positionAtRelease = null
-            return@LaunchedEffect
-        }
-        if (dragging) return@LaunchedEffect
-        val marked = positionAtRelease ?: return@LaunchedEffect
-        if (card.positionMs != marked) {
-            heldFraction = null
-            positionAtRelease = null
         }
     }
     Box(
@@ -177,7 +156,7 @@ fun ProjectCard(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = clicks.onOpen) {
+                    IconButton(onClick = onOpen) {
                         Icon(
                             imageVector = Icons.Filled.FolderOpen,
                             contentDescription = stringResource(R.string.cd_open_project),
@@ -188,62 +167,13 @@ fun ProjectCard(
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if (image != null) AppColors.Bg.copy(alpha = 0.72f) else AppColors.SurfacePanel)
                     .padding(horizontal = Dimens.PanelPadding, vertical = Dimens.TightGap),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
-                ) {
-                    CardPlaybackButton(
-                        role = CardPlaybackRole.Play,
-                        engaged = !card.playing,
-                        onClick = clicks.onPlay,
-                    )
-                    CardPlaybackButton(
-                        role = CardPlaybackRole.Stop,
-                        engaged = card.playing,
-                        onClick = clicks.onStop,
-                    )
-                    Slider(
-                        value = displayed,
-                        onValueChange = { next ->
-                            if (!dragging) clicks.onScrubStarted()
-                            dragging = true
-                            heldFraction = next
-                        },
-                        onValueChangeFinished = {
-                            val released = heldFraction
-                            positionAtRelease = card.positionMs
-                            dragging = false
-                            if (released != null && duration > 0) clicks.onSeek((released * duration).toInt())
-                        },
-                        enabled = duration > 0,
-                        modifier = Modifier.weight(1f),
-                        colors = SliderDefaults.colors(
-                            thumbColor = AppColors.Line,
-                            activeTrackColor = AppColors.Line,
-                            inactiveTrackColor = AppColors.iconMuted,
-                        ),
-                    )
-                }
-                if (duration > 0) {
-                    Text(
-                        text = stringResource(
-                            R.string.card_playback_clock,
-                            playbackClock(shownPositionMs),
-                            playbackClock(duration),
-                        ),
-                        style = AppText.TileSubtitle,
-                        color = AppColors.iconMuted,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                playback()
             }
         }
     }
@@ -299,19 +229,134 @@ data class ShownCard(
     val title: String,
     val tags: List<String>,
     val imagePath: String?,
-    val positionMs: Int,
-    val durationMs: Int,
     val status: String? = null,
     val progress: Float? = null,
     val detail: String? = null,
     val loading: Boolean = false,
-    val playing: Boolean = false,
 )
 
-data class ProjectCardClicks(
-    val onPlay: () -> Unit,
-    val onStop: () -> Unit,
-    val onScrubStarted: () -> Unit,
-    val onSeek: (Int) -> Unit,
-    val onOpen: () -> Unit,
-)
+@Composable
+fun LibraryCardPlayback(
+    playing: Boolean,
+    positionMs: Int,
+    durationMs: Int,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onScrubStarted: () -> Unit,
+    onSeek: (Int) -> Unit,
+) {
+    CardPlaybackStrip(
+        playing = playing,
+        positionMs = positionMs,
+        durationMs = durationMs,
+        onPlay = onPlay,
+        onStop = onStop,
+        onScrubStarted = onScrubStarted,
+        onSeek = onSeek,
+    )
+}
+
+@Composable
+fun CommunityCardPlayback(
+    playing: Boolean,
+    positionMs: Int,
+    durationMs: Int,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onSeek: (Int) -> Unit,
+) {
+    CardPlaybackStrip(
+        playing = playing,
+        positionMs = positionMs,
+        durationMs = durationMs,
+        onPlay = onPlay,
+        onStop = onStop,
+        onScrubStarted = null,
+        onSeek = onSeek,
+    )
+}
+
+@Composable
+private fun CardPlaybackStrip(
+    playing: Boolean,
+    positionMs: Int,
+    durationMs: Int,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onScrubStarted: (() -> Unit)?,
+    onSeek: (Int) -> Unit,
+) {
+    val fraction = if (durationMs > 0) positionMs.toFloat() / durationMs.toFloat() else 0f
+    var dragging by remember { mutableStateOf(false) }
+    var heldFraction by remember { mutableStateOf<Float?>(null) }
+    var positionAtRelease by remember { mutableStateOf<Int?>(null) }
+    val held = heldFraction
+    val displayed = (held ?: fraction).coerceIn(0f, 1f)
+    val shownPositionMs = if (held != null && durationMs > 0) (displayed * durationMs).toInt() else positionMs
+    LaunchedEffect(dragging, durationMs, positionMs) {
+        if (durationMs <= 0) {
+            dragging = false
+            heldFraction = null
+            positionAtRelease = null
+            return@LaunchedEffect
+        }
+        if (dragging) return@LaunchedEffect
+        val marked = positionAtRelease ?: return@LaunchedEffect
+        if (positionMs != marked) {
+            heldFraction = null
+            positionAtRelease = null
+        }
+    }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
+        ) {
+            CardPlaybackButton(
+                role = CardPlaybackRole.Play,
+                engaged = !playing,
+                onClick = onPlay,
+            )
+            CardPlaybackButton(
+                role = CardPlaybackRole.Stop,
+                engaged = playing,
+                onClick = onStop,
+            )
+            Slider(
+                value = displayed,
+                onValueChange = { next ->
+                    if (!dragging) onScrubStarted?.invoke()
+                    dragging = true
+                    heldFraction = next
+                },
+                onValueChangeFinished = {
+                    val released = heldFraction
+                    positionAtRelease = positionMs
+                    dragging = false
+                    if (released != null && durationMs > 0) onSeek((released * durationMs).toInt())
+                },
+                enabled = durationMs > 0,
+                modifier = Modifier.weight(1f),
+                colors = SliderDefaults.colors(
+                    thumbColor = AppColors.Line,
+                    activeTrackColor = AppColors.Line,
+                    inactiveTrackColor = AppColors.iconMuted,
+                ),
+            )
+        }
+        if (durationMs > 0) {
+            Text(
+                text = stringResource(
+                    R.string.card_playback_clock,
+                    playbackClock(shownPositionMs),
+                    playbackClock(durationMs),
+                ),
+                style = AppText.TileSubtitle,
+                color = AppColors.iconMuted,
+                textAlign = TextAlign.End,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}

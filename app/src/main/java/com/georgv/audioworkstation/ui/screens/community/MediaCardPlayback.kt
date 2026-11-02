@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.community
 
+import com.georgv.audioworkstation.ui.playback.CardTransport
 import com.georgv.audioworkstation.ui.playback.MemoryPcmPreview
 import java.io.File
 import javax.inject.Inject
@@ -30,6 +31,13 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
 
     override fun seekTo(positionMs: Int) {
         memory.seekTo(positionMs)
+    }
+
+    override fun release() {
+        synchronized(lock) {
+            active = false
+        }
+        memory.release()
     }
 
     override fun read(): CardTransport {

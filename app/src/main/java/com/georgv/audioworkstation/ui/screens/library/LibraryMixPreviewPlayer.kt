@@ -12,6 +12,7 @@ import com.georgv.audioworkstation.core.audio.readWavPcmFileInfo
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.coroutines.withIo
+import com.georgv.audioworkstation.ui.playback.CardTransport
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,8 +42,8 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private val playingProjectId = MutableStateFlow<String?>(null)
     val playingProjectIdState: StateFlow<String?> = playingProjectId.asStateFlow()
 
-    private val transport = MutableStateFlow(MixTransport())
-    val transportState: StateFlow<MixTransport> = transport.asStateFlow()
+    private val transport = MutableStateFlow(CardTransport())
+    val transportState: StateFlow<CardTransport> = transport.asStateFlow()
 
     fun isPlaying(projectId: String): Boolean = playingProjectId.value == projectId
 
@@ -196,10 +197,10 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private fun publishLocked() {
         val loaded = clip
         if (loaded == null || loaded.durationMs <= 0L) {
-            transport.value = MixTransport()
+            transport.value = CardTransport()
             return
         }
-        transport.value = MixTransport(
+        transport.value = CardTransport(
             projectId = loaded.projectId,
             playing = playingProjectId.value != null,
             positionMs = positionMs,
@@ -207,13 +208,6 @@ class LibraryMixPreviewPlayer @Inject constructor(
         )
     }
 }
-
-data class MixTransport(
-    val projectId: String? = null,
-    val playing: Boolean = false,
-    val positionMs: Int = 0,
-    val durationMs: Int = 0,
-)
 
 private data class MixClip(
     val projectId: String,

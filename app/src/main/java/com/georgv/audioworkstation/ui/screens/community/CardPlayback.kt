@@ -1,5 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.community
 
+import com.georgv.audioworkstation.ui.playback.CardTransport
 import java.io.File
 
 interface CardPlayback {
@@ -10,11 +11,6 @@ interface CardPlayback {
     fun seekTo(positionMs: Int)
 
     fun read(): CardTransport
-}
 
-data class CardTransport(
-    val projectId: String? = null,
-    val playing: Boolean = false,
-    val positionMs: Int = 0,
-    val durationMs: Int = 0,
-)
+    fun release()
+}

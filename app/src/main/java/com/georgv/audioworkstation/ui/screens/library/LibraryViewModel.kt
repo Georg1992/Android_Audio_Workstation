@@ -10,38 +10,26 @@ import com.georgv.audioworkstation.core.ui.DataAvailability
 import com.georgv.audioworkstation.core.ui.ScreenState
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.online.AccountSessionStore
-import com.georgv.audioworkstation.online.share.ProjectShare
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicBoolean
-import java.io.File
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: ProjectRepository,
     private val mixdownCoordinator: ProjectMixdownCoordinator,
     private val mixPreviewPlayer: LibraryMixPreviewPlayer,
-    private val sessions: AccountSessionStore,
-    private val projectShare: ProjectShare,
 ) : ViewModel() {
 
     private val projectsFirstEmissionLogged = AtomicBoolean(false)
@@ -107,58 +95,6 @@ class LibraryViewModel @Inject constructor(
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     val userMessages = messages.receiveAsFlow()
 
-    /** The library list itself does not change with the account. Share is only offered while signed in. */
-    val shareEnabled: StateFlow<Boolean> =
-        sessions.state
-            .map { session -> session != null }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
-    private val sharingIds = MutableStateFlow<Set<String>>(emptySet())
-    val sharingProjectIds: StateFlow<Set<String>> = sharingIds
-    val previewTransport: StateFlow<MixTransport> = mixPreviewPlayer.transportState
-    private var watchJob: Job? = null
-
-    fun play(item: LibraryProjectItem) {
-        val path = item.mixdown.mixdownWavPath
-        val mixReady = path != null && item.mixdown.hasMixPreview && File(path).isFile
-        if (item.mixdown.isMixing || !mixReady) {
-            viewModelScope.launch { messages.send(UiMessage(R.string.library_no_mix_yet)) }
-            return
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            val started = mixPreviewPlayer.play(item.project.id, path)
-            if (!started) {
-                messages.send(UiMessage(R.string.error_mix_preview_failed))
-                return@launch
-            }
-            watchPreview()
-        }
-    }
-
-    fun stopPreview() {
-        viewModelScope.launch { mixPreviewPlayer.stop() }
-    }
-
-    fun seekPreview(positionMs: Int) {
-        viewModelScope.launch { mixPreviewPlayer.seekTo(positionMs) }
-    }
-
-    fun holdPreview() {
-        viewModelScope.launch { mixPreviewPlayer.holdForScrub() }
-    }
-
-    fun shareProject(projectId: String) {
-        runWhileSharing(projectId, R.string.library_share_done, R.string.error_share_project_failed) {
-            projectShare.share(projectId)
-        }
-    }
-
-    fun unshareProject(projectId: String) {
-        runWhileSharing(projectId, R.string.library_unshare_done, R.string.error_unshare_project_failed) {
-            projectShare.unshare(projectId)
-        }
-    }
-
     fun deleteProject(projectId: String) {
         viewModelScope.launch {
             try {
@@ -183,57 +119,8 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() {
-        watchJob?.cancel()
-        runBlocking { mixPreviewPlayer.stopAll() }
-        super.onCleared()
-    }
-
-    private fun runWhileSharing(
-        projectId: String,
-        doneMessage: Int,
-        failedMessage: Int,
-        work: suspend () -> Unit,
-    ) {
-        var started = false
-        sharingIds.update { current ->
-            if (projectId in current) {
-                current
-            } else {
-                started = true
-                current + projectId
-            }
-        }
-        if (!started) return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                work()
-                messages.send(UiMessage(doneMessage))
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Exception) {
-                logWarning(TAG, "share action failed: $projectId", error)
-                messages.send(UiMessage(failedMessage))
-            } finally {
-                sharingIds.update { current -> current - projectId }
-            }
-        }
-    }
-
-    private fun watchPreview() {
-        watchJob?.cancel()
-        watchJob = viewModelScope.launch {
-            while (isActive) {
-                mixPreviewPlayer.tick()
-                if (mixPreviewPlayer.playingProjectIdState.value == null) break
-                delay(PREVIEW_TICK_MS)
-            }
-        }
-    }
-
     private companion object {
         const val TAG = "LibraryViewModel"
-        const val PREVIEW_TICK_MS = 100L
 
         fun initialLibraryScreenState(
             repo: ProjectRepository,

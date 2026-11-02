@@ -8,25 +8,19 @@ import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.signOutLocallyThenRevoke
-import com.georgv.audioworkstation.online.share.CardMedia
 import com.georgv.audioworkstation.online.share.SharedProject
 import com.georgv.audioworkstation.online.share.SharedProjects
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class CommunityHomeUiState(
     val sessionKnown: Boolean = false,
@@ -35,7 +29,6 @@ data class CommunityHomeUiState(
     val projects: List<SharedProject> = emptyList(),
     val busy: Boolean = false,
     val preparing: Boolean = false,
-    val loadingProjectId: String? = null,
 )
 
 @HiltViewModel
@@ -45,23 +38,15 @@ class CommunityHomeViewModel @Inject constructor(
     private val sharedProjects: SharedProjects,
     private val localProjects: LocalProjectLookup,
     private val ownedShares: OwnedShareRefresh,
-    private val player: CardPlayback,
-    private val media: CardMedia,
 ) : ViewModel() {
     private val busy = MutableStateFlow(false)
     private val preparing = MutableStateFlow(false)
-    private val loadingProjectId = MutableStateFlow<String?>(null)
     private val projects = MutableStateFlow<List<SharedProject>>(emptyList())
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     private val opens = Channel<String>(capacity = Channel.BUFFERED)
-    private val transportState = MutableStateFlow(CardTransport())
-    private val imagePathsState = MutableStateFlow<Map<String, String>>(emptyMap())
-    private var watchJob: Job? = null
 
     val userMessages = messages.receiveAsFlow()
     val openProject = opens.receiveAsFlow()
-    val transport: StateFlow<CardTransport> = transportState
-    val imagePaths: StateFlow<Map<String, String>> = imagePathsState
 
     init {
         viewModelScope.launch {
@@ -83,8 +68,7 @@ class CommunityHomeViewModel @Inject constructor(
             busy,
             projects,
             preparing,
-            loadingProjectId,
-        ) { session, isBusy, shared, isPreparing, loadingId ->
+        ) { session, isBusy, shared, isPreparing ->
             CommunityHomeUiState(
                 sessionKnown = true,
                 email = session?.email,
@@ -92,7 +76,6 @@ class CommunityHomeViewModel @Inject constructor(
                 projects = shared,
                 busy = isBusy,
                 preparing = isPreparing,
-                loadingProjectId = loadingId,
             )
         }.stateIn(
             viewModelScope,
@@ -112,35 +95,6 @@ class CommunityHomeViewModel @Inject constructor(
         }
     }
 
-    fun play(projectId: String) {
-        if (loadingProjectId.value != null) return
-        viewModelScope.launch {
-            loadingProjectId.value = projectId
-            try {
-                val file = withContext(Dispatchers.IO) { media.audio(projectId) }
-                withContext(Dispatchers.IO) { player.play(projectId, file) }
-                transportState.value = player.read()
-                watch()
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Exception) {
-                report(R.string.error_card_playback_failed, error)
-            } finally {
-                loadingProjectId.value = null
-            }
-        }
-    }
-
-    fun stop() {
-        player.stop()
-        transportState.value = player.read()
-    }
-
-    fun seek(positionMs: Int) {
-        player.seekTo(positionMs)
-        transportState.value = player.read()
-    }
-
     fun open(projectId: String) {
         viewModelScope.launch {
             try {
@@ -157,32 +111,12 @@ class CommunityHomeViewModel @Inject constructor(
         }
     }
 
-    fun loadImage(projectId: String, hash: String) {
-        if (imagePathsState.value.containsKey(hash)) return
-        viewModelScope.launch {
-            try {
-                val file = media.image(projectId, hash)
-                imagePathsState.value = imagePathsState.value + (hash to file.absolutePath)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Exception) {
-                report(R.string.error_card_image_failed, error)
-            }
-        }
-    }
-
     fun signOut() {
         submit {
             signOutLocallyThenRevoke(sessions, accounts) { error ->
                 logWarning(TAG, "token revoke failed", error)
             }
         }
-    }
-
-    override fun onCleared() {
-        watchJob?.cancel()
-        player.stop()
-        super.onCleared()
     }
 
     private suspend fun load() {
@@ -197,18 +131,6 @@ class CommunityHomeViewModel @Inject constructor(
             projects.value = sharedProjects.list()
         } finally {
             preparing.value = false
-        }
-    }
-
-    private fun watch() {
-        watchJob?.cancel()
-        watchJob = viewModelScope.launch {
-            while (isActive) {
-                val read = player.read()
-                transportState.value = read
-                if (!read.playing) break
-                delay(TICK_MS)
-            }
         }
     }
 
@@ -237,6 +159,5 @@ class CommunityHomeViewModel @Inject constructor(
     private companion object {
         const val TAG = "CommunityHomeViewModel"
         const val STOP_TIMEOUT_MS = 5_000L
-        const val TICK_MS = 100L
     }
 }

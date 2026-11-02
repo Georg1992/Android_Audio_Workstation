@@ -3,13 +3,9 @@ package com.georgv.audioworkstation.online.share
 import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
-import com.georgv.audioworkstation.online.share.CardMedia
-import com.georgv.audioworkstation.ui.screens.community.CardPlayback
-import com.georgv.audioworkstation.ui.screens.community.CardTransport
 import com.georgv.audioworkstation.ui.screens.community.CommunityHomeViewModel
 import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
 import com.georgv.audioworkstation.ui.screens.community.OwnedShareRefresh
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -62,8 +58,6 @@ class SharedProjectsTest {
             ),
             localProjects = NoLocalProjects,
             ownedShares = NoLocalProjects,
-            player = IdlePlayback,
-            media = IdleMedia,
         )
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
@@ -82,8 +76,6 @@ class SharedProjectsTest {
             sharedProjects = FixedProjects(emptyList()),
             localProjects = NoLocalProjects,
             ownedShares = NoLocalProjects,
-            player = IdlePlayback,
-            media = IdleMedia,
         )
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
@@ -147,22 +139,6 @@ class SharedProjectsTest {
         override suspend fun publishOwnerNames() = Unit
 
         override suspend fun publishMixes() = Unit
-    }
-
-    private object IdlePlayback : CardPlayback {
-        override fun play(projectId: String, file: File) = error("unused")
-
-        override fun stop() = Unit
-
-        override fun seekTo(positionMs: Int) = Unit
-
-        override fun read(): CardTransport = CardTransport()
-    }
-
-    private object IdleMedia : CardMedia {
-        override suspend fun audio(projectId: String): File = error("unused")
-
-        override suspend fun image(projectId: String, hash: String): File = error("unused")
     }
 
     private companion object {

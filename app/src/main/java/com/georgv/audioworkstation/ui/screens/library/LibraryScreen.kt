@@ -45,8 +45,8 @@ import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.AppLocaleScope
+import com.georgv.audioworkstation.ui.components.LibraryCardPlayback
 import com.georgv.audioworkstation.ui.components.ProjectCard
-import com.georgv.audioworkstation.ui.components.ProjectCardClicks
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.ShownCard
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
@@ -54,6 +54,7 @@ import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.components.warmLoadingBoxAsset
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.online.share.cardTagList
+import com.georgv.audioworkstation.ui.playback.CardTransport
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -66,13 +67,15 @@ fun LibraryScreen(
     onOpenProject: (String) -> Unit,
     onCustomize: (String) -> Unit,
     vm: LibraryViewModel = hiltViewModel(),
+    preview: LibraryPreviewViewModel = hiltViewModel(),
+    share: LibraryShareViewModel = hiltViewModel(),
 ) {
     NavTransitionDiagnostics.MonitorDestinationLifecycle("library")
 
     val state by vm.uiState.collectAsStateWithLifecycle()
-    val transport by vm.previewTransport.collectAsStateWithLifecycle()
-    val shareEnabled by vm.shareEnabled.collectAsStateWithLifecycle()
-    val sharingProjectIds by vm.sharingProjectIds.collectAsStateWithLifecycle()
+    val transport by preview.transport.collectAsStateWithLifecycle()
+    val shareEnabled by share.shareEnabled.collectAsStateWithLifecycle()
+    val sharingProjectIds by share.sharingProjectIds.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -85,10 +88,10 @@ fun LibraryScreen(
     var pendingShare by remember { mutableStateOf<PendingShare?>(null) }
     val locale = rememberAppLocaleScope()
 
-    LaunchedEffect(vm) {
-        vm.userMessages.collect { message ->
-            snackbarHostState.showSnackbar(message.resolve(context))
-        }
+    LaunchedEffect(vm, preview, share) {
+        launch { vm.userMessages.collect { message -> snackbarHostState.showSnackbar(message.resolve(context)) } }
+        launch { preview.userMessages.collect { message -> snackbarHostState.showSnackbar(message.resolve(context)) } }
+        launch { share.userMessages.collect { message -> snackbarHostState.showSnackbar(message.resolve(context)) } }
     }
 
     ScreenScaffold(
@@ -108,10 +111,10 @@ fun LibraryScreen(
                 state = state,
                 transport = transport,
                 handlers = LibraryRowHandlers(
-                    onPlay = vm::play,
-                    onStop = vm::stopPreview,
-                    onScrubStarted = vm::holdPreview,
-                    onSeek = vm::seekPreview,
+                    onPlay = preview::play,
+                    onStop = preview::stop,
+                    onScrubStarted = preview::hold,
+                    onSeek = preview::seek,
                     onOpen = { projectId ->
                         scope.launch {
                             vm.warmUpProject(projectId)
@@ -202,8 +205,8 @@ fun LibraryScreen(
                 onDismiss = { pendingShare = null },
                 onConfirm = {
                     when (pending) {
-                        is PendingShare.Start -> vm.shareProject(pending.projectId)
-                        is PendingShare.Stop -> vm.unshareProject(pending.projectId)
+                        is PendingShare.Start -> share.shareProject(pending.projectId)
+                        is PendingShare.Stop -> share.unshareProject(pending.projectId)
                     }
                     pendingShare = null
                 },
@@ -303,7 +306,7 @@ private data class LibraryRowHandlers(
 @Composable
 private fun LibraryProjectContent(
     state: ScreenState<LibraryContent>,
-    transport: MixTransport,
+    transport: CardTransport,
     handlers: LibraryRowHandlers,
     modifier: Modifier = Modifier,
 ) {
@@ -362,8 +365,6 @@ private fun LibraryProjectContent(
                             title = title,
                             tags = cardTagList(item.project.cardTags),
                             imagePath = item.project.cardImagePath,
-                            positionMs = if (active) transport.positionMs else 0,
-                            durationMs = if (active) transport.durationMs else 0,
                             status = if (mixing) {
                                 stringResource(
                                     R.string.library_mixing_progress_percent,
@@ -373,15 +374,8 @@ private fun LibraryProjectContent(
                                 null
                             },
                             progress = if (mixing) item.mixdown.progress else null,
-                            playing = item.isPreviewPlaying,
                         ),
-                        clicks = ProjectCardClicks(
-                            onPlay = { handlers.onPlay(item) },
-                            onStop = handlers.onStop,
-                            onScrubStarted = handlers.onScrubStarted,
-                            onSeek = handlers.onSeek,
-                            onOpen = { handlers.onOpen(item.project.id) },
-                        ),
+                        onOpen = { handlers.onOpen(item.project.id) },
                         actions = {
                             IconButton(onClick = { handlers.onDelete(item) }) {
                                 Icon(
@@ -423,6 +417,17 @@ private fun LibraryProjectContent(
                                     }
                                 }
                             }
+                        },
+                        playback = {
+                            LibraryCardPlayback(
+                                playing = item.isPreviewPlaying,
+                                positionMs = if (active) transport.positionMs else 0,
+                                durationMs = if (active) transport.durationMs else 0,
+                                onPlay = { handlers.onPlay(item) },
+                                onStop = handlers.onStop,
+                                onScrubStarted = handlers.onScrubStarted,
+                                onSeek = handlers.onSeek,
+                            )
                         },
                     )
                 }
