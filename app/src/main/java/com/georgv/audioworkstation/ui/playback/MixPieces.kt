@@ -22,6 +22,7 @@ internal object MixPieces {
         return (pcmByte / pieceBytes).toInt()
     }
 
+    /** Index entry for piece [index]. Audio for that entry is stored separately. */
     fun span(info: WavPcmFileInfo, pieceBytes: Int, index: Int): MixSpan? {
         if (pieceBytes <= 0 || index < 0) return null
         val pcmStart = index.toLong() * pieceBytes
@@ -45,21 +46,6 @@ internal object MixPieces {
         val frames = clamped.toLong() * info.sampleRateHz / MsPerSecond
         val frameCount = info.dataSize / info.blockAlign
         return frames.coerceAtMost(frameCount) * info.blockAlign
-    }
-
-    /** One piece-sized window that starts at [pcmStart], not on the original grid. */
-    fun spanFrom(info: WavPcmFileInfo, pieceBytes: Int, pcmStart: Long): MixSpan? {
-        if (pieceBytes <= 0 || pcmStart < 0L || pcmStart >= info.dataSize) return null
-        val size = minOf(pieceBytes.toLong(), info.dataSize - pcmStart).toInt()
-        if (size <= 0) return null
-        val fileStart = info.dataOffset + pcmStart
-        return MixSpan(
-            index = indexAt(pcmStart, pieceBytes),
-            fileStart = fileStart,
-            fileEndInclusive = fileStart + size - 1,
-            pcmStart = pcmStart,
-            size = size,
-        )
     }
 
     const val AheadPieces = 2

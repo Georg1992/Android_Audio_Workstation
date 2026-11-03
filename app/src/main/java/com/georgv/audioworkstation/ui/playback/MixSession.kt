@@ -59,10 +59,12 @@ internal class MixSession(
         while (true) {
             val url = state.address() ?: return false
             val snap = state.snapshot() ?: return false
-            val span = MixPieces.spanFrom(info, snap.pieceBytes, snap.pcmByte) ?: error("mix is not pcm")
+            val span = MixPieces.span(info, snap.pieceBytes, snap.playIndex) ?: error("mix is not pcm")
             try {
                 val bytes = reader.read(url, span.fileStart, span.fileEndInclusive, exact = true) ?: continue
+                if (state.snapshot()?.generation != snap.generation) continue
                 val piece = HeldPiece(span.index, span.pcmStart, bytes, snap.generation, ended = false)
+                if (!buffer.store(piece)) return false
                 state.noteReady()
                 arm(true)
                 state.hold(piece)
@@ -88,7 +90,11 @@ internal class MixSession(
                 continue
             }
             val previous = piece?.generation
-            val current = readyPiece(piece, snap) ?: return
+            val current = readyPiece(piece, snap)
+            if (current == null) {
+                if (state.address() == null || Thread.currentThread().isInterrupted) return
+                continue
+            }
             if (previous != null && current.generation != previous) arm(false)
             piece = current
             if (writePiece(current)) {
@@ -103,28 +109,27 @@ internal class MixSession(
         if (kept != null) return kept
         if (piece != null) arm(false)
         state.hold(null)
-        return nextPiece()
+        val live = state.snapshot() ?: return null
+        if (!live.playing || live.generation != snap.generation) return null
+        val stored = buffer.awaitPiece(live.playIndex) ?: return null
+        val now = state.snapshot() ?: return null
+        val moved = !now.playing || now.generation != live.generation || now.playIndex != live.playIndex
+        if (moved) return null
+        if (stored.ended) {
+            state.finish()
+            return null
+        }
+        val tagged = stored.retag(now.generation)
+        state.hold(tagged)
+        state.noteReady()
+        return tagged
     }
 
     private fun reused(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
         if (piece == null || !piece.covers(snap.pcmByte)) return null
-        if (piece.generation == snap.generation) return piece
-        return piece.retag(snap.generation)
-    }
-
-    private fun nextPiece(): HeldPiece? {
-        while (true) {
-            if (state.address() == null) return null
-            val taken = buffer.take() ?: return null
-            val snap = state.snapshot() ?: return null
-            if (taken.generation != snap.generation) continue
-            if (!taken.ended) {
-                state.hold(taken)
-                state.noteReady()
-                return taken
-            }
-            state.finish()
-        }
+        val tagged = if (piece.generation == snap.generation) piece else piece.retag(snap.generation)
+        state.hold(tagged)
+        return tagged
     }
 
     private fun writePiece(piece: HeldPiece): Boolean {

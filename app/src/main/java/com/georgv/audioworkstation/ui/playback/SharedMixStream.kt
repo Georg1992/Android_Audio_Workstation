@@ -3,12 +3,11 @@ package com.georgv.audioworkstation.ui.playback
 import java.util.concurrent.TimeUnit
 
 /**
- * Plays a shared 16-bit PCM mix as short pieces.
- * Playback starts once the first piece is in memory. A fetcher keeps only a
- * small stretch of later pieces buffered. Seek flushes the speaker and starts
- * a piece at the new sample. The first bytes of that piece are played as they
- * arrive. A slow piece keeps the buffered audio playing and is requested again
- * when the connection returns.
+ * Plays a shared 16-bit PCM mix as short indexed pieces.
+ * Playback starts once the first piece is stored. A short stretch of the next
+ * pieces stays buffered. Seek opens the piece that contains the new time and
+ * starts it at once when that piece is already stored. A slow piece keeps the
+ * buffered audio playing and is requested again when the connection returns.
  */
 internal class SharedMixStream(
     private val source: MixSource = UrlMixSource(),
@@ -25,7 +24,7 @@ internal class SharedMixStream(
         val resumed = state.resume(url)
         if (resumed != null) {
             resumed.stream?.close()
-            buffer.clear()
+            buffer.kick()
             return
         }
         begin(url)
@@ -34,7 +33,7 @@ internal class SharedMixStream(
     fun stop() {
         val open = state.retarget(0L, audible = false)
         open?.close()
-        buffer.clear()
+        buffer.kick()
     }
 
     fun seekTo(positionMs: Int) {
@@ -42,7 +41,8 @@ internal class SharedMixStream(
         val pcm = MixPieces.pcmByte(snap.info, positionMs)
         val open = state.retarget(pcm, audible = true)
         open?.close()
-        buffer.clear()
+        buffer.retain(MixPieces.indexAt(pcm, snap.pieceBytes))
+        buffer.kick()
     }
 
     fun transport(): StreamTransport = state.transport()

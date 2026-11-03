@@ -34,10 +34,10 @@ class SharedTrackStreamsTest {
             assertTrue(ranges.none { it.start > pieceStart(AheadPieces) })
             streams.seekTo(SeekMs)
             assertEquals(SeekMs, streams.positionMs())
-            assertTrue(waitUntil { ranges.any { it.start == ExactPcmOffset } })
-            val piece = ranges.first { it.start == ExactPcmOffset }
-            assertEquals(SeekWindowEnd, piece.endInclusive)
-            assertTrue(ranges.none { it.start == TargetStart })
+            assertTrue(waitUntil { ranges.any { it.start == TargetStart } })
+            val piece = ranges.first { it.start == TargetStart }
+            assertEquals(TargetEnd, piece.endInclusive)
+            assertTrue(ranges.none { it.start == ExactPcmOffset })
         } finally {
             output.allow(WritesAfterStart)
             streams.release()
@@ -177,8 +177,8 @@ class SharedTrackStreamsTest {
         const val SampleRate = 1_000
         const val SeekMs = 10_500L
         const val TargetStart = 20_044L
+        const val TargetEnd = 24_043L
         const val ExactPcmOffset = 21_044L
-        const val SeekWindowEnd = 25_043L
         const val WritesAfterStart = 8
         const val WaitMs = 3_000L
         const val PollMs = 10L
