@@ -7,6 +7,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.online.share.SharedCardUpdate
+import com.georgv.audioworkstation.online.share.SharedTakePublish
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Provider
@@ -31,12 +32,21 @@ class ProjectRepository(
     private val diagnostics: ProjectRepositoryDiagnostics = ProjectRepositoryDiagnostics.None,
     private val sharedCards: Provider<SharedCardUpdate>? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val sharedTakes: Provider<SharedTakePublish>? = null,
 ) {
     @Inject constructor(
         dao: ProjectDao,
         fileStore: ProjectFileStore,
         sharedCards: Provider<SharedCardUpdate>,
-    ) : this(dao, fileStore, ProjectRepositoryDiagnostics.None, sharedCards, Dispatchers.IO)
+        sharedTakes: Provider<SharedTakePublish>,
+    ) : this(
+        dao,
+        fileStore,
+        ProjectRepositoryDiagnostics.None,
+        sharedCards,
+        Dispatchers.IO,
+        sharedTakes,
+    )
 
     private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -98,6 +108,12 @@ class ProjectRepository(
         diagnostics.dbWriteWhenActive("upsertTrack trackId=${track.id}", track.projectId) {
             dao.upsertTrack(track)
         }
+    }
+
+    suspend fun publishRecordedTake(track: TrackEntity) {
+        val published = sharedTakes?.get()?.publishNewTake(track) ?: return
+        if (published.contentHash == track.contentHash) return
+        upsertTrack(published)
     }
 
     suspend fun upsertTracks(tracks: List<TrackEntity>) {

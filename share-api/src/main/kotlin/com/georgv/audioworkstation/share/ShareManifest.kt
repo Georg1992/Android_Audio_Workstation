@@ -93,6 +93,16 @@ internal class ShareManifest(config: ShareApiConfig) {
         }
     }
 
+    fun requireSharedProject(projectId: String) {
+        connection().use { db ->
+            val found = db.prepareStatement("SELECT 1 FROM shared_project WHERE id = ?").use { query ->
+                query.setString(1, projectId)
+                query.executeQuery().use { rows -> rows.next() }
+            }
+            if (!found) throw ShareFailure(404, "not found")
+        }
+    }
+
     fun requireOwner(projectId: String, ownerAccount: String) {
         connection().use { db ->
             val owner = db.prepareStatement("SELECT owner_account FROM shared_project WHERE id = ?").use { query ->

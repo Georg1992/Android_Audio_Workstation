@@ -99,10 +99,8 @@ class CommunityHomeViewModel @Inject constructor(
     fun open(projectId: String) {
         viewModelScope.launch {
             try {
-                if (!localProjects.exists(projectId)) {
-                    val title = projects.value.firstOrNull { it.id == projectId }?.title.orEmpty()
-                    localProjects.present(projectId, title)
-                }
+                val title = projects.value.firstOrNull { it.id == projectId }?.title.orEmpty()
+                localProjects.present(projectId, title)
                 opens.send(projectId)
             } catch (cancel: CancellationException) {
                 throw cancel

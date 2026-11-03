@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
+import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -89,6 +90,45 @@ class SharedProjectPlaceTest {
         advanceUntilIdle()
         assertEquals("song", vm.openProject.first())
         assertEquals(2, objects.downloads)
+        assertEquals("song", project.remoteUrl)
+        collect.cancel()
+    }
+
+    @Test
+    fun openAddsAPublishedTakeWithoutReplacingTracksAlreadyOnThePhone() = runTest {
+        val wav = File.createTempFile("shared-take", ".wav")
+        writeConstantPcm16Wav(wav, 1, 100, sampleRateHz = 44_100)
+        val existing = File.createTempFile("already-here", ".wav")
+        existing.writeText("keep")
+        val dao = FakeProjectDao(
+            projects = listOf(ProjectEntity(id = "song", name = "Song")),
+            tracks = listOf(
+                TrackEntity(
+                    id = "take-a",
+                    projectId = "song",
+                    name = "Take 1",
+                    wavFilePath = existing.absolutePath,
+                    duration = 100,
+                    contentHash = "hash-a",
+                ),
+            ),
+        )
+        val objects = CountingWav(wav)
+        val local = room(dao, shared = AddedTake(wav.length()), objects = objects)
+        val vm = home(local)
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        vm.open("song")
+        advanceUntilIdle()
+        assertEquals("song", vm.openProject.first())
+        assertEquals(1, objects.downloads)
+        assertEquals("keep", existing.readText())
+        assertEquals("Song", dao.observeProject("song").first()?.name)
+        val tracks = dao.observeTracks("song").first()
+        assertEquals(listOf("take-a", "take-c"), tracks.map { it.id })
+        assertEquals(listOf(0, 1), tracks.map { it.position })
+        assertEquals("hash-c", tracks.last().contentHash)
+        assertTrue((tracks.last().duration ?: 0L) > 0L)
         collect.cancel()
     }
 
@@ -165,6 +205,19 @@ class SharedProjectPlaceTest {
         override suspend fun files(id: String): List<SharedTake> = listOf(
             SharedTake("take-b", "hash-b", size, "b"),
             SharedTake("take-a", "hash-a", size, "a"),
+        )
+    }
+
+    private class AddedTake(private val size: Long) : SharedProjects {
+        override suspend fun list(): List<SharedProject> = error("unused")
+
+        override suspend fun imageUrl(id: String): String = error("unused")
+
+        override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
+
+        override suspend fun files(id: String): List<SharedTake> = listOf(
+            SharedTake("take-a", "hash-a", size, "a"),
+            SharedTake("take-c", "hash-c", size, "c"),
         )
     }
 

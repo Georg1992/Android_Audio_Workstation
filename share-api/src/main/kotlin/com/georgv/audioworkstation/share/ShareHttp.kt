@@ -44,8 +44,8 @@ internal class ShareHttp(
         when {
             method == "POST" && action == listOf("card") -> updateCard(exchange, accountId, projectId)
             method == "POST" && action == listOf("owner") -> setOwner(exchange, accountId, projectId)
-            method == "POST" && action == listOf("uploads") -> requestUpload(exchange, accountId, projectId)
-            method == "POST" && action == listOf("files") -> commitFile(exchange, accountId, projectId)
+            method == "POST" && action == listOf("uploads") -> requestUpload(exchange, projectId)
+            method == "POST" && action == listOf("files") -> commitFile(exchange, projectId)
             method == "GET" && action == listOf("files") -> listFiles(exchange, projectId)
             method == "POST" && action == listOf("downloads") -> download(exchange, accountId, projectId)
             method == "POST" && action == listOf("image") -> beginImage(exchange, accountId, projectId)
@@ -173,8 +173,8 @@ internal class ShareHttp(
         send(exchange, 200, """{"id":"$projectId"}""")
     }
 
-    private fun requestUpload(exchange: HttpExchange, accountId: String, projectId: String) {
-        manifest.requireOwner(projectId, accountId)
+    private fun requestUpload(exchange: HttpExchange, projectId: String) {
+        manifest.requireSharedProject(projectId)
         val body = json(exchange)
         val hash = storageKey(body.optString("contentHash"))
         val bytes = size(body.optLong("size", -1))
@@ -200,8 +200,8 @@ internal class ShareHttp(
         send(exchange, 200, response.toString())
     }
 
-    private fun commitFile(exchange: HttpExchange, accountId: String, projectId: String) {
-        manifest.requireOwner(projectId, accountId)
+    private fun commitFile(exchange: HttpExchange, projectId: String) {
+        manifest.requireSharedProject(projectId)
         val body = json(exchange)
         val trackId = id(body.optString("trackId"), "track id")
         val hash = storageKey(body.optString("contentHash"))

@@ -310,7 +310,7 @@ class SharedProjectsTest {
         advanceUntilIdle()
         vm.open("song")
         advanceUntilIdle()
-        assertTrue(lookup.presented.isEmpty())
+        assertEquals(listOf("song" to "Song"), lookup.presented)
         assertEquals("song", vm.openProject.first())
         collect.cancel()
     }
@@ -330,8 +330,10 @@ class SharedProjectsTest {
         local.present("song", "Song")
         local.present("showcase", "Renamed")
         assertEquals("Song", dao.observeProject("song").first()?.name)
+        assertEquals("song", dao.observeProject("song").first()?.remoteUrl)
         assertEquals("Showcase", dao.observeProject("showcase").first()?.name)
-        assertEquals(listOf("song"), files.ids)
+        assertEquals("showcase", dao.observeProject("showcase").first()?.remoteUrl)
+        assertEquals(listOf("song", "showcase"), files.ids)
         assertTrue(dao.observeTracks("song").first().isEmpty())
     }
 

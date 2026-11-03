@@ -5,6 +5,7 @@ import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.WavPcmFileInfo
 import com.georgv.audioworkstation.core.audio.isSupportedProjectSampleRate
 import com.georgv.audioworkstation.core.audio.readWavPcmFileInfo
+import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -14,6 +15,7 @@ import com.georgv.audioworkstation.online.share.SharedTake
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 internal class SharedProjectPlace(
@@ -23,7 +25,10 @@ internal class SharedProjectPlace(
     private val objects: ShareObjectTransport,
 ) {
     suspend fun place(projectId: String, title: String) = withContext(Dispatchers.IO) {
-        if (projects.projectExists(projectId)) return@withContext
+        if (projects.projectExists(projectId)) {
+            addMissing(projectId)
+            return@withContext
+        }
         val stored = ArrayList<File>()
         try {
             writeProject(projectId, title, stored)
@@ -42,13 +47,48 @@ internal class SharedProjectPlace(
             val expectedRate = takes.firstOrNull()?.info?.sampleRateHz
             takes += storeTake(projectId, file, expectedRate, stored)
         }
-        val project = projects.ensureProject(projectId, title)
-        val rate = takes.firstOrNull()?.info?.sampleRateHz
-        if (rate != null && rate != project.sampleRate) {
-            projects.upsertProject(project.copy(sampleRate = rate))
-        }
+        val created = projects.ensureProject(projectId, title)
+        val rate = takes.firstOrNull()?.info?.sampleRateHz ?: created.sampleRate
+        projects.upsertProject(created.copy(sampleRate = rate, remoteUrl = projectId))
         if (takes.isNotEmpty()) {
             projects.upsertTracks(takes.mapIndexed { index, take -> trackRow(projectId, index, take) })
+        }
+    }
+
+    private suspend fun addMissing(projectId: String) {
+        val project = projects.observeProject(projectId).first() ?: return
+        val existing = projects.observeTracks(projectId).first()
+        val known = existing.map { it.id }.toSet()
+        val missing = shared.files(projectId).filter { it.trackId !in known }.sortedBy { it.trackId }
+        val stored = ArrayList<File>()
+        try {
+            keepNewTakes(project, existing.size, missing, stored)
+        } catch (cancel: CancellationException) {
+            stored.forEach { file -> file.delete() }
+            throw cancel
+        } catch (error: Exception) {
+            stored.forEach { file -> file.delete() }
+            throw SharedPlaceException(error)
+        }
+    }
+
+    private suspend fun keepNewTakes(
+        project: ProjectEntity,
+        position: Int,
+        missing: List<SharedTake>,
+        stored: MutableList<File>,
+    ) {
+        if (project.remoteUrl.isNullOrBlank()) {
+            projects.upsertProject(project.copy(remoteUrl = project.id))
+        }
+        val takes = ArrayList<PlacedTake>()
+        for (file in missing) {
+            takes += storeTake(project.id, file, project.sampleRate, stored)
+        }
+        if (takes.isNotEmpty()) {
+            projects.upsertTracks(
+                takes.mapIndexed { index, take -> trackRow(project.id, position + index, take) },
+            )
         }
     }
 

@@ -880,9 +880,16 @@ class ProjectViewModel @Inject constructor(
                         stopSnapshot = stopSnapshot,
                         overdubPlaybackStartMs = overdubPlaybackStartMs,
                     )
-                dbActions.run(R.string.error_recording_metadata_failed) {
-                    withIo(dispatchers, "persist finalized recording track") {
-                        repo.upsertTrack(finalizedTrack)
+                val saved =
+                    dbActions.run(R.string.error_recording_metadata_failed) {
+                        withIo(dispatchers, "persist finalized recording track") {
+                            repo.upsertTrack(finalizedTrack)
+                        }
+                    }
+                if (!saved) return@launch
+                dbActions.run(R.string.error_share_project_failed) {
+                    withIo(dispatchers, "publish recorded take") {
+                        repo.publishRecordedTake(finalizedTrack)
                     }
                 }
             }
