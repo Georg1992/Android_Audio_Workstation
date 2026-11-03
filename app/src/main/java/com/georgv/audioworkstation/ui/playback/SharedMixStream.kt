@@ -5,9 +5,10 @@ import java.util.concurrent.TimeUnit
 /**
  * Plays a shared 16-bit PCM mix as short pieces.
  * Playback starts once the first piece is in memory. A fetcher keeps only a
- * small stretch of later pieces buffered. Seek drops that stretch and asks
- * for the piece at the new time. A slow piece keeps the buffered audio
- * playing and is requested again when the connection returns.
+ * small stretch of later pieces buffered. Seek flushes the speaker and starts
+ * a piece at the new sample. The first bytes of that piece are played as they
+ * arrive. A slow piece keeps the buffered audio playing and is requested again
+ * when the connection returns.
  */
 internal class SharedMixStream(
     private val source: MixSource = UrlMixSource(),

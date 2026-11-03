@@ -47,8 +47,24 @@ internal object MixPieces {
         return frames.coerceAtMost(frameCount) * info.blockAlign
     }
 
+    /** One piece-sized window that starts at [pcmStart], not on the original grid. */
+    fun spanFrom(info: WavPcmFileInfo, pieceBytes: Int, pcmStart: Long): MixSpan? {
+        if (pieceBytes <= 0 || pcmStart < 0L || pcmStart >= info.dataSize) return null
+        val size = minOf(pieceBytes.toLong(), info.dataSize - pcmStart).toInt()
+        if (size <= 0) return null
+        val fileStart = info.dataOffset + pcmStart
+        return MixSpan(
+            index = indexAt(pcmStart, pieceBytes),
+            fileStart = fileStart,
+            fileEndInclusive = fileStart + size - 1,
+            pcmStart = pcmStart,
+            size = size,
+        )
+    }
+
     const val AheadPieces = 2
     const val HeaderEnd = 4095L
+    const val PlayChunk = 4096
     private const val PieceMs = 2000L
     private const val MsPerSecond = 1000L
 }

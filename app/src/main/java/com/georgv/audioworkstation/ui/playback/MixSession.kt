@@ -59,7 +59,7 @@ internal class MixSession(
         while (true) {
             val url = state.address() ?: return false
             val snap = state.snapshot() ?: return false
-            val span = MixPieces.span(info, snap.pieceBytes, snap.playIndex) ?: error("mix is not pcm")
+            val span = MixPieces.spanFrom(info, snap.pieceBytes, snap.pcmByte) ?: error("mix is not pcm")
             try {
                 val bytes = reader.read(url, span.fileStart, span.fileEndInclusive, exact = true) ?: continue
                 val piece = HeldPiece(span.index, span.pcmStart, bytes, snap.generation, ended = false)
@@ -87,19 +87,29 @@ internal class MixSession(
                 if (!state.pulse()) return
                 continue
             }
-            val current = aligned(piece, snap.generation) ?: return
+            val previous = piece?.generation
+            val current = readyPiece(piece, snap) ?: return
+            if (previous != null && current.generation != previous) arm(false)
             piece = current
-            writePiece(current)
-            piece = null
-            state.hold(null)
+            if (writePiece(current)) {
+                piece = null
+                state.hold(null)
+            }
         }
     }
 
-    private fun aligned(piece: HeldPiece?, generation: Int): HeldPiece? {
-        if (piece != null && piece.generation == generation) return piece
-        arm(false)
+    private fun readyPiece(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
+        val kept = reused(piece, snap)
+        if (kept != null) return kept
+        if (piece != null) arm(false)
         state.hold(null)
         return nextPiece()
+    }
+
+    private fun reused(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
+        if (piece == null || !piece.covers(snap.pcmByte)) return null
+        if (piece.generation == snap.generation) return piece
+        return piece.retag(snap.generation)
     }
 
     private fun nextPiece(): HeldPiece? {
@@ -126,9 +136,9 @@ internal class MixSession(
             val snap = state.snapshot() ?: return false
             val stop = !snap.playing || snap.generation != piece.generation
             if (stop) return false
-            val length = minOf(ChunkBytes, piece.bytes.size - offset)
+            val length = minOf(MixPieces.PlayChunk, piece.bytes.size - offset)
             val wrote = output.write(piece.bytes, offset, length)
-            if (wrote <= 0) return false
+            if (wrote <= 0) return true
             if (!state.advance(wrote, piece.generation)) return false
             offset += wrote
         }
@@ -173,7 +183,6 @@ internal class MixSession(
 
     private companion object {
         const val FetchName = "shared-mix-fetch"
-        const val ChunkBytes = 4096
         const val RetryMs = 200L
         const val JoinMs = 1_000L
     }

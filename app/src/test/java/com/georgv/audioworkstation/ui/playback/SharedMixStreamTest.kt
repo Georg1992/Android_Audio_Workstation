@@ -64,14 +64,14 @@ class SharedMixStreamTest {
     }
 
     @Test
-    fun seekDropsTheBufferAndRequestsThePieceAtTheNewTime() {
+    fun seekStartsAtTheNewSample() {
         val wav = largeWav()
         val info = WavStreamHeader.read(ByteArrayInputStream(wav)) ?: error("wav header")
         val bytes = MixPieces.pieceBytes(info.sampleRateHz, info.blockAlign)
-        val span = MixPieces.span(info, bytes, MixPieces.indexAt(MixPieces.pcmByte(info, SeekMs), bytes))
-        check(span != null)
-        assertEquals(TargetStart, span.fileStart)
-        assertEquals(TargetEnd, span.fileEndInclusive)
+        val window = MixPieces.spanFrom(info, bytes, MixPieces.pcmByte(info, SeekMs))
+        check(window != null)
+        assertEquals(ExactPcmOffset, window.fileStart)
+        assertEquals(SeekWindowEnd, window.fileEndInclusive)
         val ranges = CopyOnWriteArrayList<Requested>()
         val output = PermitOutput()
         val stream = SharedMixStream(memory(wav, ranges), output, aheadPieces = AheadPieces)
@@ -80,14 +80,68 @@ class SharedMixStreamTest {
             assertTrue(waitUntil { pieceStarts(ranges) == FirstPieces && stable(ranges) })
             stream.seekTo(SeekMs)
             assertEquals(SeekMs, stream.transport().positionMs)
-            assertTrue(waitUntil { ranges.any { it.start == TargetStart } })
-            val next = ranges.first { it.start == TargetStart }
-            assertEquals(TargetEnd, next.endInclusive)
-            assertFalse(pieceStarts(ranges).contains(ExactPcmOffset))
+            assertTrue(waitUntil { ranges.any { it.start == ExactPcmOffset } })
+            val next = ranges.first { it.start == ExactPcmOffset }
+            assertEquals(SeekWindowEnd, next.endInclusive)
+            assertFalse(pieceStarts(ranges).contains(TargetStart))
             output.allow(WritesAfterStart)
             assertTrue(waitUntil { stream.transport().positionMs > SeekMs })
             assertTrue(stream.transport().playing)
         } finally {
+            output.allow(WritesAfterStart)
+            stream.release()
+        }
+    }
+
+    @Test
+    fun seekPlaysTheFirstBytesBeforeTheRestOfThePiece() {
+        val wav = largeWav()
+        val held = AtomicReference<PrefixStream>()
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                if (start != ExactPcmOffset) return slice(wav, start, endInclusive)
+                val prefix = PrefixStream(sliceBytes(wav, start, endInclusive), HoldBytes)
+                held.set(prefix)
+                return prefix
+            }
+        }
+        val output = PermitOutput()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces)
+        try {
+            stream.play(Url)
+            stream.seekTo(SeekMs)
+            output.allow(WritesAfterStart)
+            assertTrue(waitUntil {
+                val prefix = held.get()
+                prefix != null && prefix.held.count == 0L && stream.transport().positionMs > SeekMs
+            })
+        } finally {
+            held.get()?.close()
+            output.allow(WritesAfterStart)
+            stream.release()
+        }
+    }
+
+    @Test
+    fun seekInsideTheOpenPieceStartsWithoutThatRequest() {
+        val wav = largeWav()
+        val gate = CountDownLatch(1)
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                if (start == InsideFile) gate.await()
+                return slice(wav, start, endInclusive)
+            }
+        }
+        val output = PermitOutput()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces)
+        try {
+            stream.play(Url)
+            assertTrue(waitUntil { output.attempts.get() > 0 })
+            stream.seekTo(InsideMs)
+            output.allow(WritesAfterStart)
+            assertTrue(waitUntil { stream.transport().positionMs > InsideMs })
+        } finally {
+            gate.countDown()
             output.allow(WritesAfterStart)
             stream.release()
         }
@@ -298,10 +352,13 @@ class SharedMixStreamTest {
         }
     }
 
-    private fun slice(wav: ByteArray, start: Long, endInclusive: Long): InputStream {
+    private fun slice(wav: ByteArray, start: Long, endInclusive: Long): InputStream =
+        ByteArrayInputStream(sliceBytes(wav, start, endInclusive))
+
+    private fun sliceBytes(wav: ByteArray, start: Long, endInclusive: Long): ByteArray {
         val from = start.toInt().coerceAtMost(wav.size)
         val to = (endInclusive + 1).toInt().coerceAtMost(wav.size)
-        return ByteArrayInputStream(wav.copyOfRange(from, to))
+        return wav.copyOfRange(from, to)
     }
 
     private fun url(server: HttpServer): String = "http://127.0.0.1:${server.address.port}/mix"
@@ -322,6 +379,7 @@ class SharedMixStreamTest {
 
     private class PermitOutput : PcmOutput {
         private val permits = AtomicInteger(0)
+        val attempts = AtomicInteger(0)
 
         fun allow(count: Int) {
             permits.addAndGet(count)
@@ -330,6 +388,7 @@ class SharedMixStreamTest {
         override fun start(sampleRateHz: Int, channelCount: Int) = Unit
 
         override fun write(bytes: ByteArray, offset: Int, length: Int): Int {
+            attempts.incrementAndGet()
             while (permits.get() == 0) Thread.sleep(PollMs)
             permits.decrementAndGet()
             return length
@@ -359,6 +418,42 @@ class SharedMixStreamTest {
         }
 
         override fun release() = Unit
+    }
+
+    private class PrefixStream(
+        private val data: ByteArray,
+        private val holdAfter: Int,
+    ) : InputStream() {
+        private var pos = 0
+        val held = CountDownLatch(1)
+        private val release = CountDownLatch(1)
+
+        override fun read(): Int {
+            val one = ByteArray(1)
+            val count = read(one, 0, 1)
+            if (count < 0) return -1
+            return one[0].toInt() and ByteMask
+        }
+
+        override fun read(buffer: ByteArray, off: Int, len: Int): Int {
+            if (pos >= data.size) return -1
+            if (pos >= holdAfter) {
+                held.countDown()
+                release.await()
+                if (pos >= data.size) return -1
+            }
+            val allowed = if (pos < holdAfter) holdAfter - pos else data.size - pos
+            val count = minOf(len, allowed)
+            if (count <= 0) return -1
+            data.copyInto(buffer, off, pos, pos + count)
+            pos += count
+            return count
+        }
+
+        override fun close() {
+            pos = data.size
+            release.countDown()
+        }
     }
 
     private class HoldStream : InputStream() {
@@ -395,10 +490,13 @@ class SharedMixStreamTest {
         const val PieceCount = 40
         const val SampleRate = 1_000
         const val SeekMs = 10_500
+        const val InsideMs = 500
         const val FirstPieceMs = 2_000
         const val TargetStart = 20_044L
-        const val TargetEnd = 24_043L
         const val ExactPcmOffset = 21_044L
+        const val SeekWindowEnd = 25_043L
+        const val InsideFile = 1_044L
+        const val HoldBytes = 64
         const val RangeStart = 1_044L
         const val RangeEnd = 2_047L
         const val WritesAfterStart = 8
