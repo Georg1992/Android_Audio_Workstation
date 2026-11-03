@@ -15,6 +15,8 @@ interface SharedProjects {
     suspend fun imageUrl(id: String): String
 
     suspend fun playback(id: String): List<SharedPlayback>
+
+    suspend fun files(id: String): List<SharedTake>
 }
 
 data class SharedProject(
@@ -27,6 +29,13 @@ data class SharedProject(
 
 data class SharedPlayback(
     val contentHash: String,
+    val downloadUrl: String,
+)
+
+data class SharedTake(
+    val trackId: String,
+    val contentHash: String,
+    val size: Long,
     val downloadUrl: String,
 )
 
@@ -54,6 +63,21 @@ internal class HttpSharedProjects(
             )
         }
         files
+    }
+
+    override suspend fun files(id: String): List<SharedTake> = withContext(Dispatchers.IO) {
+        val rows = JSONObject(call(openSession(), "GET", "/shared-projects/$id/files", null)).getJSONArray("files")
+        val takes = ArrayList<SharedTake>(rows.length())
+        for (index in 0 until rows.length()) {
+            val row = rows.getJSONObject(index)
+            takes += SharedTake(
+                trackId = row.getString("trackId"),
+                contentHash = row.getString("contentHash"),
+                size = row.getLong("size"),
+                downloadUrl = row.getString("downloadUrl"),
+            )
+        }
+        takes
     }
 
     private suspend fun openSession(): AccountSession =

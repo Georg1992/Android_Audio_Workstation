@@ -12,6 +12,12 @@ internal data class SharedProjectRecord(
     val ownerName: String,
 )
 
+internal data class SharedFileRecord(
+    val trackId: String,
+    val contentHash: String,
+    val size: Long,
+)
+
 internal class ShareManifest(config: ShareApiConfig) {
     private val url = config.databaseUrl
     private val user = config.databaseUser
@@ -249,6 +255,36 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
         }
     }
+
+    fun listFiles(projectId: String): List<SharedFileRecord> =
+        connection().use { db ->
+            val present = db.prepareStatement("SELECT 1 FROM shared_project WHERE id = ?").use { query ->
+                query.setString(1, projectId)
+                query.executeQuery().use { rows -> rows.next() }
+            }
+            if (!present) throw ShareFailure(404, "not found")
+            db.prepareStatement(
+                """
+                SELECT client_track_id, content_hash, size_bytes
+                FROM shared_file
+                WHERE shared_project_id = ?
+                ORDER BY client_track_id
+                """.trimIndent(),
+            ).use { query ->
+                query.setString(1, projectId)
+                query.executeQuery().use { rows ->
+                    val files = ArrayList<SharedFileRecord>()
+                    while (rows.next()) {
+                        files += SharedFileRecord(
+                            trackId = rows.getString(1),
+                            contentHash = rows.getString(2),
+                            size = rows.getLong(3),
+                        )
+                    }
+                    files
+                }
+            }
+        }
 
     fun hasFile(projectId: String, ownerAccount: String, contentHash: String): Boolean =
         connection().use { db ->

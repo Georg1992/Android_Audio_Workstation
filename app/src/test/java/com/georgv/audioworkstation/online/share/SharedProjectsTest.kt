@@ -158,6 +158,8 @@ class SharedProjectsTest {
             MemorySessions(session),
             share,
             TempDirAudioFilePathProvider(),
+            CountingFiles(),
+            UnusedObjects,
         )
         val removed = local.unpublishAbsent(
             listOf(
@@ -199,6 +201,8 @@ class SharedProjectsTest {
             override suspend fun imageUrl(id: String): String = error("unused")
 
             override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
+
+            override suspend fun files(id: String): List<SharedTake> = error("unused")
         },
         localProjects = NoLocalProjects,
         ownedShares = NoLocalProjects,
@@ -210,6 +214,8 @@ class SharedProjectsTest {
         override suspend fun imageUrl(id: String): String = error("unused")
 
         override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
+
+        override suspend fun files(id: String): List<SharedTake> = error("unused")
     }
 
     private class MemorySessions(session: AccountSession?) : AccountSessionStore {
@@ -312,16 +318,42 @@ class SharedProjectsTest {
     @Test
     fun presentPlacesAMissingSharedProjectAndLeavesAnExistingName() = runTest {
         val dao = FakeProjectDao(projects = listOf(ProjectEntity(id = "showcase", name = "Showcase")))
+        val files = CountingFiles()
         val local = RoomLocalProjects(
             ProjectRepository(dao, NoopProjectFileStore),
             MemorySessions(session),
             RecordingOwnedPublish(emptySet()),
             TempDirAudioFilePathProvider(),
+            files,
+            UnusedObjects,
         )
         local.present("song", "Song")
         local.present("showcase", "Renamed")
         assertEquals("Song", dao.observeProject("song").first()?.name)
         assertEquals("Showcase", dao.observeProject("showcase").first()?.name)
+        assertEquals(listOf("song"), files.ids)
+        assertTrue(dao.observeTracks("song").first().isEmpty())
+    }
+
+    private class CountingFiles : SharedProjects {
+        val ids = mutableListOf<String>()
+
+        override suspend fun list(): List<SharedProject> = error("unused")
+
+        override suspend fun imageUrl(id: String): String = error("unused")
+
+        override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
+
+        override suspend fun files(id: String): List<SharedTake> {
+            ids += id
+            return emptyList()
+        }
+    }
+
+    private object UnusedObjects : ShareObjectTransport {
+        override fun put(url: String, headers: Map<String, String>, file: java.io.File) = error("unused")
+
+        override fun download(url: String, destination: java.io.File) = error("unused")
     }
 
     private class RecordingLookup(private val existing: Set<String>) : LocalProjectLookup {

@@ -17,9 +17,9 @@ import com.georgv.audioworkstation.online.share.OwnedProjectPublish
 import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.online.share.ShareConfig
 import com.georgv.audioworkstation.online.share.SharedCardUpdate
+import com.georgv.audioworkstation.online.share.ShareObjectTransport
 import com.georgv.audioworkstation.online.share.SharedProjects
 import com.georgv.audioworkstation.online.share.SharedTakeRestore
-import com.georgv.audioworkstation.online.share.UrlConnectionShareObjects
 import com.georgv.audioworkstation.ui.screens.community.CardPlayback
 import com.georgv.audioworkstation.ui.screens.community.LocalProjectLookup
 import com.georgv.audioworkstation.ui.screens.community.MediaCardPlayback
@@ -93,12 +93,13 @@ abstract class OnlineModule {
             accounts: CognitoAccounts,
             projects: ProjectRepository,
             paths: AudioFilePathProvider,
+            objects: ShareObjectTransport,
         ): HttpProjectShare = HttpProjectShare(
             sessions = sessions,
             accounts = accounts,
             projects = projects,
             api = UrlConnectionHttpTransport(ShareConfig.API_BASE),
-            objects = UrlConnectionShareObjects(),
+            objects = objects,
             paths = paths,
         )
 
@@ -130,10 +131,11 @@ abstract class OnlineModule {
         fun provideCardMedia(
             projects: SharedProjects,
             cache: CardCache,
+            objects: ShareObjectTransport,
         ): CardMedia = HttpCardMedia(
             projects = projects,
             cache = cache,
-            objects = UrlConnectionShareObjects(),
+            objects = objects,
         )
     }
 }

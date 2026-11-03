@@ -46,6 +46,7 @@ internal class ShareHttp(
             method == "POST" && action == listOf("owner") -> setOwner(exchange, accountId, projectId)
             method == "POST" && action == listOf("uploads") -> requestUpload(exchange, accountId, projectId)
             method == "POST" && action == listOf("files") -> commitFile(exchange, accountId, projectId)
+            method == "GET" && action == listOf("files") -> listFiles(exchange, projectId)
             method == "POST" && action == listOf("downloads") -> download(exchange, accountId, projectId)
             method == "POST" && action == listOf("image") -> beginImage(exchange, accountId, projectId)
             method == "POST" && action == listOf("image", "commit") -> commitImage(exchange, accountId, projectId)
@@ -212,6 +213,20 @@ internal class ShareHttp(
         if (stat.size != bytes) throw ShareFailure(409, "size mismatch")
         manifest.saveFile(projectId, trackId, hash, key, bytes)
         send(exchange, 200, """{"storageKey":"$hash"}""")
+    }
+
+    private fun listFiles(exchange: HttpExchange, projectId: String) {
+        val files = JSONArray()
+        for (file in manifest.listFiles(projectId)) {
+            files.put(
+                JSONObject()
+                    .put("trackId", file.trackId)
+                    .put("contentHash", file.contentHash)
+                    .put("size", file.size)
+                    .put("downloadUrl", objects.downloadUrl(file.contentHash)),
+            )
+        }
+        send(exchange, 200, JSONObject().put("files", files).toString())
     }
 
     private fun download(exchange: HttpExchange, accountId: String, projectId: String) {

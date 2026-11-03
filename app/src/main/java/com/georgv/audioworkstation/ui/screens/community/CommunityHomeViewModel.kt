@@ -107,7 +107,7 @@ class CommunityHomeViewModel @Inject constructor(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
-                report(R.string.error_card_not_on_phone, error)
+                report(reportedFailure(error, R.string.error_card_not_on_phone), error)
             }
         }
     }
