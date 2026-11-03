@@ -6,10 +6,11 @@ import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.OwnedProjectPublish
-import com.georgv.audioworkstation.online.share.ShareObjectTransport
 import com.georgv.audioworkstation.online.share.SharedProject
 import com.georgv.audioworkstation.online.share.SharedProjects
 import com.georgv.audioworkstation.online.share.sha256Hex
+import com.georgv.audioworkstation.ui.playback.MixSource
+import com.georgv.audioworkstation.ui.playback.UrlMixSource
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,13 +37,13 @@ class RoomLocalProjects @Inject constructor(
     private val share: OwnedProjectPublish,
     private val paths: AudioFilePathProvider,
     private val sharedProjects: SharedProjects,
-    private val objects: ShareObjectTransport,
 ) : LocalProjectLookup, OwnedShareRefresh {
+    internal var headerSource: MixSource = UrlMixSource()
     private val published = PublishedCardMarks()
     override suspend fun exists(projectId: String): Boolean = projects.projectExists(projectId)
 
     override suspend fun present(projectId: String, title: String) {
-        SharedProjectPlace(projects, paths, sharedProjects, objects).place(projectId, title)
+        SharedProjectPlace(projects, sharedProjects, headerSource).place(projectId, title)
     }
 
     override suspend fun publishOwnerNames() {

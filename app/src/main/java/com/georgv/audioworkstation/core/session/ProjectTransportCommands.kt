@@ -5,12 +5,10 @@ import com.georgv.audioworkstation.core.audio.MeterPort
 import com.georgv.audioworkstation.core.audio.RecordingStopKind
 import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
-import com.georgv.audioworkstation.core.coroutines.withAudioIo
-import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
-import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
 import com.georgv.audioworkstation.core.audio.TransportTimelinePolicy
-import com.georgv.audioworkstation.core.coroutines.withIo
+import com.georgv.audioworkstation.core.ui.reportedFailure
+import kotlinx.coroutines.CancellationException
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
@@ -183,30 +181,24 @@ internal class ProjectTransportCommands(
             return
         }
 
-        var armedTrackIds: List<String> = emptyList()
-        val started =
-            withAudioIo(dispatchers, "PlaybackPort.startPlayback") {
-                withIo(dispatchers, "prepare session transport capability") {
-                    sessionTransportGate.prepareForLiveSession(currentProject.sampleRate)
-                }
-                PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
-                val outputLatencyMs = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
-                val playbackSpec =
-                    currentProject.toLiveEnginePlaybackSpec(
-                        tracks = selectedPlayableTracks,
-                        startPositionMs = PlaybackTransportSync.mixTransportMs(audibleStart, outputLatencyMs),
-                    ) ?: return@withAudioIo false
-                armedTrackIds = playbackSpec.lanes.map { it.trackId }
-                playback.startPlayback(playbackSpec)
-            }
-        if (!started) {
+        val armed = try {
+            ProjectPlaybackStart(playback, meter, dispatchers, sessionTransportGate)
+                .start(currentProject, selectedPlayableTracks, audibleStart)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            playheadTransport.abortPlaybackStart()
+            emitMessage(reportedFailure(error, R.string.error_playback_failed_to_start))
+            return
+        }
+        if (armed == null) {
             playheadTransport.abortPlaybackStart()
             emitMessage(R.string.error_playback_failed_to_start)
             return
         }
         playheadPositionMs.value = audibleStart.value
         playheadTransport.onPlaybackStarted(fromPositionMs = audibleStart.value)
-        playbackSession.markPlayingAndStartCompletionMonitor(armedTrackIds)
+        playbackSession.markPlayingAndStartCompletionMonitor(armed.laneIds)
     }
 
     suspend fun performStopPressed() {

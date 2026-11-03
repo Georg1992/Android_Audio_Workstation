@@ -7,6 +7,11 @@ import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.toMultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.toRecordingSpec
 import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
+import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.core.track.hasTimelineClip
+import com.georgv.audioworkstation.core.track.selectedPlayableTracks
+import com.georgv.audioworkstation.core.track.streamsSharedTake
+import com.georgv.audioworkstation.ui.playback.MixSource
 import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
@@ -16,12 +21,13 @@ import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.share.OwnedProjectPublish
-import com.georgv.audioworkstation.online.share.ShareObjectTransport
 import com.georgv.audioworkstation.online.share.SharedPlayback
 import com.georgv.audioworkstation.online.share.SharedProject
 import com.georgv.audioworkstation.online.share.SharedProjects
 import com.georgv.audioworkstation.online.share.SharedTake
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.InputStream
 import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,10 +66,9 @@ class SharedProjectPlaceTest {
     fun openStoresSharedTakesTheProjectScreenCanPlayAndRecord() = runTest {
         val dao = FakeProjectDao()
         val paths = TempDirAudioFilePathProvider()
-        val wav = File.createTempFile("shared-take", ".wav")
-        writeConstantPcm16Wav(wav, 1_000, 4_800, channelCount = 2, sampleRateHz = 48_000)
-        val objects = CountingWav(wav)
-        val local = room(dao, paths, ListedTakes(wav.length()), objects)
+        val wav = wavBytes(channelCount = 2, sampleRateHz = 48_000, frames = 4_800)
+        val headers = HeaderBytes(wav)
+        val local = room(dao, paths, ListedTakes(wav.size.toLong()), headers)
         val vm = home(local)
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
@@ -79,25 +84,26 @@ class SharedProjectPlaceTest {
         assertEquals(listOf("Take 1", "Take 2"), tracks.map { it.name })
         assertEquals(listOf("hash-a", "hash-b"), tracks.map { it.contentHash })
         assertEquals(listOf(SyncStatus.LOCAL, SyncStatus.LOCAL), tracks.map { it.syncStatus })
-        assertTrue(tracks.all { (it.duration ?: 0L) > 0L && File(it.wavFilePath).isFile })
+        assertTrue(tracks.all { it.wavFilePath.isBlank() && it.streamsSharedTake() && it.hasTimelineClip() })
+        assertTrue(tracks.all { !it.hasPersistedPlayableAudio() && (it.duration ?: 0L) > 0L })
+        assertFalse(File(paths.trackOutputPath("song", "take-a")).exists())
         assertEquals(ChannelMode.STEREO, tracks.first().channelMode)
-        val playback = checkNotNull(project.toMultiPlaybackSpec(tracks))
-        assertEquals(listOf("take-a", "take-b"), playback.lanes.map { it.trackId })
-        assertTrue(playback.lanes.all { it.timelineClipDurationMs > 0L })
+        assertEquals(null, project.toMultiPlaybackSpec(tracks))
+        val selected = tracks.map { it.id }.toSet()
+        assertEquals(listOf("take-a", "take-b"), selectedPlayableTracks(tracks, selected).map { it.id })
         val recorded = project.toRecordingSpec(TrackEntity(id = "new-take", projectId = project.id))
         assertEquals(48_000, recorded.sampleRate)
         vm.open("song")
         advanceUntilIdle()
         assertEquals("song", vm.openProject.first())
-        assertEquals(2, objects.downloads)
-        assertEquals("song", project.remoteUrl)
+        assertEquals(2, headers.reads)
+        assertEquals("song", dao.observeProject("song").first()?.remoteUrl)
         collect.cancel()
     }
 
     @Test
     fun openAddsAPublishedTakeWithoutReplacingTracksAlreadyOnThePhone() = runTest {
-        val wav = File.createTempFile("shared-take", ".wav")
-        writeConstantPcm16Wav(wav, 1, 100, sampleRateHz = 44_100)
+        val wav = wavBytes(sampleRateHz = 44_100, frames = 100)
         val existing = File.createTempFile("already-here", ".wav")
         existing.writeText("keep")
         val dao = FakeProjectDao(
@@ -113,19 +119,21 @@ class SharedProjectPlaceTest {
                 ),
             ),
         )
-        val objects = CountingWav(wav)
-        val local = room(dao, shared = AddedTake(wav.length()), objects = objects)
+        val headers = HeaderBytes(wav)
+        val local = room(dao, shared = AddedTake(wav.size.toLong()), headers = headers)
         val vm = home(local)
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
         vm.open("song")
         advanceUntilIdle()
         assertEquals("song", vm.openProject.first())
-        assertEquals(1, objects.downloads)
+        assertEquals(1, headers.reads)
         assertEquals("keep", existing.readText())
         assertEquals("Song", dao.observeProject("song").first()?.name)
         val tracks = dao.observeTracks("song").first()
         assertEquals(listOf("take-a", "take-c"), tracks.map { it.id })
+        assertEquals(existing.absolutePath, tracks.first().wavFilePath)
+        assertTrue(tracks.last().wavFilePath.isBlank() && tracks.last().streamsSharedTake())
         assertEquals(listOf(0, 1), tracks.map { it.position })
         assertEquals("hash-c", tracks.last().contentHash)
         assertTrue((tracks.last().duration ?: 0L) > 0L)
@@ -136,9 +144,8 @@ class SharedProjectPlaceTest {
     fun presentDeletesAPartialTakeWhenALaterDownloadFails() = runTest {
         val dao = FakeProjectDao()
         val paths = TempDirAudioFilePathProvider()
-        val wav = File.createTempFile("shared-take", ".wav")
-        writeConstantPcm16Wav(wav, 1, 100, sampleRateHz = 44_100)
-        val local = room(dao, paths, ListedTakes(wav.length()), FailAfterFirst(wav))
+        val wav = wavBytes(sampleRateHz = 44_100, frames = 100)
+        val local = room(dao, paths, ListedTakes(wav.size.toLong()), FailAfterFirstHeader(wav))
         val failure = runCatching { local.present("song", "Song") }.exceptionOrNull()
         assertTrue(failure is SharedPlaceException)
         assertEquals(null, dao.observeProject("song").first())
@@ -177,15 +184,20 @@ class SharedProjectPlaceTest {
         dao: FakeProjectDao,
         paths: TempDirAudioFilePathProvider = TempDirAudioFilePathProvider(),
         shared: SharedProjects,
-        objects: ShareObjectTransport = UnusedObjects,
+        headers: MixSource = HeaderBytes(ByteArray(0)),
     ) = RoomLocalProjects(
         ProjectRepository(dao, NoopProjectFileStore),
         IdleSessions,
         NoPublish,
         paths,
         shared,
-        objects,
-    )
+    ).also { it.headerSource = headers }
+
+    private fun wavBytes(sampleRateHz: Int, frames: Int, channelCount: Int = 1): ByteArray {
+        val file = File.createTempFile("shared-take", ".wav")
+        writeConstantPcm16Wav(file, 1, frames, channelCount = channelCount, sampleRateHz = sampleRateHz)
+        return file.readBytes().also { file.delete() }
+    }
 
     private fun home(local: LocalProjectLookup) = CommunityHomeViewModel(
         sessions = MemorySessions(session),
@@ -231,30 +243,26 @@ class SharedProjectPlaceTest {
         override suspend fun files(id: String): List<SharedTake> = throw error
     }
 
-    private class CountingWav(private val wav: File) : ShareObjectTransport {
-        var downloads = 0
+    private class HeaderBytes(private val wav: ByteArray) : MixSource {
+        var reads = 0
 
-        override fun put(url: String, headers: Map<String, String>, file: File) = error("unused")
-
-        override fun download(url: String, destination: File) {
-            downloads += 1
-            wav.copyTo(destination)
+        override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+            reads += 1
+            val from = start.toInt().coerceAtMost(wav.size)
+            val to = (endInclusive + 1).toInt().coerceAtMost(wav.size)
+            return ByteArrayInputStream(wav.copyOfRange(from, to))
         }
     }
 
-    private class FailAfterFirst(private val wav: File) : ShareObjectTransport {
-        private var calls = 0
+    private class FailAfterFirstHeader(private val wav: ByteArray) : MixSource {
+        private var reads = 0
 
-        override fun put(url: String, headers: Map<String, String>, file: File) = error("unused")
-
-        override fun download(url: String, destination: File) {
-            calls += 1
-            if (calls == 1) {
-                wav.copyTo(destination)
-                return
-            }
-            destination.writeBytes(byteArrayOf(1, 2, 3))
-            error("download failed: 500")
+        override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+            reads += 1
+            if (reads > 1) error("probe failed")
+            val from = start.toInt().coerceAtMost(wav.size)
+            val to = (endInclusive + 1).toInt().coerceAtMost(wav.size)
+            return ByteArrayInputStream(wav.copyOfRange(from, to))
         }
     }
 
@@ -320,12 +328,6 @@ class SharedProjectPlaceTest {
         override suspend fun publishMixes() = Unit
 
         override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
-    }
-
-    private object UnusedObjects : ShareObjectTransport {
-        override fun put(url: String, headers: Map<String, String>, file: File) = error("unused")
-
-        override fun download(url: String, destination: File) = error("unused")
     }
 
     private companion object {

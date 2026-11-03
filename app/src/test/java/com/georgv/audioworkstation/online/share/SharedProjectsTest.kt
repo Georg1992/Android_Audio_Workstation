@@ -159,7 +159,6 @@ class SharedProjectsTest {
             share,
             TempDirAudioFilePathProvider(),
             CountingFiles(),
-            UnusedObjects,
         )
         val removed = local.unpublishAbsent(
             listOf(
@@ -325,7 +324,6 @@ class SharedProjectsTest {
             RecordingOwnedPublish(emptySet()),
             TempDirAudioFilePathProvider(),
             files,
-            UnusedObjects,
         )
         local.present("song", "Song")
         local.present("showcase", "Renamed")
@@ -350,12 +348,6 @@ class SharedProjectsTest {
             ids += id
             return emptyList()
         }
-    }
-
-    private object UnusedObjects : ShareObjectTransport {
-        override fun put(url: String, headers: Map<String, String>, file: java.io.File) = error("unused")
-
-        override fun download(url: String, destination: java.io.File) = error("unused")
     }
 
     private class RecordingLookup(private val existing: Set<String>) : LocalProjectLookup {

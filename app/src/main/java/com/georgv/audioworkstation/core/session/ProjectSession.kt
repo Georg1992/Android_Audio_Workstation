@@ -17,6 +17,7 @@ import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabil
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.AudioIoScope
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
+import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import kotlinx.coroutines.CoroutineScope
@@ -60,15 +61,20 @@ class ProjectSession(
     private val onRecordingCaptureFailed: (String) -> Unit,
 ) {
     val playheadPositionMs = MutableStateFlow(0L)
+    private val streamPosition = StreamPosition()
 
     val playheadTransport =
         PlayheadTransportController(
             scope = scope,
             playheadPositionMs = playheadPositionMs,
-            nativeTransportPositionMs = { meter.transportPositionMs() },
+            nativeTransportPositionMs = { streamPosition.read() },
             pollDispatcher = dispatchers.default,
             sessionOutputLatencyMs = {
-                PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
+                if (ProjectTrackStreams.player.ownsClock()) {
+                    0.0
+                } else {
+                    PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
+                }
             },
         )
 
@@ -118,6 +124,7 @@ class ProjectSession(
             currentProjectId = projectId,
             visibleTracks = visibleTracks,
             onPlaybackCompleted = {
+                ProjectTrackStreams.player.release()
                 masterPeakController.resetDisplayAndNativeHold()
                 playheadTransport.stopAndResetToZero()
                 scope.launch(dispatchers.audioIo) {
@@ -128,6 +135,24 @@ class ProjectSession(
             },
             suppressTransportOnPlaybackCompletion = { recordingSession.hasActiveRecordingTake() },
         )
+
+    init {
+        streamPosition.read = {
+            val ended = playheadTransport.phase.value == TransportPlaybackPhase.Playing &&
+                ProjectTrackStreams.player.consumeClock { error ->
+                    emitMessage(reportedFailure(error, R.string.error_playback_failed_to_start))
+                }
+            if (ended) {
+                playbackSession.clearPlayingTransportState()
+                playheadTransport.stopAndResetToZero()
+                0L
+            } else if (ProjectTrackStreams.player.ownsClock()) {
+                ProjectTrackStreams.player.positionMs()
+            } else {
+                meter.transportPositionMs()
+            }
+        }
+    }
 
     private val playAndRecordTransport =
         PlayAndRecordTransport(

@@ -10,6 +10,9 @@ import com.georgv.audioworkstation.core.diagnostics.ThreadingDiagnostics
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.navigation.NavTransitionDiagnostics
 import com.georgv.audioworkstation.ui.screens.library.LibraryDiagnostics
+import com.georgv.audioworkstation.core.session.ProjectTrackStreams
+import com.georgv.audioworkstation.ui.playback.SharedTrackAccess
+import com.georgv.audioworkstation.ui.playback.SharedTrackStreams
 import com.georgv.audioworkstation.ui.screens.projects.ProjectDiagnostics
 import dagger.hilt.android.HiltAndroidApp
 
@@ -17,6 +20,8 @@ import dagger.hilt.android.HiltAndroidApp
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        SharedTrackAccess.application = this
+        ProjectTrackStreams.player = SharedTrackStreams(projects = { SharedTrackAccess.projects() })
         val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         TimelineGeometryDebug.loggingEnabled = debuggable
         NavTransitionDiagnostics.loggingEnabled = debuggable

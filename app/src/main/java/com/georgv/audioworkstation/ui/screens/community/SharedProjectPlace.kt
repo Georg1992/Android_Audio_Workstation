@@ -1,18 +1,18 @@
 package com.georgv.audioworkstation.ui.screens.community
 
-import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
 import com.georgv.audioworkstation.core.audio.ChannelMode
 import com.georgv.audioworkstation.core.audio.WavPcmFileInfo
+import com.georgv.audioworkstation.core.audio.WavStreamHeader
 import com.georgv.audioworkstation.core.audio.isSupportedProjectSampleRate
-import com.georgv.audioworkstation.core.audio.readWavPcmFileInfo
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
-import com.georgv.audioworkstation.online.share.ShareObjectTransport
 import com.georgv.audioworkstation.online.share.SharedProjects
 import com.georgv.audioworkstation.online.share.SharedTake
-import java.io.File
+import com.georgv.audioworkstation.ui.playback.MixPieces
+import com.georgv.audioworkstation.ui.playback.MixSource
+import com.georgv.audioworkstation.ui.playback.UrlMixSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -20,32 +20,30 @@ import kotlinx.coroutines.withContext
 
 internal class SharedProjectPlace(
     private val projects: ProjectRepository,
-    private val paths: AudioFilePathProvider,
     private val shared: SharedProjects,
-    private val objects: ShareObjectTransport,
+    private val headers: MixSource = UrlMixSource(),
 ) {
     suspend fun place(projectId: String, title: String) = withContext(Dispatchers.IO) {
         if (projects.projectExists(projectId)) {
             addMissing(projectId)
             return@withContext
         }
-        val stored = ArrayList<File>()
         try {
-            writeProject(projectId, title, stored)
+            writeProject(projectId, title)
         } catch (cancel: CancellationException) {
-            discard(projectId, stored)
+            discard(projectId)
             throw cancel
         } catch (error: Exception) {
-            discard(projectId, stored)
+            discard(projectId)
             throw SharedPlaceException(error)
         }
     }
 
-    private suspend fun writeProject(projectId: String, title: String, stored: MutableList<File>) {
+    private suspend fun writeProject(projectId: String, title: String) {
         val takes = ArrayList<PlacedTake>()
         for (file in shared.files(projectId).sortedBy { it.trackId }) {
             val expectedRate = takes.firstOrNull()?.info?.sampleRateHz
-            takes += storeTake(projectId, file, expectedRate, stored)
+            takes += PlacedTake(file, probe(file.downloadUrl, expectedRate))
         }
         val created = projects.ensureProject(projectId, title)
         val rate = takes.firstOrNull()?.info?.sampleRateHz ?: created.sampleRate
@@ -60,30 +58,22 @@ internal class SharedProjectPlace(
         val existing = projects.observeTracks(projectId).first()
         val known = existing.map { it.id }.toSet()
         val missing = shared.files(projectId).filter { it.trackId !in known }.sortedBy { it.trackId }
-        val stored = ArrayList<File>()
         try {
-            keepNewTakes(project, existing.size, missing, stored)
+            keepNewTakes(project, existing.size, missing)
         } catch (cancel: CancellationException) {
-            stored.forEach { file -> file.delete() }
             throw cancel
         } catch (error: Exception) {
-            stored.forEach { file -> file.delete() }
             throw SharedPlaceException(error)
         }
     }
 
-    private suspend fun keepNewTakes(
-        project: ProjectEntity,
-        position: Int,
-        missing: List<SharedTake>,
-        stored: MutableList<File>,
-    ) {
+    private suspend fun keepNewTakes(project: ProjectEntity, position: Int, missing: List<SharedTake>) {
         if (project.remoteUrl.isNullOrBlank()) {
             projects.upsertProject(project.copy(remoteUrl = project.id))
         }
         val takes = ArrayList<PlacedTake>()
         for (file in missing) {
-            takes += storeTake(project.id, file, project.sampleRate, stored)
+            takes += PlacedTake(file, probe(file.downloadUrl, project.sampleRate))
         }
         if (takes.isNotEmpty()) {
             projects.upsertTracks(
@@ -92,21 +82,9 @@ internal class SharedProjectPlace(
         }
     }
 
-    private fun storeTake(
-        projectId: String,
-        file: SharedTake,
-        sampleRateHz: Int?,
-        stored: MutableList<File>,
-    ): PlacedTake {
-        val path = paths.trackOutputPath(projectId, file.trackId) ?: error("shared project has no storage")
-        val destination = File(path)
-        stored += destination
-        objects.download(file.downloadUrl, destination)
-        return PlacedTake(file, path, wavInfo(destination, sampleRateHz))
-    }
-
-    private fun wavInfo(destination: File, sampleRateHz: Int?): WavPcmFileInfo {
-        val info = readWavPcmFileInfo(destination.absolutePath) ?: error("shared take is not pcm")
+    private fun probe(url: String, sampleRateHz: Int?): WavPcmFileInfo {
+        val info = headers.open(url, 0L, MixPieces.HeaderEnd).use { WavStreamHeader.read(it) }
+            ?: error("shared take is not pcm")
         val supported = info.isSupportedProjectPcm && isSupportedProjectSampleRate(info.sampleRateHz)
         val sameRate = sampleRateHz == null || sampleRateHz == info.sampleRateHz
         if (!supported || !sameRate) error("shared take is not pcm")
@@ -121,7 +99,6 @@ internal class SharedProjectPlace(
             name = "Take ${index + 1}",
             channelMode = if (channels == 1) ChannelMode.MONO else ChannelMode.STEREO,
             channelCount = channels,
-            wavFilePath = take.path,
             duration = take.info.durationMs,
             position = index,
             contentHash = take.file.contentHash,
@@ -129,8 +106,7 @@ internal class SharedProjectPlace(
         )
     }
 
-    private suspend fun discard(projectId: String, stored: List<File>) {
-        stored.forEach { file -> file.delete() }
+    private suspend fun discard(projectId: String) {
         if (projects.projectExists(projectId)) projects.deleteProject(projectId)
     }
 }
@@ -139,6 +115,5 @@ internal class SharedPlaceException(cause: Throwable) : Exception(cause)
 
 private data class PlacedTake(
     val file: SharedTake,
-    val path: String,
     val info: WavPcmFileInfo,
 )

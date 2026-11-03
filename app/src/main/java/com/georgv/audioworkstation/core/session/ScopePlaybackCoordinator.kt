@@ -5,11 +5,15 @@ import com.georgv.audioworkstation.core.audio.AudibleMs
 import com.georgv.audioworkstation.core.audio.MixTransportMs
 import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.core.audio.capability.SessionTransportCapabilityGate
+import com.georgv.audioworkstation.core.audio.sessionPlaybackSchedulingEndMsForPlayback
 import com.georgv.audioworkstation.core.audio.toLiveEnginePlaybackSpec
 import com.georgv.audioworkstation.core.coroutines.AppDispatchers
 import com.georgv.audioworkstation.core.coroutines.withAudioIo
 import com.georgv.audioworkstation.core.track.activeMixScopeOverdubPlaybackTracks
 import com.georgv.audioworkstation.core.track.activeMixScopePlayableTracks
+import com.georgv.audioworkstation.core.track.streamsSharedTake
+import com.georgv.audioworkstation.core.util.logWarning
+import kotlinx.coroutines.CancellationException
 import com.georgv.audioworkstation.core.track.playbackMustStopAtScopeEnd
 import com.georgv.audioworkstation.core.track.playheadMsAfterScopeStop
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
@@ -132,20 +136,27 @@ internal class ScopePlaybackCoordinator(
             return false
         }
         PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
-        val playbackSpec =
-            currentProject.toLiveEnginePlaybackSpec(
-                tracks = scopePlayableTracks,
-                startPositionMs = mixTransportMs,
-            ) ?: return false
-        if (
+        val localTracks = scopePlayableTracks.filter { it.wavFilePath.isNotBlank() }
+        val streamedTracks = scopePlayableTracks.filter { it.streamsSharedTake() }
+        val playbackSpec = if (localTracks.isEmpty()) {
+            null
+        } else {
+            currentProject.toLiveEnginePlaybackSpec(tracks = localTracks, startPositionMs = mixTransportMs)
+                ?.copy(
+                    sessionTimelineEndMs = sessionPlaybackSchedulingEndMsForPlayback(scopePlayableTracks),
+                )
+        }
+        if (localTracks.isNotEmpty() && playbackSpec == null) return false
+        if (playbackSpec != null &&
             !playbackSession.restartEngineFromPlayhead(
                 spec = playbackSpec,
-                trackIdsInLaneOrder = scopePlayableTracks.map { it.id },
+                trackIdsInLaneOrder = localTracks.map { it.id },
                 selectedTrackIds = selectedTrackIds,
             )
         ) {
             return false
         }
+        if (!armStreams(currentProject.id, localTracks, streamedTracks, clampedAudible.value)) return false
         playheadPositionMs.value = clampedAudible.value
         if (playheadTransport.phase.value == TransportPlaybackPhase.Playing) {
             playheadTransport.onPlaybackStarted(fromPositionMs = clampedAudible.value)
@@ -197,6 +208,7 @@ internal class ScopePlaybackCoordinator(
         withAudioIo(dispatchers, "PlaybackPort.stopPlayback scopeChange") {
             playbackSession.stopEngineIfMarkedPlaying()
         }
+        ProjectTrackStreams.player.release()
         playbackSession.clearPlayingTransportState()
         playheadPositionMs.value =
             PlaybackTransportSync.audiblePlayheadMs(meter, clampMixTransportMs).value
@@ -212,8 +224,43 @@ internal class ScopePlaybackCoordinator(
         }
     }
 
-    private fun readMixTransportMs(): MixTransportMs =
-        PlaybackTransportSync.mixTransportMsFromRaw(
-            meter.transportPositionMs().coerceAtLeast(0L),
-        )
+    private suspend fun armStreams(
+        projectId: String,
+        localTracks: List<TrackEntity>,
+        streamedTracks: List<TrackEntity>,
+        positionMs: Long,
+    ): Boolean {
+        val player = ProjectTrackStreams.player
+        try {
+            if (streamedTracks.isEmpty()) {
+                player.release()
+            } else if (player.sameTracks(streamedTracks)) {
+                player.seekTo(positionMs)
+                player.useStreamClock(localTracks.isEmpty())
+            } else {
+                player.play(projectId, streamedTracks, positionMs, localTracks.isEmpty())
+            }
+        } catch (cancel: CancellationException) {
+            player.release()
+            throw cancel
+        } catch (error: Exception) {
+            player.release()
+            logWarning(Tag, "shared track seek failed", error)
+            return false
+        }
+        return true
+    }
+
+    private fun readMixTransportMs(): MixTransportMs {
+        val raw = if (ProjectTrackStreams.player.ownsClock()) {
+            ProjectTrackStreams.player.positionMs()
+        } else {
+            meter.transportPositionMs()
+        }
+        return PlaybackTransportSync.mixTransportMsFromRaw(raw.coerceAtLeast(0L))
+    }
+
+    private companion object {
+        const val Tag = "ScopePlayback"
+    }
 }

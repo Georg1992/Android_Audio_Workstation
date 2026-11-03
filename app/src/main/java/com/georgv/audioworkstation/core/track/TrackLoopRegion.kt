@@ -19,7 +19,8 @@ fun TrackEntity.hasTimelineClip(): Boolean {
     val durationMs = duration?.takeIf { it > 0L } ?: return false
     return when (importStatus) {
         TrackImportStatus.READY ->
-            wavFilePath.isNotBlank() && !(isRecording && !hasPersistedPlayableAudio())
+            (wavFilePath.isNotBlank() || streamsSharedTake()) &&
+                !(isRecording && !hasPersistedPlayableAudio())
         TrackImportStatus.IMPORTING,
         TrackImportStatus.FAILED,
         -> true

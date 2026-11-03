@@ -94,6 +94,7 @@ class ProjectTransportController(
         }
 
         playbackSession.stopEngineIfMarkedPlaying()
+        ProjectTrackStreams.player.release()
 
         recordingSession.clearRecordingTransportMarkers()
         playbackSession.clearPlayingTransportState()
@@ -103,17 +104,20 @@ class ProjectTransportController(
     /** Playback markers only — used when navigating to another project ([ProjectViewModel.bind]). */
     fun resetPlaybackForProjectChange() {
         playbackSession.resetWhenProjectChanges()
+        ProjectTrackStreams.player.release()
     }
 
     /** Stops native playback and clears playing markers without touching recording. */
     suspend fun pausePlayback() {
         playbackSession.cancelCompletionMonitorForTransportStop()
         playbackSession.stopEngineIfMarkedPlaying()
+        ProjectTrackStreams.player.release()
         playbackSession.clearPlayingTransportState()
     }
 
     /** Transport Seek.1: pause audio only; session lane maps and selection stay armed. */
     suspend fun pauseEnginePreservingSession() {
         playbackSession.pauseEnginePreservingSession()
+        ProjectTrackStreams.player.stop()
     }
 }

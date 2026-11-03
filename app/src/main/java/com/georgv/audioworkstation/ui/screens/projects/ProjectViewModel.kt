@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.track.activeMixScopeTrackIds
 import com.georgv.audioworkstation.core.track.clampLoopRegionMs
 import com.georgv.audioworkstation.core.track.hasPersistedPlayableAudio
+import com.georgv.audioworkstation.core.track.streamsSharedTake
 import com.georgv.audioworkstation.core.track.reconcileInScopeLoopRegions
 import com.georgv.audioworkstation.core.track.sourceDurationMs
 import com.georgv.audioworkstation.core.session.MasterPeakController
@@ -115,7 +116,7 @@ data class ProjectUiState(
     val isPlayEnabled: Boolean
         get() =
             selectedTrackIds.any { id ->
-                tracks.any { it.id == id && it.hasPersistedPlayableAudio() }
+                tracks.any { it.id == id && (it.hasPersistedPlayableAudio() || it.streamsSharedTake()) }
             }
 
     val isStopEnabled: Boolean

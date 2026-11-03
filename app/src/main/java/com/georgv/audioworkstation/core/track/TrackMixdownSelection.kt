@@ -9,6 +9,7 @@ fun selectedPlayableTracks(
 ): List<TrackEntity> {
     if (selectedTrackIds.isEmpty()) return emptyList()
     return tracks.filter { track ->
-        track.id in selectedTrackIds && track.hasPersistedPlayableAudio()
+        track.id in selectedTrackIds &&
+            (track.hasPersistedPlayableAudio() || track.streamsSharedTake())
     }
 }
