@@ -392,11 +392,18 @@ class LibraryViewModelTest {
     fun `library marks this account shared when the community row exists`() = runTest {
         val dao = FakeLibraryProjectDao(
             projects = listOf(
-                project("project-a", "Showcase", 2L),
-                project("project-b", "Other", 1L),
+                project("project-a", "Showcase", 3L),
+                project("project-b", "Other", 2L),
+                project("project-c", "Gone", 1L).copy(syncStatus = SyncStatus.SYNCED, ownerUserId = "account-1"),
             ),
         )
         val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
+        val warmDeadline = System.nanoTime() + 5_000_000_000L
+        var cached = repo.observeProjects().first()
+        while (cached.size < 3 && System.nanoTime() < warmDeadline) {
+            Thread.sleep(20)
+            cached = repo.observeProjects().first()
+        }
         val session = AccountSession("access-token", "account-1", "owner@example.com", "Owner", "refresh-token")
         LibraryShareViewModel(
             SignedInAccountSessionStore(session),
@@ -415,11 +422,18 @@ class LibraryViewModelTest {
             Thread.sleep(20)
             mine = dao.observeProject("project-a").first()
         }
+        var gone = dao.observeProject("project-c").first()
+        while (gone?.syncStatus != SyncStatus.LOCAL && System.nanoTime() < deadline) {
+            Thread.sleep(20)
+            gone = dao.observeProject("project-c").first()
+        }
         val other = dao.observeProject("project-b").first()
         assertEquals(SyncStatus.SYNCED, mine?.syncStatus)
         assertEquals("account-1", mine?.ownerUserId)
         assertEquals(SyncStatus.LOCAL, other?.syncStatus)
         assertEquals(null, other?.ownerUserId)
+        assertEquals(SyncStatus.LOCAL, gone?.syncStatus)
+        assertEquals(null, gone?.ownerUserId)
     }
 
     @Test

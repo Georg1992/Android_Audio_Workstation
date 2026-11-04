@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.online.share
 
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
+import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -10,6 +11,7 @@ import com.georgv.audioworkstation.online.CognitoAccounts
 import com.georgv.audioworkstation.online.network.HttpCall
 import com.georgv.audioworkstation.online.network.HttpTransport
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -49,11 +51,20 @@ class HttpProjectShare(
             shareFiles(session, project, files)
         }.exceptionOrNull()
         if (failure == null) return
-        val listed = session.name.isNotEmpty() &&
-            sharedProjects(api.exchangeAuthorized(session, "GET", "/shared-projects", null)).any { row ->
+        var listed = false
+        var listUnread = false
+        try {
+            val rows = sharedProjects(api.exchangeAuthorized(session, "GET", "/shared-projects", null))
+            listed = session.name.isNotEmpty() && rows.any { row ->
                 row.id == project.id && row.ownerName == session.name
             }
-        if (listed) {
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            logWarning(TAG, "community list was not read after share", error)
+            listUnread = true
+        }
+        if (listed || listUnread && published) {
             projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId))
             return
         }
@@ -264,6 +275,7 @@ class HttpProjectShare(
     }
 
     private companion object {
+        const val TAG = "HttpProjectShare"
         const val NotOwner = 403
         const val NotFound = 404
         val HttpOk = 200..299

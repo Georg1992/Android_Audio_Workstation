@@ -227,6 +227,59 @@ class ShareSelectionTest {
     }
 
     @Test
+    fun shareFailureKeepsBothSidesSharedWhenTheCommunityListCannotBeRead() = runBlocking {
+        val mix = File.createTempFile("share-list-down", ".wav")
+        mix.writeText("mix")
+        val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
+        val api = ScriptedApi(listOf("""{"storageKey":"mix","alreadyStored":true}""", """{"id":"project-a"}"""), 2, 3)
+        val share = HttpProjectShare(
+            sessions = FixedSession(session),
+            accounts = IdleAccounts(),
+            projects = ProjectRepository(dao, NoopFiles),
+            api = api,
+            objects = RecordingObjects(),
+            paths = FixedPaths(mix.absolutePath),
+        )
+        try {
+            share.share("project-a")
+            assertEquals(listOf("POST", "POST", "POST", "GET"), api.methods)
+            assertEquals(SyncStatus.SYNCED, dao.projects.value.single().syncStatus)
+            assertEquals("account-1", dao.projects.value.single().ownerUserId)
+        } finally {
+            mix.delete()
+        }
+    }
+
+    @Test
+    fun shareFailureBeforeACommunityRowStaysUnsharedWhenTheListCannotBeRead() = runBlocking {
+        val mix = File.createTempFile("share-list-early", ".wav")
+        mix.writeText("mix")
+        val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
+        val api = ScriptedApi(emptyList(), failAt = 0, alsoFailAt = 1)
+        val share = HttpProjectShare(
+            sessions = FixedSession(session),
+            accounts = IdleAccounts(),
+            projects = ProjectRepository(dao, NoopFiles),
+            api = api,
+            objects = RecordingObjects(),
+            paths = FixedPaths(mix.absolutePath),
+        )
+        try {
+            var failed = false
+            try {
+                share.share("project-a")
+            } catch (error: IllegalStateException) {
+                failed = error.message == "share api status 404"
+            }
+            assertTrue(failed)
+            assertEquals(SyncStatus.LOCAL, dao.projects.value.single().syncStatus)
+            assertNull(dao.projects.value.single().ownerUserId)
+        } finally {
+            mix.delete()
+        }
+    }
+
+    @Test
     fun unpublishLeavesAShareThisAccountDoesNotOwn() = runBlocking {
         val share = httpShare(StatusApi(403))
         assertFalse(share.unpublish("other"))
@@ -501,6 +554,7 @@ class ShareSelectionTest {
     private class ScriptedApi(
         private val bodies: List<String>,
         private val failAt: Int = -1,
+        private val alsoFailAt: Int = -1,
     ) : HttpTransport {
         private var index = 0
         val tokens = ArrayList<String?>()
@@ -513,7 +567,7 @@ class ShareSelectionTest {
             paths += call.path
             val cursor = index
             index += 1
-            if (cursor == failAt) return HttpResult(404, """{"error":"not found"}""")
+            if (cursor == failAt || cursor == alsoFailAt) return HttpResult(404, """{"error":"not found"}""")
             return HttpResult(200, bodies[cursor])
         }
     }

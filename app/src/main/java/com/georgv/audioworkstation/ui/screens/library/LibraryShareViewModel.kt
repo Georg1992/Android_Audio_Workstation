@@ -8,10 +8,13 @@ import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.AccountSession
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.ProjectShare
+import com.georgv.audioworkstation.online.share.SharedProject
 import com.georgv.audioworkstation.online.share.SharedProjects
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -33,12 +36,6 @@ class LibraryShareViewModel @Inject constructor(
     private val sharedProjects: SharedProjects,
     private val projects: ProjectRepository,
 ) : ViewModel() {
-    init {
-        viewModelScope.launch(Dispatchers.IO) {
-            showExistingShares()
-        }
-    }
-
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     val userMessages = messages.receiveAsFlow()
 
@@ -50,6 +47,13 @@ class LibraryShareViewModel @Inject constructor(
 
     private val sharingIds = MutableStateFlow<Set<String>>(emptySet())
     val sharingProjectIds: StateFlow<Set<String>> = sharingIds
+    private val agreementGeneration = AtomicInteger(0)
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            showExistingShares()
+        }
+    }
 
     fun shareProject(projectId: String) {
         runWhileSharing(projectId, R.string.library_share_done, R.string.error_share_project_failed) {
@@ -67,20 +71,43 @@ class LibraryShareViewModel @Inject constructor(
         try {
             val session = sessions.current() ?: return
             if (session.name.isEmpty()) return
-            for (row in sharedProjects.list()) {
-                if (row.ownerName != session.name) continue
-                val project = projects.observeProject(row.id).first() ?: continue
-                val alreadyShared = project.syncStatus == SyncStatus.SYNCED &&
-                    project.ownerUserId == session.accountId
-                if (alreadyShared) continue
-                projects.upsertProject(
-                    project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
-                )
-            }
+            val generation = agreementGeneration.get()
+            val listed = sharedProjects.list()
+            if (generation != agreementGeneration.get()) return
+            markListedShares(session, listed, generation)
+            clearMissingShares(listed, generation)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
             logWarning(TAG, "community share status was not applied", error)
+        }
+    }
+
+    private suspend fun markListedShares(
+        session: AccountSession,
+        listed: List<SharedProject>,
+        generation: Int,
+    ) {
+        for (row in listed) {
+            if (row.ownerName != session.name || row.id in sharingIds.value) continue
+            val project = projects.observeProject(row.id).first() ?: continue
+            val alreadyShared = project.syncStatus == SyncStatus.SYNCED &&
+                project.ownerUserId == session.accountId
+            if (alreadyShared || generation != agreementGeneration.get()) continue
+            projects.upsertProject(
+                project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
+            )
+        }
+    }
+
+    private suspend fun clearMissingShares(listed: List<SharedProject>, generation: Int) {
+        if (!projects.projectsReady.value) projects.projectsReady.first { ready -> ready }
+        val present = listed.map { row -> row.id }.toSet()
+        for (project in projects.observeProjects().first()) {
+            if (project.id in present || project.id in sharingIds.value) continue
+            val shared = project.syncStatus == SyncStatus.SYNCED || project.syncStatus == SyncStatus.SYNCING
+            if (!shared || generation != agreementGeneration.get()) continue
+            projects.upsertProject(project.copy(syncStatus = SyncStatus.LOCAL, ownerUserId = null))
         }
     }
 
@@ -100,6 +127,7 @@ class LibraryShareViewModel @Inject constructor(
             }
         }
         if (!started) return
+        agreementGeneration.incrementAndGet()
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 work()
