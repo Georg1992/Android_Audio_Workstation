@@ -6,8 +6,11 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
+import com.georgv.audioworkstation.data.db.entities.SyncStatus
+import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.ProjectShare
+import com.georgv.audioworkstation.online.share.SharedProjects
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -16,6 +19,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -24,9 +28,17 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class LibraryShareViewModel @Inject constructor(
-    sessions: AccountSessionStore,
+    private val sessions: AccountSessionStore,
     private val projectShare: ProjectShare,
+    private val sharedProjects: SharedProjects,
+    private val projects: ProjectRepository,
 ) : ViewModel() {
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            showExistingShares()
+        }
+    }
+
     private val messages = Channel<UiMessage>(capacity = Channel.BUFFERED)
     val userMessages = messages.receiveAsFlow()
 
@@ -48,6 +60,27 @@ class LibraryShareViewModel @Inject constructor(
     fun unshareProject(projectId: String) {
         runWhileSharing(projectId, R.string.library_unshare_done, R.string.error_unshare_project_failed) {
             projectShare.unshare(projectId)
+        }
+    }
+
+    private suspend fun showExistingShares() {
+        try {
+            val session = sessions.current() ?: return
+            if (session.name.isEmpty()) return
+            for (row in sharedProjects.list()) {
+                if (row.ownerName != session.name) continue
+                val project = projects.observeProject(row.id).first() ?: continue
+                val alreadyShared = project.syncStatus == SyncStatus.SYNCED &&
+                    project.ownerUserId == session.accountId
+                if (alreadyShared) continue
+                projects.upsertProject(
+                    project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
+                )
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            logWarning(TAG, "community share status was not applied", error)
         }
     }
 

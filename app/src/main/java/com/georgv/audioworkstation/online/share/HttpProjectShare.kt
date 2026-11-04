@@ -49,6 +49,14 @@ class HttpProjectShare(
             shareFiles(session, project, files)
         }.exceptionOrNull()
         if (failure == null) return
+        val listed = session.name.isNotEmpty() &&
+            sharedProjects(api.exchangeAuthorized(session, "GET", "/shared-projects", null)).any { row ->
+                row.id == project.id && row.ownerName == session.name
+            }
+        if (listed) {
+            projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId))
+            return
+        }
         if (published && unpublish(project.id)) {
             projects.upsertProject(project.copy(syncStatus = SyncStatus.LOCAL, ownerUserId = null))
         }

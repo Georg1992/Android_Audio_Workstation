@@ -24,6 +24,10 @@ import com.georgv.audioworkstation.online.AccountSessionStore
 import com.georgv.audioworkstation.online.share.CardImageStore
 import com.georgv.audioworkstation.online.share.ProjectShare
 import com.georgv.audioworkstation.online.share.SharedCardUpdate
+import com.georgv.audioworkstation.online.share.SharedPlayback
+import com.georgv.audioworkstation.online.share.SharedProject
+import com.georgv.audioworkstation.online.share.SharedProjects
+import com.georgv.audioworkstation.online.share.SharedTake
 import javax.inject.Provider
 import com.georgv.audioworkstation.core.audio.FakeAudioController
 import android.net.Uri
@@ -385,6 +389,40 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `library marks this account shared when the community row exists`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project("project-a", "Showcase", 2L),
+                project("project-b", "Other", 1L),
+            ),
+        )
+        val repo = ProjectRepository(dao, NoopLibraryProjectFileStore)
+        val session = AccountSession("access-token", "account-1", "owner@example.com", "Owner", "refresh-token")
+        LibraryShareViewModel(
+            SignedInAccountSessionStore(session),
+            IdleProjectShare(),
+            ListedProjects(
+                listOf(
+                    SharedProject("project-a", "Showcase", emptyList(), null, "Owner"),
+                    SharedProject("project-b", "Other", emptyList(), null, "Someone"),
+                ),
+            ),
+            repo,
+        )
+        val deadline = System.nanoTime() + 5_000_000_000L
+        var mine = dao.observeProject("project-a").first()
+        while (mine?.syncStatus != SyncStatus.SYNCED && System.nanoTime() < deadline) {
+            Thread.sleep(20)
+            mine = dao.observeProject("project-a").first()
+        }
+        val other = dao.observeProject("project-b").first()
+        assertEquals(SyncStatus.SYNCED, mine?.syncStatus)
+        assertEquals("account-1", mine?.ownerUserId)
+        assertEquals(SyncStatus.LOCAL, other?.syncStatus)
+        assertEquals(null, other?.ownerUserId)
+    }
+
+    @Test
     fun `share reports a connection problem when the host cannot be reached`() = runTest {
         val vm = shareVm(ThrowingProjectShare(UnknownHostException("Unable to resolve host")))
         assertEquals(R.string.error_no_connection, awaitMessage(vm.userMessages) { vm.shareProject("project-a") })
@@ -475,7 +513,12 @@ class LibraryViewModelTest {
     }
 
     private fun shareVm(share: ProjectShare): LibraryShareViewModel =
-        LibraryShareViewModel(IdleAccountSessionStore(), share)
+        LibraryShareViewModel(
+            IdleAccountSessionStore(),
+            share,
+            ListedProjects(emptyList()),
+            ProjectRepository(FakeLibraryProjectDao(), NoopLibraryProjectFileStore),
+        )
 
     private fun syncedCardDao(): FakeLibraryProjectDao = FakeLibraryProjectDao(
         projects = listOf(
@@ -614,6 +657,26 @@ private class FakeLibraryProjectDao(
 
 private object IdleCardImages : CardImageStore {
     override fun copy(uri: Uri): File = error("unused")
+}
+
+private class ListedProjects(private val projects: List<SharedProject>) : SharedProjects {
+    override suspend fun list(): List<SharedProject> = projects
+
+    override suspend fun imageUrl(id: String): String = error("unused")
+
+    override suspend fun playback(id: String): List<SharedPlayback> = error("unused")
+
+    override suspend fun files(id: String): List<SharedTake> = error("unused")
+}
+
+private class SignedInAccountSessionStore(private val session: AccountSession) : AccountSessionStore {
+    override val state: Flow<AccountSession?> = flowOf(session)
+
+    override suspend fun current(): AccountSession? = session
+
+    override suspend fun save(session: AccountSession) = Unit
+
+    override suspend fun clear() = Unit
 }
 
 private class IdleAccountSessionStore : AccountSessionStore {
