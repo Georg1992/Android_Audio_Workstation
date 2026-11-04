@@ -125,13 +125,25 @@ class CommunityHomeViewModel @Inject constructor(
         }
         preparing.value = true
         try {
-            ownedShares.publishOwnerNames()
-            ownedShares.publishMixes()
+            val publishError = publishCards()
             val listed = sharedProjects.list()
             val removed = ownedShares.unpublishAbsent(listed)
             projects.value = listed.filter { project -> project.id !in removed }
+            if (publishError != null) throw publishError
         } finally {
             preparing.value = false
+        }
+    }
+
+    private suspend fun publishCards(): Exception? {
+        try {
+            ownedShares.publishOwnerNames()
+            ownedShares.publishMixes()
+            return null
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            return error
         }
     }
 

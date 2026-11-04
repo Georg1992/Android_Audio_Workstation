@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.online.share
 
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
+import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.AccountSession
@@ -27,15 +28,33 @@ class HttpProjectShare(
         val session = openSession("Sign in to share a project")
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
         val files = tracksToShare(projects.observeTracks(projectId).first())
-        post(
-            session,
-            "/shared-projects",
-            JSONObject()
-                .put("id", project.id)
-                .put("title", project.name.orEmpty())
-                .put("ownerName", session.name)
-                .toString(),
-        )
+        var published = false
+        val failure = runCatching {
+            post(
+                session,
+                "/shared-projects",
+                JSONObject()
+                    .put("id", project.id)
+                    .put("title", project.name.orEmpty())
+                    .put("ownerName", session.name)
+                    .toString(),
+            )
+            published = true
+            projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCING, ownerUserId = session.accountId))
+            shareFiles(session, project, files)
+        }.exceptionOrNull()
+        if (failure == null) return
+        if (published && unpublish(project.id)) {
+            projects.upsertProject(project.copy(syncStatus = SyncStatus.LOCAL, ownerUserId = null))
+        }
+        throw failure
+    }
+
+    private suspend fun shareFiles(
+        session: AccountSession,
+        project: ProjectEntity,
+        files: List<SharedTrackFile>,
+    ) {
         val hashes = LinkedHashMap<String, String>()
         for (file in files) {
             val hash = sha256Hex(file.file)
@@ -65,7 +84,7 @@ class HttpProjectShare(
             )
             hashes[file.trackId] = hash
         }
-        val tracks = projects.observeTracks(projectId).first()
+        val tracks = projects.observeTracks(project.id).first()
         projects.updateTracks(
             tracks.map { track ->
                 val hash = hashes[track.id] ?: return@map track
@@ -82,7 +101,18 @@ class HttpProjectShare(
     override suspend fun unshare(projectId: String) {
         val session = openSession("Sign in to stop sharing a project")
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
-        delete(session, "/shared-projects/${project.id}")
+        val result = api.exchange(
+            HttpCall(
+                method = "DELETE",
+                path = "/shared-projects/${project.id}",
+                token = session.token,
+                contentType = null,
+                contentLength = 0L,
+                writeBody = null,
+            ),
+        )
+        val removed = result.status in HttpOk || result.status == NotFound
+        if (!removed) error("share api status ${result.status}")
         projects.upsertProject(project.copy(syncStatus = SyncStatus.LOCAL, ownerUserId = null))
     }
 
@@ -121,6 +151,7 @@ class HttpProjectShare(
         )
         when (result.status) {
             NotOwner -> false
+            NotFound -> true
             in HttpOk -> true
             else -> error("share api status ${result.status}")
         }
@@ -148,10 +179,6 @@ class HttpProjectShare(
 
     private fun post(session: AccountSession, path: String, json: String): JSONObject =
         JSONObject(api.exchangeAuthorized(session, "POST", path, json))
-
-    private fun delete(session: AccountSession, path: String) {
-        api.exchangeAuthorized(session, "DELETE", path)
-    }
 
     private fun publishCard(
         session: AccountSession,
@@ -214,6 +241,7 @@ class HttpProjectShare(
 
     private companion object {
         const val NotOwner = 403
+        const val NotFound = 404
         val HttpOk = 200..299
     }
 }

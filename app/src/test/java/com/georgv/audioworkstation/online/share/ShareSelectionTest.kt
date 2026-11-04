@@ -40,6 +40,47 @@ class ShareSelectionTest {
     }
 
     @Test
+    fun failedShareRemovesTheCommunityRowAndLeavesTheProjectLocal() = runBlocking {
+        val audio = File.createTempFile("share-fail", ".wav")
+        val mix = File.createTempFile("share-fail-mix", ".wav")
+        audio.writeText("abc")
+        mix.writeText("mix")
+        val dao = MemoryProjectDao(
+            project = ProjectEntity(id = "project-a", name = "Showcase"),
+            tracks = listOf(track("track-a", audio.path)),
+        )
+        val api = ScriptedApi(
+            listOf("""{"id":"project-a"}""", "", """{"id":"project-a"}"""),
+            failAt = 1,
+        )
+        val share = HttpProjectShare(
+            sessions = FixedSession(session),
+            accounts = IdleAccounts(),
+            projects = ProjectRepository(dao, NoopFiles),
+            api = api,
+            objects = RecordingObjects(),
+            paths = FixedPaths(mix.absolutePath),
+        )
+        try {
+            var failed = false
+            try {
+                share.share("project-a")
+            } catch (error: IllegalStateException) {
+                failed = error.message == "share api status 404"
+            }
+            assertTrue(failed)
+            assertEquals(listOf("POST", "POST", "DELETE"), api.methods)
+            assertEquals("/shared-projects/project-a", api.paths.last())
+            val project = dao.projects.value.single()
+            assertEquals(SyncStatus.LOCAL, project.syncStatus)
+            assertNull(project.ownerUserId)
+        } finally {
+            audio.delete()
+            mix.delete()
+        }
+    }
+
+    @Test
     fun unpublishLeavesAShareThisAccountDoesNotOwn() = runBlocking {
         val share = httpShare(StatusApi(403))
         assertFalse(share.unpublish("other"))
@@ -312,15 +353,23 @@ class ShareSelectionTest {
         }
     }
 
-    private class ScriptedApi(private val bodies: List<String>) : HttpTransport {
+    private class ScriptedApi(
+        private val bodies: List<String>,
+        private val failAt: Int = -1,
+    ) : HttpTransport {
         private var index = 0
         val tokens = ArrayList<String?>()
+        val methods = ArrayList<String>()
+        val paths = ArrayList<String>()
 
         override fun exchange(call: HttpCall): HttpResult {
             tokens += call.token
-            val body = bodies[index]
+            methods += call.method
+            paths += call.path
+            val cursor = index
             index += 1
-            return HttpResult(200, body)
+            if (cursor == failAt) return HttpResult(404, """{"error":"not found"}""")
+            return HttpResult(200, bodies[cursor])
         }
     }
 

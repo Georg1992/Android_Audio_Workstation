@@ -124,6 +124,36 @@ class SharedProjectsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
+    fun communityUnpublishesAnAbsentShareWhenTheCardPublishFails() = runTest {
+        val vm = CommunityHomeViewModel(
+            sessions = MemorySessions(session),
+            accounts = UnusedAccounts,
+            sharedProjects = FixedProjects(
+                listOf(
+                    SharedProject("boom", "Boom", emptyList(), null, "selftitled1"),
+                    SharedProject("other", "Song", emptyList(), null, "Ada"),
+                ),
+            ),
+            localProjects = NoLocalProjects,
+            ownedShares = object : OwnedShareRefresh {
+                override suspend fun publishOwnerNames() = Unit
+
+                override suspend fun publishMixes() {
+                    throw UnknownHostException("Unable to resolve host")
+                }
+
+                override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = setOf("boom")
+            },
+        )
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertEquals(listOf("Song"), vm.uiState.value.projects.map { it.title })
+        assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
+        collect.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
     fun communityKeepsTheConnectionMessageWhenAnAbsentShareCannotBeUnpublished() = runTest {
         val vm = CommunityHomeViewModel(
             sessions = MemorySessions(session),

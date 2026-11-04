@@ -105,7 +105,8 @@ class LibraryViewModel @Inject constructor(
             var removingShare = false
             try {
                 val shared = withContext(Dispatchers.IO) {
-                    repo.observeProject(projectId).first()?.syncStatus == SyncStatus.SYNCED
+                    val status = repo.observeProject(projectId).first()?.syncStatus
+                    status == SyncStatus.SYNCED || status == SyncStatus.SYNCING
                 }
                 if (shared) {
                     removingShare = true

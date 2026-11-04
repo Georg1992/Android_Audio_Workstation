@@ -189,6 +189,32 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `delete of a project that is still being shared unshares it first`() = runTest {
+        val dao = FakeLibraryProjectDao(
+            projects = listOf(
+                project(id = "project-a", name = "Showcase", createdAt = 1L).copy(syncStatus = SyncStatus.SYNCING),
+            ),
+        )
+        val share = RecordingProjectShare { dao.observeProject("project-a").first() }
+        val vm = LibraryViewModel(
+            ProjectRepository(dao, NoopLibraryProjectFileStore),
+            mixdownCoordinator(),
+            libraryPreviewPlayer(),
+            share,
+        )
+        val collectJob = backgroundScope.launch { vm.uiState.collect { } }
+
+        advanceUntilIdle()
+        vm.deleteProject("project-a")
+        vm.uiState.dropWhile { it.content.projects.isNotEmpty() }.first()
+
+        assertEquals(listOf("project-a"), share.unshared)
+        assertEquals(SyncStatus.SYNCING, share.seenWhileUnsharing.single()?.syncStatus)
+        assertTrue(dao.observeProjects().first().isEmpty())
+        collectJob.cancel()
+    }
+
+    @Test
     fun `delete of a local project does not unshare it`() = runTest {
         val dao = FakeLibraryProjectDao(
             projects = listOf(project(id = "project-a", name = "Alpha", createdAt = 1L)),
