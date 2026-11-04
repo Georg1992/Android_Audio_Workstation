@@ -27,9 +27,12 @@ class HttpProjectShare(
     override suspend fun share(projectId: String) {
         val session = openSession("Sign in to share a project")
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
-        val files = tracksToShare(projects.observeTracks(projectId).first())
+        val mix = mixFile(project.id)
+        val files = tracksToShare(projects.observeTracks(project.id).first())
+        val hash = sha256Hex(mix)
         var published = false
         val failure = runCatching {
+            storeObject(session, hash, mix)
             post(
                 session,
                 "/shared-projects",
@@ -37,6 +40,8 @@ class HttpProjectShare(
                     .put("id", project.id)
                     .put("title", project.name.orEmpty())
                     .put("ownerName", session.name)
+                    .put("contentHash", hash)
+                    .put("size", mix.length())
                     .toString(),
             )
             published = true
@@ -92,7 +97,6 @@ class HttpProjectShare(
             },
         )
         publishCard(session, project.id, project.name.orEmpty(), project.cardTags, project.cardImagePath)
-        uploadHashed(session, project.id, "mix", mixFile(project.id))
         projects.upsertProject(
             project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
         )
@@ -205,6 +209,18 @@ class HttpProjectShare(
         val file = File(path)
         if (!file.isFile) error("shared project has no mix")
         return file
+    }
+
+    private fun storeObject(session: AccountSession, hash: String, file: File) {
+        val upload = post(
+            session,
+            "/shared-objects",
+            JSONObject().put("contentHash", hash).put("size", file.length()).toString(),
+        )
+        if (upload.getBoolean("alreadyStored")) return
+        val url = upload.getString("uploadUrl")
+        if (url.isBlank()) error("share api did not return an upload url")
+        objects.put(url, headers(upload), file)
     }
 
     private fun uploadHashed(session: AccountSession, projectId: String, kind: String, file: File) {

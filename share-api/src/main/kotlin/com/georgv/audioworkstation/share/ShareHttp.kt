@@ -24,6 +24,10 @@ internal class ShareHttp(
                     accountId(exchange)
                     listProjects(exchange)
                 }
+                method == "POST" && path == "/shared-objects" -> {
+                    accountId(exchange)
+                    stageObject(exchange)
+                }
                 method == "POST" && path == "/shared-projects" -> createProject(exchange, accountId(exchange))
                 path.startsWith("/shared-projects/") -> routeProject(exchange, method, path)
                 else -> throw ShareFailure(404, "not found")
@@ -164,12 +168,30 @@ internal class ShareHttp(
         send(exchange, 200, """{"id":"$projectId"}""")
     }
 
+    private fun stageObject(exchange: HttpExchange) {
+        val body = json(exchange)
+        val hash = storageKey(body.optString("contentHash"))
+        val bytes = size(body.optLong("size", -1))
+        val stat = objects.stat(hash)
+        if (stat.exists && stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        if (stat.exists) {
+            send(exchange, 200, """{"storageKey":"$hash","alreadyStored":true}""")
+            return
+        }
+        sendUpload(exchange, hash, bytes)
+    }
+
     private fun createProject(exchange: HttpExchange, accountId: String) {
         val body = json(exchange)
         val projectId = id(body.optString("id"), "project id")
         val cardTitle = title(body.optString("title"))
         val name = ownerName(body.optString("ownerName"))
-        manifest.saveProject(projectId, accountId, cardTitle, name)
+        val hash = storageKey(body.optString("contentHash"))
+        val bytes = size(body.optLong("size", -1))
+        val stat = objects.stat(hash)
+        if (!stat.exists) throw ShareFailure(409, "object missing")
+        if (stat.size != bytes) throw ShareFailure(409, "size mismatch")
+        manifest.saveProject(projectId, accountId, cardTitle, name, hash)
         send(exchange, 200, """{"id":"$projectId"}""")
     }
 

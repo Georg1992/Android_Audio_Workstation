@@ -50,8 +50,13 @@ class ShareSelectionTest {
             tracks = listOf(track("track-a", audio.path)),
         )
         val api = ScriptedApi(
-            listOf("""{"id":"project-a"}""", "", """{"id":"project-a"}"""),
-            failAt = 1,
+            listOf(
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"id":"project-a"}""",
+                "",
+                """{"id":"project-a"}""",
+            ),
+            failAt = 2,
         )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
@@ -69,13 +74,57 @@ class ShareSelectionTest {
                 failed = error.message == "share api status 404"
             }
             assertTrue(failed)
-            assertEquals(listOf("POST", "POST", "DELETE"), api.methods)
+            assertEquals("/shared-objects", api.paths.first())
+            assertEquals("/shared-projects", api.paths[1])
+            assertEquals(listOf("POST", "POST", "POST", "DELETE"), api.methods)
             assertEquals("/shared-projects/project-a", api.paths.last())
             val project = dao.projects.value.single()
             assertEquals(SyncStatus.LOCAL, project.syncStatus)
             assertNull(project.ownerUserId)
         } finally {
             audio.delete()
+            mix.delete()
+        }
+    }
+
+    @Test
+    fun shareWithoutAFinishedMixDoesNotCreateARow() = runBlocking {
+        val api = ScriptedApi(emptyList())
+        var failed = false
+        try {
+            httpShare(api).share("local")
+        } catch (error: IllegalStateException) {
+            failed = error.message == "shared project has no mix"
+        }
+        assertTrue(failed)
+        assertTrue(api.paths.isEmpty())
+    }
+
+    @Test
+    fun mixUploadFailureDoesNotCreateTheCommunityRow() = runBlocking {
+        val mix = File.createTempFile("share-mix-fail", ".wav")
+        mix.writeText("mix")
+        val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
+        val api = ScriptedApi(emptyList(), failAt = 0)
+        val share = HttpProjectShare(
+            sessions = FixedSession(session),
+            accounts = IdleAccounts(),
+            projects = ProjectRepository(dao, NoopFiles),
+            api = api,
+            objects = RecordingObjects(),
+            paths = FixedPaths(mix.absolutePath),
+        )
+        try {
+            var failed = false
+            try {
+                share.share("project-a")
+            } catch (error: IllegalStateException) {
+                failed = error.message == "share api status 404"
+            }
+            assertTrue(failed)
+            assertEquals(listOf("/shared-objects"), api.paths)
+            assertEquals(SyncStatus.LOCAL, dao.projects.value.single().syncStatus)
+        } finally {
             mix.delete()
         }
     }
@@ -160,25 +209,26 @@ class ShareSelectionTest {
             project = ProjectEntity(id = "project-a", name = "Kept"),
             tracks = listOf(track("track-a", audio.path)),
         )
+        val api = ScriptedApi(
+            listOf(
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"id":"project-a"}""",
+                """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
+                """{"storageKey":"$ABC_HASH"}""",
+                """{"id":"project-a"}""",
+            ),
+        )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
             accounts = IdleAccounts(),
             projects = ProjectRepository(dao, NoopFiles),
-            api = ScriptedApi(
-                listOf(
-                    """{"id":"project-a"}""",
-                    """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
-                    """{"storageKey":"$ABC_HASH"}""",
-                    """{"id":"project-a"}""",
-                    """{"storageKey":"mix","alreadyStored":true}""",
-                    """{"storageKey":"mix"}""",
-                ),
-            ),
+            api = api,
             objects = objects,
             paths = FixedPaths(mix.absolutePath),
         )
         try {
             share.share("project-a")
+            assertEquals(listOf("/shared-objects", "/shared-projects"), api.paths.take(2))
             assertEquals(0, objects.puts)
             assertEquals("abc", audio.readText())
             val stored = dao.tracks.value.single()
@@ -208,12 +258,11 @@ class ShareSelectionTest {
         )
         val api = ScriptedApi(
             listOf(
+                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":false,"uploadUrl":"https://example.invalid/put","headers":{"Content-Type":"application/octet-stream"}}""",
                 """{"storageKey":"$ABC_HASH"}""",
                 """{"id":"project-a"}""",
-                """{"storageKey":"mix","alreadyStored":true}""",
-                """{"storageKey":"mix"}""",
             ),
         )
         val share = HttpProjectShare(
@@ -227,7 +276,7 @@ class ShareSelectionTest {
         try {
             share.share("project-a")
             assertEquals(1, objects.puts)
-            assertEquals(List(6) { "access-token" }, api.tokens)
+            assertEquals(List(5) { "access-token" }, api.tokens)
             assertTrue(audio.isFile)
             assertEquals("abc", audio.readText())
         } finally {
@@ -245,12 +294,11 @@ class ShareSelectionTest {
         val stored = MemorySession(session.copy(token = jwtWithExp(1)))
         val api = ScriptedApi(
             listOf(
+                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
                 """{"storageKey":"$ABC_HASH"}""",
                 """{"id":"project-a"}""",
-                """{"storageKey":"mix","alreadyStored":true}""",
-                """{"storageKey":"mix"}""",
             ),
         )
         val share = HttpProjectShare(
@@ -269,7 +317,7 @@ class ShareSelectionTest {
         )
         try {
             share.share("project-a")
-            assertEquals(List(6) { "fresh-access" }, api.tokens)
+            assertEquals(List(5) { "fresh-access" }, api.tokens)
             assertEquals("fresh-access", stored.current()?.token)
         } finally {
             audio.delete()

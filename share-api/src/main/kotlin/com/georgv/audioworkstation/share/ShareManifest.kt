@@ -63,7 +63,7 @@ internal class ShareManifest(config: ShareApiConfig) {
         }
     }
 
-    fun saveProject(id: String, ownerAccount: String, title: String, ownerName: String) {
+    fun saveProject(id: String, ownerAccount: String, title: String, ownerName: String, mixHash: String) {
         connection().use { db ->
             val owner = db.prepareStatement("SELECT owner_account FROM shared_project WHERE id = ?").use { query ->
                 query.setString(1, id)
@@ -71,23 +71,28 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
             if (owner == null) {
                 db.prepareStatement(
-                    "INSERT INTO shared_project (id, owner_account, title, owner_name) VALUES (?, ?, ?, ?)",
+                    """
+                    INSERT INTO shared_project (id, owner_account, title, owner_name, mix_hash)
+                    VALUES (?, ?, ?, ?, ?)
+                    """.trimIndent(),
                 ).use { insert ->
                     insert.setString(1, id)
                     insert.setString(2, ownerAccount)
                     insert.setString(3, title)
                     insert.setString(4, ownerName)
+                    insert.setString(5, mixHash)
                     insert.executeUpdate()
                 }
                 return
             }
             if (owner != ownerAccount) throw ShareFailure(403, "forbidden")
             db.prepareStatement(
-                "UPDATE shared_project SET title = ?, owner_name = ? WHERE id = ?",
+                "UPDATE shared_project SET title = ?, owner_name = ?, mix_hash = ? WHERE id = ?",
             ).use { update ->
                 update.setString(1, title)
                 update.setString(2, ownerName)
-                update.setString(3, id)
+                update.setString(3, mixHash)
+                update.setString(4, id)
                 update.executeUpdate()
             }
         }
@@ -149,6 +154,7 @@ internal class ShareManifest(config: ShareApiConfig) {
                 """
                 SELECT id, title, tags, image_hash, owner_account, owner_name
                 FROM shared_project
+                WHERE mix_hash IS NOT NULL
                 ORDER BY title, id
                 """.trimIndent(),
             ).use { query ->
