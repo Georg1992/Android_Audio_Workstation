@@ -154,6 +154,36 @@ class SharedProjectsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
+    fun communityShowsTheListWhenTheMixRouteIsMissing() = runTest {
+        val vm = CommunityHomeViewModel(
+            sessions = MemorySessions(session),
+            accounts = UnusedAccounts,
+            sharedProjects = FixedProjects(
+                listOf(SharedProject("boomi", "boomi", emptyList(), null, "selftitled1")),
+            ),
+            localProjects = NoLocalProjects,
+            ownedShares = object : OwnedShareRefresh {
+                override suspend fun publishOwnerNames() = Unit
+
+                override suspend fun publishMixes() {
+                    throw IllegalStateException("share api status 404")
+                }
+
+                override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
+            },
+        )
+        val shown = mutableListOf<Int>()
+        val collect = backgroundScope.launch { vm.uiState.collect { } }
+        val errors = backgroundScope.launch { vm.userMessages.collect { shown += it.resId } }
+        advanceUntilIdle()
+        assertEquals(listOf("boomi"), vm.uiState.value.projects.map { it.title })
+        assertTrue(shown.isEmpty())
+        collect.cancel()
+        errors.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
     fun communityKeepsTheConnectionMessageWhenAnAbsentShareCannotBeUnpublished() = runTest {
         val vm = CommunityHomeViewModel(
             sessions = MemorySessions(session),

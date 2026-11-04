@@ -129,7 +129,12 @@ class CommunityHomeViewModel @Inject constructor(
             val listed = sharedProjects.list()
             val removed = ownedShares.unpublishAbsent(listed)
             projects.value = listed.filter { project -> project.id !in removed }
-            if (publishError != null) throw publishError
+            if (publishError != null && publishError.message != MissingShareRoute) {
+                throw publishError
+            }
+            if (publishError != null) {
+                logWarning(TAG, "shared card was not published", publishError)
+            }
         } finally {
             preparing.value = false
         }
@@ -172,5 +177,6 @@ class CommunityHomeViewModel @Inject constructor(
     private companion object {
         const val TAG = "CommunityHomeViewModel"
         const val STOP_TIMEOUT_MS = 5_000L
+        const val MissingShareRoute = "share api status 404"
     }
 }
