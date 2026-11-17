@@ -31,6 +31,37 @@ import org.junit.Test
 
 class ShareSelectionTest {
     @Test
+    fun publishMixStoresTheFinishedMixAheadOfSharedTakes() = runBlocking {
+        val mix = File.createTempFile("full-mix", ".wav")
+        mix.writeText("full-mix")
+        val size = mix.length()
+        val api = ScriptedApi(
+            listOf(
+                """{"storageKey":"mix","alreadyStored":false,"uploadUrl":"https://upload.example/mix","headers":{"Content-Type":"audio/wav"}}""",
+                """{"storageKey":"mix"}""",
+            ),
+        )
+        val objects = RecordingObjects()
+        val share = HttpProjectShare(
+            sessions = FixedSession(session),
+            accounts = IdleAccounts(),
+            projects = ProjectRepository(MemoryProjectDao(ProjectEntity(id = "project-a", name = "boomi"), emptyList()), NoopFiles),
+            api = api,
+            objects = objects,
+            paths = FixedPaths(mix.absolutePath),
+        )
+        share.publishMix("project-a")
+        assertEquals(listOf("/shared-projects/project-a/uploads", "/shared-projects/project-a/files"), api.paths)
+        assertEquals(1, objects.puts)
+        val upload = JSONObject(api.sent[0])
+        val commit = JSONObject(api.sent[1])
+        assertEquals("00000000-0000-0000-0000-000000000000", upload.getString("trackId"))
+        assertEquals(upload.getString("trackId"), commit.getString("trackId"))
+        assertEquals(upload.getString("contentHash"), commit.getString("contentHash"))
+        assertEquals(size, upload.getLong("size"))
+    }
+
+    @Test
     fun unpublishDeletesAnOwnedShareWithoutALocalProject() = runBlocking {
         val api = StatusApi(200)
         val share = httpShare(api)
@@ -560,11 +591,15 @@ class ShareSelectionTest {
         val tokens = ArrayList<String?>()
         val methods = ArrayList<String>()
         val paths = ArrayList<String>()
+        val sent = ArrayList<String>()
 
         override fun exchange(call: HttpCall): HttpResult {
             tokens += call.token
             methods += call.method
             paths += call.path
+            val body = java.io.ByteArrayOutputStream()
+            call.writeBody?.invoke(body)
+            sent += body.toString(Charsets.UTF_8.name())
             val cursor = index
             index += 1
             if (cursor == failAt || cursor == alsoFailAt) return HttpResult(404, """{"error":"not found"}""")

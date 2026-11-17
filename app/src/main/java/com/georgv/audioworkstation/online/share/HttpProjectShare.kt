@@ -156,7 +156,33 @@ class HttpProjectShare(
 
     override suspend fun publishMix(projectId: String) {
         withContext(Dispatchers.IO) {
-            uploadHashed(openSession("Sign in to share a project"), projectId, "mix", mixFile(projectId))
+            val session = openSession("Sign in to share a project")
+            val file = mixFile(projectId)
+            val hash = sha256Hex(file)
+            val upload = post(
+                session,
+                "/shared-projects/$projectId/uploads",
+                JSONObject()
+                    .put("trackId", MixTrack)
+                    .put("contentHash", hash)
+                    .put("size", file.length())
+                    .toString(),
+            )
+            if (!upload.getBoolean("alreadyStored")) {
+                val url = upload.getString("uploadUrl")
+                if (url.isBlank()) error("share api did not return an upload url")
+                objects.put(url, headers(upload), file)
+            }
+            post(
+                session,
+                "/shared-projects/$projectId/files",
+                JSONObject()
+                    .put("trackId", MixTrack)
+                    .put("contentHash", hash)
+                    .put("storageKey", hash)
+                    .put("size", file.length())
+                    .toString(),
+            )
         }
     }
 
@@ -278,6 +304,9 @@ class HttpProjectShare(
         const val TAG = "HttpProjectShare"
         const val NotOwner = 403
         const val NotFound = 404
+
+        /** Sorts before every real track id, so Community playback opens this mix. */
+        const val MixTrack = "00000000-0000-0000-0000-000000000000"
         val HttpOk = 200..299
     }
 }

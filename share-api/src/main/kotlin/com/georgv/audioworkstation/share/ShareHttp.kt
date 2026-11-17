@@ -49,7 +49,7 @@ internal class ShareHttp(
             method == "POST" && action == listOf("card") -> updateCard(exchange, accountId, projectId)
             method == "POST" && action == listOf("owner") -> setOwner(exchange, accountId, projectId)
             method == "POST" && action == listOf("uploads") -> requestUpload(exchange, projectId)
-            method == "POST" && action == listOf("files") -> commitFile(exchange, projectId)
+            method == "POST" && action == listOf("files") -> commitFile(exchange, accountId, projectId)
             method == "GET" && action == listOf("files") -> listFiles(exchange, projectId)
             method == "POST" && action == listOf("downloads") -> download(exchange, accountId, projectId)
             method == "POST" && action == listOf("image") -> beginImage(exchange, accountId, projectId)
@@ -222,7 +222,7 @@ internal class ShareHttp(
         send(exchange, 200, response.toString())
     }
 
-    private fun commitFile(exchange: HttpExchange, projectId: String) {
+    private fun commitFile(exchange: HttpExchange, accountId: String, projectId: String) {
         manifest.requireSharedProject(projectId)
         val body = json(exchange)
         val trackId = id(body.optString("trackId"), "track id")
@@ -234,6 +234,7 @@ internal class ShareHttp(
         if (!stat.exists) throw ShareFailure(409, "object missing")
         if (stat.size != bytes) throw ShareFailure(409, "size mismatch")
         manifest.saveFile(projectId, trackId, hash, key, bytes)
+        if (trackId == MixTrack) manifest.setMix(projectId, accountId, hash)
         send(exchange, 200, """{"storageKey":"$hash"}""")
     }
 
@@ -334,6 +335,7 @@ internal class ShareHttp(
         const val MAX_NAME = 80
         const val MAX_TAGS = 12
         const val MAX_TAG_LENGTH = 24
+        const val MixTrack = "00000000-0000-0000-0000-000000000000"
         val Id = Regex("^[A-Za-z0-9_-]{1,80}$")
     }
 }
