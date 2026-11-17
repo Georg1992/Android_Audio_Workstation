@@ -8,6 +8,7 @@ import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.db.entities.TrackEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.share.SharedMix
 import com.georgv.audioworkstation.online.share.SharedProjects
 import com.georgv.audioworkstation.online.share.SharedTake
 import com.georgv.audioworkstation.ui.playback.MixPieces
@@ -41,7 +42,7 @@ internal class SharedProjectPlace(
 
     private suspend fun writeProject(projectId: String, title: String) {
         val takes = ArrayList<PlacedTake>()
-        for (file in shared.files(projectId).sortedBy { it.trackId }) {
+        for (file in shared.files(projectId).filter { it.trackId != SharedMix.TrackId }.sortedBy { it.trackId }) {
             val expectedRate = takes.firstOrNull()?.info?.sampleRateHz
             takes += PlacedTake(file, probe(file.downloadUrl, expectedRate))
         }
@@ -57,7 +58,7 @@ internal class SharedProjectPlace(
         val project = projects.observeProject(projectId).first() ?: return
         val existing = projects.observeTracks(projectId).first()
         val known = existing.map { it.id }.toSet()
-        val missing = shared.files(projectId).filter { it.trackId !in known }.sortedBy { it.trackId }
+        val missing = shared.files(projectId).filter { it.trackId !in known && it.trackId != SharedMix.TrackId }.sortedBy { it.trackId }
         try {
             keepNewTakes(project, existing.size, missing)
         } catch (cancel: CancellationException) {

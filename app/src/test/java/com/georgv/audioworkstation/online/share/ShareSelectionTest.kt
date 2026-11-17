@@ -1,6 +1,9 @@
 package com.georgv.audioworkstation.online.share
 
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
+import com.georgv.audioworkstation.core.audio.convert.RoundTripAac
+import com.georgv.audioworkstation.core.audio.convert.WavToAac
+import com.georgv.audioworkstation.core.audio.writeConstantPcm16Wav
 import com.georgv.audioworkstation.core.audio.ProjectFileStore
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.data.db.dao.ProjectDao
@@ -33,11 +36,15 @@ class ShareSelectionTest {
     @Test
     fun publishMixStoresTheFinishedMixAheadOfSharedTakes() = runBlocking {
         val mix = File.createTempFile("full-mix", ".wav")
-        mix.writeText("full-mix")
-        val size = mix.length()
+        writeConstantPcm16Wav(mix, 1, frameCount = 4_000, sampleRateHz = 1_000)
+        val aac = WavToAac(RoundTripAac()).convert(mix)
+        val aacHash = sha256Hex(aac)
+        val aacSize = aac.length()
+        val wavHash = sha256Hex(mix)
+        aac.delete()
         val api = ScriptedApi(
             listOf(
-                """{"storageKey":"mix","alreadyStored":false,"uploadUrl":"https://upload.example/mix","headers":{"Content-Type":"audio/wav"}}""",
+                """{"storageKey":"mix","alreadyStored":false,"uploadUrl":"https://upload.example/mix","headers":{"Content-Type":"audio/aac"}}""",
                 """{"storageKey":"mix"}""",
             ),
         )
@@ -50,15 +57,18 @@ class ShareSelectionTest {
             objects = objects,
             paths = FixedPaths(mix.absolutePath),
         )
+        share.mixConverter = WavToAac(RoundTripAac())
         share.publishMix("project-a")
-        assertEquals(listOf("/shared-projects/project-a/uploads", "/shared-projects/project-a/files"), api.paths)
-        assertEquals(1, objects.puts)
         val upload = JSONObject(api.sent[0])
         val commit = JSONObject(api.sent[1])
+        assertEquals(listOf("/shared-projects/project-a/uploads", "/shared-projects/project-a/files"), api.paths)
+        assertEquals(1, objects.puts)
         assertEquals("00000000-0000-0000-0000-000000000000", upload.getString("trackId"))
-        assertEquals(upload.getString("trackId"), commit.getString("trackId"))
-        assertEquals(upload.getString("contentHash"), commit.getString("contentHash"))
-        assertEquals(size, upload.getLong("size"))
+        assertEquals(aacHash, upload.getString("contentHash"))
+        assertEquals(aacHash, commit.getString("contentHash"))
+        assertEquals(aacSize, upload.getLong("size"))
+        mix.delete()
+        assertFalse(aacHash == wavHash)
     }
 
     @Test

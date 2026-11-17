@@ -1,6 +1,8 @@
 package com.georgv.audioworkstation.online.share
 
 import com.georgv.audioworkstation.core.audio.AudioFilePathProvider
+import com.georgv.audioworkstation.core.audio.convert.AudioConverter
+import com.georgv.audioworkstation.core.audio.convert.androidWavToAac
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
@@ -26,6 +28,8 @@ class HttpProjectShare(
     private val objects: ShareObjectTransport,
     private val paths: AudioFilePathProvider,
 ) : ProjectShare, SharedCardUpdate, SharedTakeRestore, OwnedProjectPublish {
+    internal var mixConverter: AudioConverter? = null
+
     override suspend fun share(projectId: String) {
         val session = openSession("Sign in to share a project")
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
@@ -157,32 +161,36 @@ class HttpProjectShare(
     override suspend fun publishMix(projectId: String) {
         withContext(Dispatchers.IO) {
             val session = openSession("Sign in to share a project")
-            val file = mixFile(projectId)
-            val hash = sha256Hex(file)
-            val upload = post(
-                session,
-                "/shared-projects/$projectId/uploads",
-                JSONObject()
-                    .put("trackId", MixTrack)
-                    .put("contentHash", hash)
-                    .put("size", file.length())
-                    .toString(),
-            )
-            if (!upload.getBoolean("alreadyStored")) {
-                val url = upload.getString("uploadUrl")
-                if (url.isBlank()) error("share api did not return an upload url")
-                objects.put(url, headers(upload), file)
+            val aac = (mixConverter ?: androidWavToAac()).convert(mixFile(projectId))
+            try {
+                val hash = sha256Hex(aac)
+                val upload = post(
+                    session,
+                    "/shared-projects/$projectId/uploads",
+                    JSONObject()
+                        .put("trackId", SharedMix.TrackId)
+                        .put("contentHash", hash)
+                        .put("size", aac.length())
+                        .toString(),
+                )
+                if (!upload.getBoolean("alreadyStored")) {
+                    val url = upload.getString("uploadUrl")
+                    if (url.isBlank()) error("share api did not return an upload url")
+                    objects.put(url, headers(upload), aac)
+                }
+                post(
+                    session,
+                    "/shared-projects/$projectId/files",
+                    JSONObject()
+                        .put("trackId", SharedMix.TrackId)
+                        .put("contentHash", hash)
+                        .put("storageKey", hash)
+                        .put("size", aac.length())
+                        .toString(),
+                )
+            } finally {
+                aac.delete()
             }
-            post(
-                session,
-                "/shared-projects/$projectId/files",
-                JSONObject()
-                    .put("trackId", MixTrack)
-                    .put("contentHash", hash)
-                    .put("storageKey", hash)
-                    .put("size", file.length())
-                    .toString(),
-            )
         }
     }
 
@@ -304,9 +312,6 @@ class HttpProjectShare(
         const val TAG = "HttpProjectShare"
         const val NotOwner = 403
         const val NotFound = 404
-
-        /** Sorts before every real track id, so Community playback opens this mix. */
-        const val MixTrack = "00000000-0000-0000-0000-000000000000"
         val HttpOk = 200..299
     }
 }
