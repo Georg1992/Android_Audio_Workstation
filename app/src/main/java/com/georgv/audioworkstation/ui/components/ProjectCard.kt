@@ -1,29 +1,37 @@
 package com.georgv.audioworkstation.ui.components
 
 import android.graphics.BitmapFactory
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -37,23 +45,37 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class ProjectCardOpening(
+    val opened: Boolean,
+    val mixAvailable: Boolean,
+    val onToggle: () -> Unit,
+    val onOpen: () -> Unit,
+)
+
 @Composable
 fun ProjectCard(
     card: ShownCard,
-    onOpen: () -> Unit,
+    opening: ProjectCardOpening,
     actions: @Composable RowScope.() -> Unit,
     playback: @Composable () -> Unit,
 ) {
@@ -67,11 +89,194 @@ fun ProjectCard(
             withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
         }
     }
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(Dimens.ProjectCardHeight)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium,
+                ),
+            )
             .clip(shape)
+            .background(AppColors.SurfacePanel)
+            .border(Dimens.Stroke, AppColors.Line, shape),
+    ) {
+        if (opening.opened) {
+            OpenedProjectCard(
+                card = card,
+                bitmap = bitmap,
+                opening = opening,
+                actions = actions,
+                playback = playback,
+            )
+        } else {
+            ProjectCardShortcut(
+                card = card,
+                bitmap = bitmap,
+                onClick = opening.onToggle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProjectCardShortcut(
+    card: ShownCard,
+    bitmap: ImageBitmap?,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+    ) {
+        CardArt(bitmap = bitmap, size = Dimens.CardShortcutArt)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = card.title,
+                style = AppText.TileTitle,
+                color = AppColors.Line,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val detail = card.detail
+            if (detail != null) {
+                Text(
+                    text = detail,
+                    style = AppText.TileSubtitle,
+                    color = AppColors.iconMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpenedProjectCard(
+    card: ShownCard,
+    bitmap: ImageBitmap?,
+    opening: ProjectCardOpening,
+    actions: @Composable RowScope.() -> Unit,
+    playback: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(Dimens.TileInnerPadding),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+            verticalAlignment = Alignment.Top,
+        ) {
+            CardArt(bitmap = bitmap, size = Dimens.CardOpenArt)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = card.title,
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val detail = card.detail
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = Dimens.TightGap),
+                    )
+                }
+                if (card.tags.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.Gap),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                    ) {
+                        card.tags.forEach { tag ->
+                            CardTag(tag)
+                        }
+                    }
+                }
+                val status = card.status
+                if (status != null) {
+                    Text(
+                        text = status,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                        modifier = Modifier.padding(top = Dimens.Gap),
+                    )
+                }
+                val progress = card.progress
+                if (card.loading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.TightGap),
+                        color = AppColors.Line,
+                        trackColor = AppColors.iconMuted,
+                    )
+                } else if (progress != null) {
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.TightGap),
+                        color = AppColors.Line,
+                        trackColor = AppColors.iconMuted,
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CardActionButton(onClick = opening.onOpen) {
+                Icon(
+                    imageVector = Icons.Filled.FolderOpen,
+                    contentDescription = stringResource(R.string.cd_open_project),
+                    tint = AppColors.Line,
+                )
+            }
+            actions()
+            CardActionButton(onClick = opening.onToggle) {
+                Icon(
+                    imageVector = Icons.Filled.ExpandLess,
+                    contentDescription = stringResource(R.string.cd_close_card),
+                    tint = AppColors.Line,
+                )
+            }
+        }
+        if (opening.mixAvailable) {
+            playback()
+        }
+    }
+}
+
+@Composable
+private fun CardArt(
+    bitmap: ImageBitmap?,
+    size: Dp,
+) {
+    val shape = RoundedCornerShape(Dimens.MediumRadius)
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(shape)
+            .background(AppColors.SurfaceRaised)
             .border(Dimens.Stroke, AppColors.Line, shape),
     ) {
         val image = bitmap
@@ -82,100 +287,45 @@ fun ProjectCard(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
-        } else {
-            Box(modifier = Modifier.fillMaxSize().background(AppColors.SurfacePanel))
         }
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (image != null) AppColors.Bg.copy(alpha = 0.72f) else AppColors.SurfacePanel)
-                    .padding(start = Dimens.TileInnerPadding, top = Dimens.TightGap, bottom = Dimens.TightGap),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(top = Dimens.PanelPadding)) {
-                    Text(text = card.title, style = AppText.TileTitle, color = AppColors.Line, maxLines = 2)
-                    val detail = card.detail
-                    if (detail != null) {
-                        Text(
-                            text = detail,
-                            style = AppText.TileSubtitle,
-                            color = AppColors.iconMuted,
-                            maxLines = 1,
-                        )
-                    }
-                    if (card.tags.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(top = Dimens.TightGap),
-                            horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
-                        ) {
-                            card.tags.forEach { tag ->
-                                Surface(
-                                    shape = RoundedCornerShape(Dimens.SmallRadius),
-                                    color = AppColors.SurfacePanel,
-                                    modifier = Modifier.border(
-                                        Dimens.Stroke,
-                                        AppColors.Line,
-                                        RoundedCornerShape(Dimens.SmallRadius),
-                                    ),
-                                ) {
-                                    Text(
-                                        text = tag,
-                                        style = AppText.TileSubtitle,
-                                        color = AppColors.Line,
-                                        modifier = Modifier.padding(
-                                            horizontal = Dimens.Gap,
-                                            vertical = Dimens.TightGap,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    val status = card.status
-                    if (status != null) {
-                        Text(text = status, style = AppText.TileSubtitle, color = AppColors.iconMuted)
-                    }
-                    val progress = card.progress
-                    if (card.loading) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().padding(top = Dimens.TightGap),
-                            color = AppColors.Line,
-                            trackColor = AppColors.iconMuted,
-                        )
-                    } else if (progress != null) {
-                        LinearProgressIndicator(
-                            progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().padding(top = Dimens.TightGap),
-                            color = AppColors.Line,
-                            trackColor = AppColors.iconMuted,
-                        )
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onOpen) {
-                        Icon(
-                            imageVector = Icons.Filled.FolderOpen,
-                            contentDescription = stringResource(R.string.cd_open_project),
-                            tint = AppColors.Line,
-                        )
-                    }
-                    actions()
-                }
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (image != null) AppColors.Bg.copy(alpha = 0.72f) else AppColors.SurfacePanel)
-                    .padding(horizontal = Dimens.PanelPadding, vertical = Dimens.TightGap),
-            ) {
-                playback()
-            }
-        }
+    }
+}
+
+@Composable
+private fun CardTag(tag: String) {
+    val shape = RoundedCornerShape(Dimens.SmallRadius)
+    Surface(
+        shape = shape,
+        color = AppColors.Bg,
+        modifier = Modifier.border(Dimens.Stroke, AppColors.Line, shape),
+    ) {
+        Text(
+            text = tag,
+            style = AppText.TileSubtitle,
+            color = AppColors.Line,
+            modifier = Modifier.padding(horizontal = Dimens.Gap, vertical = Dimens.TightGap),
+        )
+    }
+}
+
+@Composable
+fun CardActionButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val shape = RoundedCornerShape(Dimens.SmallRadius)
+    Box(
+        modifier = Modifier
+            .size(Dimens.IconTileSize)
+            .alpha(if (enabled) 1f else AppOpacity.disabled)
+            .clip(shape)
+            .background(AppColors.Bg)
+            .border(Dimens.Stroke, AppColors.Line, shape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
     }
 }
 
@@ -191,25 +341,46 @@ private fun CardPlaybackButton(
     onClick: () -> Unit,
 ) {
     val play = role == CardPlaybackRole.Play
-    val fill = if (play) AppColors.Green else AppColors.Line
-    val mark = if (play) AppColors.Line else AppColors.SurfaceRaised
-    TrackActionButton(
-        active = engaged,
-        enabled = true,
-        accentColor = mark,
-        onClick = onClick,
-        size = Dimens.TransportButtonSize,
-        surfaceColor = AppColors.Bg,
-        activeBackgroundColor = fill,
-        activeBorderColor = AppColors.Line,
-        activeIconColor = mark,
-        showActiveGlow = false,
-        showActiveLed = false,
-    ) { tint ->
+    val fill by animateColorAsState(
+        targetValue = when {
+            engaged && play -> AppColors.Green
+            engaged -> AppColors.Yellow
+            else -> AppColors.Bg
+        },
+        animationSpec = tween(durationMillis = TransportFillMs),
+        label = "cardTransportFill",
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) TransportPressedScale else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh,
+        ),
+        label = "cardTransportPress",
+    )
+    Box(
+        modifier = Modifier
+            .size(Dimens.TransportButtonSize)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(fill)
+            .border(Dimens.Stroke, AppColors.Line, CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
         Icon(
             imageVector = if (play) Icons.Filled.PlayArrow else Icons.Filled.Stop,
             contentDescription = stringResource(if (play) R.string.cd_play else R.string.cd_stop),
-            tint = tint,
+            tint = AppColors.Line,
             modifier = Modifier.size(Dimens.TransportIconSize),
         )
     }
@@ -218,6 +389,8 @@ private fun CardPlaybackButton(
 private const val MillisPerSecond = 1000
 private const val SecondsPerMinute = 60
 private const val PinArriveMs = 100
+private const val TransportFillMs = 160
+private const val TransportPressedScale = 0.94f
 
 private fun playbackClock(positionMs: Int): String {
     val totalSeconds = positionMs.coerceAtLeast(0) / MillisPerSecond
@@ -314,11 +487,25 @@ private fun CardPlaybackStrip(
             heldFraction = null
         }
     }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
+    val clock = stringResource(
+        R.string.card_playback_clock,
+        playbackClock(shownPositionMs),
+        playbackClock(durationMs),
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(AppColors.Bg)
+            .border(Dimens.Stroke, AppColors.Line, shape)
+            .padding(Dimens.Gap),
+        verticalArrangement = Arrangement.spacedBy(Dimens.PanelPadding),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
         ) {
             CardPlaybackButton(
                 role = CardPlaybackRole.Play,
@@ -330,6 +517,13 @@ private fun CardPlaybackStrip(
                 engaged = playing,
                 onClick = onStop,
             )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+        ) {
+            TransportClock(text = playbackClock(shownPositionMs), align = TextAlign.End)
             Slider(
                 value = displayed,
                 onValueChange = { next ->
@@ -358,26 +552,34 @@ private fun CardPlaybackStrip(
                     }
                 },
                 enabled = durationMs > 0,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { stateDescription = clock },
                 colors = SliderDefaults.colors(
                     thumbColor = AppColors.Line,
-                    activeTrackColor = AppColors.Line,
+                    activeTrackColor = AppColors.Green,
                     inactiveTrackColor = AppColors.iconMuted,
+                    disabledThumbColor = AppColors.iconMuted,
+                    disabledActiveTrackColor = AppColors.iconMuted,
+                    disabledInactiveTrackColor = AppColors.iconMuted,
                 ),
             )
-        }
-        if (durationMs > 0) {
-            Text(
-                text = stringResource(
-                    R.string.card_playback_clock,
-                    playbackClock(shownPositionMs),
-                    playbackClock(durationMs),
-                ),
-                style = AppText.TileSubtitle,
-                color = AppColors.iconMuted,
-                textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            TransportClock(text = playbackClock(durationMs), align = TextAlign.Start)
         }
     }
+}
+
+@Composable
+private fun TransportClock(
+    text: String,
+    align: TextAlign,
+) {
+    Text(
+        text = text,
+        style = AppText.TileSubtitle,
+        color = AppColors.labelEmphasis,
+        textAlign = align,
+        maxLines = 1,
+        modifier = Modifier.widthIn(min = Dimens.TransportButtonSize),
+    )
 }

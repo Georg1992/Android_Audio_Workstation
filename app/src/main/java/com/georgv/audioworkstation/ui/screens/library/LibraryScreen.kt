@@ -18,7 +18,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -29,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -45,8 +45,10 @@ import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.core.ui.isContentEmpty
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.AppLocaleScope
+import com.georgv.audioworkstation.ui.components.CardActionButton
 import com.georgv.audioworkstation.ui.components.LibraryCardPlayback
 import com.georgv.audioworkstation.ui.components.ProjectCard
+import com.georgv.audioworkstation.ui.components.ProjectCardOpening
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.ShownCard
 import com.georgv.audioworkstation.ui.components.TopToolbarPanel
@@ -86,6 +88,7 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     var pendingDeleteProject by remember { mutableStateOf<LibraryProjectItem?>(null) }
     var pendingShare by remember { mutableStateOf<PendingShare?>(null) }
+    var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     val locale = rememberAppLocaleScope()
 
     LaunchedEffect(vm, preview, share) {
@@ -111,6 +114,10 @@ fun LibraryScreen(
                 state = state,
                 transport = transport,
                 handlers = LibraryRowHandlers(
+                    openedProjectId = openedProjectId,
+                    onToggleCard = { projectId ->
+                        openedProjectId = if (openedProjectId == projectId) null else projectId
+                    },
                     onPlay = preview::play,
                     onStop = preview::stop,
                     onScrubStarted = preview::hold,
@@ -291,6 +298,8 @@ private fun ShareConfirmDialog(
 }
 
 private data class LibraryRowHandlers(
+    val openedProjectId: String?,
+    val onToggleCard: (String) -> Unit,
     val onPlay: (LibraryProjectItem) -> Unit,
     val onStop: () -> Unit,
     val onScrubStarted: () -> Unit,
@@ -375,16 +384,21 @@ private fun LibraryProjectContent(
                             },
                             progress = if (mixing) item.mixdown.progress else null,
                         ),
-                        onOpen = { handlers.onOpen(item.project.id) },
+                        opening = ProjectCardOpening(
+                            opened = handlers.openedProjectId == item.project.id,
+                            mixAvailable = item.mixdown.hasMixPreview,
+                            onToggle = { handlers.onToggleCard(item.project.id) },
+                            onOpen = { handlers.onOpen(item.project.id) },
+                        ),
                         actions = {
-                            IconButton(onClick = { handlers.onDelete(item) }) {
+                            CardActionButton(onClick = { handlers.onDelete(item) }) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
                                     contentDescription = stringResource(R.string.action_delete),
                                     tint = AppColors.Red,
                                 )
                             }
-                            IconButton(onClick = { handlers.onCustomize(item.project.id) }) {
+                            CardActionButton(onClick = { handlers.onCustomize(item.project.id) }) {
                                 Icon(
                                     imageVector = Icons.Filled.Settings,
                                     contentDescription = stringResource(R.string.cd_customize_card),
@@ -398,7 +412,7 @@ private fun LibraryProjectContent(
                                 val description = stringResource(
                                     if (shared) R.string.cd_unshare_project else R.string.cd_share_project,
                                 )
-                                IconButton(
+                                CardActionButton(
                                     onClick = { handlers.onShare(item) },
                                     enabled = !sharing,
                                 ) {

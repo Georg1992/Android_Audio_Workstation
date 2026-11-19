@@ -103,6 +103,7 @@
     <string name="cd_import_audio">Импорт аудио</string>
     <string name="cd_mixdown_project">Микс и экспорт проекта</string>
     <string name="cd_open_project">Открыть проект</string>
+    <string name="cd_close_card">Закрыть карточку</string>
     <string name="cd_share_project">Поделиться проектом</string>
     <string name="cd_unshare_project">Закрыть доступ</string>
     <string name="library_share_project_title">Поделиться проектом?</string>

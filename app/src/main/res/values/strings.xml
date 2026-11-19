@@ -104,6 +104,7 @@
     <string name="cd_import_audio">Import audio</string>
     <string name="cd_mixdown_project">Mix and export project</string>
     <string name="cd_open_project">Open project</string>
+    <string name="cd_close_card">Close card</string>
     <string name="cd_share_project">Share project</string>
     <string name="cd_unshare_project">Stop sharing</string>
     <string name="library_share_project_title">Share this project?</string>

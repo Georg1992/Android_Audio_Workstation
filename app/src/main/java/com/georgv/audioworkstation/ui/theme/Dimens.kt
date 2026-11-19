@@ -51,7 +51,8 @@ object Dimens {
 
     // placeholder screens (Community, Library, Devices)
     val ScreenContentPadding = 16.dp
-    val ProjectCardHeight = 256.dp
+    val CardShortcutArt = 56.dp
+    val CardOpenArt = 104.dp
 
     // main tile narrow breakpoint
     val MainTileNarrowBreakpoint = 170.dp

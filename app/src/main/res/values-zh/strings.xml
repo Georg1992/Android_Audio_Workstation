@@ -107,6 +107,7 @@
     <string name="cd_import_audio">导入音频</string>
     <string name="cd_mixdown_project">混音并导出项目</string>
     <string name="cd_open_project">打开项目</string>
+    <string name="cd_close_card">关闭卡片</string>
     <string name="cd_share_project">分享项目</string>
     <string name="cd_unshare_project">停止分享</string>
     <string name="library_share_project_title">分享此项目？</string>

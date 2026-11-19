@@ -16,7 +16,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +31,7 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.CommunityCardPlayback
 import com.georgv.audioworkstation.ui.components.ProjectCard
+import com.georgv.audioworkstation.ui.components.ProjectCardOpening
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.components.ShownCard
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -50,6 +54,7 @@ fun CommunityHomeScreen(
     val loadingProjectId by playback.loadingProjectId.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     val place = communityDestination(state.sessionKnown, state.email != null)
 
     LaunchedEffect(vm, playback, images) {
@@ -116,7 +121,14 @@ fun CommunityHomeScreen(
                                     tags = project.tags,
                                     imagePath = hash?.let { imagePaths[it] },
                                 ),
-                                onOpen = { vm.open(project.id) },
+                                opening = ProjectCardOpening(
+                                    opened = openedProjectId == project.id,
+                                    mixAvailable = true,
+                                    onToggle = {
+                                        openedProjectId = if (openedProjectId == project.id) null else project.id
+                                    },
+                                    onOpen = { vm.open(project.id) },
+                                ),
                                 actions = {},
                                 playback = {
                                     CommunityCardPlayback(
