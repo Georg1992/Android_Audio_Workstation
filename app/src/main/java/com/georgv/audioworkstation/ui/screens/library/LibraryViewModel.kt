@@ -12,6 +12,7 @@ import com.georgv.audioworkstation.core.ui.UiMessage
 import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.data.db.entities.SyncStatus
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.share.OwnedProjectPublish
 import com.georgv.audioworkstation.online.share.ProjectShare
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -35,11 +36,13 @@ class LibraryViewModel @Inject constructor(
     private val mixdownCoordinator: ProjectMixdownCoordinator,
     private val mixPreviewPlayer: LibraryMixPreviewPlayer,
     private val projectShare: ProjectShare,
+    private val ownedPublish: OwnedProjectPublish = NoOwnedPublish,
 ) : ViewModel() {
 
     private val projectsFirstEmissionLogged = AtomicBoolean(false)
 
     private val reportedMixdownErrors = mutableSetOf<String>()
+    private val mixesInFlight = mutableSetOf<String>()
 
     init {
         viewModelScope.launch {
@@ -50,6 +53,7 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             mixdownCoordinator.mixdownByProjectIdState.collect { states ->
                 states.forEach { (projectId, state) ->
+                    noteMixdown(projectId, state)
                     val errorResId = state.errorMessageResId ?: return@forEach
                     if (reportedMixdownErrors.add(projectId)) {
                         messages.send(UiMessage(errorResId))
@@ -131,6 +135,31 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    private fun noteMixdown(projectId: String, state: ProjectMixdownState) {
+        if (state.isMixing) {
+            mixesInFlight.add(projectId)
+            return
+        }
+        if (!mixesInFlight.remove(projectId) || state.mixdownWavPath == null) return
+        publishRenderedMix(projectId)
+    }
+
+    private fun publishRenderedMix(projectId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val project = repo.observeProject(projectId).first() ?: return@launch
+            if (project.syncStatus != SyncStatus.SYNCED) return@launch
+            try {
+                ownedPublish.publishMix(projectId)
+                android.util.Log.i(TAG, "published mix updated: $projectId")
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                logWarning(TAG, "published mix was not updated: $projectId", error)
+                messages.send(UiMessage(reportedFailure(error, R.string.error_share_project_failed)))
+            }
+        }
+    }
+
     /** Prefetch project metadata before Library → Project navigation. */
     fun warmUpProject(projectId: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -141,6 +170,14 @@ class LibraryViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "LibraryViewModel"
+
+        private object NoOwnedPublish : OwnedProjectPublish {
+            override suspend fun publishOwner(projectId: String) = Unit
+
+            override suspend fun publishMix(projectId: String) = Unit
+
+            override suspend fun unpublish(projectId: String): Boolean = false
+        }
 
         fun initialLibraryScreenState(
             repo: ProjectRepository,

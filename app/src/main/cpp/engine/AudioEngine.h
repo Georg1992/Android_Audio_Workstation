@@ -405,8 +405,8 @@ public:
     void requestOfflineMixdownCancel();
 
     /**
-     * Offline bounce using the same [renderBlock] mixer path as live Oboe playback.
-     * Caller must not invoke while live playback is active on the same engine instance.
+     * Offline bounce with the same pan and clip math as live playback.
+     * The bounce opens its own file readers, so releasing the live engine cannot cut the file.
      */
     OfflineMixdownStatus renderOfflineMixdown(
         int32_t sampleRate,
@@ -431,7 +431,7 @@ private:
     };
 
     /**
-     * Shared stereo mix block used by live [render] and offline bounce.
+     * Shared stereo mix block used by live [render].
      * @return true when at least one lane contributed samples.
      */
     bool renderBlock(float *outputInterleaved,
@@ -442,8 +442,6 @@ private:
                      bool applyMasterSoftClip,
                      bool playbackMutexAlreadyHeld = false,
                      int32_t *outMinFramesReturned = nullptr);
-
-    void syncLaneSourcesForOfflineTransport(int64_t transportFrameAtBlock);
 
 private:
     static constexpr std::size_t kPlaybackLaneCount = 16;

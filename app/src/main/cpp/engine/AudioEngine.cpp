@@ -198,6 +198,132 @@ void mixLaneSampleWithPan(float gain,
     }
 }
 
+struct OfflineMixLane {
+    std::unique_ptr<dawengine::LocalWavSource> source;
+    float gain = 0.0f;
+    float pan = 0.0f;
+    int32_t channels = 0;
+    int64_t clipStartFrame = 0;
+    int64_t clipEndFrame = 0;
+    bool loopEnabled = false;
+    int64_t sourceLoopStartFrame = 0;
+    int64_t sourceLoopEndFrame = 0;
+    int64_t sourceTrimStartFrame = 0;
+};
+
+int64_t laneValueAt(const std::vector<int64_t> &values, std::size_t index) {
+    if (index >= values.size()) return 0;
+    return values[index];
+}
+
+bool offlineLaneActiveInBlock(const OfflineMixLane &lane,
+                              int64_t transportFrame,
+                              int32_t numFrames) {
+    for (int32_t probe = 0; probe < numFrames; ++probe) {
+        if (laneActiveOnTimelineForPlayback(
+                transportFrame + static_cast<int64_t>(probe),
+                lane.clipStartFrame,
+                lane.clipEndFrame,
+                lane.loopEnabled)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool mixOfflineLaneBlock(OfflineMixLane &lane,
+                         float *output,
+                         float *scratch,
+                         int32_t numFrames,
+                         int32_t outChannels,
+                         int64_t transportFrame) {
+    if (!offlineLaneActiveInBlock(lane, transportFrame, numFrames)) return true;
+    const int64_t parkedFrame = laneSourceSeekFrameForArm(
+        transportFrame,
+        lane.clipStartFrame,
+        lane.loopEnabled,
+        lane.sourceLoopStartFrame,
+        lane.sourceLoopEndFrame,
+        lane.sourceTrimStartFrame);
+    if (!lane.source || !seekSourceToStartFrame(*lane.source, parkedFrame)) return false;
+    const int32_t framesReturned = readLaneSourceFrames(
+        *lane.source,
+        scratch,
+        numFrames,
+        lane.channels,
+        lane.loopEnabled,
+        lane.sourceLoopStartFrame,
+        lane.sourceLoopEndFrame);
+    if (framesReturned < 0) return false;
+    if (framesReturned == 0) {
+        return lane.loopEnabled || parkedFrame >= lane.source->totalFrames();
+    }
+    for (int32_t frame = 0; frame < framesReturned; ++frame) {
+        const int64_t frameTransport = transportFrame + static_cast<int64_t>(frame);
+        if (!laneActiveOnTimelineForPlayback(
+                frameTransport,
+                lane.clipStartFrame,
+                lane.clipEndFrame,
+                lane.loopEnabled)) {
+            continue;
+        }
+        const std::size_t srcBase =
+            static_cast<std::size_t>(frame) * static_cast<std::size_t>(lane.channels);
+        const std::size_t outBase =
+            static_cast<std::size_t>(frame) * static_cast<std::size_t>(outChannels);
+        mixLaneSampleWithPan(
+            lane.gain,
+            lane.pan,
+            lane.channels,
+            scratch + srcBase,
+            output + outBase,
+            outChannels);
+    }
+    return true;
+}
+
+bool openOfflineMixLane(const std::string &wavPath,
+                        float gain,
+                        float pan,
+                        int32_t sampleRate,
+                        int64_t clipStartMs,
+                        int64_t clipDurationMs,
+                        bool loopEnabled,
+                        int64_t loopSourceStartMs,
+                        int64_t loopSourceEndMs,
+                        int64_t sourceTrimStartMs,
+                        OfflineMixLane &lane) {
+    if (wavPath.empty() || sampleRate <= 0) return false;
+    auto source = std::make_unique<dawengine::LocalWavSource>(wavPath);
+    if (!source->open()) return false;
+    if (source->sampleRate() != sampleRate) return false;
+    if (source->channelCount() < 1 || source->channelCount() > 2) return false;
+    lane.source = std::move(source);
+    lane.gain = gain;
+    lane.pan = std::clamp(pan, -1.0f, 1.0f);
+    lane.channels = lane.source->channelCount();
+    lane.loopEnabled = loopEnabled;
+    lane.clipStartFrame = playbackStartFrameFromMs(clipStartMs, sampleRate);
+    lane.clipEndFrame =
+        loopEnabled
+            ? 0
+            : clipTimelineEndFrameForLane(lane.clipStartFrame, clipDurationMs, sampleRate);
+    lane.sourceLoopStartFrame =
+        loopEnabled ? playbackStartFrameFromMs(loopSourceStartMs, sampleRate) : 0;
+    lane.sourceLoopEndFrame =
+        loopEnabled ? playbackStartFrameFromMs(loopSourceEndMs, sampleRate) : 0;
+    lane.sourceTrimStartFrame =
+        loopEnabled ? 0 : playbackStartFrameFromMs(sourceTrimStartMs, sampleRate);
+    if (loopEnabled) {
+        const int64_t totalFrames = lane.source->totalFrames();
+        lane.sourceLoopEndFrame = clampLoopEndFrameToSource(lane.sourceLoopEndFrame, totalFrames);
+        if (totalFrames > 0 && lane.sourceLoopStartFrame > totalFrames) {
+            lane.sourceLoopStartFrame = totalFrames;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 namespace dawengine {
@@ -2240,37 +2366,6 @@ bool AudioEngine::renderBlock(float *outputInterleaved,
     return readAnyLane;
 }
 
-void AudioEngine::syncLaneSourcesForOfflineTransport(const int64_t transportFrameAtBlock) {
-    for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneCount; ++laneIdx) {
-        PlaybackLaneSlot &lane = m_playbackLanes[laneIdx];
-        const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
-        if (!laneLifecycleParticipatesInMix(state) || !lane.source) {
-            continue;
-        }
-
-        const int64_t clipStartFrame =
-            lane.clipTimelineStartFrame.load(std::memory_order_acquire);
-        const int64_t clipEndFrame =
-            lane.clipTimelineEndFrame.load(std::memory_order_acquire);
-        const bool loopEnabled = lane.loopEnabled.load(std::memory_order_acquire);
-        const int64_t sourceLoopStartFrame =
-            lane.sourceLoopStartFrame.load(std::memory_order_acquire);
-        const int64_t sourceLoopEndFrame =
-            lane.sourceLoopEndFrame.load(std::memory_order_acquire);
-        const int64_t sourceTrimStartFrame =
-            lane.sourceTrimStartFrame.load(std::memory_order_acquire);
-
-        const int64_t parkedFrame = laneSourceSeekFrameForArm(
-            transportFrameAtBlock,
-            clipStartFrame,
-            loopEnabled,
-            sourceLoopStartFrame,
-            sourceLoopEndFrame,
-            sourceTrimStartFrame);
-        seekSourceToStartFrame(*lane.source, parkedFrame);
-    }
-}
-
 void AudioEngine::requestOfflineMixdownCancel() {
     m_offlineMixdownCancelRequested.store(true, std::memory_order_release);
 }
@@ -2293,7 +2388,8 @@ AudioEngine::OfflineMixdownStatus AudioEngine::renderOfflineMixdown(
     __android_log_print(ANDROID_LOG_INFO, playback::kMixdownLogTag, "mixdown_start");
     m_offlineMixdownCancelRequested.store(false, std::memory_order_release);
 
-    if (outputPath.empty() || wavPaths.empty() || wavPaths.size() != gains.size()) {
+    if (outputPath.empty() || sampleRate <= 0 || wavPaths.empty() ||
+        wavPaths.size() != gains.size() || wavPaths.size() > kPlaybackLaneProductCap) {
         __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed invalid_args");
         return OfflineMixdownStatus::Failed;
     }
@@ -2306,58 +2402,36 @@ AudioEngine::OfflineMixdownStatus AudioEngine::renderOfflineMixdown(
         static_cast<long long>(startPositionMs),
         static_cast<long long>(sessionTimelineEndMs));
 
-    configureProject(sampleRate, 16);
-    m_isPlaying.store(false, std::memory_order_release);
-    stopIoThread();
-    stopHotJoinThread();
-
-    const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, m_sampleRate);
-    int64_t endFrame = playbackStartFrameFromMs(sessionTimelineEndMs, m_sampleRate);
-    if (endFrame <= startFrame) {
-        endFrame = startFrame + 1;
-    }
-
-    {
-        std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-        for (std::size_t laneIdx = 0; laneIdx < kPlaybackLaneProductCap; ++laneIdx) {
-            const PlaybackLaneLifecycle state = loadLaneLifecycle(laneIdx);
-            if (state == PlaybackLaneLifecycle::Preparing ||
-                state == PlaybackLaneLifecycle::ReadyToCommit) {
-                clearHotJoinStagingLocked(laneIdx);
-                setLaneInactiveLocked(m_playbackLanes[laneIdx]);
-            }
-        }
-        if (!armPlaybackLanesLocked(
-                wavPaths,
-                gains,
-                startFrame,
-                laneClipStartMs,
-                laneClipDurationMs,
-                laneLoopEnabled,
-                laneLoopSourceStartMs,
-                laneLoopSourceEndMs,
-                laneSourceTrimStartMs,
-                lanePan)) {
-            clearPlaybackLanesLocked();
-            resetMasterPlaybackTimeline();
-            __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed arm_lanes");
+    std::vector<OfflineMixLane> lanes(wavPaths.size());
+    for (std::size_t laneIdx = 0; laneIdx < wavPaths.size(); ++laneIdx) {
+        const bool loopEnabled =
+            laneIdx < laneLoopEnabled.size() && laneLoopEnabled[laneIdx] != 0;
+        const float pan = laneIdx < lanePan.size() ? lanePan[laneIdx] : 0.0f;
+        if (!openOfflineMixLane(
+                wavPaths[laneIdx],
+                gains[laneIdx],
+                pan,
+                sampleRate,
+                laneValueAt(laneClipStartMs, laneIdx),
+                laneValueAt(laneClipDurationMs, laneIdx),
+                loopEnabled,
+                laneValueAt(laneLoopSourceStartMs, laneIdx),
+                laneValueAt(laneLoopSourceEndMs, laneIdx),
+                laneValueAt(laneSourceTrimStartMs, laneIdx),
+                lanes[laneIdx])) {
+            __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed open_source");
             return OfflineMixdownStatus::Failed;
         }
     }
 
-    initializeMasterPlaybackTimeline(startFrame);
-    m_playbackSessionEndFrame.store(endFrame, std::memory_order_release);
-    m_sessionHasLoopLanes.store(false, std::memory_order_release);
-
-    if (m_renderScratch.size() < playback::kRenderScratchFloatCount) {
-        m_renderScratch.resize(playback::kRenderScratchFloatCount);
+    const int64_t startFrame = playbackStartFrameFromMs(startPositionMs, sampleRate);
+    int64_t endFrame = playbackStartFrameFromMs(sessionTimelineEndMs, sampleRate);
+    if (endFrame <= startFrame) {
+        endFrame = startFrame + 1;
     }
 
     StreamingPcm16WavWriter writer;
-    if (!writer.Open(outputPath, m_sampleRate, 2, m_fileBitDepth)) {
-        std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-        clearPlaybackLanesLocked();
-        resetMasterPlaybackTimeline();
+    if (!writer.Open(outputPath, sampleRate, 2, 16)) {
         __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed open_output");
         return OfflineMixdownStatus::Failed;
     }
@@ -2365,15 +2439,14 @@ AudioEngine::OfflineMixdownStatus AudioEngine::renderOfflineMixdown(
     const int64_t totalFrames = endFrame - startFrame;
     std::vector<float> blockBuffer(
         static_cast<std::size_t>(playback::kOfflineMixdownBlockFrames) * 2u, 0.0f);
+    std::vector<float> scratch(
+        static_cast<std::size_t>(playback::kOfflineMixdownBlockFrames) * 2u, 0.0f);
     int64_t renderedFrames = 0;
 
     while (renderedFrames < totalFrames) {
         if (m_offlineMixdownCancelRequested.load(std::memory_order_acquire)) {
             writer.Abort();
             std::remove(outputPath.c_str());
-            std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-            clearPlaybackLanesLocked();
-            resetMasterPlaybackTimeline();
             __android_log_print(ANDROID_LOG_WARN, playback::kMixdownLogTag, "mixdown_failed cancelled");
             return OfflineMixdownStatus::Cancelled;
         }
@@ -2382,28 +2455,31 @@ AudioEngine::OfflineMixdownStatus AudioEngine::renderOfflineMixdown(
             playback::kOfflineMixdownBlockFrames,
             totalFrames - renderedFrames));
         const int64_t transportFrame = startFrame + renderedFrames;
+        const std::size_t outSampleCount = static_cast<std::size_t>(framesThisBlock) * 2u;
+        std::fill_n(blockBuffer.begin(), outSampleCount, 0.0f);
 
-        {
-            std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-            syncLaneSourcesForOfflineTransport(transportFrame);
-            renderBlock(
-                blockBuffer.data(),
-                framesThisBlock,
-                2,
-                transportFrame,
-                RenderBlockInputMode::DirectSource,
-                true,
-                true);
+        for (OfflineMixLane &lane : lanes) {
+            if (!mixOfflineLaneBlock(
+                    lane,
+                    blockBuffer.data(),
+                    scratch.data(),
+                    framesThisBlock,
+                    2,
+                    transportFrame)) {
+                writer.Abort();
+                std::remove(outputPath.c_str());
+                __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed source_read");
+                return OfflineMixdownStatus::Failed;
+            }
         }
 
-        if (!writer.WriteFloatInterleaved(
-                blockBuffer.data(),
-                static_cast<std::size_t>(framesThisBlock) * 2u)) {
+        if (playback::kMasterSafetySoftClipEnabled) {
+            playback::ProcessMasterSafetySoftClip(blockBuffer.data(), outSampleCount);
+        }
+
+        if (!writer.WriteFloatInterleaved(blockBuffer.data(), outSampleCount)) {
             writer.Abort();
             std::remove(outputPath.c_str());
-            std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-            clearPlaybackLanesLocked();
-            resetMasterPlaybackTimeline();
             __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed write");
             return OfflineMixdownStatus::Failed;
         }
@@ -2424,18 +2500,10 @@ AudioEngine::OfflineMixdownStatus AudioEngine::renderOfflineMixdown(
     const uint32_t bytesWritten = writer.dataBytesWritten();
     if (!writer.Finalize()) {
         std::remove(outputPath.c_str());
-        std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-        clearPlaybackLanesLocked();
-        resetMasterPlaybackTimeline();
         __android_log_print(ANDROID_LOG_ERROR, playback::kMixdownLogTag, "mixdown_failed finalize");
         return OfflineMixdownStatus::Failed;
     }
 
-    {
-        std::lock_guard<std::mutex> playbackLock(m_playbackMutex);
-        clearPlaybackLanesLocked();
-    }
-    resetMasterPlaybackTimeline();
     if (progressCallback) {
         progressCallback(1.0f);
     }
