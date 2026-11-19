@@ -71,7 +71,6 @@ internal class MixSession(
                 val piece = HeldPiece(span.index, span.pcmStart, bytes, snap.generation, ended = false)
                 if (!buffer.store(piece)) return false
                 state.noteReady()
-                arm(true)
                 state.hold(piece)
                 return true
             } catch (bad: IllegalStateException) {

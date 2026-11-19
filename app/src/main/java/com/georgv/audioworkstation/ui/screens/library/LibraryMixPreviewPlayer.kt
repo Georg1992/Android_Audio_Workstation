@@ -37,9 +37,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private var positionMs = 0
     private var holding = false
     private var heardEngine = false
-    private var waitForOutput = false
-    private var clockShown: Int? = null
-    private var clockAudible = 0L
+    private var awaitingOutput = false
 
     private val playingProjectId = MutableStateFlow<String?>(null)
     val playingProjectIdState: StateFlow<String?> = playingProjectId.asStateFlow()
@@ -62,10 +60,12 @@ class LibraryMixPreviewPlayer @Inject constructor(
         playingProjectId.value = projectId
         holding = false
         heardEngine = false
-        waitForOutput = false
-        clockShown = null
+        awaitingOutput = true
         val started = armBody(positionMs)
-        if (!started) playingProjectId.value = null
+        if (!started) {
+            awaitingOutput = false
+            playingProjectId.value = null
+        }
         publishLocked()
         started
     }
@@ -73,21 +73,20 @@ class LibraryMixPreviewPlayer @Inject constructor(
     suspend fun stop() = engine.withLock {
         holding = false
         heardEngine = false
-        waitForOutput = false
-        clockShown = null
+        awaitingOutput = false
         playingProjectId.value = null
         positionMs = 0
         haltBody()
         publishLocked()
     }
 
-    /** Pause the mix while the finger is down. The playhead stays armed. */
+    /** Pause the mix while the finger is down. The stored playhead stays put. */
     suspend fun holdForScrub() {
         engine.withLock {
             if (playingProjectId.value == null || holding) return
             holding = true
             heardEngine = false
-            waitForOutput = false
+            awaitingOutput = false
             haltBody()
             publishLocked()
         }
@@ -99,12 +98,17 @@ class LibraryMixPreviewPlayer @Inject constructor(
             val duration = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             this.positionMs = positionMs.coerceIn(0, duration)
             holding = false
-            clockShown = null
-            if (playingProjectId.value != null) {
-                heardEngine = false
-                waitForOutput = true
-                val started = armBody(this.positionMs)
-                if (!started) playingProjectId.value = null
+            if (playingProjectId.value == null) {
+                awaitingOutput = false
+                publishLocked()
+                return
+            }
+            heardEngine = false
+            awaitingOutput = true
+            val started = armBody(this.positionMs)
+            if (!started) {
+                awaitingOutput = false
+                playingProjectId.value = null
             }
             publishLocked()
         }
@@ -124,23 +128,14 @@ class LibraryMixPreviewPlayer @Inject constructor(
             }
             val loaded = clip ?: return
             val (running, audible) = sample
-            if (running) heardEngine = true
-            if (running && waitForOutput && !outputReady()) {
+            if (running && awaitingOutput && !outputReady()) {
                 publishLocked()
                 return
             }
+            awaitingOutput = false
             if (running) {
-                if (waitForOutput) {
-                    waitForOutput = false
-                    clockShown = positionMs
-                    clockAudible = audible
-                }
-                val origin = clockShown
-                positionMs = if (origin == null) {
-                    audible.coerceIn(0L, loaded.durationMs).toInt()
-                } else {
-                    (origin + (audible - clockAudible)).coerceIn(0L, loaded.durationMs).toInt()
-                }
+                heardEngine = true
+                positionMs = audible.coerceIn(0L, loaded.durationMs).toInt()
             } else if (heardEngine) {
                 playingProjectId.value = null
                 positionMs = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
@@ -160,8 +155,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
         positionMs = 0
         holding = false
         heardEngine = false
-        waitForOutput = false
-        clockShown = null
+        awaitingOutput = false
         playingProjectId.value = null
         publishLocked()
     }

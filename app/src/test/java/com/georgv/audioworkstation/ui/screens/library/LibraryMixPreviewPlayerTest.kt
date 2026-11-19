@@ -64,17 +64,17 @@ class LibraryMixPreviewPlayerTest {
         audio.transportPositionMsValue = 40L
 
         player.seekTo(40)
-        audio.transportPositionMsValue = 90L
+        audio.transportPositionMsValue = 60L
         player.tick()
         assertEquals(40, player.transportState.value.positionMs)
 
         audio.outputHasRenderedValue = true
-        audio.transportPositionMsValue = 90L
+        audio.transportPositionMsValue = 60L
         player.tick()
-        assertEquals(40, player.transportState.value.positionMs)
-        audio.transportPositionMsValue = 130L
+        assertEquals(60, player.transportState.value.positionMs)
+        audio.transportPositionMsValue = 95L
         player.tick()
-        assertEquals(80, player.transportState.value.positionMs)
+        assertEquals(95, player.transportState.value.positionMs)
     }
 
     @Test

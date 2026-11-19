@@ -291,7 +291,6 @@ private fun CardPlaybackStrip(
     var dragging by remember { mutableStateOf(false) }
     var heldFraction by remember { mutableStateOf<Float?>(null) }
     var pinnedMs by remember { mutableStateOf<Int?>(null) }
-    var pinArmed by remember { mutableStateOf(false) }
     val finger = heldFraction
     val pin = pinnedMs
     val shownPositionMs = when {
@@ -305,16 +304,13 @@ private fun CardPlaybackStrip(
             dragging = false
             heldFraction = null
             pinnedMs = null
-            pinArmed = false
             return@LaunchedEffect
         }
         if (dragging) return@LaunchedEffect
         val marked = pinnedMs ?: return@LaunchedEffect
         val distance = if (positionMs >= marked) positionMs - marked else marked - positionMs
-        if (distance <= PinArriveMs) pinArmed = true
-        if (pinArmed && positionMs > marked) {
+        if (distance <= PinArriveMs) {
             pinnedMs = null
-            pinArmed = false
             heldFraction = null
         }
     }
@@ -337,9 +333,17 @@ private fun CardPlaybackStrip(
             Slider(
                 value = displayed,
                 onValueChange = { next ->
-                    if (!dragging) onScrubStarted?.invoke()
-                    dragging = true
-                    heldFraction = next
+                    val marked = pinnedMs
+                    val restating = !dragging && marked != null && durationMs > 0 &&
+                        (next * durationMs).toInt() == marked
+                    if (!restating) {
+                        if (!dragging) {
+                            pinnedMs = null
+                            onScrubStarted?.invoke()
+                        }
+                        dragging = true
+                        heldFraction = next
+                    }
                 },
                 onValueChangeFinished = {
                     val released = heldFraction
@@ -347,7 +351,6 @@ private fun CardPlaybackStrip(
                     if (released != null && durationMs > 0) {
                         val target = (released * durationMs).toInt()
                         pinnedMs = target
-                        pinArmed = false
                         heldFraction = null
                         onSeek(target)
                     } else {

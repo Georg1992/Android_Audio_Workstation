@@ -36,10 +36,11 @@ internal class SharedMixStream(
         buffer.kick()
     }
 
-    /** Pause the output and keep the playhead. The card stays on this mix. */
+    /** Pause the output and keep the heard playhead. The card stays on this mix. */
     fun hold() {
-        val snap = state.snapshot() ?: return
-        val open = state.retarget(snap.pcmByte, audible = false)
+        if (state.snapshot() == null) return
+        val heard = synchronized(state.lock) { state.audiblePcm }
+        val open = state.retarget(heard, audible = false)
         open?.close()
         buffer.kick()
     }
