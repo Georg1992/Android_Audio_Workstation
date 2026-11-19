@@ -124,32 +124,15 @@ class CommunityHomeViewModel @Inject constructor(
             return
         }
         preparing.value = true
-        try {
-            val publishError = publishCards()
-            val listed = sharedProjects.list()
-            val removed = ownedShares.unpublishAbsent(listed)
-            projects.value = listed.filter { project -> project.id !in removed }
-            if (publishError != null && publishError.message != MissingShareRoute) {
-                throw publishError
-            }
-            if (publishError != null) {
-                logWarning(TAG, "shared card was not published", publishError)
-            }
+        val listed = try {
+            sharedProjects.list()
         } finally {
             preparing.value = false
         }
-    }
-
-    private suspend fun publishCards(): Exception? {
-        try {
-            ownedShares.publishOwnerNames()
-            ownedShares.publishMixes()
-            return null
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (error: Exception) {
-            return error
-        }
+        projects.value = listed
+        val removed = ownedShares.unpublishAbsent(listed)
+        if (removed.isEmpty()) return
+        projects.value = listed.filter { project -> project.id !in removed }
     }
 
     private fun submit(block: suspend () -> Unit) {
@@ -177,6 +160,5 @@ class CommunityHomeViewModel @Inject constructor(
     private companion object {
         const val TAG = "CommunityHomeViewModel"
         const val STOP_TIMEOUT_MS = 5_000L
-        const val MissingShareRoute = "share api status 404"
     }
 }

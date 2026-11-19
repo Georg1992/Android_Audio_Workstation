@@ -106,7 +106,7 @@ fun CommunityHomeScreen(
                             val title = project.title.ifBlank {
                                 stringResource(R.string.library_untitled_project)
                             }
-                            val loading = loadingProjectId == project.id || state.preparing
+                            val loading = loadingProjectId == project.id
                             ProjectCard(
                                 card = ShownCard(
                                     title = title,

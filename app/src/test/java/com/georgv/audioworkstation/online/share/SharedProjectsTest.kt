@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -124,37 +125,8 @@ class SharedProjectsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun communityUnpublishesAnAbsentShareWhenTheCardPublishFails() = runTest {
-        val vm = CommunityHomeViewModel(
-            sessions = MemorySessions(session),
-            accounts = UnusedAccounts,
-            sharedProjects = FixedProjects(
-                listOf(
-                    SharedProject("boom", "Boom", emptyList(), null, "selftitled1"),
-                    SharedProject("other", "Song", emptyList(), null, "Ada"),
-                ),
-            ),
-            localProjects = NoLocalProjects,
-            ownedShares = object : OwnedShareRefresh {
-                override suspend fun publishOwnerNames() = Unit
-
-                override suspend fun publishMixes() {
-                    throw UnknownHostException("Unable to resolve host")
-                }
-
-                override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = setOf("boom")
-            },
-        )
-        val collect = backgroundScope.launch { vm.uiState.collect { } }
-        advanceUntilIdle()
-        assertEquals(listOf("Song"), vm.uiState.value.projects.map { it.title })
-        assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
-        collect.cancel()
-    }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    @Test
-    fun communityShowsTheListWhenTheMixRouteIsMissing() = runTest {
+    fun openingThePlaylistShowsTheCardsWithoutPublishingTheMix() = runTest {
+        var published = false
         val vm = CommunityHomeViewModel(
             sessions = MemorySessions(session),
             accounts = UnusedAccounts,
@@ -163,23 +135,23 @@ class SharedProjectsTest {
             ),
             localProjects = NoLocalProjects,
             ownedShares = object : OwnedShareRefresh {
-                override suspend fun publishOwnerNames() = Unit
+                override suspend fun publishOwnerNames() {
+                    published = true
+                }
 
                 override suspend fun publishMixes() {
-                    throw IllegalStateException("share api status 404")
+                    published = true
                 }
 
                 override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
             },
         )
-        val shown = mutableListOf<Int>()
         val collect = backgroundScope.launch { vm.uiState.collect { } }
-        val errors = backgroundScope.launch { vm.userMessages.collect { shown += it.resId } }
         advanceUntilIdle()
         assertEquals(listOf("boomi"), vm.uiState.value.projects.map { it.title })
-        assertTrue(shown.isEmpty())
+        assertEquals(false, vm.uiState.value.preparing)
+        assertFalse(published)
         collect.cancel()
-        errors.cancel()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -205,7 +177,7 @@ class SharedProjectsTest {
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
         assertEquals(R.string.error_no_connection, vm.userMessages.first().resId)
-        assertTrue(vm.uiState.value.projects.isEmpty())
+        assertEquals(listOf("Boom"), vm.uiState.value.projects.map { it.title })
         collect.cancel()
     }
 
