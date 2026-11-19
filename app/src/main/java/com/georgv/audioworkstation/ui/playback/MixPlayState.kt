@@ -38,6 +38,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
     internal var start: MixStart? = null
     internal var stall: Exception? = null
     internal var stallSent = false
+    internal var parked: Thread? = null
 
     fun open(url: String): CountDownLatch {
         synchronized(lock) {
@@ -71,6 +72,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
             generation += 1
             val open = inflight
             inflight = null
+            parked?.interrupt()
             lock.notifyAll()
             return ReleasedStream(open)
         }
@@ -86,6 +88,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
             generation += 1
             val open = inflight
             inflight = null
+            parked?.interrupt()
             lock.notifyAll()
             return open
         }
@@ -98,9 +101,21 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
             broken = true
             val open = inflight
             inflight = null
+            parked?.interrupt()
             start?.latch?.countDown()
             lock.notifyAll()
             return open
+        }
+    }
+
+    fun park(active: Boolean) {
+        synchronized(lock) {
+            if (active) {
+                parked = Thread.currentThread()
+            } else if (parked === Thread.currentThread()) {
+                parked = null
+                Thread.interrupted()
+            }
         }
     }
 

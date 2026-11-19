@@ -68,7 +68,7 @@ internal class MixPieceFetcher(
 
     private fun load(snap: MixSnap, span: MixSpan, seen: Int): PieceLoad {
         try {
-            val bytes = reader.read(snap.url, span.fileStart, span.fileEndInclusive, exact = true)
+            val bytes = reader.read(snap.url, span.fileStart, span.fileEndInclusive, exact = true, abortable = true)
             val same = state.snapshot()?.generation == seen
             if (bytes == null || !same) return PieceLoad(null, keepGoing = true)
             return PieceLoad(bytes, keepGoing = true)

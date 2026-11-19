@@ -11,11 +11,10 @@ internal class AacMixSource(
     private val codec: AacCodec,
 ) : MixSource {
     private val pcm = AacToPcm(codec)
+    private val cache = AacByteCache(remote)
 
     override fun open(url: String, start: Long, endInclusive: Long): InputStream {
-        val bytes = pcm.wav(url, start, endInclusive) { from, to ->
-            remote.open(url, from, to).use { stream -> stream.readBytes() }
-        }
+        val bytes = pcm.wav(url, start, endInclusive) { from, to -> cache.read(url, from, to) }
         return ByteArrayInputStream(bytes)
     }
 }

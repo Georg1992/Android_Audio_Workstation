@@ -50,11 +50,6 @@ class AacToPcm(private val codec: AacCodec) {
         if (packet.size < ref.length) error("mix is not aac")
         val pcm = codec.decode(packet, mix.sampleRateHz, mix.channelCount, mix.pcmLength(piece))
         decoded[piece] = pcm
-        decoded.keys.filter { kotlin.math.abs(it - piece) > KeptNeighbors }.forEach { decoded.remove(it) }
         return pcm
-    }
-
-    private companion object {
-        const val KeptNeighbors = 1
     }
 }

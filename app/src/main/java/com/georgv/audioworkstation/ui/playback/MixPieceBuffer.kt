@@ -72,17 +72,17 @@ internal class MixPieceBuffer(private val limit: Int) {
 
     fun awaitPiece(index: Int): HeldPiece? {
         synchronized(lock) {
-            val ready = pieces[index]
-            if (ready != null) return ready
-            if (closed) return null
-            try {
-                lock.wait()
-            } catch (interrupted: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return null
+            while (true) {
+                val ready = pieces[index]
+                if (ready != null) return ready
+                if (closed) return null
+                try {
+                    lock.wait()
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return null
+                }
             }
-            if (closed) return null
-            return pieces[index]
         }
     }
 }

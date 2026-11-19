@@ -50,6 +50,7 @@ internal class AudioTrackPcmOutput : PcmOutput {
 
     override fun write(bytes: ByteArray, offset: Int, length: Int): Int {
         val audio = track ?: return -1
+        if (audio.playState != AudioTrack.PLAYSTATE_PLAYING) return 0
         return audio.write(bytes, offset, length, AudioTrack.WRITE_BLOCKING)
     }
 

@@ -6,17 +6,25 @@ internal class MixPieceReader(
     private val source: MixSource,
     private val state: MixPlayState,
 ) {
-    fun read(url: String, start: Long, endInclusive: Long, exact: Boolean): ByteArray? {
-        val input = source.open(url, start, endInclusive)
-        if (!state.attach(input)) {
-            input.close()
-            return null
-        }
+    fun read(url: String, start: Long, endInclusive: Long, exact: Boolean, abortable: Boolean = false): ByteArray? {
+        if (abortable) state.park(true)
         try {
-            return readBytes(input, (endInclusive - start + 1L).toInt(), exact)
+            val input = source.open(url, start, endInclusive)
+            if (!state.attach(input)) {
+                input.close()
+                return null
+            }
+            try {
+                return readBytes(input, (endInclusive - start + 1L).toInt(), exact)
+            } finally {
+                state.detach(input)
+                input.close()
+            }
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
         } finally {
-            state.detach(input)
-            input.close()
+            if (abortable) state.park(false)
         }
     }
 

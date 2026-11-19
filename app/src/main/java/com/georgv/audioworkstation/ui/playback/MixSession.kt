@@ -15,6 +15,7 @@ internal class MixSession(
 ) {
     private var outputLive = false
     private var fetcher: Thread? = null
+    private var cutGeneration = -1
 
     fun run() {
         try {
@@ -106,7 +107,7 @@ internal class MixSession(
     private fun readyPiece(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
         val kept = reused(piece, snap)
         if (kept != null) return kept
-        if (piece != null) restart()
+        if (piece != null) cut(snap.generation)
         state.hold(null)
         val live = state.snapshot() ?: return null
         if (!live.playing || live.generation != snap.generation) return null
@@ -126,7 +127,7 @@ internal class MixSession(
 
     private fun reused(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
         if (piece == null || !piece.covers(snap.pcmByte)) return null
-        if (piece.generation != snap.generation) restart()
+        if (piece.generation != snap.generation) cut(snap.generation)
         val tagged = if (piece.generation == snap.generation) piece else piece.retag(snap.generation)
         state.hold(tagged)
         return tagged
@@ -154,7 +155,9 @@ internal class MixSession(
         return true
     }
 
-    private fun restart() {
+    private fun cut(generation: Int) {
+        if (cutGeneration == generation) return
+        cutGeneration = generation
         arm(false)
         arm(true)
     }

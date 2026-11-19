@@ -3,13 +3,9 @@ package com.georgv.audioworkstation.ui.playback
 import java.util.concurrent.TimeUnit
 
 /**
- * Plays a shared 16-bit PCM mix as short indexed pieces.
- * Playback starts once the first piece is stored. A short stretch of the next
- * pieces stays buffered. The master mix keeps every fetched piece for that
- * playback, and keeps fetching until the song is stored. Seek opens the piece
- * that contains the new time and starts it at once when that piece is already
- * stored. A slow piece keeps the buffered audio playing and is requested again
- * when the connection returns.
+ * Plays one shared mix. Playback starts from the first piece. The master mix
+ * keeps every piece for that playback. Seek leaves the playhead on the released
+ * time until that piece can be written, then the speaker continues from there.
  */
 internal class SharedMixStream(
     private val source: MixSource = UrlMixSource(),

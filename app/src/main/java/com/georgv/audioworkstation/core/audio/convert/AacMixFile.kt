@@ -17,6 +17,7 @@ internal class AacMixIndex(
     val packets: List<AacPacketRef>,
 ) {
     val wavSize: Long = AacMixFile.WavHeaderBytes + pcmBytes.toLong()
+    val fileSize: Long = packets[packets.lastIndex].let { packet -> packet.offset + packet.length }
 
     fun header(): ByteArray {
         val bytes = ByteBuffer.allocate(AacMixFile.WavHeaderBytes).order(ByteOrder.LITTLE_ENDIAN)

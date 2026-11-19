@@ -43,6 +43,41 @@ class AacMixTest {
     }
 
     @Test
+    fun oneDownloadFeedsEveryPiece() {
+        val wav = File.createTempFile("mix", ".wav")
+        writeConstantPcm16Wav(wav, Sample, frameCount = Frames, sampleRateHz = Rate)
+        val aac = WavToAac(RoundTripAac()).convert(wav)
+        val stored = aac.readBytes()
+        val opens = AtomicInteger()
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                opens.incrementAndGet()
+                val from = start.toInt()
+                val to = endInclusive.toInt() + 1
+                return ByteArrayInputStream(stored.copyOfRange(from, to))
+            }
+        }
+        val output = RecordingOutput()
+        val stream = SharedMixStream(AacMixSource(source, RoundTripAac()), output, aheadPieces = 1, keepSong = true)
+        try {
+            stream.play(Url)
+            assertTrue(waitUntil { opens.get() >= BulkReads && stable(opens) })
+            val count = opens.get()
+            assertTrue(count <= BulkReads)
+            stream.seekTo(SeekMs)
+            output.allow(WritesAfterSeek)
+            assertTrue(waitUntil { stream.transport().positionMs > SeekMs && stream.transport().playing })
+            assertEquals(count, opens.get())
+        } finally {
+            output.allow(WritesAfterSeek)
+            stream.release()
+            aac.delete()
+            wav.delete()
+            Unit
+        }
+    }
+
+    @Test
     fun seekStartsTheAacMixAtTheNewTimeAndKeepsPlaying() {
         val wav = File.createTempFile("mix", ".wav")
         writeConstantPcm16Wav(wav, Sample, frameCount = Frames, sampleRateHz = Rate)
@@ -111,6 +146,12 @@ class AacMixTest {
         override fun release() = Unit
     }
 
+    private fun stable(opens: AtomicInteger): Boolean {
+        val first = opens.get()
+        Thread.sleep(PollMs)
+        return opens.get() == first
+    }
+
     private fun waitUntil(probe: () -> Boolean): Boolean {
         val deadline = System.currentTimeMillis() + WaitMs
         while (System.currentTimeMillis() < deadline) {
@@ -143,6 +184,7 @@ class AacMixTest {
         const val Sample: Short = 7
         const val Url = "https://mix.example/aac"
         const val WritesAfterSeek = 2
+        const val BulkReads = 3
         const val WaitMs = 3_000L
         const val PollMs = 10L
         const val ByteMask = 0xFF

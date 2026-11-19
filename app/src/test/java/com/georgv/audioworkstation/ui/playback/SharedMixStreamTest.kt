@@ -64,6 +64,36 @@ class SharedMixStreamTest {
     }
 
     @Test
+    fun seekHoldsThePlayheadUntilThatPieceCanPlay() {
+        val wav = largeWav()
+        val gate = CountDownLatch(1)
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                if (start == TargetStart) gate.await()
+                return slice(wav, start, endInclusive)
+            }
+        }
+        val output = PermitOutput()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces, keepSong = true)
+        try {
+            stream.play(Url)
+            output.allow(WritesAfterStart)
+            stream.seekTo(SeekMs)
+            assertEquals(SeekMs, stream.transport().positionMs)
+            Thread.sleep(HoldMs)
+            assertEquals(SeekMs, stream.transport().positionMs)
+            assertTrue(stream.transport().playing)
+            gate.countDown()
+            output.allow(WritesAfterStart)
+            assertTrue(waitUntil { stream.transport().positionMs > SeekMs && stream.transport().playing })
+        } finally {
+            gate.countDown()
+            output.allow(WritesAfterStart)
+            stream.release()
+        }
+    }
+
+    @Test
     fun seekStartsAtTheNewSample() {
         val wav = largeWav()
         val info = WavStreamHeader.read(ByteArrayInputStream(wav)) ?: error("wav header")
@@ -511,6 +541,7 @@ class SharedMixStreamTest {
         const val WaitMs = 3_000L
         const val PollMs = 10L
         const val SettleMs = 40L
+        const val HoldMs = 400L
         const val ByteMask = 0xFF
         val FirstPieces = listOf(44L, 4_044L, 8_044L)
     }

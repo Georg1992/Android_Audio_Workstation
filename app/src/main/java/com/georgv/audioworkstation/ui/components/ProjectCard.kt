@@ -217,6 +217,7 @@ private fun CardPlaybackButton(
 
 private const val MillisPerSecond = 1000
 private const val SecondsPerMinute = 60
+private const val PinArriveMs = 100
 
 private fun playbackClock(positionMs: Int): String {
     val totalSeconds = positionMs.coerceAtLeast(0) / MillisPerSecond
@@ -286,25 +287,34 @@ private fun CardPlaybackStrip(
     onScrubStarted: (() -> Unit)?,
     onSeek: (Int) -> Unit,
 ) {
-    val fraction = if (durationMs > 0) positionMs.toFloat() / durationMs.toFloat() else 0f
     var dragging by remember { mutableStateOf(false) }
     var heldFraction by remember { mutableStateOf<Float?>(null) }
-    var positionAtRelease by remember { mutableStateOf<Int?>(null) }
-    val held = heldFraction
-    val displayed = (held ?: fraction).coerceIn(0f, 1f)
-    val shownPositionMs = if (held != null && durationMs > 0) (displayed * durationMs).toInt() else positionMs
-    LaunchedEffect(dragging, durationMs, positionMs) {
+    var pinnedMs by remember { mutableStateOf<Int?>(null) }
+    var pinArmed by remember { mutableStateOf(false) }
+    val finger = heldFraction
+    val pin = pinnedMs
+    val shownPositionMs = when {
+        finger != null && durationMs > 0 -> (finger.coerceIn(0f, 1f) * durationMs).toInt()
+        pin != null -> pin.coerceIn(0, durationMs)
+        else -> positionMs
+    }
+    val displayed = if (durationMs > 0) shownPositionMs.toFloat() / durationMs.toFloat() else 0f
+    LaunchedEffect(dragging, durationMs, positionMs, pinnedMs) {
         if (durationMs <= 0) {
             dragging = false
             heldFraction = null
-            positionAtRelease = null
+            pinnedMs = null
+            pinArmed = false
             return@LaunchedEffect
         }
         if (dragging) return@LaunchedEffect
-        val marked = positionAtRelease ?: return@LaunchedEffect
-        if (positionMs != marked) {
+        val marked = pinnedMs ?: return@LaunchedEffect
+        val distance = if (positionMs >= marked) positionMs - marked else marked - positionMs
+        if (distance <= PinArriveMs) pinArmed = true
+        if (pinArmed && positionMs > marked) {
+            pinnedMs = null
+            pinArmed = false
             heldFraction = null
-            positionAtRelease = null
         }
     }
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -332,9 +342,16 @@ private fun CardPlaybackStrip(
                 },
                 onValueChangeFinished = {
                     val released = heldFraction
-                    positionAtRelease = positionMs
                     dragging = false
-                    if (released != null && durationMs > 0) onSeek((released * durationMs).toInt())
+                    if (released != null && durationMs > 0) {
+                        val target = (released * durationMs).toInt()
+                        pinnedMs = target
+                        pinArmed = false
+                        heldFraction = null
+                        onSeek(target)
+                    } else {
+                        heldFraction = null
+                    }
                 },
                 enabled = durationMs > 0,
                 modifier = Modifier.weight(1f),
