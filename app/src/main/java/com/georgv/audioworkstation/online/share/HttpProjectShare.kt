@@ -37,6 +37,7 @@ class HttpProjectShare(
         val files = tracksToShare(projects.observeTracks(project.id).first())
         val sharedMix = (mixConverter ?: androidWavToAac()).convert(mix)
         var published = false
+        var mixStored = false
         val failure = try {
             runCatching {
                 post(
@@ -50,27 +51,41 @@ class HttpProjectShare(
                 )
                 published = true
                 projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCING, ownerUserId = session.accountId))
-                uploadHashed(session, project.id, "mix", sharedMix)
+                storeSharedMix(session, project.id, sharedMix)
+                mixStored = true
                 shareFiles(session, project, files)
             }.exceptionOrNull()
         } finally {
             sharedMix.delete()
         }
         if (failure == null) return
+        finishShare(session, project, published, mixStored, failure)
+    }
+
+    private suspend fun finishShare(
+        session: AccountSession,
+        project: ProjectEntity,
+        published: Boolean,
+        mixStored: Boolean,
+        failure: Throwable,
+    ) {
         var listed = false
         var listUnread = false
-        try {
-            val rows = sharedProjects(api.exchangeAuthorized(session, "GET", "/shared-projects", null))
-            listed = session.name.isNotEmpty() && rows.any { row ->
-                row.id == project.id && row.ownerName == session.name
+        if (!published || mixStored) {
+            try {
+                val rows = sharedProjects(api.exchangeAuthorized(session, "GET", "/shared-projects", null))
+                listed = session.name.isNotEmpty() && rows.any { row ->
+                    row.id == project.id && row.ownerName == session.name
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                logWarning(TAG, "community list was not read after share", error)
+                listUnread = true
             }
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (error: Exception) {
-            logWarning(TAG, "community list was not read after share", error)
-            listUnread = true
         }
-        if (listed || listUnread && published) {
+        val rowAlreadyShared = published && mixStored && (listed || listUnread)
+        if (rowAlreadyShared || !published && listed) {
             projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId))
             return
         }
@@ -154,7 +169,7 @@ class HttpProjectShare(
             val session = openSession("Sign in to share a project")
             val aac = (mixConverter ?: androidWavToAac()).convert(mixFile(projectId))
             try {
-                uploadHashed(session, projectId, "mix", aac)
+                storeSharedMix(session, projectId, aac)
             } finally {
                 aac.delete()
             }
@@ -229,6 +244,34 @@ class HttpProjectShare(
         val file = File(path)
         if (!file.isFile) error("shared project has no mix")
         return file
+    }
+
+    private fun storeSharedMix(session: AccountSession, projectId: String, aac: File) {
+        val hash = sha256Hex(aac)
+        val upload = post(
+            session,
+            "/shared-projects/$projectId/uploads",
+            JSONObject()
+                .put("trackId", SharedMix.TrackId)
+                .put("contentHash", hash)
+                .put("size", aac.length())
+                .toString(),
+        )
+        if (!upload.getBoolean("alreadyStored")) {
+            val url = upload.getString("uploadUrl")
+            if (url.isBlank()) error("share api did not return an upload url")
+            objects.put(url, headers(upload), aac)
+        }
+        post(
+            session,
+            "/shared-projects/$projectId/files",
+            JSONObject()
+                .put("trackId", SharedMix.TrackId)
+                .put("contentHash", hash)
+                .put("storageKey", hash)
+                .put("size", aac.length())
+                .toString(),
+        )
     }
 
     private fun uploadHashed(session: AccountSession, projectId: String, kind: String, file: File) {

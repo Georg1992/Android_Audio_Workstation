@@ -61,8 +61,9 @@ class ShareSelectionTest {
         share.publishMix("project-a")
         val upload = JSONObject(api.sent[0])
         val commit = JSONObject(api.sent[1])
-        assertEquals(listOf("/shared-projects/project-a/mix", "/shared-projects/project-a/mix/commit"), api.paths)
+        assertEquals(listOf("/shared-projects/project-a/uploads", "/shared-projects/project-a/files"), api.paths)
         assertEquals(1, objects.puts)
+        assertEquals("00000000-0000-0000-0000-000000000000", upload.getString("trackId"))
         assertEquals(aacHash, upload.getString("contentHash"))
         assertEquals(aacHash, commit.getString("contentHash"))
         assertEquals(aacSize, upload.getLong("size"))
@@ -116,8 +117,8 @@ class ShareSelectionTest {
             }
             assertTrue(failed)
             assertEquals("/shared-projects", api.paths.first())
-            assertEquals("/shared-projects/project-a/mix", api.paths[1])
-            assertEquals(listOf("POST", "POST", "POST", "GET", "DELETE"), api.methods)
+            assertEquals("/shared-projects/project-a/uploads", api.paths[1])
+            assertEquals(listOf("POST", "POST", "POST", "DELETE"), api.methods)
             assertEquals("/shared-projects/project-a", api.paths.last())
             val project = dao.projects.value.single()
             assertEquals(SyncStatus.LOCAL, project.syncStatus)
@@ -169,13 +170,12 @@ class ShareSelectionTest {
             assertEquals(
                 listOf(
                     "/shared-projects",
-                    "/shared-projects/project-a/mix",
-                    "/shared-projects",
+                    "/shared-projects/project-a/uploads",
                     "/shared-projects/project-a",
                 ),
                 api.paths,
             )
-            assertEquals(listOf("POST", "POST", "GET", "DELETE"), api.methods)
+            assertEquals(listOf("POST", "POST", "DELETE"), api.methods)
             assertEquals(SyncStatus.LOCAL, dao.projects.value.single().syncStatus)
         } finally {
             mix.delete()
@@ -196,10 +196,11 @@ class ShareSelectionTest {
             listOf(
                 """{"id":"project-a"}""",
                 """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
                 "",
                 community("Owner"),
             ),
-            failAt = 2,
+            failAt = 3,
         )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
@@ -211,7 +212,7 @@ class ShareSelectionTest {
         ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
-            assertEquals(listOf("POST", "POST", "POST", "GET"), api.methods)
+            assertEquals(listOf("POST", "POST", "POST", "POST", "GET"), api.methods)
             assertEquals("/shared-projects", api.paths.last())
             val project = dao.projects.value.single()
             assertEquals(SyncStatus.SYNCED, project.syncStatus)
@@ -282,7 +283,15 @@ class ShareSelectionTest {
         val mix = File.createTempFile("share-list-down", ".wav")
         writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
-        val api = ScriptedApi(listOf("""{"id":"project-a"}""", """{"storageKey":"mix","alreadyStored":true}"""), 2, 3)
+        val api = ScriptedApi(
+            listOf(
+                """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
+            ),
+            failAt = 3,
+            alsoFailAt = 4,
+        )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
             accounts = IdleAccounts(),
@@ -293,7 +302,7 @@ class ShareSelectionTest {
         ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
-            assertEquals(listOf("POST", "POST", "POST", "GET"), api.methods)
+            assertEquals(listOf("POST", "POST", "POST", "POST", "GET"), api.methods)
             assertEquals(SyncStatus.SYNCED, dao.projects.value.single().syncStatus)
             assertEquals("account-1", dao.projects.value.single().ownerUserId)
         } finally {
@@ -430,7 +439,7 @@ class ShareSelectionTest {
         ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
-            assertEquals(listOf("/shared-projects", "/shared-projects/project-a/mix"), api.paths.take(2))
+            assertEquals(listOf("/shared-projects", "/shared-projects/project-a/uploads"), api.paths.take(2))
             assertEquals(0, objects.puts)
             assertEquals("abc", audio.readText())
             val stored = dao.tracks.value.single()
