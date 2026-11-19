@@ -209,6 +209,38 @@ internal class MixTimelineGestures(
     val onCommit: (Long) -> Unit,
 )
 
+@Composable
+internal fun TransportTimeline(
+    playheadPositionMs: Long,
+    timelineDurationMs: Long,
+    gestures: MixTimelineGestures,
+    inputLocked: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(Dimens.SmallRadius)
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(Dimens.PanelPlaceholderHeight)
+            .background(AppColors.Bg, shape),
+    ) {
+        val metrics = rememberTimelinePlayheadWaveformMetrics(
+            waveformAreaWidth = maxWidth,
+            timelineDurationMs = timelineDurationMs,
+        )
+        TimelineScrubberWaveformSlot(
+            metrics = metrics,
+            timelineDurationMs = timelineDurationMs,
+            playheadPositionMs = playheadPositionMs,
+            onPlayheadScrubStarted = gestures.onStarted,
+            onPlayheadScrubCancelled = gestures.onCancelled,
+            onPlayheadPositionPreview = gestures.onPreview,
+            onPlayheadPositionCommit = gestures.onCommit,
+            inputLocked = inputLocked,
+        )
+    }
+}
+
 /**
  * Ruler ticks, scrub hit-testing, and the top playhead marker share one waveform-column [Box].
  * [TimelinePlayheadMarker] is the only top playhead visual; X uses [timelineMsToX].

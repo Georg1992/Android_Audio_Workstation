@@ -5,7 +5,9 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -38,16 +41,20 @@ import com.georgv.audioworkstation.core.audio.ContentResolverAudioImportSource
 import com.georgv.audioworkstation.core.content.resolveDisplayName
 import com.georgv.audioworkstation.core.ui.resolve
 import com.georgv.audioworkstation.ui.components.ImportAudioButton
+import com.georgv.audioworkstation.ui.components.MasterOutputPeakIndicator
+import com.georgv.audioworkstation.ui.components.MixTimelineGestures
 import com.georgv.audioworkstation.ui.components.MixdownAudioButton
-import com.georgv.audioworkstation.ui.components.TimelinePlayheadScrubberPanel
 import com.georgv.audioworkstation.ui.components.TopBarAlertState
 import com.georgv.audioworkstation.ui.components.TransportPanel
+import com.georgv.audioworkstation.ui.components.TransportTimeline
 import com.georgv.audioworkstation.ui.components.formatTimelineDuration
+import com.georgv.audioworkstation.ui.components.transportChrome
 import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
 import com.georgv.audioworkstation.ui.drag.DragController
 import com.georgv.audioworkstation.ui.mixdown.ProjectMixdownViewModel
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlinx.coroutines.coroutineScope
@@ -213,32 +220,56 @@ internal fun ProjectScreenHeavyLayer(
 
     val playheadPositionMs =
         scrubbingPlayheadPositionMs ?: realtimeState.globalPlayheadPositionMs
+    val timelineLocked =
+        reorderActive ||
+            structuralState.recordingTrackId != null ||
+            structuralState.isRecordingStartup
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TimelinePlayheadScrubberPanel(
-            playheadPositionMs = playheadPositionMs,
-            timelineDurationMs = realtimeState.timelineVisibleDurationMs,
-            masterPeakDbText = realtimeState.masterPeakDbText,
-            masterPeakIndicatorLevel = realtimeState.masterPeakIndicatorLevel,
-            onMasterPeakIndicatorClick = { vm.onMasterPeakIndicatorClicked() },
-            onPlayheadScrubStarted = { vm.onPlayheadScrubStarted() },
-            onPlayheadScrubCancelled = {
-                scrubbingPlayheadPositionMs = null
-                vm.onPlayheadScrubCancelled()
-            },
-            onPlayheadPositionPreview = { positionMs ->
-                scrubbingPlayheadPositionMs = positionMs
-                vm.onPlayheadScrubPreviewPosition(positionMs, realtimeState.timelineVisibleDurationMs)
-            },
-            onPlayheadPositionCommit = { positionMs ->
-                scrubbingPlayheadPositionMs = null
-                vm.onPlayheadScrubCommittedPosition(positionMs, realtimeState.timelineVisibleDurationMs)
-            },
-            inputLocked =
-                reorderActive ||
-                structuralState.recordingTrackId != null ||
-                structuralState.isRecordingStartup,
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
+                .transportChrome(raised = true)
+                .padding(horizontal = Dimens.Gap, vertical = Dimens.TransportPanelPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .alpha(if (timelineLocked) AppOpacity.disabled else 1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { vm.onMasterPeakIndicatorClicked() },
+                    ),
+            ) {
+                MasterOutputPeakIndicator(
+                    peakDbText = realtimeState.masterPeakDbText,
+                    indicatorLevel = realtimeState.masterPeakIndicatorLevel,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            ImportAudioButton(
+                enabled =
+                    structuralState.recordingTrackId == null &&
+                        !structuralState.isRecordingStartup &&
+                        !structuralState.isImportInProgress &&
+                        !isMixdownInProgress,
+                onClick = { importAudioLauncher.launch(IMPORT_AUDIO_MIME_TYPES) },
+                inputLocked = reorderActive,
+            )
+            Spacer(Modifier.width(Dimens.Gap / 2))
+            MixdownAudioButton(
+                enabled =
+                    structuralState.isPlayEnabled &&
+                        structuralState.recordingTrackId == null &&
+                        !structuralState.isRecordingStartup &&
+                        !structuralState.isImportInProgress &&
+                        !isMixdownInProgress,
+                onClick = { showMixdownDialog = true },
+                inputLocked = reorderActive,
+            )
+        }
 
         ProjectHeavyWorkspace(
             state = structuralState,
@@ -252,53 +283,51 @@ internal fun ProjectScreenHeavyLayer(
             modifier = Modifier.weight(1f),
         )
 
-        Row(
+        TransportPanel(
+            isRecording = structuralState.recordingTrackId != null || structuralState.isRecordingStartup,
+            isPlaying = structuralState.isTransportPlaying,
+            isPlayEnabled = structuralState.isPlayEnabled,
+            isStopEnabled = structuralState.isStopEnabled,
+            stopButtonShowsPause = structuralState.stopButtonShowsPause,
+            playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
+            onPlay = { vm.onPlayPressed() },
+            onStop = { vm.onStopPressed() },
+            onRecord = { startRecordingIfPermitted(newProjectName) },
+            isRecordEnabled = !structuralState.isImportInProgress,
+            inputLocked = reorderActive,
+            raised = true,
+            timeline = {
+                TransportTimeline(
+                    playheadPositionMs = playheadPositionMs,
+                    timelineDurationMs = realtimeState.timelineVisibleDurationMs,
+                    gestures = MixTimelineGestures(
+                        onStarted = { vm.onPlayheadScrubStarted() },
+                        onCancelled = {
+                            scrubbingPlayheadPositionMs = null
+                            vm.onPlayheadScrubCancelled()
+                        },
+                        onPreview = { positionMs ->
+                            scrubbingPlayheadPositionMs = positionMs
+                            vm.onPlayheadScrubPreviewPosition(
+                                positionMs,
+                                realtimeState.timelineVisibleDurationMs,
+                            )
+                        },
+                        onCommit = { positionMs ->
+                            scrubbingPlayheadPositionMs = null
+                            vm.onPlayheadScrubCommittedPosition(
+                                positionMs,
+                                realtimeState.timelineVisibleDurationMs,
+                            )
+                        },
+                    ),
+                    inputLocked = timelineLocked,
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Start,
-        ) {
-            TransportPanel(
-                isRecording = structuralState.recordingTrackId != null || structuralState.isRecordingStartup,
-                isPlaying = structuralState.isTransportPlaying,
-                isPlayEnabled = structuralState.isPlayEnabled,
-                isStopEnabled = structuralState.isStopEnabled,
-                stopButtonShowsPause = structuralState.stopButtonShowsPause,
-                playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
-                onPlay = { vm.onPlayPressed() },
-                onStop = { vm.onStopPressed() },
-                onRecord = { startRecordingIfPermitted(newProjectName) },
-                isRecordEnabled = !structuralState.isImportInProgress,
-                inputLocked = reorderActive,
-                modifier = Modifier.fillMaxWidth(Dimens.TransportPanelWidthFraction),
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            ImportAudioButton(
-                enabled =
-                    structuralState.recordingTrackId == null &&
-                    !structuralState.isRecordingStartup &&
-                    !structuralState.isImportInProgress &&
-                    !isMixdownInProgress,
-                onClick = { importAudioLauncher.launch(IMPORT_AUDIO_MIME_TYPES) },
-                inputLocked = reorderActive,
-            )
-
-            Spacer(Modifier.width(Dimens.Gap / 2))
-
-            MixdownAudioButton(
-                enabled =
-                    structuralState.isPlayEnabled &&
-                    structuralState.recordingTrackId == null &&
-                    !structuralState.isRecordingStartup &&
-                    !structuralState.isImportInProgress &&
-                    !isMixdownInProgress,
-                onClick = { showMixdownDialog = true },
-                inputLocked = reorderActive,
-            )
-        }
+        )
     }
 }
 

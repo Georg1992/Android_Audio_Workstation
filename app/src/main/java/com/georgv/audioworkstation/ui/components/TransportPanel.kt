@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -59,12 +60,22 @@ fun TransportPanel(
     onRecord: () -> Unit,
     isRecordEnabled: Boolean = true,
     modifier: Modifier = Modifier,
-    inputLocked: Boolean = false
+    inputLocked: Boolean = false,
+    raised: Boolean = false,
+    timeline: (@Composable () -> Unit)? = null,
 ) {
-    TransportPanelSurface(
-        modifier = modifier,
-        inputLocked = inputLocked,
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .transportChrome(raised)
+            .padding(horizontal = Dimens.Gap, vertical = Dimens.TransportPanelPadding)
+            .consumeAllPointers(enabled = inputLocked),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.CenterVertically,
@@ -107,30 +118,32 @@ fun TransportPanel(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f))
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-        ) {
-            TransportButton(
-                color = AppColors.Red,
-                enabled = isRecordEnabled && !inputLocked,
-                onClick = onRecord,
-                isActive = isRecording,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             ) {
-                Icon(
-                    Icons.Filled.FiberManualRecord,
-                    contentDescription = stringResource(R.string.cd_record),
-                    tint = AppColors.Line,
-                    modifier = Modifier.size(Dimens.TransportIconSize),
+                TransportButton(
+                    color = AppColors.Red,
+                    enabled = isRecordEnabled && !inputLocked,
+                    onClick = onRecord,
+                    isActive = isRecording,
+                ) {
+                    Icon(
+                        Icons.Filled.FiberManualRecord,
+                        contentDescription = stringResource(R.string.cd_record),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
+                TransportPlayheadTimeDisplay(
+                    label = playheadTimeLabel,
+                    modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
                 )
             }
-            TransportPlayheadTimeDisplay(
-                label = playheadTimeLabel,
-                modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
-            )
         }
+        timeline?.invoke()
     }
 }
 
@@ -140,21 +153,34 @@ internal fun TransportPanelSurface(
     inputLocked: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(AppColors.SurfacePanel)
-            .border(Dimens.Stroke, AppColors.Line, shape)
-            .padding(horizontal = Dimens.Gap, vertical = TransportPanelVerticalPadding)
+            .transportChrome(raised = false)
+            .padding(horizontal = Dimens.Gap, vertical = Dimens.TransportPanelPadding)
             .consumeAllPointers(enabled = inputLocked),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
 }
 
-private val TransportPanelVerticalPadding = 6.dp
+internal fun Modifier.transportChrome(raised: Boolean): Modifier {
+    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
+    return if (raised) {
+        this
+            .shadow(
+                elevation = Dimens.PanelElevation,
+                shape = shape,
+                clip = false,
+            )
+            .background(AppColors.SurfaceRaised, shape)
+    } else {
+        this
+            .clip(shape)
+            .background(AppColors.SurfacePanel)
+            .border(Dimens.Stroke, AppColors.Line, shape)
+    }
+}
 
 @Composable
 fun MasterOutputPeakIndicator(

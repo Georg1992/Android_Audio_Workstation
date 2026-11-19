@@ -3,9 +3,6 @@ package com.georgv.audioworkstation.ui.theme
 import androidx.compose.ui.unit.dp
 
 object Dimens {
-    /** Fraction of the project screen width used for the transport panel container. */
-    const val TransportPanelWidthFraction = 0.7f
-
     val Gap = 10.dp
 
     val TileRadius = 10.dp
@@ -43,6 +40,8 @@ object Dimens {
 
     // transport
     val TransportPanelRadius = 12.dp
+    val TransportPanelPadding = 6.dp
+    val PanelElevation = 4.dp
     val TransportButtonSize = 48.dp
     val TransportIconSize = 24.dp
 
