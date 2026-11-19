@@ -64,8 +64,9 @@ internal class MixPieceFetcher(
             state.noteStall(io)
             return PieceLoad(null, sleep(RetryMs))
         } catch (bad: IllegalStateException) {
-            state.failHard(bad)
-            return PieceLoad(null, keepGoing = false)
+            if (state.snapshot()?.generation != seen) return PieceLoad(null, keepGoing = true)
+            state.noteStall(bad)
+            return PieceLoad(null, sleep(RetryMs))
         }
     }
 

@@ -95,7 +95,7 @@ internal class MixSession(
                 if (state.address() == null || Thread.currentThread().isInterrupted) return
                 continue
             }
-            if (previous != null && current.generation != previous) arm(false)
+            if (previous != null && current.generation != previous) restart()
             piece = current
             if (writePiece(current)) {
                 piece = null
@@ -107,7 +107,7 @@ internal class MixSession(
     private fun readyPiece(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
         val kept = reused(piece, snap)
         if (kept != null) return kept
-        if (piece != null) arm(false)
+        if (piece != null) restart()
         state.hold(null)
         val live = state.snapshot() ?: return null
         if (!live.playing || live.generation != snap.generation) return null
@@ -143,11 +143,21 @@ internal class MixSession(
             if (stop) return false
             val length = minOf(MixPieces.PlayChunk, piece.bytes.size - offset)
             val wrote = output.write(piece.bytes, offset, length)
-            if (wrote <= 0) return true
+            if (wrote == 0) {
+                restart()
+                if (!sleep(RetryMs)) return false
+                continue
+            }
+            if (wrote < 0) return false
             if (!state.advance(wrote, piece.generation)) return false
             offset += wrote
         }
         return true
+    }
+
+    private fun restart() {
+        arm(false)
+        arm(true)
     }
 
     private fun arm(active: Boolean) {

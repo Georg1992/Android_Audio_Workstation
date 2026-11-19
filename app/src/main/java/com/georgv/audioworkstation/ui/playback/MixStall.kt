@@ -46,6 +46,7 @@ internal fun MixPlayState.failHard(error: Exception) {
         }
         lock.notifyAll()
     }
+    buffer.kick()
 }
 
 internal fun MixPlayState.startError(): Exception? = synchronized(lock) { start?.failure }
