@@ -1,30 +1,24 @@
 package com.georgv.audioworkstation.ui.components
 
 import android.graphics.BitmapFactory
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
@@ -33,8 +27,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,12 +41,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.georgv.audioworkstation.R
@@ -329,75 +319,7 @@ fun CardActionButton(
     }
 }
 
-private enum class CardPlaybackRole {
-    Play,
-    Stop,
-}
-
-@Composable
-private fun CardPlaybackButton(
-    role: CardPlaybackRole,
-    engaged: Boolean,
-    onClick: () -> Unit,
-) {
-    val play = role == CardPlaybackRole.Play
-    val fill by animateColorAsState(
-        targetValue = when {
-            engaged && play -> AppColors.Green
-            engaged -> AppColors.Yellow
-            else -> AppColors.Bg
-        },
-        animationSpec = tween(durationMillis = TransportFillMs),
-        label = "cardTransportFill",
-    )
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) TransportPressedScale else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessHigh,
-        ),
-        label = "cardTransportPress",
-    )
-    Box(
-        modifier = Modifier
-            .size(Dimens.TransportButtonSize)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(CircleShape)
-            .background(fill)
-            .border(Dimens.Stroke, AppColors.Line, CircleShape)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = if (play) Icons.Filled.PlayArrow else Icons.Filled.Stop,
-            contentDescription = stringResource(if (play) R.string.cd_play else R.string.cd_stop),
-            tint = AppColors.Line,
-            modifier = Modifier.size(Dimens.TransportIconSize),
-        )
-    }
-}
-
-private const val MillisPerSecond = 1000
-private const val SecondsPerMinute = 60
 private const val PinArriveMs = 100
-private const val TransportFillMs = 160
-private const val TransportPressedScale = 0.94f
-
-private fun playbackClock(positionMs: Int): String {
-    val totalSeconds = positionMs.coerceAtLeast(0) / MillisPerSecond
-    val minutes = totalSeconds / SecondsPerMinute
-    val seconds = totalSeconds % SecondsPerMinute
-    return "$minutes:${seconds.toString().padStart(2, '0')}"
-}
 
 data class ShownCard(
     val title: String,
@@ -462,20 +384,19 @@ private fun CardPlaybackStrip(
     onSeek: (Int) -> Unit,
 ) {
     var dragging by remember { mutableStateOf(false) }
-    var heldFraction by remember { mutableStateOf<Float?>(null) }
+    var heldMs by remember { mutableStateOf<Int?>(null) }
     var pinnedMs by remember { mutableStateOf<Int?>(null) }
-    val finger = heldFraction
+    val finger = heldMs
     val pin = pinnedMs
     val shownPositionMs = when {
-        finger != null && durationMs > 0 -> (finger.coerceIn(0f, 1f) * durationMs).toInt()
+        finger != null && durationMs > 0 -> finger.coerceIn(0, durationMs)
         pin != null -> pin.coerceIn(0, durationMs)
         else -> positionMs
     }
-    val displayed = if (durationMs > 0) shownPositionMs.toFloat() / durationMs.toFloat() else 0f
     LaunchedEffect(dragging, durationMs, positionMs, pinnedMs) {
         if (durationMs <= 0) {
             dragging = false
-            heldFraction = null
+            heldMs = null
             pinnedMs = null
             return@LaunchedEffect
         }
@@ -484,102 +405,83 @@ private fun CardPlaybackStrip(
         val distance = if (positionMs >= marked) positionMs - marked else marked - positionMs
         if (distance <= PinArriveMs) {
             pinnedMs = null
-            heldFraction = null
+            heldMs = null
         }
     }
-    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
     val clock = stringResource(
         R.string.card_playback_clock,
-        playbackClock(shownPositionMs),
-        playbackClock(durationMs),
+        formatTimelineDuration(shownPositionMs.toLong()),
+        formatTimelineDuration(durationMs.toLong()),
     )
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(AppColors.Bg)
-            .border(Dimens.Stroke, AppColors.Line, shape)
-            .padding(Dimens.Gap),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Dimens.PanelPadding),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CardPlaybackButton(
-                role = CardPlaybackRole.Play,
-                engaged = !playing,
-                onClick = onPlay,
-            )
-            CardPlaybackButton(
-                role = CardPlaybackRole.Stop,
-                engaged = playing,
-                onClick = onStop,
+        TransportPanelSurface {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TransportButton(
+                    color = AppColors.Green,
+                    enabled = true,
+                    isActive = playing,
+                    onClick = onPlay,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(R.string.cd_play),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
+                TransportButton(
+                    color = AppColors.Yellow,
+                    enabled = true,
+                    isActive = false,
+                    onClick = onStop,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = stringResource(R.string.cd_stop),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            TransportPlayheadTimeDisplay(
+                label = formatTimelineDuration(shownPositionMs.toLong()),
+                modifier = Modifier.semantics { contentDescription = clock },
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-        ) {
-            TransportClock(text = playbackClock(shownPositionMs), align = TextAlign.End)
-            Slider(
-                value = displayed,
-                onValueChange = { next ->
-                    val marked = pinnedMs
-                    val restating = !dragging && marked != null && durationMs > 0 &&
-                        (next * durationMs).toInt() == marked
-                    if (!restating) {
-                        if (!dragging) {
-                            pinnedMs = null
-                            onScrubStarted?.invoke()
-                        }
-                        dragging = true
-                        heldFraction = next
+        MixTransportTimeline(
+            playheadPositionMs = shownPositionMs.toLong(),
+            timelineDurationMs = durationMs.toLong(),
+            gestures = MixTimelineGestures(
+                onStarted = {
+                    if (!dragging) {
+                        pinnedMs = null
+                        onScrubStarted?.invoke()
                     }
+                    dragging = true
                 },
-                onValueChangeFinished = {
-                    val released = heldFraction
+                onCancelled = {
                     dragging = false
-                    if (released != null && durationMs > 0) {
-                        val target = (released * durationMs).toInt()
+                    heldMs = null
+                },
+                onPreview = { next -> heldMs = next.toInt() },
+                onCommit = { next ->
+                    dragging = false
+                    heldMs = null
+                    if (durationMs > 0) {
+                        val target = next.toInt().coerceIn(0, durationMs)
                         pinnedMs = target
-                        heldFraction = null
                         onSeek(target)
-                    } else {
-                        heldFraction = null
                     }
                 },
-                enabled = durationMs > 0,
-                modifier = Modifier
-                    .weight(1f)
-                    .semantics { stateDescription = clock },
-                colors = SliderDefaults.colors(
-                    thumbColor = AppColors.Line,
-                    activeTrackColor = AppColors.Green,
-                    inactiveTrackColor = AppColors.iconMuted,
-                    disabledThumbColor = AppColors.iconMuted,
-                    disabledActiveTrackColor = AppColors.iconMuted,
-                    disabledInactiveTrackColor = AppColors.iconMuted,
-                ),
-            )
-            TransportClock(text = playbackClock(durationMs), align = TextAlign.Start)
-        }
+            ),
+            inputLocked = durationMs <= 0,
+        )
     }
-}
-
-@Composable
-private fun TransportClock(
-    text: String,
-    align: TextAlign,
-) {
-    Text(
-        text = text,
-        style = AppText.TileSubtitle,
-        color = AppColors.labelEmphasis,
-        textAlign = align,
-        maxLines = 1,
-        modifier = Modifier.widthIn(min = Dimens.TransportButtonSize),
-    )
 }

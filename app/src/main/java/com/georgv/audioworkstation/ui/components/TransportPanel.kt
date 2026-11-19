@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -60,17 +61,9 @@ fun TransportPanel(
     modifier: Modifier = Modifier,
     inputLocked: Boolean = false
 ) {
-    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(AppColors.SurfacePanel)
-            .border(Dimens.Stroke, AppColors.Line, shape)
-            .padding(horizontal = Dimens.Gap, vertical = 6.dp)
-            .consumeAllPointers(enabled = inputLocked),
-        verticalAlignment = Alignment.CenterVertically,
+    TransportPanelSurface(
+        modifier = modifier,
+        inputLocked = inputLocked,
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
@@ -142,6 +135,28 @@ fun TransportPanel(
 }
 
 @Composable
+internal fun TransportPanelSurface(
+    modifier: Modifier = Modifier,
+    inputLocked: Boolean = false,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(Dimens.TransportPanelRadius)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(AppColors.SurfacePanel)
+            .border(Dimens.Stroke, AppColors.Line, shape)
+            .padding(horizontal = Dimens.Gap, vertical = TransportPanelVerticalPadding)
+            .consumeAllPointers(enabled = inputLocked),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+private val TransportPanelVerticalPadding = 6.dp
+
+@Composable
 fun MasterOutputPeakIndicator(
     peakDbText: String,
     indicatorLevel: MasterPeakIndicatorLevel,
@@ -175,7 +190,7 @@ fun MasterOutputPeakIndicator(
 }
 
 @Composable
-private fun TransportPlayheadTimeDisplay(
+internal fun TransportPlayheadTimeDisplay(
     label: String,
     modifier: Modifier = Modifier,
 ) {
@@ -203,7 +218,7 @@ private fun TransportPlayheadTimeDisplay(
 }
 
 @Composable
-private fun TransportButton(
+internal fun TransportButton(
     color: Color,
     enabled: Boolean,
     isActive: Boolean,
