@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.screens.community
 import com.georgv.audioworkstation.core.audio.convert.androidAacCodec
 import com.georgv.audioworkstation.ui.playback.AacMixSource
 import com.georgv.audioworkstation.ui.playback.CardTransport
+import com.georgv.audioworkstation.ui.playback.FileMixSource
 import com.georgv.audioworkstation.ui.playback.SharedMixStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,7 +11,10 @@ import javax.inject.Singleton
 @Singleton
 class MediaCardPlayback @Inject constructor() : CardPlayback {
     private val lock = Any()
-    private val stream = SharedMixStream(AacMixSource(codec = androidAacCodec()), keepSong = true)
+    private val stream = SharedMixStream(
+        AacMixSource(remote = FileMixSource(), codec = androidAacCodec()),
+        keepSong = true,
+    )
     private var projectId: String? = null
     private var active = false
     private var scrubbing = false

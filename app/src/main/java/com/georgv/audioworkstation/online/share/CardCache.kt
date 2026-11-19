@@ -8,6 +8,8 @@ import javax.inject.Singleton
 
 interface CardCache {
     fun imageFile(hash: String): File
+
+    fun mixFile(hash: String): File
 }
 
 @Singleton
@@ -15,6 +17,8 @@ class AppCardCache @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) : CardCache {
     override fun imageFile(hash: String): File = file("community-images", hash)
+
+    override fun mixFile(hash: String): File = file("community-mixes", hash)
 
     private fun file(folder: String, name: String): File {
         val dir = File(context.cacheDir, folder)
