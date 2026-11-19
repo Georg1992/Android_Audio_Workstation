@@ -35,25 +35,27 @@ class HttpProjectShare(
         val project = projects.observeProject(projectId).first() ?: error("Project $projectId is not on this phone")
         val mix = mixFile(project.id)
         val files = tracksToShare(projects.observeTracks(project.id).first())
-        val hash = sha256Hex(mix)
+        val sharedMix = (mixConverter ?: androidWavToAac()).convert(mix)
         var published = false
-        val failure = runCatching {
-            storeObject(session, hash, mix)
-            post(
-                session,
-                "/shared-projects",
-                JSONObject()
-                    .put("id", project.id)
-                    .put("title", project.name.orEmpty())
-                    .put("ownerName", session.name)
-                    .put("contentHash", hash)
-                    .put("size", mix.length())
-                    .toString(),
-            )
-            published = true
-            projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCING, ownerUserId = session.accountId))
-            shareFiles(session, project, files)
-        }.exceptionOrNull()
+        val failure = try {
+            runCatching {
+                post(
+                    session,
+                    "/shared-projects",
+                    JSONObject()
+                        .put("id", project.id)
+                        .put("title", project.name.orEmpty())
+                        .put("ownerName", session.name)
+                        .toString(),
+                )
+                published = true
+                projects.upsertProject(project.copy(syncStatus = SyncStatus.SYNCING, ownerUserId = session.accountId))
+                uploadHashed(session, project.id, "mix", sharedMix)
+                shareFiles(session, project, files)
+            }.exceptionOrNull()
+        } finally {
+            sharedMix.delete()
+        }
         if (failure == null) return
         var listed = false
         var listUnread = false
@@ -147,47 +149,12 @@ class HttpProjectShare(
         publishCard(openSession("Sign in to update the card"), projectId, title, tags, imagePath)
     }
 
-    override suspend fun publishOwner(projectId: String) {
-        withContext(Dispatchers.IO) {
-            val session = openSession("Sign in to share a project")
-            post(
-                session,
-                "/shared-projects/$projectId/owner",
-                JSONObject().put("name", session.name).toString(),
-            )
-        }
-    }
-
     override suspend fun publishMix(projectId: String) {
         withContext(Dispatchers.IO) {
             val session = openSession("Sign in to share a project")
             val aac = (mixConverter ?: androidWavToAac()).convert(mixFile(projectId))
             try {
-                val hash = sha256Hex(aac)
-                val upload = post(
-                    session,
-                    "/shared-projects/$projectId/uploads",
-                    JSONObject()
-                        .put("trackId", SharedMix.TrackId)
-                        .put("contentHash", hash)
-                        .put("size", aac.length())
-                        .toString(),
-                )
-                if (!upload.getBoolean("alreadyStored")) {
-                    val url = upload.getString("uploadUrl")
-                    if (url.isBlank()) error("share api did not return an upload url")
-                    objects.put(url, headers(upload), aac)
-                }
-                post(
-                    session,
-                    "/shared-projects/$projectId/files",
-                    JSONObject()
-                        .put("trackId", SharedMix.TrackId)
-                        .put("contentHash", hash)
-                        .put("storageKey", hash)
-                        .put("size", aac.length())
-                        .toString(),
-                )
+                uploadHashed(session, projectId, "mix", aac)
             } finally {
                 aac.delete()
             }
@@ -262,18 +229,6 @@ class HttpProjectShare(
         val file = File(path)
         if (!file.isFile) error("shared project has no mix")
         return file
-    }
-
-    private fun storeObject(session: AccountSession, hash: String, file: File) {
-        val upload = post(
-            session,
-            "/shared-objects",
-            JSONObject().put("contentHash", hash).put("size", file.length()).toString(),
-        )
-        if (upload.getBoolean("alreadyStored")) return
-        val url = upload.getString("uploadUrl")
-        if (url.isBlank()) error("share api did not return an upload url")
-        objects.put(url, headers(upload), file)
     }
 
     private fun uploadHashed(session: AccountSession, projectId: String, kind: String, file: File) {

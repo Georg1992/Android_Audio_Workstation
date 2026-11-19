@@ -61,9 +61,8 @@ class ShareSelectionTest {
         share.publishMix("project-a")
         val upload = JSONObject(api.sent[0])
         val commit = JSONObject(api.sent[1])
-        assertEquals(listOf("/shared-projects/project-a/uploads", "/shared-projects/project-a/files"), api.paths)
+        assertEquals(listOf("/shared-projects/project-a/mix", "/shared-projects/project-a/mix/commit"), api.paths)
         assertEquals(1, objects.puts)
-        assertEquals("00000000-0000-0000-0000-000000000000", upload.getString("trackId"))
         assertEquals(aacHash, upload.getString("contentHash"))
         assertEquals(aacHash, commit.getString("contentHash"))
         assertEquals(aacSize, upload.getLong("size"))
@@ -85,15 +84,15 @@ class ShareSelectionTest {
         val audio = File.createTempFile("share-fail", ".wav")
         val mix = File.createTempFile("share-fail-mix", ".wav")
         audio.writeText("abc")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(
             project = ProjectEntity(id = "project-a", name = "Showcase"),
             tracks = listOf(track("track-a", audio.path)),
         )
         val api = ScriptedApi(
             listOf(
-                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
                 "",
                 """{"projects":[]}""",
                 """{"id":"project-a"}""",
@@ -107,7 +106,7 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             var failed = false
             try {
@@ -116,8 +115,8 @@ class ShareSelectionTest {
                 failed = error.message == "share api status 404"
             }
             assertTrue(failed)
-            assertEquals("/shared-objects", api.paths.first())
-            assertEquals("/shared-projects", api.paths[1])
+            assertEquals("/shared-projects", api.paths.first())
+            assertEquals("/shared-projects/project-a/mix", api.paths[1])
             assertEquals(listOf("POST", "POST", "POST", "GET", "DELETE"), api.methods)
             assertEquals("/shared-projects/project-a", api.paths.last())
             val project = dao.projects.value.single()
@@ -145,9 +144,12 @@ class ShareSelectionTest {
     @Test
     fun mixUploadFailureDoesNotCreateTheCommunityRow() = runBlocking {
         val mix = File.createTempFile("share-mix-fail", ".wav")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
-        val api = ScriptedApi(listOf("", """{"projects":[]}"""), failAt = 0)
+        val api = ScriptedApi(
+            listOf("""{"id":"project-a"}""", "", """{"projects":[]}""", """{"id":"project-a"}"""),
+            failAt = 1,
+        )
         val share = HttpProjectShare(
             sessions = FixedSession(session),
             accounts = IdleAccounts(),
@@ -155,7 +157,7 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             var failed = false
             try {
@@ -164,8 +166,16 @@ class ShareSelectionTest {
                 failed = error.message == "share api status 404"
             }
             assertTrue(failed)
-            assertEquals(listOf("/shared-objects", "/shared-projects"), api.paths)
-            assertEquals(listOf("POST", "GET"), api.methods)
+            assertEquals(
+                listOf(
+                    "/shared-projects",
+                    "/shared-projects/project-a/mix",
+                    "/shared-projects",
+                    "/shared-projects/project-a",
+                ),
+                api.paths,
+            )
+            assertEquals(listOf("POST", "POST", "GET", "DELETE"), api.methods)
             assertEquals(SyncStatus.LOCAL, dao.projects.value.single().syncStatus)
         } finally {
             mix.delete()
@@ -177,15 +187,15 @@ class ShareSelectionTest {
         val audio = File.createTempFile("share-kept-row", ".wav")
         val mix = File.createTempFile("share-kept-row-mix", ".wav")
         audio.writeText("abc")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(
             project = ProjectEntity(id = "project-a", name = "Showcase"),
             tracks = listOf(track("track-a", audio.path)),
         )
         val api = ScriptedApi(
             listOf(
-                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
                 "",
                 community("Owner"),
             ),
@@ -198,7 +208,7 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
             assertEquals(listOf("POST", "POST", "POST", "GET"), api.methods)
@@ -215,7 +225,7 @@ class ShareSelectionTest {
     @Test
     fun shareFailureMarksAnExistingCommunityRowShared() = runBlocking {
         val mix = File.createTempFile("share-existing-row", ".wav")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
         val api = ScriptedApi(listOf("", community("Owner")), failAt = 0)
         val share = HttpProjectShare(
@@ -225,11 +235,11 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
             assertEquals(listOf("POST", "GET"), api.methods)
-            assertEquals(listOf("/shared-objects", "/shared-projects"), api.paths)
+            assertEquals(listOf("/shared-projects", "/shared-projects"), api.paths)
             val project = dao.projects.value.single()
             assertEquals(SyncStatus.SYNCED, project.syncStatus)
             assertEquals("account-1", project.ownerUserId)
@@ -241,7 +251,7 @@ class ShareSelectionTest {
     @Test
     fun shareFailureLeavesAnotherOwnersCommunityRowUnshared() = runBlocking {
         val mix = File.createTempFile("share-other-row", ".wav")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
         val api = ScriptedApi(listOf("", community("Someone")), failAt = 0)
         val share = HttpProjectShare(
@@ -251,7 +261,7 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             var failed = false
             try {
@@ -270,9 +280,9 @@ class ShareSelectionTest {
     @Test
     fun shareFailureKeepsBothSidesSharedWhenTheCommunityListCannotBeRead() = runBlocking {
         val mix = File.createTempFile("share-list-down", ".wav")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
-        val api = ScriptedApi(listOf("""{"storageKey":"mix","alreadyStored":true}""", """{"id":"project-a"}"""), 2, 3)
+        val api = ScriptedApi(listOf("""{"id":"project-a"}""", """{"storageKey":"mix","alreadyStored":true}"""), 2, 3)
         val share = HttpProjectShare(
             sessions = FixedSession(session),
             accounts = IdleAccounts(),
@@ -280,7 +290,7 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
             assertEquals(listOf("POST", "POST", "POST", "GET"), api.methods)
@@ -294,7 +304,7 @@ class ShareSelectionTest {
     @Test
     fun shareFailureBeforeACommunityRowStaysUnsharedWhenTheListCannotBeRead() = runBlocking {
         val mix = File.createTempFile("share-list-early", ".wav")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val dao = MemoryProjectDao(ProjectEntity(id = "project-a", name = "Showcase"), emptyList())
         val api = ScriptedApi(emptyList(), failAt = 0, alsoFailAt = 1)
         val share = HttpProjectShare(
@@ -304,7 +314,7 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             var failed = false
             try {
@@ -394,7 +404,7 @@ class ShareSelectionTest {
         val audio = File.createTempFile("share-kept", ".wav")
         val mix = File.createTempFile("share-kept-mix", ".wav")
         audio.writeText("abc")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val objects = RecordingObjects()
         val dao = MemoryProjectDao(
             project = ProjectEntity(id = "project-a", name = "Kept"),
@@ -402,8 +412,9 @@ class ShareSelectionTest {
         )
         val api = ScriptedApi(
             listOf(
-                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
                 """{"storageKey":"$ABC_HASH"}""",
                 """{"id":"project-a"}""",
@@ -416,10 +427,10 @@ class ShareSelectionTest {
             api = api,
             objects = objects,
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
-            assertEquals(listOf("/shared-objects", "/shared-projects"), api.paths.take(2))
+            assertEquals(listOf("/shared-projects", "/shared-projects/project-a/mix"), api.paths.take(2))
             assertEquals(0, objects.puts)
             assertEquals("abc", audio.readText())
             val stored = dao.tracks.value.single()
@@ -441,7 +452,7 @@ class ShareSelectionTest {
         val audio = File.createTempFile("share-new", ".wav")
         val mix = File.createTempFile("share-new-mix", ".wav")
         audio.writeText("abc")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val objects = RecordingObjects()
         val dao = MemoryProjectDao(
             project = ProjectEntity(id = "project-a", name = "New"),
@@ -449,8 +460,9 @@ class ShareSelectionTest {
         )
         val api = ScriptedApi(
             listOf(
-                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":false,"uploadUrl":"https://example.invalid/put","headers":{"Content-Type":"application/octet-stream"}}""",
                 """{"storageKey":"$ABC_HASH"}""",
                 """{"id":"project-a"}""",
@@ -463,11 +475,11 @@ class ShareSelectionTest {
             api = api,
             objects = objects,
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
             assertEquals(1, objects.puts)
-            assertEquals(List(5) { "access-token" }, api.tokens)
+            assertEquals(List(6) { "access-token" }, api.tokens)
             assertTrue(audio.isFile)
             assertEquals("abc", audio.readText())
         } finally {
@@ -481,12 +493,13 @@ class ShareSelectionTest {
         val audio = File.createTempFile("share-expired", ".wav")
         val mix = File.createTempFile("share-expired-mix", ".wav")
         audio.writeText("abc")
-        mix.writeText("mix")
+        writeConstantPcm16Wav(mix, 1, frameCount = 2_000, sampleRateHz = 1_000)
         val stored = MemorySession(session.copy(token = jwtWithExp(1)))
         val api = ScriptedApi(
             listOf(
-                """{"storageKey":"mix","alreadyStored":true}""",
                 """{"id":"project-a"}""",
+                """{"storageKey":"mix","alreadyStored":true}""",
+                """{"storageKey":"mix"}""",
                 """{"storageKey":"$ABC_HASH","alreadyStored":true}""",
                 """{"storageKey":"$ABC_HASH"}""",
                 """{"id":"project-a"}""",
@@ -505,10 +518,10 @@ class ShareSelectionTest {
             api = api,
             objects = RecordingObjects(),
             paths = FixedPaths(mix.absolutePath),
-        )
+        ).also { ready -> ready.mixConverter = WavToAac(RoundTripAac()) }
         try {
             share.share("project-a")
-            assertEquals(List(5) { "fresh-access" }, api.tokens)
+            assertEquals(List(6) { "fresh-access" }, api.tokens)
             assertEquals("fresh-access", stored.current()?.token)
         } finally {
             audio.delete()
