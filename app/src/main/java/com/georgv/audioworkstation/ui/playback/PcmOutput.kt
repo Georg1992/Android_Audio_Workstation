@@ -56,16 +56,13 @@ internal class AudioTrackPcmOutput : PcmOutput {
 
     override fun pause() {
         val audio = track ?: return
-        val state = audio.playState
-        if (state == AudioTrack.PLAYSTATE_STOPPED) return
-        if (state == AudioTrack.PLAYSTATE_PLAYING) audio.pause()
+        if (audio.playState == AudioTrack.PLAYSTATE_STOPPED) return
+        if (audio.playState == AudioTrack.PLAYSTATE_PLAYING) audio.pause()
         audio.flush()
-        audio.stop()
     }
 
     override fun play() {
-        val audio = track ?: return
-        if (audio.playState != AudioTrack.PLAYSTATE_PLAYING) audio.play()
+        track?.play()
     }
 
     override fun release() {
