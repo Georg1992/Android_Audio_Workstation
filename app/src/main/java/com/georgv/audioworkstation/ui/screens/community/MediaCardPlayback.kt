@@ -10,7 +10,7 @@ import javax.inject.Singleton
 @Singleton
 class MediaCardPlayback @Inject constructor() : CardPlayback {
     private val lock = Any()
-    private val stream = SharedMixStream(AacMixSource(codec = androidAacCodec()))
+    private val stream = SharedMixStream(AacMixSource(codec = androidAacCodec()), keepSong = true)
     private var projectId: String? = null
     private var active = false
 

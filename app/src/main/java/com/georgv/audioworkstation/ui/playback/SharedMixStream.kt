@@ -5,15 +5,18 @@ import java.util.concurrent.TimeUnit
 /**
  * Plays a shared 16-bit PCM mix as short indexed pieces.
  * Playback starts once the first piece is stored. A short stretch of the next
- * pieces stays buffered. Seek opens the piece that contains the new time and
- * starts it at once when that piece is already stored. A slow piece keeps the
- * buffered audio playing and is requested again when the connection returns.
+ * pieces stays buffered. The master mix keeps every fetched piece for that
+ * playback, and keeps fetching until the song is stored. Seek opens the piece
+ * that contains the new time and starts it at once when that piece is already
+ * stored. A slow piece keeps the buffered audio playing and is requested again
+ * when the connection returns.
  */
 internal class SharedMixStream(
     private val source: MixSource = UrlMixSource(),
     private val output: PcmOutput = AudioTrackPcmOutput(),
     private val aheadPieces: Int = MixPieces.AheadPieces,
     private val startWaitMs: Long = StartWaitMs,
+    private val keepSong: Boolean = false,
 ) {
     private val buffer = MixPieceBuffer(aheadPieces + 1)
     private val state = MixPlayState(buffer)
@@ -41,7 +44,7 @@ internal class SharedMixStream(
         val pcm = MixPieces.pcmByte(snap.info, positionMs)
         val open = state.retarget(pcm, audible = true)
         open?.close()
-        buffer.retain(MixPieces.indexAt(pcm, snap.pieceBytes))
+        if (!keepSong) buffer.retain(MixPieces.indexAt(pcm, snap.pieceBytes))
         buffer.kick()
     }
 
@@ -58,7 +61,9 @@ internal class SharedMixStream(
         stopSession()
         buffer.reset()
         val gate = state.open(url)
-        val thread = Thread({ MixSession(state, reader, buffer, output, aheadPieces).run() }, ThreadName)
+        val thread = Thread({
+            MixSession(state, reader, buffer, output, aheadPieces, keepSong).run()
+        }, ThreadName)
         thread.isDaemon = true
         writer = thread
         thread.start()

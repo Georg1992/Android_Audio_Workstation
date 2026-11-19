@@ -127,6 +127,44 @@ class SharedMixStreamTest {
     }
 
     @Test
+    fun keptSongSeeksWithoutReadingAStoredPieceAgain() {
+        val wav = largeWav()
+        val ranges = CopyOnWriteArrayList<Requested>()
+        val blocked = AtomicBoolean(false)
+        val source = object : MixSource {
+            override fun open(url: String, start: Long, endInclusive: Long): InputStream {
+                if (blocked.get()) {
+                    ranges.add(Requested(start, endInclusive))
+                    throw IOException("closed")
+                }
+                ranges.add(Requested(start, endInclusive))
+                return slice(wav, start, endInclusive)
+            }
+        }
+        val output = PermitOutput()
+        val stream = SharedMixStream(source, output, aheadPieces = AheadPieces, keepSong = true)
+        try {
+            stream.play(Url)
+            assertTrue(waitUntil { pieceStarts(ranges).size == PieceCount && stable(ranges) })
+            val fetched = ranges.size
+            blocked.set(true)
+            stream.seekTo(SeekMs)
+            assertEquals(SeekMs, stream.transport().positionMs)
+            assertTrue(stream.transport().playing)
+            output.allow(2)
+            assertTrue(waitUntil { stream.transport().positionMs > SeekMs && stream.transport().playing })
+            stream.seekTo(0)
+            assertEquals(0, stream.transport().positionMs)
+            assertTrue(stream.transport().playing)
+            assertEquals(fetched, ranges.size)
+        } finally {
+            blocked.set(false)
+            output.allow(WritesAfterStart)
+            stream.release()
+        }
+    }
+
+    @Test
     fun seekInsideTheOpenPieceStartsWithoutThatRequest() {
         val wav = largeWav()
         val gate = CountDownLatch(1)

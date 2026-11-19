@@ -14,6 +14,7 @@ internal class MixPieceFetcher(
     private val buffer: MixPieceBuffer,
     private val state: MixPlayState,
     private val ahead: Int,
+    private val keepSong: Boolean,
 ) {
     fun run() {
         val cursor = FetchCursor()
@@ -29,9 +30,21 @@ internal class MixPieceFetcher(
         }
         val from = if (snap.holding) snap.playIndex + 1 else snap.playIndex
         val count = if (snap.holding) ahead else ahead + 1
-        buffer.retain(from)
-        val missing = firstMissing(from, count) ?: return sleep(PollMs)
+        if (!keepSong) buffer.retain(from)
+        val missing = nextIndex(snap, from, count) ?: return sleep(PollMs)
         return fetch(missing, snap, cursor)
+    }
+
+    private fun nextIndex(snap: MixSnap, from: Int, count: Int): Int? {
+        val window = firstMissing(from, count)
+        if (window != null || !keepSong) return window
+        val bytes = snap.pieceBytes.toLong()
+        if (bytes <= 0L) return null
+        val total = ((snap.info.dataSize + bytes - 1L) / bytes).toInt()
+        for (index in 0 until total) {
+            if (buffer.piece(index) == null) return index
+        }
+        return null
     }
 
     private fun firstMissing(from: Int, count: Int): Int? {

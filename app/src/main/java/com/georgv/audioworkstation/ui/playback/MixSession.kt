@@ -11,6 +11,7 @@ internal class MixSession(
     private val buffer: MixPieceBuffer,
     private val output: PcmOutput,
     private val aheadPieces: Int,
+    private val keepSong: Boolean,
 ) {
     private var outputLive = false
     private var fetcher: Thread? = null
@@ -183,7 +184,7 @@ internal class MixSession(
 
     private fun startFetcher() {
         val thread = Thread({
-            MixPieceFetcher(reader, buffer, state, aheadPieces).run()
+            MixPieceFetcher(reader, buffer, state, aheadPieces, keepSong).run()
         }, FetchName)
         thread.isDaemon = true
         fetcher = thread
