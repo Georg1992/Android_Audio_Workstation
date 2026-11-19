@@ -90,7 +90,7 @@ private fun ProjectTransportHarness() {
             }
             TransportPanel(
                 isRecording = false,
-                isPlaying = false,
+                isPlaying = true,
                 isPlayEnabled = true,
                 isStopEnabled = true,
                 stopButtonShowsPause = false,

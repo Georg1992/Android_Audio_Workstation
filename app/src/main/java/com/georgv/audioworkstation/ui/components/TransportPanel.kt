@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -85,6 +86,7 @@ fun TransportPanel(
                 enabled = isPlayEnabled && !inputLocked,
                 onClick = onPlay,
                 isActive = isPlaying,
+                raised = raised,
             ) {
                 Icon(
                     Icons.Filled.PlayArrow,
@@ -99,6 +101,7 @@ fun TransportPanel(
                 enabled = isStopEnabled && !inputLocked,
                 onClick = onStop,
                 isActive = false,
+                raised = raised,
             ) {
                 if (stopButtonShowsPause) {
                     Icon(
@@ -129,6 +132,7 @@ fun TransportPanel(
                     enabled = isRecordEnabled && !inputLocked,
                     onClick = onRecord,
                     isActive = isRecording,
+                    raised = raised,
                 ) {
                     Icon(
                         Icons.Filled.FiberManualRecord,
@@ -139,6 +143,7 @@ fun TransportPanel(
                 }
                 TransportPlayheadTimeDisplay(
                     label = playheadTimeLabel,
+                    raised = raised,
                     modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
                 )
             }
@@ -162,6 +167,23 @@ internal fun TransportPanelSurface(
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
+}
+
+internal fun Modifier.transportControlChrome(
+    raised: Boolean,
+    shape: Shape,
+    fill: Color,
+): Modifier {
+    return if (raised) {
+        this
+            .shadow(elevation = Dimens.ControlElevation, shape = shape)
+            .background(fill)
+    } else {
+        this
+            .clip(shape)
+            .background(fill)
+            .border(Dimens.Stroke, AppColors.Line, shape)
+    }
 }
 
 internal fun Modifier.transportChrome(raised: Boolean): Modifier {
@@ -219,16 +241,16 @@ fun MasterOutputPeakIndicator(
 internal fun TransportPlayheadTimeDisplay(
     label: String,
     modifier: Modifier = Modifier,
+    raised: Boolean = false,
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
+    val fill = if (raised) AppColors.SurfacePressed else AppColors.Bg
 
     Box(
         modifier = modifier
             .height(Dimens.TransportButtonSize)
             .widthIn(min = 36.dp)
-            .clip(shape)
-            .background(AppColors.Bg)
-            .border(Dimens.Stroke, AppColors.Line, shape)
+            .transportControlChrome(raised = raised, shape = shape, fill = fill)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -249,22 +271,21 @@ internal fun TransportButton(
     enabled: Boolean,
     isActive: Boolean,
     onClick: () -> Unit,
+    raised: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
-
+    val resting = if (raised) AppColors.SurfacePressed else AppColors.Bg
     val bgColor = when {
-        !enabled -> AppColors.Bg
+        !enabled -> resting
         isActive -> color
-        else -> AppColors.Bg
+        else -> resting
     }
 
     Box(
         modifier = Modifier
             .size(Dimens.TransportButtonSize)
-            .clip(shape)
-            .background(bgColor)
-            .border(Dimens.Stroke, AppColors.Line, shape),
+            .transportControlChrome(raised = raised, shape = shape, fill = bgColor),
         contentAlignment = Alignment.Center
     ) {
         IconButton(

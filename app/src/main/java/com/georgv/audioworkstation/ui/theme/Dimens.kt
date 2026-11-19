@@ -42,6 +42,7 @@ object Dimens {
     val TransportPanelRadius = 12.dp
     val TransportPanelPadding = 6.dp
     val PanelElevation = 4.dp
+    val ControlElevation = 2.dp
     val TransportButtonSize = 48.dp
     val TransportIconSize = 24.dp
 
