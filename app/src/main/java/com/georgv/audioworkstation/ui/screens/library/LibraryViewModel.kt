@@ -172,8 +172,6 @@ class LibraryViewModel @Inject constructor(
         const val TAG = "LibraryViewModel"
 
         private object NoOwnedPublish : OwnedProjectPublish {
-            override suspend fun publishOwner(projectId: String) = Unit
-
             override suspend fun publishMix(projectId: String) = Unit
 
             override suspend fun unpublish(projectId: String): Boolean = false

@@ -425,11 +425,6 @@ public:
         const std::function<void(float)> &progressCallback);
 
 private:
-    enum class RenderBlockInputMode {
-        RingBuffer,
-        DirectSource,
-    };
-
     /**
      * Shared stereo mix block used by live [render].
      * @return true when at least one lane contributed samples.
@@ -438,12 +433,8 @@ private:
                      int32_t numFrames,
                      int32_t outChannels,
                      int64_t transportFrameAtBlock,
-                     RenderBlockInputMode inputMode,
-                     bool applyMasterSoftClip,
-                     bool playbackMutexAlreadyHeld = false,
-                     int32_t *outMinFramesReturned = nullptr);
+                     int32_t *outMinFramesReturned);
 
-private:
     static constexpr std::size_t kPlaybackLaneCount = 16;
     static constexpr std::size_t kPlaybackLaneProductCap = 8;
 

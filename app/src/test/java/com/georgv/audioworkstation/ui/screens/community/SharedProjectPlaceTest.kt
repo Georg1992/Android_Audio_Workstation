@@ -68,7 +68,7 @@ class SharedProjectPlaceTest {
         val paths = TempDirAudioFilePathProvider()
         val wav = wavBytes(channelCount = 2, sampleRateHz = 48_000, frames = 4_800)
         val headers = HeaderBytes(wav)
-        val local = room(dao, paths, ListedTakes(wav.size.toLong()), headers)
+        val local = room(dao, ListedTakes(wav.size.toLong()), headers)
         val vm = home(local)
         val collect = backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
@@ -145,7 +145,7 @@ class SharedProjectPlaceTest {
         val dao = FakeProjectDao()
         val paths = TempDirAudioFilePathProvider()
         val wav = wavBytes(sampleRateHz = 44_100, frames = 100)
-        val local = room(dao, paths, ListedTakes(wav.size.toLong()), FailAfterFirstHeader(wav))
+        val local = room(dao, ListedTakes(wav.size.toLong()), FailAfterFirstHeader(wav))
         val failure = runCatching { local.present("song", "Song") }.exceptionOrNull()
         assertTrue(failure is SharedPlaceException)
         assertEquals(null, dao.observeProject("song").first())
@@ -182,14 +182,11 @@ class SharedProjectPlaceTest {
 
     private fun room(
         dao: FakeProjectDao,
-        paths: TempDirAudioFilePathProvider = TempDirAudioFilePathProvider(),
         shared: SharedProjects,
         headers: MixSource = HeaderBytes(ByteArray(0)),
     ) = RoomLocalProjects(
         ProjectRepository(dao, NoopProjectFileStore),
-        IdleSessions,
         NoPublish,
-        paths,
         shared,
     ).also { it.headerSource = headers }
 
@@ -292,16 +289,6 @@ class SharedProjectPlaceTest {
         }
     }
 
-    private object IdleSessions : AccountSessionStore {
-        override val state: Flow<AccountSession?> = MutableStateFlow(null)
-
-        override suspend fun current(): AccountSession? = null
-
-        override suspend fun save(session: AccountSession) = Unit
-
-        override suspend fun clear() = Unit
-    }
-
     private object UnusedAccounts : CognitoAccounts {
         override suspend fun register(email: String, password: String, name: String) = error("unused")
 
@@ -315,18 +302,12 @@ class SharedProjectPlaceTest {
     }
 
     private object NoPublish : OwnedProjectPublish {
-        override suspend fun publishOwner(projectId: String) = Unit
-
         override suspend fun publishMix(projectId: String) = Unit
 
         override suspend fun unpublish(projectId: String): Boolean = false
     }
 
     private object NoRefresh : OwnedShareRefresh {
-        override suspend fun publishOwnerNames() = Unit
-
-        override suspend fun publishMixes() = Unit
-
         override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
     }
 

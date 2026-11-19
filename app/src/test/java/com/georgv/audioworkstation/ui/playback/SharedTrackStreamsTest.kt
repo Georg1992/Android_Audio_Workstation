@@ -32,7 +32,7 @@ class SharedTrackStreamsTest {
             runBlocking { streams.play("song", tracks, 0L, streamClock = true) }
             assertTrue(waitUntil { pieceStarts(ranges).size == tracks.size * (AheadPieces + 1) && stable(ranges) })
             assertTrue(ranges.none { it.start > pieceStart(AheadPieces) })
-            streams.seekTo(SeekMs)
+            streams.restartAt(SeekMs)
             assertEquals(SeekMs, streams.positionMs())
             assertTrue(waitUntil { ranges.any { it.start == TargetStart } })
             val piece = ranges.first { it.start == TargetStart }

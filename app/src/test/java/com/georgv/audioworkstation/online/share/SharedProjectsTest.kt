@@ -2,7 +2,6 @@ package com.georgv.audioworkstation.online.share
 
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.NoopProjectFileStore
-import com.georgv.audioworkstation.core.audio.TempDirAudioFilePathProvider
 import com.georgv.audioworkstation.data.db.dao.FakeProjectDao
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
@@ -26,7 +25,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -110,10 +108,6 @@ class SharedProjectsTest {
             ),
             localProjects = NoLocalProjects,
             ownedShares = object : OwnedShareRefresh {
-                override suspend fun publishOwnerNames() = Unit
-
-                override suspend fun publishMixes() = Unit
-
                 override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = setOf("boom")
             },
         )
@@ -126,7 +120,6 @@ class SharedProjectsTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun openingThePlaylistShowsTheCardsWithoutPublishingTheMix() = runTest {
-        var published = false
         val vm = CommunityHomeViewModel(
             sessions = MemorySessions(session),
             accounts = UnusedAccounts,
@@ -135,14 +128,6 @@ class SharedProjectsTest {
             ),
             localProjects = NoLocalProjects,
             ownedShares = object : OwnedShareRefresh {
-                override suspend fun publishOwnerNames() {
-                    published = true
-                }
-
-                override suspend fun publishMixes() {
-                    published = true
-                }
-
                 override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
             },
         )
@@ -150,7 +135,6 @@ class SharedProjectsTest {
         advanceUntilIdle()
         assertEquals(listOf("boomi"), vm.uiState.value.projects.map { it.title })
         assertEquals(false, vm.uiState.value.preparing)
-        assertFalse(published)
         collect.cancel()
     }
 
@@ -165,10 +149,6 @@ class SharedProjectsTest {
             ),
             localProjects = NoLocalProjects,
             ownedShares = object : OwnedShareRefresh {
-                override suspend fun publishOwnerNames() = Unit
-
-                override suspend fun publishMixes() = Unit
-
                 override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> {
                     throw UnknownHostException("Unable to resolve host")
                 }
@@ -187,9 +167,7 @@ class SharedProjectsTest {
         val share = RecordingOwnedPublish(owned = setOf("boom"))
         val local = RoomLocalProjects(
             ProjectRepository(dao, NoopProjectFileStore),
-            MemorySessions(session),
             share,
-            TempDirAudioFilePathProvider(),
             CountingFiles(),
         )
         val removed = local.unpublishAbsent(
@@ -292,8 +270,6 @@ class SharedProjectsTest {
     private class RecordingOwnedPublish(private val owned: Set<String>) : OwnedProjectPublish {
         val unpublished = mutableListOf<String>()
 
-        override suspend fun publishOwner(projectId: String) = Unit
-
         override suspend fun publishMix(projectId: String) = Unit
 
         override suspend fun unpublish(projectId: String): Boolean {
@@ -352,9 +328,7 @@ class SharedProjectsTest {
         val files = CountingFiles()
         val local = RoomLocalProjects(
             ProjectRepository(dao, NoopProjectFileStore),
-            MemorySessions(session),
             RecordingOwnedPublish(emptySet()),
-            TempDirAudioFilePathProvider(),
             files,
         )
         local.present("song", "Song")
@@ -396,10 +370,6 @@ class SharedProjectsTest {
         override suspend fun exists(projectId: String): Boolean = false
 
         override suspend fun present(projectId: String, title: String) = Unit
-
-        override suspend fun publishOwnerNames() = Unit
-
-        override suspend fun publishMixes() = Unit
 
         override suspend fun unpublishAbsent(projects: List<SharedProject>): Set<String> = emptySet()
     }

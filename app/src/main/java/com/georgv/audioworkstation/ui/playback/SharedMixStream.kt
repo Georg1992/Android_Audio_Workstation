@@ -54,8 +54,6 @@ internal class SharedMixStream(
         buffer.kick()
     }
 
-    fun seekTo(positionMs: Int) = restartAt(positionMs)
-
     fun transport(): StreamTransport = state.transport()
 
     fun pullFailure(): Exception? = state.pullFailure()

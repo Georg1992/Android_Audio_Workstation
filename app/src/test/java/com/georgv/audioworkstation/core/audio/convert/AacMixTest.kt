@@ -64,7 +64,7 @@ class AacMixTest {
             assertTrue(waitUntil { opens.get() >= BulkReads && stable(opens) })
             val count = opens.get()
             assertTrue(count <= BulkReads)
-            stream.seekTo(SeekMs)
+            stream.restartAt(SeekMs)
             output.allow(WritesAfterSeek)
             assertTrue(waitUntil { stream.transport().positionMs > SeekMs && stream.transport().playing })
             assertEquals(count, opens.get())
@@ -87,7 +87,7 @@ class AacMixTest {
         val stream = SharedMixStream(AacMixSource(Memory(stored), RoundTripAac()), output, aheadPieces = 1)
         try {
             stream.play(Url)
-            stream.seekTo(SeekMs)
+            stream.restartAt(SeekMs)
             val atSeek = stream.transport()
             output.allow(WritesAfterSeek)
             val moved = waitUntil { stream.transport().positionMs > SeekMs && stream.transport().playing }

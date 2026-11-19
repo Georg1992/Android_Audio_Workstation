@@ -2215,9 +2215,6 @@ bool AudioEngine::renderBlock(float *outputInterleaved,
                               const int32_t numFrames,
                               const int32_t outChannels,
                               const int64_t transportFrameAtBlock,
-                              const RenderBlockInputMode inputMode,
-                              const bool applyMasterSoftClip,
-                              const bool playbackMutexAlreadyHeld,
                               int32_t *outMinFramesReturned) {
     if (!outputInterleaved || numFrames <= 0 || outChannels <= 0) {
         return false;
@@ -2264,53 +2261,18 @@ bool AudioEngine::renderBlock(float *outputInterleaved,
             continue;
         }
 
-        int32_t framesReturned = 0;
-        if (inputMode == RenderBlockInputMode::RingBuffer) {
-            const std::shared_ptr<RingBuffer> ring =
-                loadLaneRing(m_playbackLanes[laneIdx].ring);
-            if (!ring) {
-                continue;
-            }
-
-            const std::size_t neededFloats = static_cast<std::size_t>(numFrames) *
-                                             static_cast<std::size_t>(srcChannels);
-            const std::size_t scratchFloats = std::min(neededFloats, m_renderScratch.size());
-
-            const std::size_t floatsRead =
-                ring->read(m_renderScratch.data(), scratchFloats);
-            framesReturned =
-                static_cast<int32_t>(floatsRead / static_cast<std::size_t>(srcChannels));
-        } else {
-            std::unique_ptr<std::lock_guard<std::mutex>> playbackLock;
-            if (!playbackMutexAlreadyHeld) {
-                playbackLock =
-                    std::make_unique<std::lock_guard<std::mutex>>(m_playbackMutex);
-            }
-            IAudioSource *source = m_playbackLanes[laneIdx].source.get();
-            if (!source) {
-                continue;
-            }
-            const int64_t sourceLoopStartFrame =
-                m_playbackLanes[laneIdx].sourceLoopStartFrame.load(std::memory_order_acquire);
-            const int64_t sourceLoopEndFrame =
-                m_playbackLanes[laneIdx].sourceLoopEndFrame.load(std::memory_order_acquire);
-            const std::size_t neededFloats = static_cast<std::size_t>(numFrames) *
-                                             static_cast<std::size_t>(srcChannels);
-            if (m_renderScratch.size() < neededFloats) {
-                m_renderScratch.resize(neededFloats);
-            }
-            framesReturned = readLaneSourceFrames(
-                *source,
-                m_renderScratch.data(),
-                numFrames,
-                srcChannels,
-                loopEnabled,
-                sourceLoopStartFrame,
-                sourceLoopEndFrame);
-            if (framesReturned < 0) {
-                framesReturned = 0;
-            }
+        const std::shared_ptr<RingBuffer> ring =
+            loadLaneRing(m_playbackLanes[laneIdx].ring);
+        if (!ring) {
+            continue;
         }
+
+        const std::size_t neededFloats = static_cast<std::size_t>(numFrames) *
+                                         static_cast<std::size_t>(srcChannels);
+        const std::size_t scratchFloats = std::min(neededFloats, m_renderScratch.size());
+        const std::size_t floatsRead = ring->read(m_renderScratch.data(), scratchFloats);
+        const int32_t framesReturned =
+            static_cast<int32_t>(floatsRead / static_cast<std::size_t>(srcChannels));
 
         if (framesReturned <= 0) {
             continue;
@@ -2348,10 +2310,6 @@ bool AudioEngine::renderBlock(float *outputInterleaved,
                 outputInterleaved + outBase,
                 outChannels);
         }
-    }
-
-    if (readAnyLane && applyMasterSoftClip && playback::kMasterSafetySoftClipEnabled) {
-        playback::ProcessMasterSafetySoftClip(outputInterleaved, outSampleCount);
     }
 
     if (outMinFramesReturned != nullptr) {
@@ -2573,9 +2531,6 @@ void AudioEngine::render(float *outputInterleaved,
         numFrames,
         channels,
         transportFrameAtBlock,
-        RenderBlockInputMode::RingBuffer,
-        false,
-        false,
         &minFramesReturned);
 
     if (readAnyLane) {

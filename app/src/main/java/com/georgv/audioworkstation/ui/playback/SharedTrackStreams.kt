@@ -95,10 +95,10 @@ internal class SharedTrackStreams(
             val created = open(source, output())
             streams[track.id] = created
             created.play(url)
-            if (position > 0) created.seekTo(position)
+            if (position > 0) created.restartAt(position)
         } else {
             existing.play(url)
-            existing.seekTo(position)
+            existing.restartAt(position)
         }
     }
 

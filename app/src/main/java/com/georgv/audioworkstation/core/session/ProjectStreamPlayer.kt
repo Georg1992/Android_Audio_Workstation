@@ -15,10 +15,6 @@ internal interface ProjectStreamPlayer {
     /** Streaming form of [com.georgv.audioworkstation.core.audio.PlaybackPort.restartAt]. */
     fun restartAt(positionMs: Long)
 
-    fun seekTo(positionMs: Long) {
-        restartAt(positionMs)
-    }
-
     fun useStreamClock(enabled: Boolean)
 
     fun stop()

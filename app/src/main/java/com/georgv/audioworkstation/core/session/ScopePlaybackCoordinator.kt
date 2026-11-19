@@ -235,7 +235,7 @@ internal class ScopePlaybackCoordinator(
             if (streamedTracks.isEmpty()) {
                 player.release()
             } else if (player.sameTracks(streamedTracks)) {
-                player.seekTo(positionMs)
+                player.restartAt(positionMs)
                 player.useStreamClock(localTracks.isEmpty())
             } else {
                 player.play(projectId, streamedTracks, positionMs, localTracks.isEmpty())

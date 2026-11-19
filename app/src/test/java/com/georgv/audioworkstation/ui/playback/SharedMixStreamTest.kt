@@ -78,7 +78,7 @@ class SharedMixStreamTest {
         try {
             stream.play(Url)
             output.allow(WritesAfterStart)
-            stream.seekTo(SeekMs)
+            stream.restartAt(SeekMs)
             assertEquals(SeekMs, stream.transport().positionMs)
             Thread.sleep(HoldMs)
             assertEquals(SeekMs, stream.transport().positionMs)
@@ -109,7 +109,7 @@ class SharedMixStreamTest {
         try {
             stream.play(Url)
             assertTrue(waitUntil { pieceStarts(ranges) == FirstPieces && stable(ranges) })
-            stream.seekTo(SeekMs)
+            stream.restartAt(SeekMs)
             assertEquals(SeekMs, stream.transport().positionMs)
             assertTrue(waitUntil { ranges.any { it.start == TargetStart } })
             val next = ranges.first { it.start == TargetStart }
@@ -145,7 +145,7 @@ class SharedMixStreamTest {
             stream.play(Url)
             assertTrue(waitUntil { ranges.count { it.start == StoredPiece } == 1 && stable(ranges) })
             blocked.set(true)
-            stream.seekTo(StoredMs)
+            stream.restartAt(StoredMs)
             output.allow(WritesAfterStart)
             assertTrue(waitUntil { stream.transport().positionMs > StoredMs })
             assertEquals(1, ranges.count { it.start == StoredPiece })
@@ -178,12 +178,12 @@ class SharedMixStreamTest {
             assertTrue(waitUntil { pieceStarts(ranges).size == PieceCount && stable(ranges) })
             val fetched = ranges.size
             blocked.set(true)
-            stream.seekTo(SeekMs)
+            stream.restartAt(SeekMs)
             assertEquals(SeekMs, stream.transport().positionMs)
             assertTrue(stream.transport().playing)
             output.allow(2)
             assertTrue(waitUntil { stream.transport().positionMs > SeekMs && stream.transport().playing })
-            stream.seekTo(0)
+            stream.restartAt(0)
             assertEquals(0, stream.transport().positionMs)
             assertTrue(stream.transport().playing)
             assertEquals(fetched, ranges.size)
@@ -209,7 +209,7 @@ class SharedMixStreamTest {
         try {
             stream.play(Url)
             assertTrue(waitUntil { output.attempts.get() > 0 })
-            stream.seekTo(InsideMs)
+            stream.restartAt(InsideMs)
             output.allow(WritesAfterStart)
             assertTrue(waitUntil { stream.transport().positionMs > InsideMs })
         } finally {
@@ -292,7 +292,7 @@ class SharedMixStreamTest {
             stream.play(Url)
             val block = waitForHold(held)
             assertTrue(block.entered.await(WaitMs, java.util.concurrent.TimeUnit.MILLISECONDS))
-            stream.seekTo(SeekMs)
+            stream.restartAt(SeekMs)
             assertTrue(waitUntil { block.closed.get() })
         } finally {
             held.get()?.close()
