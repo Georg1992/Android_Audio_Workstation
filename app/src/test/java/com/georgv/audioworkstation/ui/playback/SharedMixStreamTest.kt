@@ -463,6 +463,7 @@ class SharedMixStreamTest {
             attempts.incrementAndGet()
             while (permits.get() == 0) Thread.sleep(PollMs)
             permits.decrementAndGet()
+            if (length > 0) played.addAndGet(length)
             return length
         }
 
@@ -470,7 +471,11 @@ class SharedMixStreamTest {
 
         override fun play() = Unit
 
+        override fun playedFrames(): Int = played.get() / BytesPerFrame
+
         override fun release() = Unit
+
+        private val played = AtomicInteger(0)
     }
 
     private class FakeOutput : PcmOutput {
@@ -481,7 +486,10 @@ class SharedMixStreamTest {
             started = true
         }
 
-        override fun write(bytes: ByteArray, offset: Int, length: Int): Int = length
+        override fun write(bytes: ByteArray, offset: Int, length: Int): Int {
+            if (length > 0) queued.addAndGet(length)
+            return length
+        }
 
         override fun pause() = Unit
 
@@ -489,7 +497,11 @@ class SharedMixStreamTest {
             played = true
         }
 
+        override fun playedFrames(): Int = queued.get() / BytesPerFrame
+
         override fun release() = Unit
+
+        private val queued = AtomicInteger(0)
     }
 
     private class HoldStream : InputStream() {
@@ -543,6 +555,7 @@ class SharedMixStreamTest {
         const val SettleMs = 40L
         const val HoldMs = 400L
         const val ByteMask = 0xFF
+        const val BytesPerFrame = 2
         val FirstPieces = listOf(44L, 4_044L, 8_044L)
     }
 }

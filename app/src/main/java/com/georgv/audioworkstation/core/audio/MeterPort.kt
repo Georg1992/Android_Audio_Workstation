@@ -17,4 +17,7 @@ interface MeterPort {
     fun transportFrame(): Long
 
     fun liveOutputLatencyNs(): Long
+
+    /** False from each arm until the callback mixes source audio. The wall clock can run earlier. */
+    fun outputHasRendered(): Boolean
 }

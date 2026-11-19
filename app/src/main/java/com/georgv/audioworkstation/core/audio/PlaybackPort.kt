@@ -12,6 +12,14 @@ interface PlaybackPort {
 
     fun stopPlayback(): Boolean
 
+    /**
+     * Project seek. The output stops, then playback starts at [MultiPlaybackSpec.startPositionMs].
+     */
+    fun restartAt(spec: MultiPlaybackSpec): Boolean {
+        stopPlayback()
+        return startPlayback(spec)
+    }
+
     fun setPlaybackLaneGain(laneIndex: Int, gain: Float)
 
     fun setPlaybackLanePan(laneIndex: Int, pan: Float)

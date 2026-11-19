@@ -12,7 +12,12 @@ internal interface ProjectStreamPlayer {
 
     fun sameTracks(tracks: List<TrackEntity>): Boolean
 
-    fun seekTo(positionMs: Long)
+    /** Streaming form of [com.georgv.audioworkstation.core.audio.PlaybackPort.restartAt]. */
+    fun restartAt(positionMs: Long)
+
+    fun seekTo(positionMs: Long) {
+        restartAt(positionMs)
+    }
 
     fun useStreamClock(enabled: Boolean)
 

@@ -71,5 +71,7 @@ class PlaybackTransportSyncTest {
         override fun transportStartFrame(): Long = 0L
 
         override fun transportFrame(): Long = 0L
+
+        override fun outputHasRendered(): Boolean = false
     }
 }

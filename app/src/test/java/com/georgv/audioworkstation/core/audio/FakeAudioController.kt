@@ -45,6 +45,7 @@ internal open class FakeAudioController(
     var masterPeakHoldLinearValue = 0f
 
     var transportPositionMsValue: Long = 0L
+    var outputHasRenderedValue: Boolean = true
     var recordingFirstSampleTransportPositionMsValue: Long = CapturePort.RecordingFirstSampleTransportUnset
     var recordingCapturedFrameCountValue: Long = 0L
     var recordingCapturedDurationMsValue: Long = 0L
@@ -52,6 +53,8 @@ internal open class FakeAudioController(
         private set
 
     override fun transportPositionMs(): Long = transportPositionMsValue
+
+    override fun outputHasRendered(): Boolean = outputHasRenderedValue
 
     override fun recordingFirstSampleTransportPositionMs(): Long =
         recordingFirstSampleTransportPositionMsValue

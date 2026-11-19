@@ -159,6 +159,7 @@ class SharedTrackStreamsTest {
         override fun write(bytes: ByteArray, offset: Int, length: Int): Int {
             while (permits.get() == 0) Thread.sleep(PollMs)
             permits.decrementAndGet()
+            if (length > 0) played.addAndGet(length)
             return length
         }
 
@@ -166,7 +167,11 @@ class SharedTrackStreamsTest {
 
         override fun play() = Unit
 
+        override fun playedFrames(): Int = played.get() / BytesPerFrame
+
         override fun release() = Unit
+
+        private val played = AtomicInteger(0)
     }
 
     private companion object {
@@ -182,5 +187,6 @@ class SharedTrackStreamsTest {
         const val WritesAfterStart = 8
         const val WaitMs = 3_000L
         const val PollMs = 10L
+        const val BytesPerFrame = 2
     }
 }

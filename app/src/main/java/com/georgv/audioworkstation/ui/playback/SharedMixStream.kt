@@ -4,8 +4,9 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Plays one shared mix. Playback starts from the first piece. The master mix
- * keeps every piece for that playback. Seek leaves the playhead on the released
- * time until that piece can be written, then the speaker continues from there.
+ * keeps every piece for that playback. [restartAt] is the stream form of the
+ * project seek: the source is placed at that time, then the output is started
+ * again with [PcmOutput.start].
  */
 internal class SharedMixStream(
     private val source: MixSource = UrlMixSource(),
@@ -35,7 +36,15 @@ internal class SharedMixStream(
         buffer.kick()
     }
 
-    fun seekTo(positionMs: Int) {
+    /** Pause the output and keep the playhead. The card stays on this mix. */
+    fun hold() {
+        val snap = state.snapshot() ?: return
+        val open = state.retarget(snap.pcmByte, audible = false)
+        open?.close()
+        buffer.kick()
+    }
+
+    fun restartAt(positionMs: Int) {
         val snap = state.snapshot() ?: return
         val pcm = MixPieces.pcmByte(snap.info, positionMs)
         val open = state.retarget(pcm, audible = true)
@@ -43,6 +52,8 @@ internal class SharedMixStream(
         if (!keepSong) buffer.retain(MixPieces.indexAt(pcm, snap.pieceBytes))
         buffer.kick()
     }
+
+    fun seekTo(positionMs: Int) = restartAt(positionMs)
 
     fun transport(): StreamTransport = state.transport()
 

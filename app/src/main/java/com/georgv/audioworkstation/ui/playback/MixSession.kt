@@ -16,6 +16,9 @@ internal class MixSession(
     private var outputLive = false
     private var fetcher: Thread? = null
     private var cutGeneration = -1
+    private var tracking = false
+    private var headOrigin = 0
+    private var pcmOrigin = 0L
 
     fun run() {
         try {
@@ -91,6 +94,7 @@ internal class MixSession(
                 if (!state.pulse()) return
                 continue
             }
+            credit(snap.generation)
             val current = readyPiece(piece, snap)
             if (current == null) {
                 if (state.address() == null || Thread.currentThread().isInterrupted) return
@@ -151,6 +155,7 @@ internal class MixSession(
             if (wrote < 0) return false
             if (!state.advance(wrote, piece.generation)) return false
             offset += wrote
+            credit(piece.generation)
         }
         return true
     }
@@ -159,17 +164,42 @@ internal class MixSession(
         if (cutGeneration == generation) return
         cutGeneration = generation
         arm(false)
-        arm(true)
+        tracking = false
+        val info = state.snapshot()?.info ?: return
+        output.start(info.sampleRateHz, info.channelCount)
     }
 
     private fun arm(active: Boolean) {
         if (active && !outputLive) {
             output.play()
             outputLive = true
+            val snap = state.snapshot()
+            if (snap != null) {
+                headOrigin = output.playedFrames()
+                pcmOrigin = snap.pcmByte
+                tracking = true
+            }
         }
         if (!active && outputLive) {
             output.pause()
             outputLive = false
+            tracking = false
+        }
+    }
+
+    private fun credit(generation: Int) {
+        if (!tracking) return
+        val snap = state.snapshot() ?: return
+        val align = snap.info.blockAlign
+        if (align <= 0) return
+        if (snap.generation != generation) return
+        val played = output.playedFrames() - headOrigin
+        if (played <= 0) return
+        val heard = pcmOrigin + played.toLong() * align
+        val capped = minOf(heard, snap.pcmByte)
+        synchronized(state.lock) {
+            if (state.generation != generation) return
+            if (capped > state.audiblePcm) state.audiblePcm = capped
         }
     }
 

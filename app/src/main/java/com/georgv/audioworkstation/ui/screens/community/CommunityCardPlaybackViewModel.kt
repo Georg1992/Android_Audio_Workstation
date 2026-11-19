@@ -60,6 +60,11 @@ class CommunityCardPlaybackViewModel @Inject constructor(
         transportState.value = player.read()
     }
 
+    fun hold() {
+        player.hold()
+        transportState.value = player.read()
+    }
+
     fun seek(positionMs: Int) {
         player.seekTo(positionMs)
         transportState.value = player.read()

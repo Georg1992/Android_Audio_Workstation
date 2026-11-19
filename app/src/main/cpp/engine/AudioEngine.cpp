@@ -903,6 +903,7 @@ void AudioEngine::resetPlaybackStartupBreakdownFlags() {
     m_oboeStreamOpenDoneSteadyNs.store(0, std::memory_order_release);
     m_oboeStreamStartDoneSteadyNs.store(0, std::memory_order_release);
     m_firstOboeCallbackSteadyNs.store(0, std::memory_order_release);
+    m_outputHasRendered.store(false, std::memory_order_release);
     m_overdubJniReadySteadyNs.store(0, std::memory_order_release);
 }
 
@@ -2510,6 +2511,7 @@ void AudioEngine::render(float *outputInterleaved,
         &minFramesReturned);
 
     if (readAnyLane) {
+        m_outputHasRendered.store(true, std::memory_order_release);
         capturePlaybackOutputMilestones(
             transportFrameAtBlock,
             outputInterleaved,

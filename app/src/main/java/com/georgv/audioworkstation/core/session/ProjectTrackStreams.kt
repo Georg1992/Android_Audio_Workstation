@@ -20,7 +20,7 @@ private object InactiveProjectStreamPlayer : ProjectStreamPlayer {
 
     override fun sameTracks(tracks: List<TrackEntity>): Boolean = false
 
-    override fun seekTo(positionMs: Long) = Unit
+    override fun restartAt(positionMs: Long) = Unit
 
     override fun useStreamClock(enabled: Boolean) = Unit
 

@@ -13,6 +13,9 @@ internal interface PcmOutput {
 
     fun play()
 
+    /** Frames the device has played since [start]. Zero until the speaker is running. */
+    fun playedFrames(): Int
+
     fun release()
 }
 
@@ -63,6 +66,12 @@ internal class AudioTrackPcmOutput : PcmOutput {
 
     override fun play() {
         track?.play()
+    }
+
+    override fun playedFrames(): Int {
+        val audio = track ?: return 0
+        if (audio.playState != AudioTrack.PLAYSTATE_PLAYING) return 0
+        return audio.playbackHeadPosition
     }
 
     override fun release() {

@@ -214,6 +214,9 @@ class NativeEngine @Inject constructor() {
 
     fun isPlaybackActive(): Boolean = nativeIsPlaybackActive()
 
+    /** This arm has mixed source audio into the output callback. */
+    fun outputHasRendered(): Boolean = nativeOutputHasRendered()
+
     /**
      * Sample-domain transport timeline frame (Clock.2).
      * Advanced by playback render while active; does not drive UI playhead until Clock.4.
@@ -410,6 +413,8 @@ class NativeEngine @Inject constructor() {
     private external fun nativeGetPlaybackLaneLifecycle(laneIndex: Int): Int
 
     private external fun nativeIsPlaybackActive(): Boolean
+
+    private external fun nativeOutputHasRendered(): Boolean
 
     private external fun nativeGetTransportFrame(): Long
 

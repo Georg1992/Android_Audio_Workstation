@@ -146,4 +146,5 @@ private class FakeMasterPeakAudioController : MeterPort {
     override fun transportStartFrame(): Long = 0L
     override fun transportFrame(): Long = 0L
     override fun liveOutputLatencyNs(): Long = PlaybackTransportSync.LiveOutputLatencyUnsetNs
+    override fun outputHasRendered(): Boolean = false
 }

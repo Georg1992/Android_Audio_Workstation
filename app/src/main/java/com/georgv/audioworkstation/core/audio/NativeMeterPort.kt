@@ -42,4 +42,9 @@ class NativeMeterPort @Inject constructor(
         checkNotMainThreadForNativeLifecycle("liveOutputLatencyNs")
         return nativeEngine.liveOutputLatencyNs()
     }
+
+    override fun outputHasRendered(): Boolean {
+        checkNotMainThreadForNativeLifecycle("outputHasRendered")
+        return nativeEngine.outputHasRendered()
+    }
 }

@@ -365,6 +365,9 @@ public:
     PlaybackLaneLifecycle laneLifecycle(std::size_t laneIndex) const;
 
     bool isPlaybackActive() const { return m_isPlaying.load(std::memory_order_acquire); }
+
+    /** True after this arm's callback has mixed source audio, not just opened the clock. */
+    bool outputHasRendered() const { return m_outputHasRendered.load(std::memory_order_acquire); }
     void stopPlayback();
 
     /**
@@ -654,6 +657,7 @@ private:
     std::atomic<int64_t> m_oboeStreamOpenDoneSteadyNs{0};
     std::atomic<int64_t> m_oboeStreamStartDoneSteadyNs{0};
     std::atomic<int64_t> m_firstOboeCallbackSteadyNs{0};
+    std::atomic<bool> m_outputHasRendered{false};
     std::atomic<int64_t> m_overdubJniReadySteadyNs{0};
 
     alignas(8) std::atomic<int64_t> m_anchorTransportStartFrame{0};

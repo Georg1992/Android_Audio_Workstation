@@ -264,6 +264,7 @@ fun CommunityCardPlayback(
     durationMs: Int,
     onPlay: () -> Unit,
     onStop: () -> Unit,
+    onScrubStarted: () -> Unit,
     onSeek: (Int) -> Unit,
 ) {
     CardPlaybackStrip(
@@ -272,7 +273,7 @@ fun CommunityCardPlayback(
         durationMs = durationMs,
         onPlay = onPlay,
         onStop = onStop,
-        onScrubStarted = null,
+        onScrubStarted = onScrubStarted,
         onSeek = onSeek,
     )
 }

@@ -96,8 +96,8 @@ class PlaybackSessionController(
         refreshSessionLaneMappings(trackIdsInLaneOrder)
         _sessionTrackIds.value = trackIdsInLaneOrder.toSet()
         val started =
-            withAudioIo(dispatchers, "PlaybackPort.startPlayback seekRestart") {
-                playback.startPlayback(spec)
+            withAudioIo(dispatchers, "PlaybackPort.restartAt") {
+                playback.restartAt(spec)
             }
         if (!started) return false
         startPlaybackMonitor(trackIdsInLaneOrder.toSet())

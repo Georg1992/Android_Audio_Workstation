@@ -81,6 +81,8 @@ class CommunityCardPlaybackFailureTest {
             transport = transport.copy(playing = false)
         }
 
+        override fun hold() = Unit
+
         override fun seekTo(positionMs: Int) = Unit
 
         override fun read(): CardTransport {

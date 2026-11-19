@@ -53,10 +53,10 @@ internal class SharedTrackStreams(
         return ids.isNotEmpty() && ids == streams.keys
     }
 
-    override fun seekTo(positionMs: Long) {
+    override fun restartAt(positionMs: Long) {
         if (streams.isEmpty()) return
         val position = positionMs.coerceIn(0L, MaxPositionMs).toInt()
-        streams.values.forEach { stream -> stream.seekTo(position) }
+        streams.values.forEach { stream -> stream.restartAt(position) }
     }
 
     override fun useStreamClock(enabled: Boolean) {

@@ -13,6 +13,7 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
     private val stream = SharedMixStream(AacMixSource(codec = androidAacCodec()), keepSong = true)
     private var projectId: String? = null
     private var active = false
+    private var scrubbing = false
 
     override fun play(projectId: String, url: String) {
         stream.play(url)
@@ -25,17 +26,27 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
     override fun stop() {
         synchronized(lock) {
             active = false
+            scrubbing = false
         }
         stream.stop()
     }
 
+    override fun hold() {
+        val pausing = synchronized(lock) { active }
+        if (!pausing) return
+        synchronized(lock) { scrubbing = true }
+        stream.hold()
+    }
+
     override fun seekTo(positionMs: Int) {
-        stream.seekTo(positionMs)
+        stream.restartAt(positionMs)
+        synchronized(lock) { scrubbing = false }
     }
 
     override fun release() {
         synchronized(lock) {
             active = false
+            scrubbing = false
         }
         stream.release()
     }
@@ -45,11 +56,12 @@ class MediaCardPlayback @Inject constructor() : CardPlayback {
     override fun read(): CardTransport {
         val state = stream.transport()
         synchronized(lock) {
-            if (!state.playing) active = false
+            val scrub = scrubbing && active
+            if (!state.playing && !scrub) active = false
             val id = projectId ?: return CardTransport()
             return CardTransport(
                 projectId = id,
-                playing = active && state.playing,
+                playing = active && (state.playing || scrub),
                 positionMs = state.positionMs,
                 durationMs = state.durationMs,
             )

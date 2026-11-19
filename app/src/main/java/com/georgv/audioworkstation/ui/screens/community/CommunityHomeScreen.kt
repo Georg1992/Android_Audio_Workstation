@@ -125,6 +125,7 @@ fun CommunityHomeScreen(
                                         durationMs = if (active) transport.durationMs else 0,
                                         onPlay = { playback.play(project.id) },
                                         onStop = playback::stop,
+                                        onScrubStarted = playback::hold,
                                         onSeek = playback::seek,
                                     )
                                 },

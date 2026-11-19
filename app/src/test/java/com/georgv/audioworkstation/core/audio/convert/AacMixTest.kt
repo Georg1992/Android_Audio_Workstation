@@ -136,6 +136,7 @@ class AacMixTest {
                 val high = bytes[offset + 1].toInt()
                 sample = (low or (high shl ByteShift)).toShort().toInt()
             }
+            if (length > 0) queued.addAndGet(length)
             return length
         }
 
@@ -143,7 +144,11 @@ class AacMixTest {
 
         override fun play() = Unit
 
+        override fun playedFrames(): Int = queued.get() / BytesPerFrame
+
         override fun release() = Unit
+
+        private val queued = AtomicInteger(0)
     }
 
     private fun stable(opens: AtomicInteger): Boolean {
@@ -174,6 +179,8 @@ class AacMixTest {
 
         override fun play() = Unit
 
+        override fun playedFrames(): Int = 0
+
         override fun release() = Unit
     }
 
@@ -187,6 +194,7 @@ class AacMixTest {
         const val BulkReads = 3
         const val WaitMs = 3_000L
         const val PollMs = 10L
+        const val BytesPerFrame = 2
         const val ByteMask = 0xFF
         const val ByteShift = 8
     }

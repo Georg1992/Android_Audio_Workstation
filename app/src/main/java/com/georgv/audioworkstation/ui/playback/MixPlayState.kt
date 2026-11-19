@@ -28,6 +28,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
     internal var header: WavPcmFileInfo? = null
     internal var pieceBytes: Int = 0
     internal var pcmByte: Long = 0
+    internal var audiblePcm: Long = 0
     internal var playing = false
     internal var closed = true
     internal var broken = false
@@ -46,6 +47,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
             header = null
             pieceBytes = 0
             pcmByte = 0
+            audiblePcm = 0
             playing = true
             closed = false
             broken = false
@@ -67,6 +69,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
             if (!same) return null
             playing = true
             pcmByte = 0
+            audiblePcm = 0
             holding = false
             held = null
             generation += 1
@@ -82,6 +85,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
         synchronized(lock) {
             if (closed) return null
             pcmByte = pcm
+            audiblePcm = pcm
             playing = audible
             holding = false
             held = null
@@ -125,7 +129,7 @@ internal class MixPlayState(internal val buffer: MixPieceBuffer) {
             if (parsed == null || parsed.sampleRateHz <= 0 || parsed.blockAlign <= 0) {
                 return StreamTransport(playing = playing && !closed)
             }
-            val frames = pcmByte.coerceAtLeast(0) / parsed.blockAlign
+            val frames = audiblePcm.coerceAtLeast(0) / parsed.blockAlign
             val position = ((frames * MsPerSecond) / parsed.sampleRateHz).toInt()
             val duration = parsed.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             return StreamTransport(

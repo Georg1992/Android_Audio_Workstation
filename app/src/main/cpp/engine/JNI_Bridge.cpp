@@ -1010,6 +1010,11 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeIsPlaybackActive(JNIE
     return g_engine && g_engine->isPlaybackActive() ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeOutputHasRendered(JNIEnv *, jobject) {
+    return g_engine && g_engine->outputHasRendered() ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetTransportFrame(JNIEnv *, jobject) {
     return g_engine ? static_cast<jlong>(g_engine->transportFrame()) : 0L;

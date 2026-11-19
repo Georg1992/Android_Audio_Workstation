@@ -56,6 +56,28 @@ class LibraryMixPreviewPlayerTest {
     }
 
     @Test
+    fun `scrub stays at the release point until the mix is rendering`() = runTest {
+        val audio = FakeAudioController()
+        val player = libraryPreviewPlayer(audio)
+        player.play("project-a", mixFile().absolutePath)
+        audio.outputHasRenderedValue = false
+        audio.transportPositionMsValue = 40L
+
+        player.seekTo(40)
+        audio.transportPositionMsValue = 90L
+        player.tick()
+        assertEquals(40, player.transportState.value.positionMs)
+
+        audio.outputHasRenderedValue = true
+        audio.transportPositionMsValue = 90L
+        player.tick()
+        assertEquals(40, player.transportState.value.positionMs)
+        audio.transportPositionMsValue = 130L
+        player.tick()
+        assertEquals(80, player.transportState.value.positionMs)
+    }
+
+    @Test
     fun `clock follows the engine transport and ends when the engine stops`() = runTest {
         val audio = FakeAudioController()
         val player = libraryPreviewPlayer(audio)

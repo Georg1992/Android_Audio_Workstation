@@ -23,7 +23,7 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * Library card playback of the finished mix file.
- * A scrub pauses that file, then starts it again from the released playhead.
+ * A scrub uses [PlaybackPort.restartAt], the same restart as the project playhead.
  */
 @Singleton
 class LibraryMixPreviewPlayer @Inject constructor(
@@ -37,7 +37,9 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private var positionMs = 0
     private var holding = false
     private var heardEngine = false
-    private var outputLatencyMs = 0.0
+    private var waitForOutput = false
+    private var clockShown: Int? = null
+    private var clockAudible = 0L
 
     private val playingProjectId = MutableStateFlow<String?>(null)
     val playingProjectIdState: StateFlow<String?> = playingProjectId.asStateFlow()
@@ -60,6 +62,8 @@ class LibraryMixPreviewPlayer @Inject constructor(
         playingProjectId.value = projectId
         holding = false
         heardEngine = false
+        waitForOutput = false
+        clockShown = null
         val started = armBody(positionMs)
         if (!started) playingProjectId.value = null
         publishLocked()
@@ -69,6 +73,8 @@ class LibraryMixPreviewPlayer @Inject constructor(
     suspend fun stop() = engine.withLock {
         holding = false
         heardEngine = false
+        waitForOutput = false
+        clockShown = null
         playingProjectId.value = null
         positionMs = 0
         haltBody()
@@ -81,6 +87,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
             if (playingProjectId.value == null || holding) return
             holding = true
             heardEngine = false
+            waitForOutput = false
             haltBody()
             publishLocked()
         }
@@ -92,8 +99,10 @@ class LibraryMixPreviewPlayer @Inject constructor(
             val duration = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             this.positionMs = positionMs.coerceIn(0, duration)
             holding = false
+            clockShown = null
             if (playingProjectId.value != null) {
                 heardEngine = false
+                waitForOutput = true
                 val started = armBody(this.positionMs)
                 if (!started) playingProjectId.value = null
             }
@@ -115,9 +124,23 @@ class LibraryMixPreviewPlayer @Inject constructor(
             }
             val loaded = clip ?: return
             val (running, audible) = sample
+            if (running) heardEngine = true
+            if (running && waitForOutput && !outputReady()) {
+                publishLocked()
+                return
+            }
             if (running) {
-                heardEngine = true
-                positionMs = audible.coerceIn(0L, loaded.durationMs).toInt()
+                if (waitForOutput) {
+                    waitForOutput = false
+                    clockShown = positionMs
+                    clockAudible = audible
+                }
+                val origin = clockShown
+                positionMs = if (origin == null) {
+                    audible.coerceIn(0L, loaded.durationMs).toInt()
+                } else {
+                    (origin + (audible - clockAudible)).coerceIn(0L, loaded.durationMs).toInt()
+                }
             } else if (heardEngine) {
                 playingProjectId.value = null
                 positionMs = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
@@ -137,10 +160,16 @@ class LibraryMixPreviewPlayer @Inject constructor(
         positionMs = 0
         holding = false
         heardEngine = false
-        outputLatencyMs = 0.0
+        waitForOutput = false
+        clockShown = null
         playingProjectId.value = null
         publishLocked()
     }
+
+    private suspend fun outputReady(): Boolean =
+        withAudioIo(dispatchers, "MeterPort.outputHasRendered") {
+            meter.outputHasRendered()
+        }
 
     private suspend fun prepareSession(sampleRate: Int) {
         withIo(dispatchers, "prepare session transport capability") {
@@ -151,9 +180,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
     private suspend fun armBody(positionMs: Int): Boolean {
         val loaded = clip ?: return false
         val audible = AudibleMs(positionMs.toLong().coerceIn(0L, loaded.durationMs))
-        return withAudioIo(dispatchers, "PlaybackPort.startPlayback") {
-            val liveLatency = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
-            val latencyMs = if (liveLatency > 0.0) liveLatency else outputLatencyMs
+        return withAudioIo(dispatchers, "PlaybackPort.restartAt") {
             PlaybackTransportSync.requirePreparedCapability(sessionTransportGate)
             val spec = MultiPlaybackSpec(
                 sampleRate = loaded.sampleRate,
@@ -165,18 +192,15 @@ class LibraryMixPreviewPlayer @Inject constructor(
                         timelineClipDurationMs = loaded.durationMs,
                     ),
                 ),
-                startPositionMs = PlaybackTransportSync.mixTransportMs(audible, latencyMs).value,
+                startPositionMs = PlaybackTransportSync.mixTransportMs(meter, audible).value,
                 sessionTimelineEndMs = loaded.durationMs,
             )
-            playback.stopPlayback()
-            playback.startPlayback(spec)
+            playback.restartAt(spec)
         }
     }
 
     private suspend fun haltBody() {
         withAudioIo(dispatchers, "PlaybackPort.stopPlayback") {
-            val liveLatency = PlaybackTransportSync.effectiveOutputLatencyMsForUiSync(meter)
-            if (liveLatency > 0.0) outputLatencyMs = liveLatency
             playback.stopPlayback()
         }
     }
