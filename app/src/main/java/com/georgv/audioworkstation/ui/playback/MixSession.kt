@@ -90,13 +90,11 @@ internal class MixSession(
                 if (!state.pulse()) return
                 continue
             }
-            val previous = piece?.generation
             val current = readyPiece(piece, snap)
             if (current == null) {
                 if (state.address() == null || Thread.currentThread().isInterrupted) return
                 continue
             }
-            if (previous != null && current.generation != previous) restart()
             piece = current
             if (writePiece(current)) {
                 piece = null
@@ -128,6 +126,7 @@ internal class MixSession(
 
     private fun reused(piece: HeldPiece?, snap: MixSnap): HeldPiece? {
         if (piece == null || !piece.covers(snap.pcmByte)) return null
+        if (piece.generation != snap.generation) restart()
         val tagged = if (piece.generation == snap.generation) piece else piece.retag(snap.generation)
         state.hold(tagged)
         return tagged
@@ -145,8 +144,7 @@ internal class MixSession(
             val length = minOf(MixPieces.PlayChunk, piece.bytes.size - offset)
             val wrote = output.write(piece.bytes, offset, length)
             if (wrote == 0) {
-                restart()
-                if (!sleep(RetryMs)) return false
+                if (!sleep(YieldMs)) return false
                 continue
             }
             if (wrote < 0) return false
@@ -200,6 +198,7 @@ internal class MixSession(
     private companion object {
         const val FetchName = "shared-mix-fetch"
         const val RetryMs = 200L
+        const val YieldMs = 10L
         const val JoinMs = 1_000L
     }
 }
