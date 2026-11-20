@@ -49,6 +49,7 @@ class ProjectTransportPanelTest {
         compose.onNodeWithContentDescription("Import audio").assertIsDisplayed()
         compose.onNodeWithContentDescription("Mix and export project").assertIsDisplayed()
         compose.onNodeWithText("0:12").assertIsDisplayed()
+        compose.onNodeWithText("00:12/02:05").assertIsDisplayed()
         compose.onNodeWithText("0:30").assertIsDisplayed()
         compose.waitForIdle()
         val view = compose.activity.window.decorView
@@ -94,7 +95,8 @@ private fun ProjectTransportHarness() {
                 isPlayEnabled = true,
                 isStopEnabled = true,
                 stopButtonShowsPause = false,
-                playheadTimeLabel = "0:12",
+                playheadPositionMs = 12_000,
+                timelineDurationMs = 125_000,
                 onPlay = {},
                 onStop = {},
                 onRecord = {},

@@ -47,7 +47,6 @@ import com.georgv.audioworkstation.ui.components.MixdownAudioButton
 import com.georgv.audioworkstation.ui.components.TopBarAlertState
 import com.georgv.audioworkstation.ui.components.TransportPanel
 import com.georgv.audioworkstation.ui.components.TransportTimeline
-import com.georgv.audioworkstation.ui.components.formatTimelineDuration
 import com.georgv.audioworkstation.ui.components.transportChrome
 import com.georgv.audioworkstation.ui.components.rememberAppLocaleScope
 import com.georgv.audioworkstation.ui.diagnostics.WaveformRecompositionDiagnostics
@@ -289,7 +288,8 @@ internal fun ProjectScreenHeavyLayer(
             isPlayEnabled = structuralState.isPlayEnabled,
             isStopEnabled = structuralState.isStopEnabled,
             stopButtonShowsPause = structuralState.stopButtonShowsPause,
-            playheadTimeLabel = formatTimelineDuration(playheadPositionMs),
+            playheadPositionMs = playheadPositionMs,
+            timelineDurationMs = realtimeState.timelineVisibleDurationMs,
             onPlay = { vm.onPlayPressed() },
             onStop = { vm.onStopPressed() },
             onRecord = { startRecordingIfPermitted(newProjectName) },

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -56,7 +57,8 @@ fun TransportPanel(
     isPlayEnabled: Boolean,
     isStopEnabled: Boolean,
     stopButtonShowsPause: Boolean,
-    playheadTimeLabel: String,
+    playheadPositionMs: Long,
+    timelineDurationMs: Long,
     onPlay: () -> Unit,
     onStop: () -> Unit,
     onRecord: () -> Unit,
@@ -65,6 +67,7 @@ fun TransportPanel(
     inputLocked: Boolean = false,
     timeline: (@Composable () -> Unit)? = null,
 ) {
+    val playheadTimeLabel = formatTimelineDuration(playheadPositionMs)
     TransportCluster(
         clock = TransportClock(playheadTimeLabel, playheadTimeLabel),
         modifier = modifier,
@@ -112,6 +115,13 @@ fun TransportPanel(
                 }
             }
         }
+
+            TransportScreen(
+                positionMs = playheadPositionMs,
+                durationMs = timelineDurationMs,
+                meterLive = isPlaying || isRecording,
+                modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -250,6 +260,83 @@ internal fun TransportPlayheadTimeDisplay(
             .semantics { contentDescription = clock.description },
     )
 }
+
+@Composable
+internal fun TransportScreen(
+    positionMs: Long,
+    durationMs: Long,
+    meterLive: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(Dimens.SmallRadius)
+    Column(
+        modifier = modifier
+            .height(Dimens.TransportButtonSize)
+            .clip(shape)
+            .background(AppColors.Line, shape)
+            .padding(horizontal = Dimens.SmallRadius, vertical = Dimens.TightGap),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        TransportEqualizer(positionMs = positionMs, meterLive = meterLive)
+        Text(
+            text = formatTransportScreenReadout(positionMs, durationMs),
+            style = AppText.TileSubtitle,
+            color = AppColors.SurfaceRaised,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun TransportEqualizer(
+    positionMs: Long,
+    meterLive: Boolean,
+) {
+    Row(
+        modifier = Modifier.height(TransportEqHeight),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        TransportEqRest.forEachIndexed { band, rest ->
+            val level = if (meterLive) transportEqLevel(positionMs, band) else rest
+            Box(
+                modifier = Modifier
+                    .width(TransportEqBarWidth)
+                    .fillMaxHeight(level)
+                    .clip(RoundedCornerShape(Dimens.Stroke))
+                    .background(if (meterLive) AppColors.Green else AppColors.SurfacePressed),
+            )
+        }
+    }
+}
+
+internal fun formatTransportScreenReadout(positionMs: Long, durationMs: Long): String =
+    formatTransportScreenTime(positionMs) + "/" + formatTransportScreenTime(durationMs)
+
+private fun formatTransportScreenTime(timeMs: Long): String {
+    val plain = formatTimelineDuration(timeMs)
+    val minutes = plain.substringBefore(':').padStart(2, '0')
+    val seconds = plain.substringAfter(':')
+    return "$minutes:$seconds"
+}
+
+private fun transportEqLevel(positionMs: Long, band: Int): Float {
+    val phase = positionMs.coerceAtLeast(0L) / TransportEqStepMs + band.toLong() * 2L
+    val cycle = TransportEqSpan * 2L
+    val step = phase % cycle
+    val lifted = if (step >= TransportEqSpan) cycle - step else step
+    val wave = lifted.toFloat() / TransportEqSpan.toFloat()
+    return TransportEqFloor + (1f - TransportEqFloor) * wave
+}
+
+private val TransportEqHeight = 14.dp
+private val TransportEqBarWidth = 3.dp
+private val TransportEqRest = floatArrayOf(0.35f, 0.62f, 0.9f, 0.48f, 0.28f)
+private const val TransportEqStepMs = 100L
+private const val TransportEqSpan = 8L
+private const val TransportEqFloor = 0.22f
 
 internal data class TransportButtonPaint(
     val active: Color,

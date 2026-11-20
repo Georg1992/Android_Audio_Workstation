@@ -319,6 +319,12 @@ private fun UnavailableMixTransport() {
                     modifier = Modifier.size(Dimens.TransportIconSize),
                 )
             }
+            TransportScreen(
+                positionMs = 0L,
+                durationMs = 0L,
+                meterLive = false,
+                modifier = Modifier.alpha(AppOpacity.disabled),
+            )
         },
         timeline = {
             Box(
@@ -514,6 +520,11 @@ private fun CardPlaybackStrip(
                     modifier = Modifier.size(Dimens.TransportIconSize),
                 )
             }
+            TransportScreen(
+                positionMs = shownPositionMs.toLong(),
+                durationMs = durationMs.toLong(),
+                meterLive = playing,
+            )
         },
         timeline = {
             MixTransportTimeline(
