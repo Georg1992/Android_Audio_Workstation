@@ -1,7 +1,5 @@
 package com.georgv.audioworkstation.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,8 +45,10 @@ fun LanguageSwitcher(
             Box(
                 modifier = Modifier
                     .size(Dimens.LangChipSize)
-                    .background(AppColors.SurfacePanel)
-                    .border(Dimens.Stroke, AppColors.Line, shape),
+                    .transportControlChrome(
+                        shape = shape,
+                        fill = AppColors.SurfacePressed,
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

@@ -2,7 +2,6 @@ package com.georgv.audioworkstation.ui.screens.devices
 
 import android.media.AudioDeviceInfo
 import androidx.annotation.StringRes
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -78,14 +77,12 @@ private fun DeviceRow(
     onSelect: (PhoneAudioRole, Int) -> Unit,
 ) {
     val shape = RoundedCornerShape(Dimens.TileRadius)
-    val borderColor = if (endpoint.active) AppColors.Green else AppColors.Line
-    val fill = if (endpoint.active) AppColors.SurfacePressed else AppColors.SurfacePanel
+    val fill = if (endpoint.active) AppColors.Green else AppColors.SurfaceRaised
     Surface(
         onClick = { onSelect(endpoint.role, endpoint.id) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(Dimens.Stroke, borderColor, shape),
+        modifier = Modifier.fillMaxWidth(),
         color = fill,
+        shadowElevation = Dimens.PanelElevation,
         shape = shape,
     ) {
         Text(

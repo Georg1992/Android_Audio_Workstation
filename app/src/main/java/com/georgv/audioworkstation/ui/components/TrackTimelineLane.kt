@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -32,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
@@ -433,7 +433,6 @@ fun TrackTimelineLane(
             .heightIn(min = timelineLaneTotalHeightDp())
             .clip(shape)
             .background(AppColors.Bg)
-            .border(Dimens.Stroke, AppColors.Line, shape)
     ) {
         val activeClip = layoutClip ?: return@BoxWithConstraints
         val layout = laneLayout
@@ -584,29 +583,21 @@ fun TrackTimelineLane(
                     val localPlayheadSourceMs = clipLocalPlayheadMs ?: sourcePlayheadMs
                     val clipImporting = activeClip.importStatus == TrackImportStatus.IMPORTING
                     val clipImportFailed = activeClip.importStatus == TrackImportStatus.FAILED
-                    val clipBorderColor =
+                    val clipFill =
                         when {
-                            clipImporting -> AppColors.Cyan
-                            clipImportFailed -> AppColors.Red
-                            else -> Color.Transparent
+                            clipImporting ->
+                                lerp(AppColors.SurfacePanel, AppColors.Cyan, AppOpacity.loopRegionFill)
+                            clipImportFailed ->
+                                lerp(AppColors.SurfacePanel, AppColors.Red, AppOpacity.loopRegionFill)
+                            else -> AppColors.SurfacePanel
                         }
-                    val clipBorderWidth = if (clipImporting || clipImportFailed) 2.dp else 0.dp
                     Box(
                         modifier = Modifier
                             .offset(x = clipStart)
                             .width(clipWidth)
                             .fillMaxHeight()
                             .clip(shape)
-                            .background(
-                                if (clipImporting) {
-                                    AppColors.SurfacePanel.copy(alpha = 0.55f)
-                                } else if (clipImportFailed) {
-                                    AppColors.SurfacePanel.copy(alpha = AppOpacity.muted)
-                                } else {
-                                    AppColors.SurfacePanel
-                                },
-                            )
-                            .border(clipBorderWidth, clipBorderColor, shape)
+                            .background(clipFill)
                             .padding(top = Dimens.TightGap, start = 1.dp),
                     ) {
                         when (
@@ -894,16 +885,14 @@ private fun ImportTimelineLaneFallback(
         modifier =
             modifier
                 .clip(shape)
-                .background(AppColors.SurfacePanel)
-                .border(
-                    width = 2.dp,
-                    color =
-                        when (clip.importStatus) {
-                            TrackImportStatus.IMPORTING -> AppColors.Cyan
-                            TrackImportStatus.FAILED -> AppColors.Red
-                            else -> AppColors.Line
-                        },
-                    shape = shape,
+                .background(
+                    when (clip.importStatus) {
+                        TrackImportStatus.IMPORTING ->
+                            lerp(AppColors.SurfacePanel, AppColors.Cyan, AppOpacity.loopRegionFill)
+                        TrackImportStatus.FAILED ->
+                            lerp(AppColors.SurfacePanel, AppColors.Red, AppOpacity.loopRegionFill)
+                        else -> AppColors.SurfacePanel
+                    },
                 )
                 .padding(Dimens.TightGap),
     ) {

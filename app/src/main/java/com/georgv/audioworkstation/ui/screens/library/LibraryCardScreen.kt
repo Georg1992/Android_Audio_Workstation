@@ -14,7 +14,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +30,7 @@ import com.georgv.audioworkstation.ui.components.ScreenScaffold
 import com.georgv.audioworkstation.ui.screens.community.CommunityAction
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
+import com.georgv.audioworkstation.ui.theme.appTextFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,7 +86,7 @@ fun LibraryCardScreen(
             }
             CommunityAction(
                 text = stringResource(R.string.library_card_choose_image),
-                fillColor = AppColors.SurfacePanel,
+                fillColor = AppColors.SurfacePressed,
                 enabled = enabled,
                 onClick = { picker.launch("image/*") },
             )
@@ -115,19 +115,6 @@ private fun CardField(
         label = { Text(text = label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
         modifier = Modifier.fillMaxWidth(),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = AppColors.SurfacePanel,
-            unfocusedContainerColor = AppColors.SurfacePanel,
-            disabledContainerColor = AppColors.SurfacePanel,
-            focusedTextColor = AppColors.Line,
-            unfocusedTextColor = AppColors.Line,
-            disabledTextColor = AppColors.Line,
-            focusedIndicatorColor = AppColors.Line,
-            unfocusedIndicatorColor = AppColors.Line,
-            disabledIndicatorColor = AppColors.Line,
-            cursorColor = AppColors.Line,
-            focusedLabelColor = AppColors.Line,
-            unfocusedLabelColor = AppColors.iconMuted,
-        ),
+        colors = appTextFieldColors(),
     )
 }

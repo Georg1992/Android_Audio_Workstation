@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -21,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
@@ -31,9 +31,6 @@ import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
 
-private const val TrackActionBorderIdleAlpha = 0.22f
-private const val TrackActionBorderActiveAlpha = 0.52f
-private const val TrackActionBorderPressedAlpha = 0.38f
 private const val TrackActionIconIdleAlpha = 0.38f
 private const val TrackActionIconGlowIntensity = 0.42f
 private const val TrackActionPressedScale = 0.95f
@@ -49,11 +46,9 @@ fun TrackActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     size: Dp = Dimens.TrackHeaderButtonSize,
-    surfaceColor: Color = AppColors.SurfacePanel,
+    surfaceColor: Color = AppColors.SurfacePressed,
     backgroundOverride: Color? = null,
-    borderColor: Color? = null,
     activeBackgroundColor: Color? = null,
-    activeBorderColor: Color? = null,
     activeIconColor: Color? = null,
     idleIconColor: Color = AppColors.Line.copy(alpha = TrackActionIconIdleAlpha),
     showActiveGlow: Boolean = true,
@@ -81,14 +76,6 @@ fun TrackActionButton(
             active && activeBackgroundColor != null -> activeBackgroundColor
             else -> surfaceColor
         }
-    val resolvedBorderColor =
-        borderColor
-            ?: when {
-                active && activeBorderColor != null -> activeBorderColor
-                active -> AppColors.Line.copy(alpha = TrackActionBorderActiveAlpha)
-                isPressed && enabled -> AppColors.Line.copy(alpha = TrackActionBorderPressedAlpha)
-                else -> AppColors.Line.copy(alpha = TrackActionBorderIdleAlpha)
-            }
     val iconTint =
         when {
             active && activeIconColor != null -> activeIconColor
@@ -105,9 +92,8 @@ fun TrackActionButton(
                     scaleY = pressScale
                 }
                 .alpha(if (enabled || preserveOpacityWhenDisabled) 1f else AppOpacity.disabled)
-                .clip(shape)
+                .shadow(elevation = Dimens.ControlElevation, shape = shape)
                 .background(backgroundColor)
-                .border(Dimens.Stroke, resolvedBorderColor, shape)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,
@@ -148,12 +134,9 @@ fun TrackActionButton(
 }
 
 private val RecordTargetIconSize = 24.dp
-/** Filled [FiberManualRecord] circle diameter in its 24dp viewport. */
-private val RecordTargetInnerCircleSize = RecordTargetIconSize * 16f / 24f
 
 @Composable
 fun RecordTargetButtonIcon(
-    active: Boolean,
     tint: Color,
     contentDescription: String,
 ) {
@@ -164,13 +147,5 @@ fun RecordTargetButtonIcon(
             tint = tint,
             modifier = Modifier.size(RecordTargetIconSize),
         )
-        if (active) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(RecordTargetInnerCircleSize)
-                        .border(Dimens.Stroke, AppColors.Line, CircleShape),
-            )
-        }
     }
 }

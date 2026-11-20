@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -23,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -66,8 +67,13 @@ fun TrackClipTrimWaveformEditor(
             modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(AppColors.Bg)
-                .border(Dimens.Stroke, AppColors.Line, RoundedCornerShape(Dimens.MediumRadius)),
+                .shadow(
+                    elevation = Dimens.PanelElevation,
+                    shape = RoundedCornerShape(Dimens.MediumRadius),
+                    clip = false,
+                )
+                .clip(RoundedCornerShape(Dimens.MediumRadius))
+                .background(AppColors.Bg),
     ) {
         val density = LocalDensity.current
         val areaWidthPx = with(density) { maxWidth.toPx() }
@@ -134,8 +140,13 @@ fun TrackClipTimelinePositionEditor(
             modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(AppColors.Bg)
-                .border(Dimens.Stroke, AppColors.Line, RoundedCornerShape(Dimens.MediumRadius)),
+                .shadow(
+                    elevation = Dimens.PanelElevation,
+                    shape = RoundedCornerShape(Dimens.MediumRadius),
+                    clip = false,
+                )
+                .clip(RoundedCornerShape(Dimens.MediumRadius))
+                .background(AppColors.Bg),
     ) {
         val density = LocalDensity.current
         val areaWidthPx = with(density) { maxWidth.toPx() }
@@ -170,8 +181,7 @@ fun TrackClipTimelinePositionEditor(
                     .offset(x = clipOffset)
                     .width(clipWidth)
                     .fillMaxHeight()
-                    .background(AppColors.LoopRegionFill.copy(alpha = 0.55f))
-                    .border(Dimens.Stroke, AppColors.Line)
+                    .background(AppColors.LoopRegionFill)
                     .pointerInput(timelineLayoutDurationMs, trimmedDurationMs) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -216,8 +226,8 @@ fun TrackEditFxPlaceholderCard(
         modifier =
             modifier
                 .fillMaxWidth()
-                .background(AppColors.Bg, shape)
-                .border(Dimens.Stroke, AppColors.Line, shape)
+                .shadow(elevation = Dimens.PanelElevation, shape = shape, clip = false)
+                .background(AppColors.SurfaceRaised, shape)
                 .padding(Dimens.PanelPadding),
     ) {
         Text(

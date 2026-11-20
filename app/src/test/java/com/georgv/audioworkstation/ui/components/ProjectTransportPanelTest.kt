@@ -75,7 +75,7 @@ private fun ProjectTransportHarness() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
-                    .transportChrome(raised = true)
+                    .transportChrome()
                     .padding(horizontal = Dimens.Gap, vertical = Dimens.TransportPanelPadding),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -98,7 +98,6 @@ private fun ProjectTransportHarness() {
                 onPlay = {},
                 onStop = {},
                 onRecord = {},
-                raised = true,
                 timeline = {
                     TransportTimeline(
                         playheadPositionMs = 12_000,

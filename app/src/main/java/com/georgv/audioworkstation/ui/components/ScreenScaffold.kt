@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.georgv.audioworkstation.R
@@ -42,7 +43,7 @@ fun ScreenScaffold(
     snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
-    val topBarContainerColor = if (topBarAlertMessage != null) topBarAlertColor else AppColors.Bg
+    val topBarContainerColor = if (topBarAlertMessage != null) topBarAlertColor else AppColors.SurfaceRaised
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -76,6 +77,7 @@ private fun CompactScreenTopBar(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .shadow(elevation = Dimens.PanelElevation)
                 .background(topBarContainerColor)
                 .statusBarsPadding(),
     ) {

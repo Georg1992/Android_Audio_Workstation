@@ -163,7 +163,7 @@ internal fun ProjectScreenHeavyLayer(
     if (showMixdownDialog) {
         AlertDialog(
             onDismissRequest = { showMixdownDialog = false },
-            containerColor = AppColors.Bg,
+            containerColor = AppColors.SurfaceRaised,
             tonalElevation = 0.dp,
             title = {
                 locale.Provide {
@@ -230,7 +230,7 @@ internal fun ProjectScreenHeavyLayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
-                .transportChrome(raised = true)
+                .transportChrome()
                 .padding(horizontal = Dimens.Gap, vertical = Dimens.TransportPanelPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -295,7 +295,6 @@ internal fun ProjectScreenHeavyLayer(
             onRecord = { startRecordingIfPermitted(newProjectName) },
             isRecordEnabled = !structuralState.isImportInProgress,
             inputLocked = reorderActive,
-            raised = true,
             timeline = {
                 TransportTimeline(
                     playheadPositionMs = playheadPositionMs,

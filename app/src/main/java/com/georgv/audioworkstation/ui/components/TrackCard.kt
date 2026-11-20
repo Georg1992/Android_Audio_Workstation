@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -24,7 +23,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.FocusRequester
@@ -63,7 +62,10 @@ import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.TrackImportStatus
 import com.georgv.audioworkstation.core.timeline.TimelineMinimumBaseDurationMs
 import com.georgv.audioworkstation.ui.modifiers.consumeAllPointers
+import androidx.compose.ui.graphics.lerp
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
+import com.georgv.audioworkstation.ui.theme.appTextFieldColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -143,15 +145,10 @@ fun TrackCard(
         when {
             isRecording -> AppColors.Red
             showSelected -> AppColors.Green
-            else -> AppColors.SurfacePanel
+            isImportFailed -> lerp(AppColors.SurfaceRaised, AppColors.Red, AppOpacity.loopRegionFill)
+            isImporting -> lerp(AppColors.SurfaceRaised, AppColors.Cyan, AppOpacity.loopRegionFill)
+            else -> AppColors.SurfaceRaised
         }
-    val borderColor =
-        when {
-            isImporting -> AppColors.Cyan
-            isImportFailed -> AppColors.Red
-            else -> AppColors.Line
-        }
-    val borderWidth = if (isImporting || isImportFailed) 2.dp else Dimens.Stroke
 
     var isRenaming by remember(trackId) { mutableStateOf(false) }
     var renameFieldValue by remember(trackId, title) { mutableStateOf(TextFieldValue(title)) }
@@ -231,9 +228,9 @@ fun TrackCard(
                         Modifier
                     }
                 )
+                .shadow(elevation = Dimens.PanelElevation, shape = cardShape, clip = false)
                 .clip(cardShape)
                 .background(bg)
-                .border(borderWidth, borderColor, cardShape)
                 .consumeAllPointers(enabled = reorderGestureEnabled && blockReorderDrag)
                 .then(
                     if (reorderActiveOnCard) {
@@ -340,16 +337,7 @@ fun TrackCard(
                                     focusManager.clearFocus()
                                 }
                             ),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = AppColors.Bg,
-                                unfocusedContainerColor = AppColors.Bg,
-                                disabledContainerColor = AppColors.Bg,
-                                focusedTextColor = AppColors.Line,
-                                unfocusedTextColor = AppColors.Line,
-                                focusedIndicatorColor = AppColors.Line,
-                                unfocusedIndicatorColor = AppColors.Line,
-                                cursorColor = AppColors.Line
-                            )
+                            colors = appTextFieldColors()
                         )
                     } else {
                         Text(
@@ -405,11 +393,9 @@ fun TrackCard(
                             active = isRecordTarget,
                             enabled = recordTargetInteractive,
                             accentColor = AppColors.Red,
-                            activeBorderColor = AppColors.Line,
                             onClick = { toggleRecordTarget?.invoke() },
                         ) { iconTint ->
                             RecordTargetButtonIcon(
-                                active = isRecordTarget,
                                 tint = iconTint,
                                 contentDescription =
                                     stringResource(
@@ -439,7 +425,6 @@ fun TrackCard(
                             preserveOpacityWhenDisabled = loopLatchedDuringPlayback,
                             accentColor = AppColors.Green,
                             activeBackgroundColor = AppColors.LoopButtonActiveBackground,
-                            activeBorderColor = AppColors.Line,
                             activeIconColor = AppColors.Line,
                             showActiveGlow = isLoop,
                             showActiveLed = isLoop,
@@ -474,7 +459,6 @@ fun TrackCard(
                                 } else {
                                     null
                                 },
-                            borderColor = AppColors.Line,
                             idleIconColor = AppColors.Line,
                             showActiveGlow = false,
                             showActiveLed = false,
@@ -500,12 +484,6 @@ fun TrackCard(
                                     !isRenaming &&
                                     isMenuOpen,
                             onDismissRequest = onMenuDismiss,
-                            modifier =
-                                Modifier.border(
-                                    Dimens.Stroke,
-                                    AppColors.Line,
-                                    menuDropdownShape,
-                                ),
                             shape = menuDropdownShape,
                         ) {
                             TrackOverflowMenuBody(
@@ -669,8 +647,7 @@ internal fun ImportStatusBadge(
             modifier =
                 modifier
                     .height(badgeHeight)
-                    .background(color.copy(alpha = 0.28f), shape)
-                    .border(Dimens.Stroke, color, shape)
+                    .background(color.copy(alpha = AppOpacity.loopRegionFill), shape)
                     .padding(horizontal = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -704,7 +681,6 @@ internal fun ImportStatusBadge(
                         )
                     }
                 }
-                .border(Dimens.Stroke, color, shape)
                 .padding(horizontal = 4.dp),
         contentAlignment = Alignment.CenterStart,
     ) {

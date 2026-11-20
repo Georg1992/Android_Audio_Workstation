@@ -151,7 +151,7 @@ fun LibraryScreen(
             val project = item.project
             AlertDialog(
                 onDismissRequest = { pendingDeleteProject = null },
-                containerColor = AppColors.Bg,
+                containerColor = AppColors.SurfaceRaised,
                 tonalElevation = 0.dp,
                 title = {
                     locale.Provide {
@@ -252,7 +252,7 @@ private fun ShareConfirmDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AppColors.Bg,
+        containerColor = AppColors.SurfaceRaised,
         tonalElevation = 0.dp,
         title = {
             locale.Provide {

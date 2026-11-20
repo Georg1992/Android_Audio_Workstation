@@ -2,7 +2,6 @@ package com.georgv.audioworkstation.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -75,8 +75,8 @@ fun TimelinePlayheadScrubberPanel(
             .fillMaxWidth()
             .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
             .height(Dimens.PanelPlaceholderHeight)
-            .background(AppColors.SurfacePanel, ScrubberPanelShape)
-            .border(Dimens.Stroke, AppColors.Line, ScrubberPanelShape),
+            .shadow(elevation = Dimens.PanelElevation, shape = ScrubberPanelShape, clip = false)
+            .background(AppColors.SurfaceRaised, ScrubberPanelShape),
     ) {
         val utilityZoneWidth =
             (maxWidth - Dimens.Gap - Dimens.FaderWidth) * TimelineMetadataWidthFraction +
@@ -155,7 +155,7 @@ private fun TimelinePlayheadUtilityStrip(
                     .align(Alignment.CenterStart)
                     .width(ScrubberUtilityZoneDividerWidth)
                     .fillMaxHeight()
-                    .background(AppColors.Line),
+                    .background(AppColors.SurfacePressed),
         )
         Column(
             modifier =
@@ -182,8 +182,7 @@ internal fun MixTransportTimeline(
         modifier = modifier
             .fillMaxWidth()
             .height(Dimens.PanelPlaceholderHeight)
-            .background(AppColors.SurfacePanel, shape)
-            .border(Dimens.Stroke, AppColors.Line, shape),
+            .background(AppColors.Bg, shape),
     ) {
         val metrics = rememberTimelinePlayheadWaveformMetrics(
             waveformAreaWidth = maxWidth,

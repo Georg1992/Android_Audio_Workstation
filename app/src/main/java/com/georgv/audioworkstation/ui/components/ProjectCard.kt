@@ -6,7 +6,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -88,9 +88,9 @@ fun ProjectCard(
                     stiffness = Spring.StiffnessMedium,
                 ),
             )
+            .shadow(elevation = Dimens.PanelElevation, shape = shape, clip = false)
             .clip(shape)
-            .background(AppColors.SurfacePanel)
-            .border(Dimens.Stroke, AppColors.Line, shape),
+            .background(AppColors.SurfaceRaised),
     ) {
         if (opening.opened) {
             OpenedProjectCard(
@@ -266,8 +266,7 @@ private fun CardArt(
         modifier = Modifier
             .size(size)
             .clip(shape)
-            .background(AppColors.SurfaceRaised)
-            .border(Dimens.Stroke, AppColors.Line, shape),
+            .background(AppColors.SurfacePressed),
     ) {
         val image = bitmap
         if (image != null) {
@@ -286,8 +285,7 @@ private fun CardTag(tag: String) {
     val shape = RoundedCornerShape(Dimens.SmallRadius)
     Surface(
         shape = shape,
-        color = AppColors.Bg,
-        modifier = Modifier.border(Dimens.Stroke, AppColors.Line, shape),
+        color = AppColors.SurfacePressed,
     ) {
         Text(
             text = tag,
@@ -309,9 +307,10 @@ fun CardActionButton(
         modifier = Modifier
             .size(Dimens.IconTileSize)
             .alpha(if (enabled) 1f else AppOpacity.disabled)
-            .clip(shape)
-            .background(AppColors.Bg)
-            .border(Dimens.Stroke, AppColors.Line, shape)
+            .transportControlChrome(
+                shape = shape,
+                fill = AppColors.SurfacePressed,
+            )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

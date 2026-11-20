@@ -5,21 +5,28 @@ import androidx.compose.ui.graphics.lerp
 
 object AppColors {
 
-    /** App shell background; splash still uses `@color/app_window_bg` until activity starts — keep that hex aligned when changing [Bg]. */
+    /** Page shell. Splash still uses `@color/app_window_bg` until activity starts — keep that hex aligned when changing [Bg]. */
     val Bg = Color(0xFFF3EFE4)
 
+    /** Inset wells on a raised surface, such as a timeline lane. */
     val SurfacePanel = Color(0xFFF7F4EE)
+    /** Cards, panels, the header, and dialogs. */
     val SurfaceRaised = Color(0xFFFFFFFF)
+    /** Resting controls and text fields. */
     val SurfacePressed = Color(0xFFE4E0D8)
 
-    // Core lines/text
+    /** Text and small marks such as ruler ticks. */
     val Line = Color(0xFF111111)
 
-    // Accent palette (PascalCase brand tokens)
+    /** Play, selection, and the primary action. */
     val Green = Color(0xFF02FC57)
+    /** Warning and the accent. */
     val Yellow = Color(0xFFFDFF1F)
+    /** Import in progress and level. */
     val Cyan = Color(0xFF00FFF6)
+    /** Community accent. */
     val Pink = Color(0xFFFFD2FF)
+    /** Record, error, and the playhead. */
     val Red = Color(0xFFFF2E4A)
 
     /** Loop region overlay tint on the timeline waveform. */
@@ -39,13 +46,11 @@ object AppColors {
     val labelEmphasis = Line.copy(alpha = AppOpacity.emphasis)
 
     // Utility neutrals
-    val WhiteSoft = Color(0xFFFFFCF7)
     val BlackSoftTransparent = Color(0x66000000)
 
     // Fader
-    val FaderTrackAbove = WhiteSoft
+    val FaderTrackAbove = SurfacePressed
     val FaderTrackBelow = Cyan
-    val FaderTrackBorder = Line
     val FaderTick = Line
     val FaderThumb = SurfaceRaised
     val FaderThumbNotch = BlackSoftTransparent

@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.components.tiles
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,7 +26,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
@@ -50,15 +48,14 @@ fun MainTile(
     Surface(
         onClick = onClick,
         shape = shape,
-        color = AppColors.SurfacePanel,
-        shadowElevation = 0.dp,
+        color = AppColors.SurfaceRaised,
+        shadowElevation = Dimens.PanelElevation,
         modifier = modifier
     ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(shape)
-                .border(Dimens.Stroke, AppColors.Line, shape)
                 .padding(Dimens.TileInnerPadding)
         ) {
             val narrow = maxWidth < Dimens.MainTileNarrowBreakpoint
@@ -155,8 +152,7 @@ private fun MainTileIconBox(
         modifier = Modifier
             .size(iconSize)
             .clip(cornerShape)
-            .background(accent)
-            .border(Dimens.Stroke, AppColors.Line, cornerShape),
+            .background(accent),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -178,6 +174,5 @@ private fun MainTileAccentBar(
             .height(Dimens.AccentBarHeight)
             .clip(cornerShape)
             .background(accent)
-            .border(Dimens.Stroke, AppColors.Line, cornerShape)
     )
 }

@@ -1,7 +1,5 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -35,7 +32,7 @@ fun SampleRateMismatchImportDialog(
     val locale = rememberAppLocaleScope()
     AlertDialog(
         onDismissRequest = onCancel,
-        containerColor = AppColors.Bg,
+        containerColor = AppColors.SurfaceRaised,
         tonalElevation = 0.dp,
         title = {
             locale.Provide {
@@ -79,7 +76,7 @@ fun SampleRateMismatchImportDialog(
                     )
                     ImportDialogChoiceButton(
                         text = stringResource(R.string.action_cancel),
-                        fillColor = AppColors.SurfacePanel,
+                        fillColor = AppColors.SurfacePressed,
                         onClick = onCancel,
                     )
                 }
@@ -102,17 +99,14 @@ private fun ImportDialogChoiceButton(
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
-        color = AppColors.SurfacePanel,
-        shadowElevation = Dimens.Stroke,
+        color = fillColor,
+        shadowElevation = Dimens.ControlElevation,
         shape = shape,
     ) {
         Box(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clip(shape)
-                    .background(fillColor)
-                    .border(Dimens.Stroke, AppColors.Line, shape)
                     .padding(vertical = 14.dp, horizontal = Dimens.TileInnerPadding),
             contentAlignment = Alignment.Center,
         ) {

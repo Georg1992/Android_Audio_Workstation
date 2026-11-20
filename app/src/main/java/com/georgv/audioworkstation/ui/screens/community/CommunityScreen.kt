@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.community
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +20,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,7 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -46,6 +43,7 @@ import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
+import com.georgv.audioworkstation.ui.theme.appTextFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +111,7 @@ private fun Confirmation(state: CommunityUiState, vm: CommunityViewModel) {
     )
     CommunityAction(
         text = stringResource(R.string.community_sign_in),
-        fillColor = AppColors.SurfacePanel,
+        fillColor = AppColors.SurfacePressed,
         enabled = !state.busy,
         onClick = vm::showSignIn,
     )
@@ -181,14 +179,14 @@ private fun SignInActions(
     onGmail: () -> Unit,
 ) {
     CommunityAction(stringResource(R.string.community_sign_in), AppColors.Green, enabled, onSignIn)
-    CommunityAction(stringResource(R.string.community_register), AppColors.SurfacePanel, enabled, onRegister)
-    CommunityAction(stringResource(R.string.community_gmail), AppColors.SurfacePanel, enabled, onGmail)
+    CommunityAction(stringResource(R.string.community_register), AppColors.SurfacePressed, enabled, onRegister)
+    CommunityAction(stringResource(R.string.community_gmail), AppColors.SurfacePressed, enabled, onGmail)
 }
 
 @Composable
 private fun RegisterActions(enabled: Boolean, onRegister: () -> Unit, onSignIn: () -> Unit) {
     CommunityAction(stringResource(R.string.community_register), AppColors.Green, enabled, onRegister)
-    CommunityAction(stringResource(R.string.community_sign_in), AppColors.SurfacePanel, enabled, onSignIn)
+    CommunityAction(stringResource(R.string.community_sign_in), AppColors.SurfacePressed, enabled, onSignIn)
 }
 
 @Composable
@@ -215,20 +213,7 @@ private fun CommunityField(
             null
         },
         modifier = Modifier.fillMaxWidth(),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = AppColors.SurfacePanel,
-            unfocusedContainerColor = AppColors.SurfacePanel,
-            disabledContainerColor = AppColors.SurfacePanel,
-            focusedTextColor = AppColors.Line,
-            unfocusedTextColor = AppColors.Line,
-            disabledTextColor = AppColors.Line,
-            focusedIndicatorColor = AppColors.Line,
-            unfocusedIndicatorColor = AppColors.Line,
-            disabledIndicatorColor = AppColors.Line,
-            cursorColor = AppColors.Line,
-            focusedLabelColor = AppColors.Line,
-            unfocusedLabelColor = AppColors.iconMuted,
-        ),
+        colors = appTextFieldColors(),
     )
 }
 
@@ -257,14 +242,12 @@ internal fun CommunityAction(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
-        color = AppColors.SurfacePanel,
-        shadowElevation = Dimens.Stroke,
+        color = fillColor,
+        shadowElevation = Dimens.ControlElevation,
+        shape = shape,
     ) {
         Row(
             modifier = Modifier
-                .clip(shape)
-                .background(fillColor)
-                .border(Dimens.Stroke, AppColors.Line, shape)
                 .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.TileInnerPadding),
             horizontalArrangement = Arrangement.Center,
         ) {

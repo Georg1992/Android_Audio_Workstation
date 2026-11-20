@@ -20,7 +20,6 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -35,7 +34,7 @@ import com.georgv.audioworkstation.ui.theme.Dimens
 
 /** Corner radius (px) for the track and thumb. Visual constant, no UX significance. */
 private const val FaderRoundedCornerPx = 3f
-/** Stroke width for the track border, thumb border, ticks and notch. */
+/** Stroke width for ticks and the thumb notch. */
 private const val FaderStrokePx = 1f
 /** Bottom padding (px) so the bottom tick doesn't kiss the canvas edge. */
 private const val FaderBottomPadPx = 2f
@@ -66,10 +65,8 @@ fun Fader(
     tickCount: Int = 13,
     trackAboveThumb: Color = AppColors.FaderTrackAbove,
     trackBelowThumb: Color = AppColors.FaderTrackBelow,
-    trackBorder: Color = AppColors.FaderTrackBorder,
     tickColor: Color = AppColors.FaderTick,
     thumbColor: Color = AppColors.FaderThumb,
-    thumbBorder: Color = AppColors.Line,
     bottomInsetPx: Float = FaderBottomPadPx,
 ) {
     val density = LocalDensity.current
@@ -228,14 +225,6 @@ fun Fader(
                     )
                 }
             }
-            drawRoundRect(
-                color = trackBorder,
-                topLeft = Offset(trackLeft, trackTop),
-                size = Size(trackW, trackH),
-                cornerRadius = trackCornerRadius,
-                style = Stroke(width = FaderStrokePx)
-            )
-
             val ticks = tickCount.coerceAtLeast(2)
             val midIndex = (ticks - 1) / 2
             for (i in 0 until ticks) {
@@ -269,13 +258,6 @@ fun Fader(
                 topLeft = Offset(thumbLeft, thumbTop),
                 size = Size(thumbW, thumbH),
                 cornerRadius = trackCornerRadius
-            )
-            drawRoundRect(
-                color = thumbBorder,
-                topLeft = Offset(thumbLeft, thumbTop),
-                size = Size(thumbW, thumbH),
-                cornerRadius = trackCornerRadius,
-                style = Stroke(width = FaderStrokePx)
             )
 
             drawLine(

@@ -31,7 +31,6 @@ fun MixdownAudioButton(
         modifier = modifier
             .size(Dimens.TransportButtonSize)
             .transportControlChrome(
-                raised = true,
                 shape = shape,
                 fill = AppColors.SurfacePressed,
             )

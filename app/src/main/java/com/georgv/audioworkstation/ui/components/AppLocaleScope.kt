@@ -55,8 +55,9 @@ fun AppDropdownMenu(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         shape = shape,
-        containerColor = AppColors.Bg,
+        containerColor = AppColors.SurfaceRaised,
         tonalElevation = 0.dp,
+        shadowElevation = Dimens.PanelElevation,
     ) {
         val menuScope = this
         locale.Provide {

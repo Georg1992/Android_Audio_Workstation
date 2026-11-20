@@ -51,6 +51,7 @@ import com.georgv.audioworkstation.ui.layout.pageStartIndex
 import com.georgv.audioworkstation.ui.layout.projectTrackLayoutSpec
 import com.georgv.audioworkstation.ui.layout.rememberLayoutEnvironment
 import com.georgv.audioworkstation.ui.theme.AppColors
+import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -444,12 +445,7 @@ fun ProjectTrackList(
                                         1f,
                                     )
                                 )
-                                .border(
-                                    width = 1.dp,
-                                    color = AppColors.Line.copy(alpha = 0.9f),
-                                    shape = shape,
-                                )
-                                .background(AppColors.Line.copy(alpha = 0.08f), shape),
+                                .background(AppColors.Line.copy(alpha = AppOpacity.emphasis), shape),
                         )
                     }
 
@@ -469,12 +465,7 @@ fun ProjectTrackList(
                                         1f,
                                     )
                                 )
-                                .border(
-                                    width = 1.dp,
-                                    color = AppColors.Line.copy(alpha = 0.9f),
-                                    shape = shape,
-                                )
-                                .background(AppColors.Line.copy(alpha = 0.08f), shape),
+                                .background(AppColors.Line.copy(alpha = AppOpacity.emphasis), shape),
                         )
                     }
                 }

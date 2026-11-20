@@ -1,7 +1,6 @@
 package com.georgv.audioworkstation.ui.screens.projects
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,14 +14,12 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -35,10 +32,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.core.audio.ProjectSampleRate
 import com.georgv.audioworkstation.ui.components.ScreenScaffold
+import com.georgv.audioworkstation.ui.components.transportControlChrome
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
+import com.georgv.audioworkstation.ui.theme.appTextFieldColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -115,18 +114,7 @@ fun CreateProjectScreen(
                         vm.createProject()
                     }
                 ),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = AppColors.SurfacePanel,
-                    unfocusedContainerColor = AppColors.SurfacePanel,
-                    disabledContainerColor = AppColors.SurfacePanel,
-                    focusedTextColor = AppColors.Line,
-                    unfocusedTextColor = AppColors.Line,
-                    disabledTextColor = AppColors.Line,
-                    focusedIndicatorColor = AppColors.Line,
-                    unfocusedIndicatorColor = AppColors.Line,
-                    disabledIndicatorColor = AppColors.Line,
-                    cursorColor = AppColors.Line
-                )
+                colors = appTextFieldColors()
             )
 
             Spacer(Modifier.height(Dimens.Gap))
@@ -149,7 +137,7 @@ fun CreateProjectScreen(
             ) {
                 CreateProjectActionButton(
                     text = stringResource(R.string.action_cancel),
-                    fillColor = AppColors.SurfacePanel,
+                    fillColor = AppColors.SurfacePressed,
                     onClick = onBack,
                     enabled = !state.isSaving
                 )
@@ -208,13 +196,11 @@ private fun SampleRateOption(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
-    val fillColor: Color = if (isSelected) AppColors.Accent else AppColors.SurfacePanel
+    val fillColor: Color = if (isSelected) AppColors.Accent else AppColors.SurfacePressed
 
     Column(
         modifier = modifier
-            .clip(shape)
-            .background(fillColor)
-            .border(Dimens.Stroke, AppColors.Line, shape)
+            .transportControlChrome(shape = shape, fill = fillColor)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.TileInnerPadding)
             .alpha(if (enabled) 1f else AppOpacity.disabled),
@@ -248,14 +234,12 @@ private fun CreateProjectActionButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        color = AppColors.SurfacePanel,
-        shadowElevation = Dimens.Stroke
+        color = fillColor,
+        shadowElevation = Dimens.ControlElevation,
+        shape = shape,
     ) {
         Row(
             modifier = Modifier
-                .clip(shape)
-                .background(fillColor)
-                .border(Dimens.Stroke, AppColors.Line, shape)
                 .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.TileInnerPadding),
             horizontalArrangement = Arrangement.Center
         ) {
