@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,6 +56,7 @@ fun TransportPanel(
     isStopEnabled: Boolean,
     stopButtonShowsPause: Boolean,
     playheadPositionMs: Long,
+    timelineDurationMs: Long,
     screenMessage: String? = null,
     onPlay: () -> Unit,
     onStop: () -> Unit,
@@ -119,9 +119,10 @@ fun TransportPanel(
             messageScreen.Show(
                 message = screenMessage,
                 visualizing = isPlaying || isRecording,
+                positionMs = playheadPositionMs,
+                durationMs = timelineDurationMs,
+                modifier = Modifier.weight(1f),
             )
-
-            Spacer(modifier = Modifier.weight(1f))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,

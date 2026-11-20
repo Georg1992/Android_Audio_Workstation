@@ -294,6 +294,7 @@ private fun UnavailableMixTransport() {
         inputLocked = true,
         buttons = {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -327,6 +328,9 @@ private fun UnavailableMixTransport() {
                 messageScreen.Show(
                     message = stringResource(R.string.library_no_mix_yet),
                     visualizing = false,
+                    positionMs = 0L,
+                    durationMs = 0L,
+                    modifier = Modifier.weight(1f),
                 )
             }
         },
@@ -504,6 +508,7 @@ private fun CardPlaybackStrip(
         ),
         buttons = {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -537,6 +542,9 @@ private fun CardPlaybackStrip(
                 messageScreen.Show(
                     message = message,
                     visualizing = playing,
+                    positionMs = shownPositionMs.toLong(),
+                    durationMs = durationMs.toLong(),
+                    modifier = Modifier.weight(1f),
                 )
             }
         },

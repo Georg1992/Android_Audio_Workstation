@@ -105,6 +105,7 @@ class ProjectCardViewTest {
         compose.onNodeWithText("Mixing… 40%").assertIsDisplayed()
         compose.onNodeWithText("No mix has been made.").assertIsDisplayed()
         compose.onNodeWithText("No mix yet").assertIsDisplayed()
+        compose.onNodeWithText("00:00/00:00").assertIsDisplayed()
         compose.onNodeWithText("TRANSPORT").assertDoesNotExist()
         compose.onNodeWithContentDescription("Play").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithContentDescription("Open project").assertIsDisplayed()
@@ -146,6 +147,7 @@ class ProjectCardViewTest {
         compose.onNodeWithContentDescription("Stop").assertIsDisplayed()
         compose.onNodeWithContentDescription("Record").assertDoesNotExist()
         compose.onNodeWithText("0:12").assertIsDisplayed()
+        compose.onNodeWithText("00:12/02:05").assertIsDisplayed()
         compose.onNodeWithText("No mix yet").assertDoesNotExist()
         compose.onNodeWithText("2:00").assertIsDisplayed()
         save("library-opened-mix")
@@ -201,6 +203,7 @@ class ProjectCardViewTest {
         compose.onNodeWithContentDescription("Stop").assertIsDisplayed()
         compose.onNodeWithContentDescription("Record").assertDoesNotExist()
         compose.onNodeWithText("0:04").assertIsDisplayed()
+        compose.onNodeWithText("00:04/01:30").assertIsDisplayed()
         compose.onNodeWithText("1:30").assertIsDisplayed()
         save("community-opened")
     }
@@ -240,6 +243,7 @@ class ProjectCardViewTest {
         compose.onNodeWithText("by Ada").assertIsDisplayed()
         compose.onNodeWithText("No mix has been made.").assertIsDisplayed()
         compose.onNodeWithText("No mix yet").assertIsDisplayed()
+        compose.onNodeWithText("00:00/00:00").assertIsDisplayed()
         save("library-opened-dark")
     }
 

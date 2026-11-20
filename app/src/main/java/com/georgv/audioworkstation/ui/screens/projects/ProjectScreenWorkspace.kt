@@ -299,6 +299,7 @@ internal fun ProjectScreenHeavyLayer(
             isStopEnabled = structuralState.isStopEnabled,
             stopButtonShowsPause = structuralState.stopButtonShowsPause,
             playheadPositionMs = playheadPositionMs,
+            timelineDurationMs = realtimeState.timelineVisibleDurationMs,
             screenMessage = screenMessage,
             onPlay = { vm.onPlayPressed() },
             onStop = { vm.onStopPressed() },

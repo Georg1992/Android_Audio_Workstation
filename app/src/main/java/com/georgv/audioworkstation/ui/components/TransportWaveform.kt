@@ -40,7 +40,7 @@ open class TransportWaveform {
             if (peak > Movement) {
                 drawPath(
                     path = path,
-                    color = AppColors.SurfaceRaised.copy(alpha = AppOpacity.disabled),
+                    color = AppColors.Line.copy(alpha = AppOpacity.disabled),
                     style = Stroke(
                         width = GlowWidth.toPx(),
                         cap = StrokeCap.Round,
@@ -50,7 +50,7 @@ open class TransportWaveform {
             }
             drawPath(
                 path = path,
-                color = AppColors.SurfaceRaised,
+                color = AppColors.Line,
                 style = Stroke(
                     width = Hairline.toPx(),
                     cap = StrokeCap.Round,
