@@ -178,7 +178,9 @@ private fun ProjectCardFace(
                     )
                 }
             }
-            CardActions(onOpen = opening.onOpen, actions = actions)
+            if (opening.opened) {
+                CardActions(onOpen = opening.onOpen, actions = actions)
+            }
         }
         if (opening.opened) {
             OpenedCardDetails(
@@ -196,7 +198,12 @@ private fun CardActions(
     onOpen: () -> Unit,
     actions: @Composable RowScope.() -> Unit,
 ) {
+    val plate = RoundedCornerShape(Dimens.SmallRadius)
     Row(
+        modifier = Modifier
+            .clip(plate)
+            .background(AppColors.SurfacePressed.copy(alpha = AppOpacity.subtle))
+            .padding(Dimens.Gap),
         horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -69,6 +69,7 @@ class ProjectCardViewTest {
         compose.onNodeWithText("Mixing… 40%").assertDoesNotExist()
         compose.onNodeWithText("TRANSPORT").assertDoesNotExist()
         compose.onNodeWithContentDescription("Play").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open project").assertDoesNotExist()
         save("library-shortcut")
     }
 
@@ -186,6 +187,7 @@ class ProjectCardViewTest {
         compose.onNodeWithText("Late vocal").assertDoesNotExist()
         compose.onNodeWithText("vocal").assertDoesNotExist()
         compose.onNodeWithContentDescription("Play").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open project").assertDoesNotExist()
         save("community-shortcut")
         compose.onNodeWithText("Night take").performClick()
         compose.waitForIdle()
