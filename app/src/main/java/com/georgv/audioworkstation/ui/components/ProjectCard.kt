@@ -39,10 +39,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -88,9 +89,13 @@ fun ProjectCard(
                     stiffness = Spring.StiffnessMedium,
                 ),
             )
-            .shadow(elevation = Dimens.PanelElevation, shape = shape, clip = true)
+            .graphicsLayer {
+                this.shape = shape
+                clip = true
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
             .clip(shape)
-            .background(AppColors.SurfaceRaised),
+            .background(AppColors.SurfaceRaised, shape),
     ) {
         val picture = bitmap
         if (picture != null) {
