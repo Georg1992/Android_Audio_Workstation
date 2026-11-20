@@ -136,7 +136,16 @@ class HttpProjectShare(
                 track.copy(contentHash = hash, syncStatus = SyncStatus.SYNCED)
             },
         )
-        publishCard(session, project.id, project.name.orEmpty(), project.cardTags, project.cardImagePath)
+        publishCard(
+            session,
+            project.id,
+            PublishedCard(
+                title = project.name.orEmpty(),
+                tags = project.cardTags,
+                imagePath = project.cardImagePath,
+                description = project.cardDescription,
+            ),
+        )
         projects.upsertProject(
             project.copy(syncStatus = SyncStatus.SYNCED, ownerUserId = session.accountId),
         )
@@ -160,8 +169,23 @@ class HttpProjectShare(
         projects.upsertProject(project.copy(syncStatus = SyncStatus.LOCAL, ownerUserId = null))
     }
 
-    override suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?) {
-        publishCard(openSession("Sign in to update the card"), projectId, title, tags, imagePath)
+    override suspend fun updateCard(
+        projectId: String,
+        title: String,
+        tags: String,
+        imagePath: String?,
+        description: String,
+    ) {
+        publishCard(
+            openSession("Sign in to update the card"),
+            projectId,
+            PublishedCard(
+                title = title,
+                tags = tags,
+                imagePath = imagePath,
+                description = description,
+            ),
+        )
     }
 
     override suspend fun publishMix(projectId: String) {
@@ -219,21 +243,27 @@ class HttpProjectShare(
     private fun post(session: AccountSession, path: String, json: String): JSONObject =
         JSONObject(api.exchangeAuthorized(session, "POST", path, json))
 
-    private fun publishCard(
-        session: AccountSession,
-        projectId: String,
-        title: String,
-        tags: String,
-        imagePath: String?,
-    ) {
+    private data class PublishedCard(
+        val title: String,
+        val tags: String,
+        val imagePath: String?,
+        val description: String,
+    )
+
+    private fun publishCard(session: AccountSession, projectId: String, card: PublishedCard) {
         val tagJson = JSONArray()
-        checkedCardTags(tags).forEach { tag -> tagJson.put(tag) }
+        checkedCardTags(card.tags).forEach { tag -> tagJson.put(tag) }
         post(
             session,
             "/shared-projects/$projectId/card",
-            JSONObject().put("title", title).put("tags", tagJson).put("ownerName", session.name).toString(),
+            JSONObject()
+                .put("title", card.title)
+                .put("tags", tagJson)
+                .put("ownerName", session.name)
+                .put("description", checkedCardDescription(card.description))
+                .toString(),
         )
-        val path = imagePath ?: return
+        val path = card.imagePath ?: return
         val file = File(path)
         if (!file.isFile) error("card image is missing")
         uploadHashed(session, projectId, "image", file)

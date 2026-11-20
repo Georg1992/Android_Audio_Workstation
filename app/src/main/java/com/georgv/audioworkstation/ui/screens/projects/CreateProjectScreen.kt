@@ -117,6 +117,28 @@ fun CreateProjectScreen(
                 colors = appTextFieldColors()
             )
 
+            Text(
+                text = stringResource(R.string.create_project_description_label),
+                style = AppText.TileTitle,
+                color = AppColors.Text
+            )
+
+            TextField(
+                value = state.description,
+                onValueChange = vm::onDescriptionChange,
+                enabled = !state.isSaving,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                placeholder = {
+                    Text(text = stringResource(R.string.create_project_description_placeholder))
+                },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    keyboardType = KeyboardType.Text,
+                ),
+                colors = appTextFieldColors()
+            )
+
             Spacer(Modifier.height(Dimens.Gap))
 
             Text(

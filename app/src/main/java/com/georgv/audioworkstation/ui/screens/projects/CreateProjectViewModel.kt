@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.core.validation.toProjectNameUiMessage
 import com.georgv.audioworkstation.core.validation.validateName
 import com.georgv.audioworkstation.data.db.entities.ProjectEntity
 import com.georgv.audioworkstation.data.repository.ProjectRepository
+import com.georgv.audioworkstation.online.share.checkedCardDescription
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -24,6 +25,7 @@ import javax.inject.Inject
 
 data class CreateProjectUiState(
     val projectName: String = "",
+    val description: String = "",
     val sampleRate: ProjectSampleRate = ProjectSampleRate.Default,
     val isSaving: Boolean = false
 )
@@ -46,6 +48,10 @@ class CreateProjectViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(projectName = value)
     }
 
+    fun onDescriptionChange(value: String) {
+        _uiState.value = _uiState.value.copy(description = value)
+    }
+
     fun onSampleRateChange(sampleRate: ProjectSampleRate) {
         if (_uiState.value.isSaving) return
         _uiState.value = _uiState.value.copy(sampleRate = sampleRate)
@@ -62,6 +68,13 @@ class CreateProjectViewModel @Inject constructor(
             is NameValidationResult.Valid -> validation.normalized
         }
 
+        val description = try {
+            checkedCardDescription(_uiState.value.description)
+        } catch (invalid: IllegalStateException) {
+            logWarning(TAG, "description is too long", invalid)
+            messages.trySend(UiMessage(R.string.error_card_description_too_long))
+            return
+        }
         val selectedSampleRate = _uiState.value.sampleRate
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true)
@@ -71,7 +84,8 @@ class CreateProjectViewModel @Inject constructor(
                     ProjectEntity(
                         id = projectId,
                         name = normalizedName,
-                        sampleRate = selectedSampleRate.hz
+                        sampleRate = selectedSampleRate.hz,
+                        cardDescription = description,
                     )
                 )
                 createdProjectIds.send(projectId)

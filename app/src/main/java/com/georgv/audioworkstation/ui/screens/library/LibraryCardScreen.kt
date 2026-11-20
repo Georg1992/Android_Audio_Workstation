@@ -81,6 +81,13 @@ fun LibraryCardScreen(
                 label = stringResource(R.string.library_card_tags_hint),
                 enabled = enabled,
             )
+            CardField(
+                value = state.description,
+                onValueChange = vm::setDescription,
+                label = stringResource(R.string.library_card_description_hint),
+                enabled = enabled,
+                singleLine = false,
+            )
             if (state.imageChosen) {
                 Text(text = stringResource(R.string.library_card_image_selected))
             }
@@ -106,11 +113,13 @@ private fun CardField(
     onValueChange: (String) -> Unit,
     label: String,
     enabled: Boolean,
+    singleLine: Boolean = true,
 ) {
     TextField(
         value = value,
         onValueChange = onValueChange,
-        singleLine = true,
+        singleLine = singleLine,
+        minLines = if (singleLine) 1 else 2,
         enabled = enabled,
         label = { Text(text = label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),

@@ -88,14 +88,21 @@ class ProjectRepository(
         if (current.syncStatus != SyncStatus.SYNCED || project.syncStatus != SyncStatus.SYNCED) return
         if (sameSharedCard(current, project)) return
         withContext(io) {
-            cards.updateCard(project.id, project.name.orEmpty(), project.cardTags, project.cardImagePath)
+            cards.updateCard(
+                project.id,
+                project.name.orEmpty(),
+                project.cardTags,
+                project.cardImagePath,
+                project.cardDescription,
+            )
         }
     }
 
     private fun sameSharedCard(previous: ProjectEntity, project: ProjectEntity): Boolean {
         if (previous.name != project.name) return false
         if (previous.cardTags != project.cardTags) return false
-        return previous.cardImagePath == project.cardImagePath
+        if (previous.cardImagePath != project.cardImagePath) return false
+        return previous.cardDescription == project.cardDescription
     }
 
     fun observeTracks(projectId: String): Flow<List<TrackEntity>> =

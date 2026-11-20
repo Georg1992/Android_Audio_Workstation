@@ -798,6 +798,7 @@ class ProjectViewModelTest {
                         title: String,
                         tags: String,
                         imagePath: String?,
+                        description: String,
                     ) {
                         nameDuringPublish = dao.observeProject(PROJECT_ID).first()?.name
                         publishedTitle = title
@@ -833,6 +834,7 @@ class ProjectViewModelTest {
                         title: String,
                         tags: String,
                         imagePath: String?,
+                        description: String,
                     ) {
                         throw UnknownHostException("Unable to resolve host")
                     }
@@ -864,6 +866,7 @@ class ProjectViewModelTest {
                         title: String,
                         tags: String,
                         imagePath: String?,
+                        description: String,
                     ) {
                         error("share api status 500")
                     }
@@ -894,6 +897,7 @@ class ProjectViewModelTest {
                         title: String,
                         tags: String,
                         imagePath: String?,
+                        description: String,
                     ) {
                         published = true
                     }

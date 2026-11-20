@@ -76,6 +76,7 @@ internal class ShareHttp(
                 row.put("imageHash", project.imageHash)
             }
             row.put("ownerName", project.ownerName)
+            row.put("description", project.description)
             projects.put(row)
         }
         send(exchange, 200, JSONObject().put("projects", projects).toString())
@@ -86,7 +87,8 @@ internal class ShareHttp(
         val cardTitle = title(body.optString("title"))
         val tags = tags(body.optJSONArray("tags"))
         val name = ownerName(body.optString("ownerName"))
-        manifest.updateCard(projectId, accountId, cardTitle, tags, name)
+        val about = cardDescription(body.optString("description"))
+        manifest.updateCard(projectId, accountId, cardTitle, tags, name, about)
         send(exchange, 200, """{"id":"$projectId"}""")
     }
 
@@ -287,6 +289,12 @@ internal class ShareHttp(
         return value
     }
 
+    private fun cardDescription(value: String): String {
+        val text = value.trim()
+        if (text.length > MAX_DESCRIPTION) throw ShareFailure(400, "description is too long")
+        return text
+    }
+
     private fun setOwner(exchange: HttpExchange, accountId: String, projectId: String) {
         val name = ownerName(json(exchange).optString("name"))
         manifest.setOwnerName(projectId, accountId, name)
@@ -332,6 +340,7 @@ internal class ShareHttp(
         const val GATEWAY_HEADER = "X-Share-Gateway"
         const val MAX_BODY = 65_536
         const val MAX_TITLE = 200
+        const val MAX_DESCRIPTION = 240
         const val MAX_NAME = 80
         const val MAX_TAGS = 12
         const val MAX_TAG_LENGTH = 24

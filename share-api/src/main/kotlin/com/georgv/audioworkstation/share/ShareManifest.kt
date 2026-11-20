@@ -10,6 +10,7 @@ internal data class SharedProjectRecord(
     val imageHash: String?,
     val ownerAccount: String,
     val ownerName: String,
+    val description: String,
 )
 
 internal data class SharedFileRecord(
@@ -43,6 +44,9 @@ internal class ShareManifest(config: ShareApiConfig) {
                 )
                 statement.executeUpdate(
                     "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS owner_name TEXT NOT NULL DEFAULT ''",
+                )
+                statement.executeUpdate(
+                    "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''",
                 )
                 statement.executeUpdate(
                     "ALTER TABLE shared_project ADD COLUMN IF NOT EXISTS mix_hash TEXT",
@@ -152,7 +156,7 @@ internal class ShareManifest(config: ShareApiConfig) {
         connection().use { db ->
             db.prepareStatement(
                 """
-                SELECT id, title, tags, image_hash, owner_account, owner_name
+                SELECT id, title, tags, image_hash, owner_account, owner_name, description
                 FROM shared_project
                 WHERE mix_hash IS NOT NULL
                 ORDER BY title, id
@@ -169,6 +173,7 @@ internal class ShareManifest(config: ShareApiConfig) {
                             imageHash = if (rows.wasNull()) null else image,
                             ownerAccount = rows.getString(5),
                             ownerName = rows.getString(6),
+                            description = rows.getString(7),
                         )
                     }
                     projects
@@ -176,16 +181,24 @@ internal class ShareManifest(config: ShareApiConfig) {
             }
         }
 
-    fun updateCard(id: String, ownerAccount: String, title: String, tags: String, ownerName: String) {
+    fun updateCard(
+        id: String,
+        ownerAccount: String,
+        title: String,
+        tags: String,
+        ownerName: String,
+        description: String,
+    ) {
         requireOwner(id, ownerAccount)
         connection().use { db ->
             db.prepareStatement(
-                "UPDATE shared_project SET title = ?, tags = ?, owner_name = ? WHERE id = ?",
+                "UPDATE shared_project SET title = ?, tags = ?, owner_name = ?, description = ? WHERE id = ?",
             ).use { update ->
                 update.setString(1, title)
                 update.setString(2, tags)
                 update.setString(3, ownerName)
-                update.setString(4, id)
+                update.setString(4, description)
+                update.setString(5, id)
                 update.executeUpdate()
             }
         }

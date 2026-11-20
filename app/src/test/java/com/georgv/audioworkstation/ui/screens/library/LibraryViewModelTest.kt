@@ -345,6 +345,7 @@ class LibraryViewModelTest {
                 title: String,
                 tags: String,
                 imagePath: String?,
+                description: String,
             ) {
                 nameDuringPublish = dao.observeProject(projectId).first()?.name
                 tagsSeen = tags
@@ -497,6 +498,7 @@ class LibraryViewModelTest {
                         title: String,
                         tags: String,
                         imagePath: String?,
+                        description: String,
                     ) {
                         published = true
                     }
@@ -560,6 +562,7 @@ class LibraryViewModelTest {
                         title: String,
                         tags: String,
                         imagePath: String?,
+                        description: String,
                     ) {
                         throw failure
                     }

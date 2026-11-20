@@ -383,6 +383,7 @@ private fun LibraryProjectContent(
                                 null
                             },
                             progress = if (mixing) item.mixdown.progress else null,
+                            description = item.project.cardDescription,
                         ),
                         opening = ProjectCardOpening(
                             opened = handlers.openedProjectId == item.project.id,

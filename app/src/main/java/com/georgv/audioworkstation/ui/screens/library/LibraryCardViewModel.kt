@@ -11,6 +11,7 @@ import com.georgv.audioworkstation.core.ui.reportedFailure
 import com.georgv.audioworkstation.core.util.logWarning
 import com.georgv.audioworkstation.data.repository.ProjectRepository
 import com.georgv.audioworkstation.online.share.CardImageStore
+import com.georgv.audioworkstation.online.share.checkedCardDescription
 import com.georgv.audioworkstation.online.share.checkedCardTags
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 data class LibraryCardUiState(
     val title: String = "",
     val tags: String = "",
+    val description: String = "",
     val imageChosen: Boolean = false,
     val loaded: Boolean = false,
     val busy: Boolean = false,
@@ -45,6 +47,7 @@ class LibraryCardViewModel @Inject constructor(
     private val projectId: String = savedState.get<String>("projectId") ?: error("card project id is missing")
     private val title = MutableStateFlow("")
     private val tags = MutableStateFlow("")
+    private val description = MutableStateFlow("")
     private val imageChosen = MutableStateFlow(false)
     private val loaded = MutableStateFlow(false)
     private val busy = MutableStateFlow(false)
@@ -55,16 +58,26 @@ class LibraryCardViewModel @Inject constructor(
     val userMessages = messages.receiveAsFlow()
     val savedEvent = saved.receiveAsFlow()
 
-    val uiState: StateFlow<LibraryCardUiState> =
-        combine(title, tags, imageChosen, loaded, busy) { name, tagText, chosen, isLoaded, isBusy ->
+    val uiState: StateFlow<LibraryCardUiState> = run {
+        val text = combine(title, tags, description) { name, tagText, about ->
+            Triple(name, tagText, about)
+        }
+        val flags = combine(imageChosen, loaded, busy) { chosen, isLoaded, isBusy ->
+            Triple(chosen, isLoaded, isBusy)
+        }
+        combine(text, flags) { words, marks ->
+            val (name, tagText, about) = words
+            val (chosen, isLoaded, isBusy) = marks
             LibraryCardUiState(
                 title = name,
                 tags = tagText,
+                description = about,
                 imageChosen = chosen,
                 loaded = isLoaded,
                 busy = isBusy,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), LibraryCardUiState())
+    }
 
     init {
         viewModelScope.launch {
@@ -73,6 +86,7 @@ class LibraryCardViewModel @Inject constructor(
                     ?: error("Project $projectId is not on this phone")
                 title.value = project.name.orEmpty()
                 tags.value = project.cardTags
+                description.value = project.cardDescription
                 loaded.value = true
             } catch (cancel: CancellationException) {
                 throw cancel
@@ -88,6 +102,10 @@ class LibraryCardViewModel @Inject constructor(
 
     fun setTags(value: String) {
         tags.value = value
+    }
+
+    fun setDescription(value: String) {
+        description.value = value
     }
 
     fun chooseImage(uri: Uri) {
@@ -107,12 +125,25 @@ class LibraryCardViewModel @Inject constructor(
             try {
                 val project = projects.observeProject(projectId).first()
                     ?: error("Project $projectId is not on this phone")
+                val storedDescription = try {
+                    checkedCardDescription(description.value)
+                } catch (invalid: IllegalStateException) {
+                    logWarning(TAG, "description is too long", invalid)
+                    busy.value = false
+                    messages.trySend(UiMessage(R.string.error_card_description_too_long))
+                    return@launch
+                }
                 val storedTags = checkedCardTags(tags.value).joinToString(", ")
                 val picked = pendingImage
                 val imagePath = if (picked == null) project.cardImagePath else storedImage(picked)
                 val name = title.value.trim().ifBlank { null }
                 projects.upsertProject(
-                    project.copy(name = name, cardTags = storedTags, cardImagePath = imagePath),
+                    project.copy(
+                        name = name,
+                        cardTags = storedTags,
+                        cardImagePath = imagePath,
+                        cardDescription = storedDescription,
+                    ),
                 )
                 saved.send(Unit)
             } catch (cancel: CancellationException) {

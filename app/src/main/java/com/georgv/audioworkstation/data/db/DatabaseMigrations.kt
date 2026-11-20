@@ -265,3 +265,10 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
         db.execSQL("ALTER TABLE projects ADD COLUMN cardImagePath TEXT")
     }
 }
+
+/** Optional project description shown on the opened card. Existing rows stay blank. */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE projects ADD COLUMN cardDescription TEXT NOT NULL DEFAULT ''")
+    }
+}

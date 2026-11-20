@@ -120,6 +120,7 @@ fun CommunityHomeScreen(
                                     loading = loading,
                                     tags = project.tags,
                                     imagePath = hash?.let { imagePaths[it] },
+                                    description = project.description,
                                 ),
                                 opening = ProjectCardOpening(
                                     opened = openedProjectId == project.id,

@@ -16,7 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -50,6 +50,7 @@ class ProjectCardViewTest {
                         imagePath = null,
                         status = "Mixing… 40%",
                         progress = 0.4f,
+                        description = "A quiet take",
                     ),
                     opening = ProjectCardOpening(
                         opened = false,
@@ -63,6 +64,7 @@ class ProjectCardViewTest {
             }
         }
         compose.onNodeWithText("Voice note").assertIsDisplayed()
+        compose.onNodeWithText("A quiet take").assertDoesNotExist()
         compose.onNodeWithText("live").assertDoesNotExist()
         compose.onNodeWithText("Mixing… 40%").assertDoesNotExist()
         compose.onNodeWithText("TRANSPORT").assertDoesNotExist()
@@ -81,6 +83,7 @@ class ProjectCardViewTest {
                         imagePath = null,
                         status = "Mixing… 40%",
                         progress = 0.4f,
+                        description = "A quiet take",
                     ),
                     opening = ProjectCardOpening(
                         opened = true,
@@ -94,11 +97,13 @@ class ProjectCardViewTest {
             }
         }
         compose.onNodeWithText("Voice note").assertIsDisplayed()
+        compose.onNodeWithText("A quiet take").assertIsDisplayed()
         compose.onNodeWithText("live").assertIsDisplayed()
         compose.onNodeWithText("session").assertIsDisplayed()
         compose.onNodeWithText("Mixing… 40%").assertIsDisplayed()
+        compose.onNodeWithText("No mix has been made.").assertIsDisplayed()
         compose.onNodeWithText("TRANSPORT").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Play").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Play").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithContentDescription("Open project").assertIsDisplayed()
         save("library-opened-no-mix")
     }
@@ -153,6 +158,7 @@ class ProjectCardViewTest {
                         tags = listOf("vocal"),
                         imagePath = null,
                         detail = "by Ada",
+                        description = "Late vocal",
                     ),
                     opening = ProjectCardOpening(
                         opened = opened,
@@ -177,11 +183,13 @@ class ProjectCardViewTest {
         }
         compose.onNodeWithText("Night take").assertIsDisplayed()
         compose.onNodeWithText("by Ada").assertIsDisplayed()
+        compose.onNodeWithText("Late vocal").assertDoesNotExist()
         compose.onNodeWithText("vocal").assertDoesNotExist()
         compose.onNodeWithContentDescription("Play").assertDoesNotExist()
         save("community-shortcut")
-        compose.onNode(hasClickAction()).performClick()
+        compose.onNodeWithText("Night take").performClick()
         compose.waitForIdle()
+        compose.onNodeWithText("Late vocal").assertIsDisplayed()
         compose.onNodeWithText("vocal").assertIsDisplayed()
         compose.onNodeWithText("by Ada").assertIsDisplayed()
         compose.onNodeWithContentDescription("Play").assertIsDisplayed()

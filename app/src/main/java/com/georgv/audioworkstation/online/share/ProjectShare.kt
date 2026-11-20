@@ -7,7 +7,13 @@ interface ProjectShare {
 }
 
 interface SharedCardUpdate {
-    suspend fun updateCard(projectId: String, title: String, tags: String, imagePath: String?)
+    suspend fun updateCard(
+        projectId: String,
+        title: String,
+        tags: String,
+        imagePath: String?,
+        description: String,
+    )
 }
 
 interface SharedTakeRestore {

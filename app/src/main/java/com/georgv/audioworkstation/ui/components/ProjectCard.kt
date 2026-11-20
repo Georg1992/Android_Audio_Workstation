@@ -42,9 +42,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
@@ -77,7 +77,7 @@ fun ProjectCard(
             withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
         }
     }
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(
@@ -87,68 +87,41 @@ fun ProjectCard(
                 ),
             )
             .shadow(elevation = Dimens.PanelElevation, shape = shape, clip = false)
-            .clip(shape)
-            .background(AppColors.SurfaceRaised),
+            .clip(shape),
     ) {
-        if (opening.opened) {
-            OpenedProjectCard(
-                card = card,
-                bitmap = bitmap,
-                opening = opening,
-                actions = actions,
-                playback = playback,
+        val picture = bitmap
+        if (picture != null) {
+            Image(
+                bitmap = picture,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
             )
         } else {
-            ProjectCardShortcut(
-                card = card,
-                bitmap = bitmap,
-                onClick = opening.onToggle,
+            Image(
+                painter = painterResource(R.drawable.card_background),
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
             )
         }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(AppColors.SurfaceRaised.copy(alpha = CardScrimAlpha)),
+        )
+        ProjectCardFace(
+            card = card,
+            opening = opening,
+            actions = actions,
+            playback = playback,
+        )
     }
 }
 
 @Composable
-private fun ProjectCardShortcut(
+private fun ProjectCardFace(
     card: ShownCard,
-    bitmap: ImageBitmap?,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-    ) {
-        CardArt(bitmap = bitmap, size = Dimens.CardShortcutArt)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = card.title,
-                style = AppText.TileTitle,
-                color = AppColors.Line,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val detail = card.detail
-            if (detail != null) {
-                Text(
-                    text = detail,
-                    style = AppText.TileSubtitle,
-                    color = AppColors.iconMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OpenedProjectCard(
-    card: ShownCard,
-    bitmap: ImageBitmap?,
     opening: ProjectCardOpening,
     actions: @Composable RowScope.() -> Unit,
     playback: @Composable () -> Unit,
@@ -164,13 +137,16 @@ private fun OpenedProjectCard(
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.Top,
         ) {
-            CardArt(bitmap = bitmap, size = Dimens.CardOpenArt)
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (opening.opened) Modifier else Modifier.clickable(onClick = opening.onToggle)),
+            ) {
                 Text(
                     text = card.title,
                     style = AppText.TileTitle,
                     color = AppColors.Line,
-                    maxLines = 2,
+                    maxLines = if (opening.opened) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val detail = card.detail
@@ -184,101 +160,143 @@ private fun OpenedProjectCard(
                         modifier = Modifier.padding(top = Dimens.TightGap),
                     )
                 }
-                if (card.tags.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = Dimens.Gap),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                    ) {
-                        card.tags.forEach { tag ->
-                            CardTag(tag)
-                        }
-                    }
-                }
-                val status = card.status
-                if (status != null) {
-                    Text(
-                        text = status,
-                        style = AppText.TileSubtitle,
-                        color = AppColors.iconMuted,
-                        modifier = Modifier.padding(top = Dimens.Gap),
-                    )
-                }
-                val progress = card.progress
-                if (card.loading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = Dimens.TightGap),
-                        color = AppColors.Line,
-                        trackColor = AppColors.SurfacePanel,
-                    )
-                } else if (progress != null) {
-                    LinearProgressIndicator(
-                        progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = Dimens.TightGap),
-                        color = AppColors.Line,
-                        trackColor = AppColors.SurfacePanel,
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = Dimens.Gap),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CardActionButton(onClick = opening.onOpen, fill = AppColors.SurfacePressed) {
-                        Icon(
-                            imageVector = Icons.Filled.FolderOpen,
-                            contentDescription = stringResource(R.string.cd_open_project),
-                            tint = AppColors.Line,
-                        )
-                    }
-                    actions()
-                    CardActionButton(onClick = opening.onToggle, fill = AppColors.SurfacePressed) {
-                        Icon(
-                            imageVector = Icons.Filled.ExpandLess,
-                            contentDescription = stringResource(R.string.cd_close_card),
-                            tint = AppColors.Line,
-                        )
-                    }
-                }
             }
+            CardActions(opening = opening, actions = actions)
         }
-        if (opening.mixAvailable) {
-            playback()
+        if (opening.opened) {
+            OpenedCardDetails(card = card, mixAvailable = opening.mixAvailable, playback = playback)
         }
     }
 }
 
 @Composable
-private fun CardArt(
-    bitmap: ImageBitmap?,
-    size: Dp,
+private fun CardActions(
+    opening: ProjectCardOpening,
+    actions: @Composable RowScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(Dimens.MediumRadius)
-    Box(
-        modifier = Modifier
-            .size(size)
-            .shadow(elevation = Dimens.ControlElevation, shape = shape, clip = false)
-            .clip(shape)
-            .background(AppColors.SurfacePanel),
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        val image = bitmap
-        if (image != null) {
-            Image(
-                bitmap = image,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
+        CardActionButton(onClick = opening.onOpen, fill = AppColors.SurfacePressed) {
+            Icon(
+                imageVector = Icons.Filled.FolderOpen,
+                contentDescription = stringResource(R.string.cd_open_project),
+                tint = AppColors.Line,
             )
         }
+        actions()
+        if (opening.opened) {
+            CardActionButton(onClick = opening.onToggle, fill = AppColors.SurfacePressed) {
+                Icon(
+                    imageVector = Icons.Filled.ExpandLess,
+                    contentDescription = stringResource(R.string.cd_close_card),
+                    tint = AppColors.Line,
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun OpenedCardDetails(
+    card: ShownCard,
+    mixAvailable: Boolean,
+    playback: @Composable () -> Unit,
+) {
+    val description = card.description
+    if (description.isNotBlank()) {
+        Text(
+            text = description,
+            style = AppText.TileSubtitle,
+            color = AppColors.Line,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    if (card.tags.isNotEmpty()) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+        ) {
+            card.tags.forEach { tag ->
+                CardTag(tag)
+            }
+        }
+    }
+    val status = card.status
+    if (status != null) {
+        Text(
+            text = status,
+            style = AppText.TileSubtitle,
+            color = AppColors.iconMuted,
+        )
+    }
+    val progress = card.progress
+    if (card.loading) {
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth(),
+            color = AppColors.Line,
+            trackColor = AppColors.SurfacePanel,
+        )
+    } else if (progress != null) {
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+            color = AppColors.Line,
+            trackColor = AppColors.SurfacePanel,
+        )
+    }
+    if (mixAvailable) {
+        playback()
+    } else {
+        Text(
+            text = stringResource(R.string.card_no_mix),
+            style = AppText.TileSubtitle,
+            color = AppColors.iconMuted,
+        )
+        UnavailableMixTransport()
+    }
+}
+
+@Composable
+private fun UnavailableMixTransport() {
+    TransportCluster(
+        clock = TransportClock(label = "0:00", description = stringResource(R.string.card_no_mix)),
+        inputLocked = true,
+        buttons = {
+            TransportButton(
+                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                enabled = false,
+                isActive = false,
+                onClick = {},
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(R.string.cd_play),
+                    tint = AppColors.Line,
+                    modifier = Modifier.size(Dimens.TransportIconSize),
+                )
+            }
+            TransportButton(
+                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                enabled = false,
+                isActive = false,
+                onClick = {},
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Stop,
+                    contentDescription = stringResource(R.string.cd_stop),
+                    tint = AppColors.Line,
+                    modifier = Modifier.size(Dimens.TransportIconSize),
+                )
+            }
+        },
+        timeline = {
+            Box(modifier = Modifier.fillMaxSize())
+        },
+    )
 }
 
 @Composable
@@ -321,6 +339,7 @@ fun CardActionButton(
 }
 
 private const val PinArriveMs = 100
+private const val CardScrimAlpha = 0.58f
 
 data class ShownCard(
     val title: String,
@@ -329,6 +348,7 @@ data class ShownCard(
     val status: String? = null,
     val progress: Float? = null,
     val detail: String? = null,
+    val description: String = "",
     val loading: Boolean = false,
 )
 

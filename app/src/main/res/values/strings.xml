@@ -46,6 +46,7 @@
     <string name="community_mix_loading">Loading the mix…</string>
     <string name="screen_library_card">Card</string>
     <string name="library_card_tags_hint">Comma-separated tags</string>
+    <string name="library_card_description_hint">Description</string>
     <string name="library_card_choose_image">Choose image</string>
     <string name="library_card_image_selected">Image selected</string>
     <string name="library_card_save">Save</string>
@@ -53,6 +54,8 @@
     <!-- Create Project screen -->
     <string name="create_project_name_label">Project name</string>
     <string name="create_project_name_placeholder">Enter project name</string>
+    <string name="create_project_description_label">Description</string>
+    <string name="create_project_description_placeholder">Optional</string>
     <string name="create_project_sample_rate_label">Sample rate</string>
     <string name="create_project_sample_rate_44100">44.1 kHz</string>
     <string name="create_project_sample_rate_44100_caption">Music / imports</string>
@@ -105,6 +108,7 @@
     <string name="cd_mixdown_project">Mix and export project</string>
     <string name="cd_open_project">Open project</string>
     <string name="cd_close_card">Close card</string>
+    <string name="card_no_mix">No mix has been made.</string>
     <string name="cd_share_project">Share project</string>
     <string name="cd_unshare_project">Stop sharing</string>
     <string name="library_share_project_title">Share this project?</string>
@@ -212,6 +216,7 @@
     <string name="error_sign_out_failed">Sign-out failed.</string>
     <string name="error_shared_projects_failed">Could not load shared projects.</string>
     <string name="error_card_save_failed">Could not save the card.</string>
+    <string name="error_card_description_too_long">Description is too long.</string>
     <string name="error_card_playback_failed">Could not play this card.</string>
     <string name="error_card_not_on_phone">This project is not on this phone.</string>
     <string name="error_card_image_failed">Could not load the card image.</string>

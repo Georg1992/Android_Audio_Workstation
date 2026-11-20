@@ -46,6 +46,7 @@
     <string name="community_mix_loading">Загрузка микса…</string>
     <string name="screen_library_card">Карточка</string>
     <string name="library_card_tags_hint">Теги через запятую</string>
+    <string name="library_card_description_hint">Описание</string>
     <string name="library_card_choose_image">Выбрать изображение</string>
     <string name="library_card_image_selected">Изображение выбрано</string>
     <string name="library_card_save">Сохранить</string>
@@ -53,6 +54,8 @@
     <!-- Create Project screen -->
     <string name="create_project_name_label">Название проекта</string>
     <string name="create_project_name_placeholder">Введите название проекта</string>
+    <string name="create_project_description_label">Описание</string>
+    <string name="create_project_description_placeholder">Необязательно</string>
     <string name="create_project_sample_rate_label">Частота дискретизации</string>
     <string name="create_project_sample_rate_44100">44,1 кГц</string>
     <string name="create_project_sample_rate_44100_caption">Музыка / импорт</string>
@@ -104,6 +107,7 @@
     <string name="cd_mixdown_project">Микс и экспорт проекта</string>
     <string name="cd_open_project">Открыть проект</string>
     <string name="cd_close_card">Закрыть карточку</string>
+    <string name="card_no_mix">Сведение ещё не сделано.</string>
     <string name="cd_share_project">Поделиться проектом</string>
     <string name="cd_unshare_project">Закрыть доступ</string>
     <string name="library_share_project_title">Поделиться проектом?</string>
@@ -211,6 +215,7 @@
     <string name="error_sign_out_failed">Не удалось выйти.</string>
     <string name="error_shared_projects_failed">Не удалось загрузить общие проекты.</string>
     <string name="error_card_save_failed">Не удалось сохранить карточку.</string>
+    <string name="error_card_description_too_long">Описание слишком длинное.</string>
     <string name="error_card_playback_failed">Не удалось воспроизвести карточку.</string>
     <string name="error_card_not_on_phone">Этого проекта нет на этом телефоне.</string>
     <string name="error_card_image_failed">Не удалось загрузить изображение карточки.</string>

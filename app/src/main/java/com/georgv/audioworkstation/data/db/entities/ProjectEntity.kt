@@ -28,4 +28,7 @@ data class ProjectEntity(
 
     /** Local image file used as the card background. */
     val cardImagePath: String? = null,
+
+    /** Optional text shown on the opened library and community card. */
+    val cardDescription: String = "",
 )
