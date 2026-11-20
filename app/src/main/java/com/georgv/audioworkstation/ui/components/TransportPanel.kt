@@ -7,15 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -75,6 +74,7 @@ fun TransportPanel(
         timeline = { timeline?.invoke() },
         buttons = {
         Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -114,14 +114,6 @@ fun TransportPanel(
                     )
                 }
             }
-        }
-
-            TransportScreen(
-                positionMs = playheadPositionMs,
-                durationMs = timelineDurationMs,
-                meterLive = isPlaying || isRecording,
-                modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
-            )
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -143,6 +135,15 @@ fun TransportPanel(
                     )
                 }
             }
+        }
+        TransportScreen(
+            positionMs = playheadPositionMs,
+            durationMs = timelineDurationMs,
+            meterLive = isPlaying || isRecording,
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(if (inputLocked) AppOpacity.disabled else 1f),
+        )
         },
     )
 }
@@ -158,7 +159,7 @@ internal fun TransportCluster(
     timeline: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     inputLocked: Boolean = false,
-    buttons: @Composable RowScope.() -> Unit,
+    buttons: @Composable ColumnScope.() -> Unit,
 ) {
     val well = RoundedCornerShape(Dimens.SmallRadius)
     Column(
@@ -169,10 +170,9 @@ internal fun TransportCluster(
             .consumeAllPointers(enabled = inputLocked),
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
             content = buttons,
         )
         Row(
@@ -268,47 +268,29 @@ internal fun TransportScreen(
     meterLive: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(Dimens.SmallRadius)
-    Column(
+    val fractal = remember { TransportFractalVisualizer() }
+    Row(
         modifier = modifier
-            .height(Dimens.TransportButtonSize)
-            .clip(shape)
-            .background(AppColors.Line, shape)
-            .padding(horizontal = Dimens.SmallRadius, vertical = Dimens.TightGap),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .fillMaxWidth()
+            .height(Dimens.TransportButtonSize),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
-        TransportEqualizer(positionMs = positionMs, meterLive = meterLive)
+        fractal.Screen(
+            positionMs = positionMs,
+            live = meterLive,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+        )
         Text(
             text = formatTransportScreenReadout(positionMs, durationMs),
-            style = AppText.TileSubtitle,
-            color = AppColors.SurfaceRaised,
-            textAlign = TextAlign.Center,
+            color = AppColors.Line,
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            textAlign = TextAlign.End,
             maxLines = 1,
         )
-    }
-}
-
-@Composable
-private fun TransportEqualizer(
-    positionMs: Long,
-    meterLive: Boolean,
-) {
-    Row(
-        modifier = Modifier.height(TransportEqHeight),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        TransportEqRest.forEachIndexed { band, rest ->
-            val level = if (meterLive) transportEqLevel(positionMs, band) else rest
-            Box(
-                modifier = Modifier
-                    .width(TransportEqBarWidth)
-                    .fillMaxHeight(level)
-                    .clip(RoundedCornerShape(Dimens.Stroke))
-                    .background(if (meterLive) AppColors.Green else AppColors.SurfacePressed),
-            )
-        }
     }
 }
 
@@ -321,22 +303,6 @@ private fun formatTransportScreenTime(timeMs: Long): String {
     val seconds = plain.substringAfter(':')
     return "$minutes:$seconds"
 }
-
-private fun transportEqLevel(positionMs: Long, band: Int): Float {
-    val phase = positionMs.coerceAtLeast(0L) / TransportEqStepMs + band.toLong() * 2L
-    val cycle = TransportEqSpan * 2L
-    val step = phase % cycle
-    val lifted = if (step >= TransportEqSpan) cycle - step else step
-    val wave = lifted.toFloat() / TransportEqSpan.toFloat()
-    return TransportEqFloor + (1f - TransportEqFloor) * wave
-}
-
-private val TransportEqHeight = 14.dp
-private val TransportEqBarWidth = 3.dp
-private val TransportEqRest = floatArrayOf(0.35f, 0.62f, 0.9f, 0.48f, 0.28f)
-private const val TransportEqStepMs = 100L
-private const val TransportEqSpan = 8L
-private const val TransportEqFloor = 0.22f
 
 internal data class TransportButtonPaint(
     val active: Color,

@@ -293,37 +293,44 @@ private fun UnavailableMixTransport() {
         clock = TransportClock(label = "0:00", description = stringResource(R.string.card_no_mix)),
         inputLocked = true,
         buttons = {
-            TransportButton(
-                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
-                enabled = false,
-                isActive = false,
-                onClick = {},
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(R.string.cd_play),
-                    tint = AppColors.Line,
-                    modifier = Modifier.size(Dimens.TransportIconSize),
-                )
-            }
-            TransportButton(
-                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
-                enabled = false,
-                isActive = false,
-                onClick = {},
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Stop,
-                    contentDescription = stringResource(R.string.cd_stop),
-                    tint = AppColors.Line,
-                    modifier = Modifier.size(Dimens.TransportIconSize),
-                )
+                TransportButton(
+                    paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                    enabled = false,
+                    isActive = false,
+                    onClick = {},
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(R.string.cd_play),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
+                TransportButton(
+                    paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                    enabled = false,
+                    isActive = false,
+                    onClick = {},
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = stringResource(R.string.cd_stop),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
             }
             TransportScreen(
                 positionMs = 0L,
                 durationMs = 0L,
                 meterLive = false,
-                modifier = Modifier.alpha(AppOpacity.disabled),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(AppOpacity.disabled),
             )
         },
         timeline = {
@@ -494,36 +501,42 @@ private fun CardPlaybackStrip(
             description = clock,
         ),
         buttons = {
-            TransportButton(
-                paint = TransportButtonPaint(AppColors.Green, AppColors.SurfacePressed),
-                enabled = true,
-                isActive = playing,
-                onClick = onPlay,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(R.string.cd_play),
-                    tint = AppColors.Line,
-                    modifier = Modifier.size(Dimens.TransportIconSize),
-                )
-            }
-            TransportButton(
-                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
-                enabled = true,
-                isActive = false,
-                onClick = onStop,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Stop,
-                    contentDescription = stringResource(R.string.cd_stop),
-                    tint = AppColors.Line,
-                    modifier = Modifier.size(Dimens.TransportIconSize),
-                )
+                TransportButton(
+                    paint = TransportButtonPaint(AppColors.Green, AppColors.SurfacePressed),
+                    enabled = true,
+                    isActive = playing,
+                    onClick = onPlay,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(R.string.cd_play),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
+                TransportButton(
+                    paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                    enabled = true,
+                    isActive = false,
+                    onClick = onStop,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = stringResource(R.string.cd_stop),
+                        tint = AppColors.Line,
+                        modifier = Modifier.size(Dimens.TransportIconSize),
+                    )
+                }
             }
             TransportScreen(
                 positionMs = shownPositionMs.toLong(),
                 durationMs = durationMs.toLong(),
                 meterLive = playing,
+                modifier = Modifier.fillMaxWidth(),
             )
         },
         timeline = {
