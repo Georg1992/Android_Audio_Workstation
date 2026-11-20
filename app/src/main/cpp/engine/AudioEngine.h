@@ -301,6 +301,10 @@ public:
     /** Clears session peak-hold display; does not affect playback or transport. */
     void resetMasterPeakHold();
 
+    /** Latest heard samples for the transport line. Does not change the output. */
+    static constexpr int kTransportWaveformPoints = 64;
+    void copyTransportWaveform(float *destination) const;
+
     bool setPlaybackSource(const std::string &wavPath,
                            float gain,
                            int64_t startPositionMs = 0,
@@ -582,6 +586,8 @@ private:
 
     void markPlaybackLaneExhaustedLocked(std::size_t laneIndex);
 
+    void publishTransportWaveform(const float *interleaved, int32_t frames, int32_t channels);
+
     int32_t m_sampleRate = 44'100;
     int32_t m_fileBitDepth = 16;
 
@@ -602,6 +608,8 @@ private:
     std::atomic<int64_t> m_recordedCaptureFrameCount{0};
     std::atomic<float> m_recordingInputLevel{0.0f};
     std::atomic<float> m_masterPeakHoldLinear{0.0f};
+    std::array<std::array<float, kTransportWaveformPoints>, 3> m_transportWaveform{};
+    std::atomic<int> m_transportWaveformSlot{0};
 
     std::mutex m_playbackMutex;
     std::array<PlaybackLaneSlot, kPlaybackLaneCount> m_playbackLanes{};

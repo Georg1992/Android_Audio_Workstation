@@ -327,7 +327,6 @@ private fun UnavailableMixTransport() {
                 messageScreen.Show(
                     message = stringResource(R.string.library_no_mix_yet),
                     visualizing = false,
-                    positionMs = 0L,
                 )
             }
         },
@@ -538,7 +537,6 @@ private fun CardPlaybackStrip(
                 messageScreen.Show(
                     message = message,
                     visualizing = playing,
-                    positionMs = shownPositionMs.toLong(),
                 )
             }
         },

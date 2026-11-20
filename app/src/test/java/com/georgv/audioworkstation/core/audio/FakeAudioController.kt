@@ -82,6 +82,8 @@ internal open class FakeAudioController(
 
     override fun readMasterPeakHoldLinear(): Float = masterPeakHoldLinearValue
 
+    override fun readTransportWaveform(): FloatArray = FloatArray(TransportWaveformTrace.PointCount)
+
     override fun resetMasterPeakHold() {
         masterPeakHoldLinearValue = 0f
     }

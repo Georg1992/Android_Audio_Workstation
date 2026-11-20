@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,23 +18,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.georgv.audioworkstation.core.audio.TransportWaveformTrace
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 /**
  * Small transport display to the right of play and stop.
- * Subclass and override [Show] to change the messages or the picture.
+ * A message when one applies, a flat line at rest, and the waveform while audio plays.
+ * Subclass and override [Show] to change the screen.
  */
 open class TransportMessageScreen {
     @Composable
     open fun Show(
         message: String?,
         visualizing: Boolean,
-        positionMs: Long,
         modifier: Modifier = Modifier,
     ) {
         val shape = RoundedCornerShape(Dimens.SmallRadius)
+        val heard by TransportWaveformTrace.samples.collectAsState()
         Box(
             modifier = modifier
                 .width(ScreenWidth)
@@ -41,14 +45,7 @@ open class TransportMessageScreen {
                 .background(AppColors.Line, shape),
             contentAlignment = Alignment.Center,
         ) {
-            if (visualizing) {
-                val fractal = remember { TransportFractalVisualizer() }
-                fractal.Screen(
-                    positionMs = positionMs,
-                    live = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else if (message != null) {
+            if (!visualizing && message != null) {
                 Text(
                     text = message,
                     style = AppText.TileSubtitle,
@@ -57,6 +54,12 @@ open class TransportMessageScreen {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = Dimens.TightGap),
+                )
+            } else {
+                val waveform = remember { TransportWaveform() }
+                waveform.Line(
+                    samples = if (visualizing) heard else TransportWaveformTrace.rest(),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }

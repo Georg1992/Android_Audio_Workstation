@@ -10,6 +10,7 @@ import com.georgv.audioworkstation.core.audio.RecordingStopKind
 import com.georgv.audioworkstation.core.audio.PlaybackPort
 import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.core.audio.RecordingStopSnapshot
+import com.georgv.audioworkstation.core.audio.TransportWaveformTrace
 import com.georgv.audioworkstation.core.audio.RecordingStorageGuard
 import com.georgv.audioworkstation.core.audio.capability.LiveOverdubLatencySessionRecorder
 import com.georgv.audioworkstation.core.audio.capability.LiveSessionProfiling
@@ -145,11 +146,14 @@ class ProjectSession(
             if (ended) {
                 playbackSession.clearPlayingTransportState()
                 playheadTransport.stopAndResetToZero()
+                TransportWaveformTrace.clear()
                 0L
             } else if (ProjectTrackStreams.player.ownsClock()) {
                 ProjectTrackStreams.player.positionMs()
             } else {
-                meter.transportPositionMs()
+                val position = meter.transportPositionMs()
+                TransportWaveformTrace.publish(meter.readTransportWaveform())
+                position
             }
         }
     }

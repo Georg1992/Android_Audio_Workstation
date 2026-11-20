@@ -64,6 +64,8 @@ class PlaybackTransportSyncTest {
 
         override fun readMasterPeakHoldLinear(): Float = 0f
 
+        override fun readTransportWaveform(): FloatArray = FloatArray(TransportWaveformTrace.PointCount)
+
         override fun resetMasterPeakHold() = Unit
 
         override fun transportPositionMs(): Long = 0L

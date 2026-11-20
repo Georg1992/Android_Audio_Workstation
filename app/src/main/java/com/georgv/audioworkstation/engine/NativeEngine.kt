@@ -7,6 +7,7 @@ import com.georgv.audioworkstation.core.audio.PlaybackLaneLifecycle
 import com.georgv.audioworkstation.core.audio.RecordingRequest
 import com.georgv.audioworkstation.core.audio.RecordingSpec
 import com.georgv.audioworkstation.core.audio.RecordingStopKind
+import com.georgv.audioworkstation.core.audio.TransportWaveformTrace
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -129,6 +130,14 @@ class NativeEngine @Inject constructor() {
     fun recordingInputLevel(): Float = nativeGetRecordingInputLevel().coerceIn(0f, 1f)
 
     fun masterPeakHoldLinear(): Float = nativeGetMasterPeakHoldLinear().coerceAtLeast(0f)
+
+    fun transportWaveform(): FloatArray {
+        val samples = nativeGetTransportWaveform()
+        check(samples != null && samples.size == TransportWaveformTrace.PointCount) {
+            "transport waveform is missing"
+        }
+        return samples
+    }
 
     fun resetMasterPeakHold() {
         nativeResetMasterPeakHold()
@@ -357,6 +366,8 @@ class NativeEngine @Inject constructor() {
     private external fun nativeGetRecordingInputLevel(): Float
 
     private external fun nativeGetMasterPeakHoldLinear(): Float
+
+    private external fun nativeGetTransportWaveform(): FloatArray?
 
     private external fun nativeResetMasterPeakHold()
 

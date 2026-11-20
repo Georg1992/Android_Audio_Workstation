@@ -18,6 +18,11 @@ class NativeMeterPort @Inject constructor(
         return nativeEngine.masterPeakHoldLinear()
     }
 
+    override fun readTransportWaveform(): FloatArray {
+        checkNotMainThreadForNativeLifecycle("readTransportWaveform")
+        return nativeEngine.transportWaveform()
+    }
+
     override fun resetMasterPeakHold() {
         checkNotMainThreadForNativeLifecycle("resetMasterPeakHold")
         nativeEngine.resetMasterPeakHold()

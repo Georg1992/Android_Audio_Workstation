@@ -3,6 +3,7 @@ package com.georgv.audioworkstation.ui.playback
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import com.georgv.audioworkstation.core.audio.TransportWaveformTrace
 
 internal interface PcmOutput {
     fun start(sampleRateHz: Int, channelCount: Int)
@@ -21,9 +22,11 @@ internal interface PcmOutput {
 
 internal class AudioTrackPcmOutput : PcmOutput {
     private var track: AudioTrack? = null
+    private var channels = 0
 
     override fun start(sampleRateHz: Int, channelCount: Int) {
         release()
+        channels = channelCount
         val mask = if (channelCount == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
         val minBytes = AudioTrack.getMinBufferSize(sampleRateHz, mask, AudioFormat.ENCODING_PCM_16BIT)
         if (minBytes <= 0) error("mix stream has no audio track")
@@ -54,7 +57,15 @@ internal class AudioTrackPcmOutput : PcmOutput {
     override fun write(bytes: ByteArray, offset: Int, length: Int): Int {
         val audio = track ?: return -1
         if (audio.playState != AudioTrack.PLAYSTATE_PLAYING) return 0
-        return audio.write(bytes, offset, length, AudioTrack.WRITE_BLOCKING)
+        val wrote = audio.write(bytes, offset, length, AudioTrack.WRITE_BLOCKING)
+        val channelCount = channels
+        val frameBytes = channelCount * TransportWaveformTrace.BytesPerSample
+        if (channelCount > 0 && wrote >= frameBytes) {
+            TransportWaveformTrace.publish(
+                TransportWaveformTrace.pcm16(bytes, offset, wrote, channelCount),
+            )
+        }
+        return wrote
     }
 
     override fun pause() {
@@ -62,6 +73,7 @@ internal class AudioTrackPcmOutput : PcmOutput {
         if (audio.playState == AudioTrack.PLAYSTATE_STOPPED) return
         if (audio.playState == AudioTrack.PLAYSTATE_PLAYING) audio.pause()
         audio.flush()
+        TransportWaveformTrace.clear()
     }
 
     override fun play() {

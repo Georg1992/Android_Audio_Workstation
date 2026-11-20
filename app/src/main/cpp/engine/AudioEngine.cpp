@@ -1575,6 +1575,9 @@ void AudioEngine::recordLoop() {
             peak = std::max(peak, std::fabs(buffer[i]));
         }
         m_recordingInputLevel.store(std::min(peak, 1.0f), std::memory_order_release);
+        if (!m_isPlaying.load(std::memory_order_acquire)) {
+            publishTransportWaveform(buffer.data(), framesRead, channelCount);
+        }
 
         if (!committer->Enqueue(buffer.data(), sampleCount)) {
             markRecordingCaptureFailed();
@@ -1899,6 +1902,40 @@ void AudioEngine::setPlaybackLanePan(const std::size_t laneIndex, const float pa
 
 void AudioEngine::resetMasterPeakHold() {
     m_masterPeakHoldLinear.store(0.0f, std::memory_order_release);
+}
+
+void AudioEngine::publishTransportWaveform(const float *interleaved,
+                                           int32_t frames,
+                                           int32_t channels) {
+    if (interleaved == nullptr || frames <= 0 || channels <= 0) {
+        return;
+    }
+    const int slot = m_transportWaveformSlot.load(std::memory_order_relaxed);
+    const int write = (slot + 1) % 3;
+    auto &points = m_transportWaveform[static_cast<std::size_t>(write)];
+    for (int index = 0; index < kTransportWaveformPoints; ++index) {
+        const int64_t frame =
+            (static_cast<int64_t>(index) * static_cast<int64_t>(frames)) / kTransportWaveformPoints;
+        const int32_t clamped = static_cast<int32_t>(
+            std::min(frame, static_cast<int64_t>(frames - 1)));
+        const float *frameSamples =
+            interleaved + static_cast<std::size_t>(clamped) * static_cast<std::size_t>(channels);
+        float mixed = 0.0f;
+        for (int channel = 0; channel < channels; ++channel) {
+            mixed += frameSamples[channel];
+        }
+        points[static_cast<std::size_t>(index)] = mixed / static_cast<float>(channels);
+    }
+    m_transportWaveformSlot.store(write, std::memory_order_release);
+}
+
+void AudioEngine::copyTransportWaveform(float *destination) const {
+    if (destination == nullptr) {
+        return;
+    }
+    const int slot = m_transportWaveformSlot.load(std::memory_order_acquire);
+    const auto &points = m_transportWaveform[static_cast<std::size_t>(slot)];
+    std::memcpy(destination, points.data(), sizeof(float) * static_cast<std::size_t>(kTransportWaveformPoints));
 }
 
 void AudioEngine::setPlaybackLaneAudible(const std::size_t laneIndex, const bool audible) {
@@ -2559,6 +2596,7 @@ void AudioEngine::render(float *outputInterleaved,
         if (playback::kMasterSafetySoftClipEnabled) {
             playback::ProcessMasterSafetySoftClip(outputInterleaved, outSampleCount);
         }
+        publishTransportWaveform(outputInterleaved, numFrames, channels);
 
         renderMaybeCompletePlaybackMaster(numFrames, channels, minFramesReturned);
     }

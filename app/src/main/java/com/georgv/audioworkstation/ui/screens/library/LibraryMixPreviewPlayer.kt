@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.ui.screens.library
 
 import com.georgv.audioworkstation.core.audio.AudibleMs
+import com.georgv.audioworkstation.core.audio.TransportWaveformTrace
 import com.georgv.audioworkstation.core.audio.MeterPort
 import com.georgv.audioworkstation.core.audio.MultiPlaybackSpec
 import com.georgv.audioworkstation.core.audio.PlaybackPort
@@ -61,6 +62,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
         holding = false
         heardEngine = false
         awaitingOutput = true
+        TransportWaveformTrace.clear()
         val started = armBody(positionMs)
         if (!started) {
             awaitingOutput = false
@@ -77,6 +79,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
         playingProjectId.value = null
         positionMs = 0
         haltBody()
+        TransportWaveformTrace.clear()
         publishLocked()
     }
 
@@ -88,6 +91,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
             heardEngine = false
             awaitingOutput = false
             haltBody()
+            TransportWaveformTrace.clear()
             publishLocked()
         }
     }
@@ -124,21 +128,25 @@ class LibraryMixPreviewPlayer @Inject constructor(
                 } else {
                     0L
                 }
-                running to audible
+                val waveform = if (running) meter.readTransportWaveform() else null
+                Triple(running, audible, waveform)
             }
             val loaded = clip ?: return
-            val (running, audible) = sample
+            val (running, audible, waveform) = sample
             if (running && awaitingOutput && !outputReady()) {
                 publishLocked()
                 return
             }
             awaitingOutput = false
             if (running) {
+                check(waveform != null)
                 heardEngine = true
                 positionMs = audible.coerceIn(0L, loaded.durationMs).toInt()
+                TransportWaveformTrace.publish(waveform)
             } else if (heardEngine) {
                 playingProjectId.value = null
                 positionMs = loaded.durationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                TransportWaveformTrace.clear()
             }
             publishLocked()
         }
@@ -157,6 +165,7 @@ class LibraryMixPreviewPlayer @Inject constructor(
         heardEngine = false
         awaitingOutput = false
         playingProjectId.value = null
+        TransportWaveformTrace.clear()
         publishLocked()
     }
 

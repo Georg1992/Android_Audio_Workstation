@@ -3,6 +3,7 @@
 #include <android/log.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -742,6 +743,22 @@ Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetRecordingInputLeve
 extern "C" JNIEXPORT jfloat JNICALL
 Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetMasterPeakHoldLinear(JNIEnv *, jobject) {
     return g_engine ? g_engine->masterPeakHoldLinear() : 0.0f;
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_com_georgv_audioworkstation_engine_NativeEngine_nativeGetTransportWaveform(JNIEnv *env, jobject) {
+    if (env == nullptr || g_engine == nullptr) {
+        return nullptr;
+    }
+    const jint count = dawengine::AudioEngine::kTransportWaveformPoints;
+    jfloatArray array = env->NewFloatArray(count);
+    if (array == nullptr) {
+        return nullptr;
+    }
+    std::array<float, dawengine::AudioEngine::kTransportWaveformPoints> samples{};
+    g_engine->copyTransportWaveform(samples.data());
+    env->SetFloatArrayRegion(array, 0, count, samples.data());
+    return array;
 }
 
 extern "C" JNIEXPORT void JNICALL

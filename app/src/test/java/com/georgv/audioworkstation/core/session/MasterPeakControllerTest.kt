@@ -1,6 +1,7 @@
 package com.georgv.audioworkstation.core.session
 
 import com.georgv.audioworkstation.core.audio.MeterPort
+import com.georgv.audioworkstation.core.audio.TransportWaveformTrace
 import com.georgv.audioworkstation.core.audio.PlaybackTransportSync
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.core.coroutines.TestAppDispatchers
@@ -137,6 +138,8 @@ private class FakeMasterPeakAudioController : MeterPort {
     override val recordingInputLevel = MutableStateFlow(0f)
 
     override fun readMasterPeakHoldLinear(): Float = masterPeakHoldLinearValue
+
+    override fun readTransportWaveform(): FloatArray = FloatArray(TransportWaveformTrace.PointCount)
 
     override fun resetMasterPeakHold() {
         masterPeakHoldLinearValue = 0f

@@ -119,7 +119,6 @@ fun TransportPanel(
             messageScreen.Show(
                 message = screenMessage,
                 visualizing = isPlaying || isRecording,
-                positionMs = playheadPositionMs,
             )
 
             Spacer(modifier = Modifier.weight(1f))

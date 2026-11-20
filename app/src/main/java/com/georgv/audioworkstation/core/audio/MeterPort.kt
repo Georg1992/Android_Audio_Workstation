@@ -8,6 +8,9 @@ interface MeterPort {
 
     fun readMasterPeakHoldLinear(): Float
 
+    /** Latest heard samples, [TransportWaveformTrace.PointCount] floats in -1..1. */
+    fun readTransportWaveform(): FloatArray
+
     fun resetMasterPeakHold()
 
     fun transportPositionMs(): Long
