@@ -47,7 +47,7 @@ fun LanguageSwitcher(
                     .size(Dimens.LangChipSize)
                     .transportControlChrome(
                         shape = shape,
-                        fill = AppColors.YellowSoft,
+                        fill = AppColors.SurfacePressed,
                     ),
                 contentAlignment = Alignment.Center
             ) {

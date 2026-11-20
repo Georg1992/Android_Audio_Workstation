@@ -76,7 +76,7 @@ fun TransportPanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TransportButton(
-                paint = TransportButtonPaint(AppColors.Green, AppColors.GreenSoft),
+                paint = TransportButtonPaint(AppColors.Green, AppColors.SurfacePressed),
                 enabled = isPlayEnabled && !inputLocked,
                 onClick = onPlay,
                 isActive = isPlaying,
@@ -90,7 +90,7 @@ fun TransportPanel(
             }
 
             TransportButton(
-                paint = TransportButtonPaint(AppColors.Yellow, AppColors.YellowSoft),
+                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
                 enabled = isStopEnabled && !inputLocked,
                 onClick = onStop,
                 isActive = false,
@@ -120,7 +120,7 @@ fun TransportPanel(
                 horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             ) {
                 TransportButton(
-                    paint = TransportButtonPaint(AppColors.Red, AppColors.RedSoft),
+                    paint = TransportButtonPaint(AppColors.Red, AppColors.SurfacePressed),
                     enabled = isRecordEnabled && !inputLocked,
                     onClick = onRecord,
                     isActive = isRecording,

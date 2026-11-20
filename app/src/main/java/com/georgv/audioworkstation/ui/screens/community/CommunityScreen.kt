@@ -105,13 +105,13 @@ private fun Confirmation(state: CommunityUiState, vm: CommunityViewModel) {
     )
     CommunityAction(
         text = stringResource(R.string.community_confirm),
-        fillColor = AppColors.Green,
+        fillColor = AppColors.SurfacePressed,
         enabled = !state.busy,
         onClick = vm::confirm,
     )
     CommunityAction(
         text = stringResource(R.string.community_sign_in),
-        fillColor = AppColors.Pink,
+        fillColor = AppColors.SurfacePressed,
         enabled = !state.busy,
         onClick = vm::showSignIn,
     )
@@ -178,15 +178,15 @@ private fun SignInActions(
     onRegister: () -> Unit,
     onGmail: () -> Unit,
 ) {
-    CommunityAction(stringResource(R.string.community_sign_in), AppColors.Green, enabled, onSignIn)
-    CommunityAction(stringResource(R.string.community_register), AppColors.Pink, enabled, onRegister)
-    CommunityAction(stringResource(R.string.community_gmail), AppColors.Pink, enabled, onGmail)
+    CommunityAction(stringResource(R.string.community_sign_in), AppColors.SurfacePressed, enabled, onSignIn)
+    CommunityAction(stringResource(R.string.community_register), AppColors.SurfacePressed, enabled, onRegister)
+    CommunityAction(stringResource(R.string.community_gmail), AppColors.SurfacePressed, enabled, onGmail)
 }
 
 @Composable
 private fun RegisterActions(enabled: Boolean, onRegister: () -> Unit, onSignIn: () -> Unit) {
-    CommunityAction(stringResource(R.string.community_register), AppColors.Green, enabled, onRegister)
-    CommunityAction(stringResource(R.string.community_sign_in), AppColors.Pink, enabled, onSignIn)
+    CommunityAction(stringResource(R.string.community_register), AppColors.SurfacePressed, enabled, onRegister)
+    CommunityAction(stringResource(R.string.community_sign_in), AppColors.SurfacePressed, enabled, onSignIn)
 }
 
 @Composable

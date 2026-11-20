@@ -147,7 +147,7 @@ fun CommunityHomeScreen(
                 }
                 CommunityAction(
                     text = stringResource(R.string.community_sign_out),
-                    fillColor = AppColors.Pink,
+                    fillColor = AppColors.SurfacePressed,
                     enabled = !state.busy,
                     onClick = vm::signOut,
                 )

@@ -86,13 +86,13 @@ fun LibraryCardScreen(
             }
             CommunityAction(
                 text = stringResource(R.string.library_card_choose_image),
-                fillColor = AppColors.YellowSoft,
+                fillColor = AppColors.SurfacePressed,
                 enabled = enabled,
                 onClick = { picker.launch("image/*") },
             )
             CommunityAction(
                 text = stringResource(R.string.library_card_save),
-                fillColor = AppColors.Green,
+                fillColor = AppColors.SurfacePressed,
                 enabled = enabled,
                 onClick = vm::save,
             )

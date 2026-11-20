@@ -424,7 +424,6 @@ fun TrackCard(
                             enabled = loopInteractive,
                             preserveOpacityWhenDisabled = loopLatchedDuringPlayback,
                             accentColor = AppColors.Green,
-                            activeBackgroundColor = AppColors.LoopButtonActiveBackground,
                             activeIconColor = AppColors.Line,
                             showActiveGlow = isLoop,
                             showActiveLed = isLoop,
@@ -453,12 +452,6 @@ fun TrackCard(
                                     isRenaming,
                                 ),
                             accentColor = AppColors.Accent,
-                            backgroundOverride =
-                                if (!dragPreview && trackActionsEnabled && isMenuOpen) {
-                                    AppColors.Accent
-                                } else {
-                                    null
-                                },
                             idleIconColor = AppColors.Line,
                             showActiveGlow = false,
                             showActiveLed = false,

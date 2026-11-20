@@ -32,7 +32,7 @@ fun ImportAudioButton(
             .size(Dimens.TransportButtonSize)
             .transportControlChrome(
                 shape = shape,
-                fill = AppColors.CyanSoft,
+                fill = AppColors.SurfacePressed,
             )
             .consumeAllPointers(enabled = inputLocked),
         contentAlignment = Alignment.Center

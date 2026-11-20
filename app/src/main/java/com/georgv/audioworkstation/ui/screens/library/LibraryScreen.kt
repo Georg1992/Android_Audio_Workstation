@@ -197,7 +197,7 @@ fun LibraryScreen(
                             Text(
                                 text = stringResource(R.string.action_delete),
                                 style = AppText.TileSubtitle,
-                                color = AppColors.Red
+                                color = AppColors.Line
                             )
                         }
                     }
@@ -393,17 +393,17 @@ private fun LibraryProjectContent(
                         actions = {
                             CardActionButton(
                                 onClick = { handlers.onDelete(item) },
-                                fill = AppColors.RedSoft,
+                                fill = AppColors.SurfacePressed,
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
                                     contentDescription = stringResource(R.string.action_delete),
-                                    tint = AppColors.Red,
+                                    tint = AppColors.Line,
                                 )
                             }
                             CardActionButton(
                                 onClick = { handlers.onCustomize(item.project.id) },
-                                fill = AppColors.YellowSoft,
+                                fill = AppColors.SurfacePressed,
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Settings,
@@ -414,13 +414,13 @@ private fun LibraryProjectContent(
                             if (handlers.shareEnabled) {
                                 val sharing = item.project.id in handlers.sharingProjectIds
                                 val shared = item.project.syncStatus == SyncStatus.SYNCED
-                                val tint = if (shared) AppColors.Green else AppColors.Line
+                                val tint = AppColors.Line
                                 val description = stringResource(
                                     if (shared) R.string.cd_unshare_project else R.string.cd_share_project,
                                 )
                                 CardActionButton(
                                     onClick = { handlers.onShare(item) },
-                                    fill = if (shared) AppColors.GreenSoft else AppColors.Pink,
+                                    fill = AppColors.SurfacePressed,
                                     enabled = !sharing,
                                 ) {
                                     if (sharing) {

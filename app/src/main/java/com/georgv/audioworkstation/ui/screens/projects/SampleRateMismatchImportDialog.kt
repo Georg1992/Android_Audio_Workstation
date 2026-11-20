@@ -62,7 +62,7 @@ fun SampleRateMismatchImportDialog(
                     )
                     ImportDialogChoiceButton(
                         text = stringResource(R.string.import_sample_rate_mismatch_resample),
-                        fillColor = AppColors.Green,
+                        fillColor = AppColors.SurfacePressed,
                         onClick = onImportWithResampling,
                     )
                     ImportDialogChoiceButton(
@@ -71,12 +71,12 @@ fun SampleRateMismatchImportDialog(
                                 R.string.import_sample_rate_mismatch_create_project,
                                 dialog.createProjectSampleRateLabel,
                             ),
-                        fillColor = AppColors.Cyan,
+                        fillColor = AppColors.SurfacePressed,
                         onClick = onCreateProject,
                     )
                     ImportDialogChoiceButton(
                         text = stringResource(R.string.action_cancel),
-                        fillColor = AppColors.YellowSoft,
+                        fillColor = AppColors.SurfacePressed,
                         onClick = onCancel,
                     )
                 }

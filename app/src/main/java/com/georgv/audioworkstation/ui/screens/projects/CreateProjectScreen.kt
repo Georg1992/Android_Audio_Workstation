@@ -137,14 +137,14 @@ fun CreateProjectScreen(
             ) {
                 CreateProjectActionButton(
                     text = stringResource(R.string.action_cancel),
-                    fillColor = AppColors.YellowSoft,
+                    fillColor = AppColors.SurfacePressed,
                     onClick = onBack,
                     enabled = !state.isSaving
                 )
 
                 CreateProjectActionButton(
                     text = stringResource(R.string.action_create_project),
-                    fillColor = AppColors.Green,
+                    fillColor = AppColors.SurfacePressed,
                     onClick = {
                         focusManager.clearFocus()
                         vm.createProject()
@@ -196,7 +196,7 @@ private fun SampleRateOption(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(Dimens.MediumRadius)
-    val fillColor: Color = if (isSelected) AppColors.Accent else AppColors.YellowSoft
+    val fillColor: Color = if (isSelected) AppColors.SurfacePressed else AppColors.Bg
 
     Column(
         modifier = modifier

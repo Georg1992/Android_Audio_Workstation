@@ -212,7 +212,7 @@ private fun OpenedProjectCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = Dimens.TightGap),
-                        color = AppColors.Pink,
+                        color = AppColors.Line,
                         trackColor = AppColors.SurfacePanel,
                     )
                 } else if (progress != null) {
@@ -221,7 +221,7 @@ private fun OpenedProjectCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = Dimens.TightGap),
-                        color = AppColors.Cyan,
+                        color = AppColors.Line,
                         trackColor = AppColors.SurfacePanel,
                     )
                 }
@@ -232,7 +232,7 @@ private fun OpenedProjectCard(
                     horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CardActionButton(onClick = opening.onOpen, fill = AppColors.GreenSoft) {
+                    CardActionButton(onClick = opening.onOpen, fill = AppColors.SurfacePressed) {
                         Icon(
                             imageVector = Icons.Filled.FolderOpen,
                             contentDescription = stringResource(R.string.cd_open_project),
@@ -240,7 +240,7 @@ private fun OpenedProjectCard(
                         )
                     }
                     actions()
-                    CardActionButton(onClick = opening.onToggle, fill = AppColors.Bg) {
+                    CardActionButton(onClick = opening.onToggle, fill = AppColors.SurfacePressed) {
                         Icon(
                             imageVector = Icons.Filled.ExpandLess,
                             contentDescription = stringResource(R.string.cd_close_card),
@@ -286,7 +286,7 @@ private fun CardTag(tag: String) {
     val shape = RoundedCornerShape(Dimens.SmallRadius)
     Surface(
         shape = shape,
-        color = AppColors.YellowSoft,
+        color = AppColors.SurfacePressed,
     ) {
         Text(
             text = tag,
@@ -421,7 +421,7 @@ private fun CardPlaybackStrip(
         ),
         buttons = {
             TransportButton(
-                paint = TransportButtonPaint(AppColors.Green, AppColors.GreenSoft),
+                paint = TransportButtonPaint(AppColors.Green, AppColors.SurfacePressed),
                 enabled = true,
                 isActive = playing,
                 onClick = onPlay,
@@ -434,7 +434,7 @@ private fun CardPlaybackStrip(
                 )
             }
             TransportButton(
-                paint = TransportButtonPaint(AppColors.Yellow, AppColors.YellowSoft),
+                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
                 enabled = true,
                 isActive = false,
                 onClick = onStop,
