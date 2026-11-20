@@ -65,13 +65,14 @@ fun TransportPanel(
     timeline: (@Composable () -> Unit)? = null,
 ) {
     val playheadTimeLabel = formatTimelineDuration(playheadPositionMs)
-    TransportCluster(
-        clock = TransportClock(playheadTimeLabel, playheadTimeLabel),
-        modifier = modifier,
-        inputLocked = inputLocked,
-        timeline = { timeline?.invoke() },
-        buttons = {
-        Row(
+    Box(modifier = modifier) {
+        TransportCluster(
+            clock = TransportClock(playheadTimeLabel, playheadTimeLabel),
+            modifier = Modifier.transportChrome(),
+            inputLocked = inputLocked,
+            timeline = { timeline?.invoke() },
+            buttons = {
+                Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.CenterVertically,
@@ -143,6 +144,7 @@ fun TransportPanel(
         }
         },
     )
+    }
 }
 
 internal data class TransportClock(
@@ -160,9 +162,9 @@ internal fun TransportCluster(
 ) {
     val well = RoundedCornerShape(Dimens.SmallRadius)
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .transportChrome()
+            .then(modifier)
             .padding(horizontal = Dimens.Gap, vertical = Dimens.TransportPanelPadding)
             .consumeAllPointers(enabled = inputLocked),
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),

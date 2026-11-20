@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -117,13 +114,15 @@ fun ProjectCard(
                 contentScale = ContentScale.Crop,
             )
         }
-        val scrimAlpha = if (picture != null) CardPhotoScrimAlpha else CardScrimAlpha
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(shape)
-                .background(AppColors.SurfaceRaised.copy(alpha = scrimAlpha)),
-        )
+        if (!opening.opened) {
+            val scrimAlpha = if (picture != null) CardPhotoScrimAlpha else CardScrimAlpha
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(AppColors.SurfaceRaised.copy(alpha = scrimAlpha)),
+            )
+        }
         ProjectCardFace(
             card = card,
             opening = opening,
@@ -146,53 +145,156 @@ private fun ProjectCardFace(
             .padding(Dimens.TileInnerPadding),
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
+        if (opening.opened) {
+            OpenedCard(
+                card = card,
+                opening = opening,
+                actions = actions,
+                playback = playback,
+            )
+        } else {
+            ShortcutCard(card = card, onToggle = opening.onToggle)
+        }
+    }
+}
+
+@Composable
+private fun ShortcutCard(
+    card: ShownCard,
+    onToggle: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .readableOnPicture(),
+    ) {
+        Text(
+            text = card.title,
+            style = AppText.TileTitle,
+            color = AppColors.Line,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val detail = card.detail
+        if (detail != null) {
+            Text(
+                text = detail,
+                style = AppText.TileSubtitle,
+                color = AppColors.iconMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = Dimens.TightGap),
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpenedCard(
+    card: ShownCard,
+    opening: ProjectCardOpening,
+    actions: @Composable RowScope.() -> Unit,
+    playback: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .cardPlate()
+            .padding(Dimens.Gap),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
                     .clickable(onClick = opening.onToggle),
-                verticalArrangement = Arrangement.Center,
             ) {
-                Column(modifier = Modifier.readableOnPicture()) {
+                Text(
+                    text = card.title,
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val detail = card.detail
+                if (detail != null) {
                     Text(
-                        text = card.title,
-                        style = AppText.TileTitle,
-                        color = AppColors.Line,
-                        maxLines = if (opening.opened) 2 else 1,
+                        text = detail,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = Dimens.TightGap),
                     )
-                    val detail = card.detail
-                    if (detail != null) {
-                        Text(
-                            text = detail,
-                            style = AppText.TileSubtitle,
-                            color = AppColors.iconMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = Dimens.TightGap),
-                        )
-                    }
                 }
             }
-            if (opening.opened) {
-                CardActions(onOpen = opening.onOpen, actions = actions)
+            CardActions(onOpen = opening.onOpen, actions = actions)
+        }
+        val description = card.description
+        val hasCopy = card.tags.isNotEmpty() || description.isNotBlank() || card.status != null
+        val hasProgress = card.loading || card.progress != null
+        if (hasCopy || hasProgress) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = opening.onToggle),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+            ) {
+                if (card.tags.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                    ) {
+                        card.tags.forEach { tag ->
+                            CardTag(tag)
+                        }
+                    }
+                }
+                if (description.isNotBlank()) {
+                    Text(
+                        text = description,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.Line,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val status = card.status
+                if (status != null) {
+                    Text(
+                        text = status,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                    )
+                }
+                val progress = card.progress
+                if (card.loading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AppColors.Line,
+                        trackColor = AppColors.SurfacePanel,
+                    )
+                } else if (progress != null) {
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AppColors.Line,
+                        trackColor = AppColors.SurfacePanel,
+                    )
+                }
             }
         }
-        if (opening.opened) {
-            OpenedCardDetails(
-                card = card,
-                mixAvailable = opening.mixAvailable,
-                onToggle = opening.onToggle,
-                playback = playback,
-            )
-        }
+    }
+    if (opening.mixAvailable) {
+        playback()
+    } else {
+        UnavailableMixTransport()
     }
 }
 
@@ -201,12 +303,7 @@ private fun CardActions(
     onOpen: () -> Unit,
     actions: @Composable RowScope.() -> Unit,
 ) {
-    val plate = RoundedCornerShape(Dimens.SmallRadius)
     Row(
-        modifier = Modifier
-            .clip(plate)
-            .background(AppColors.SurfacePressed.copy(alpha = AppOpacity.subtle))
-            .padding(Dimens.TightGap),
         horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -222,75 +319,10 @@ private fun CardActions(
 }
 
 @Composable
-private fun OpenedCardDetails(
-    card: ShownCard,
-    mixAvailable: Boolean,
-    onToggle: () -> Unit,
-    playback: @Composable () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle),
-        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-    ) {
-        val description = card.description
-        if (description.isNotBlank()) {
-            Text(
-                text = description,
-                style = AppText.TileSubtitle,
-                color = AppColors.Line,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.readableOnPicture(),
-            )
-        }
-        if (card.tags.isNotEmpty()) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            ) {
-                card.tags.forEach { tag ->
-                    CardTag(tag)
-                }
-            }
-        }
-        val status = card.status
-        if (status != null) {
-            Text(
-                text = status,
-                style = AppText.TileSubtitle,
-                color = AppColors.iconMuted,
-            )
-        }
-        val progress = card.progress
-        if (card.loading) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = AppColors.Line,
-                trackColor = AppColors.SurfacePanel,
-            )
-        } else if (progress != null) {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-                color = AppColors.Line,
-                trackColor = AppColors.SurfacePanel,
-            )
-        }
-    }
-    if (mixAvailable) {
-        playback()
-    } else {
-        UnavailableMixTransport()
-    }
-}
-
-@Composable
 private fun UnavailableMixTransport() {
     TransportCluster(
         clock = TransportClock(label = "0:00", description = stringResource(R.string.card_no_mix)),
+        modifier = Modifier.cardPlate(),
         inputLocked = true,
         buttons = {
             Row(
@@ -399,9 +431,15 @@ private fun Modifier.readableOnPicture(): Modifier {
         .padding(Dimens.SmallRadius)
 }
 
+private fun Modifier.cardPlate(): Modifier {
+    val shape = RoundedCornerShape(Dimens.TileRadius)
+    return this.clip(shape).background(AppColors.SurfaceRaised.copy(alpha = CardPlateAlpha), shape)
+}
+
 private const val PinArriveMs = 100
 private const val CardScrimAlpha = 0.28f
 private const val CardPhotoScrimAlpha = 0.58f
+private const val CardPlateAlpha = 0.5f
 
 data class ShownCard(
     val title: String,
@@ -506,6 +544,7 @@ private fun CardPlaybackStrip(
             label = formatTimelineDuration(shownPositionMs.toLong()),
             description = clock,
         ),
+        modifier = Modifier.cardPlate(),
         buttons = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
