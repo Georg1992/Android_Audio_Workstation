@@ -30,7 +30,7 @@ open class TransportWaveform {
             val path = Path()
             var peak = 0f
             for (index in samples.indices) {
-                val sample = samples[index].coerceIn(-1f, 1f)
+                val sample = (samples[index] * Gain).coerceIn(-1f, 1f)
                 val magnitude = if (sample < 0f) -sample else sample
                 if (magnitude > peak) peak = magnitude
                 val x = inset + span * index / last
@@ -62,9 +62,10 @@ open class TransportWaveform {
 
     private companion object {
         val LineInset = 8.dp
-        val GlowWidth = 6.dp
-        val Hairline = 2.dp
+        val GlowWidth = 3.dp
+        val Hairline = 1.dp
         const val LineReach = 0.42f
         const val Movement = 0.02f
+        const val Gain = 3f
     }
 }
