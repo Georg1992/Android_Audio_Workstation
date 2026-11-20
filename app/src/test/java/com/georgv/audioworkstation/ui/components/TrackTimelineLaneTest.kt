@@ -161,10 +161,6 @@ class TrackTimelineLaneTest {
         assertEquals("0:05", formatTimelineDuration(5_000L))
         assertEquals("1:23", formatTimelineDuration(83_000L))
         assertEquals("12:04", formatTimelineDuration(724_000L))
-        assertEquals("00:00/00:00", formatTransportScreenReadout(0L, 0L))
-        assertEquals("00:12/02:05", formatTransportScreenReadout(12_000L, 125_000L))
-        assertEquals("00:04/01:30", formatTransportScreenReadout(4_000L, 90_000L))
-        assertEquals("12:04/12:04", formatTransportScreenReadout(724_000L, 724_000L))
     }
 
     @Test

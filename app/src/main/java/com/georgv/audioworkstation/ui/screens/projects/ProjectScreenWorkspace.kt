@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlin.math.roundToInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.georgv.audioworkstation.R
@@ -282,6 +283,15 @@ internal fun ProjectScreenHeavyLayer(
             modifier = Modifier.weight(1f),
         )
 
+        val mixdown = projectMixdown
+        val screenMessage = if (mixdown != null && mixdown.isMixing) {
+            stringResource(
+                R.string.library_mixing_progress_percent,
+                (mixdown.progress * 100f).roundToInt(),
+            )
+        } else {
+            null
+        }
         TransportPanel(
             isRecording = structuralState.recordingTrackId != null || structuralState.isRecordingStartup,
             isPlaying = structuralState.isTransportPlaying,
@@ -289,7 +299,7 @@ internal fun ProjectScreenHeavyLayer(
             isStopEnabled = structuralState.isStopEnabled,
             stopButtonShowsPause = structuralState.stopButtonShowsPause,
             playheadPositionMs = playheadPositionMs,
-            timelineDurationMs = realtimeState.timelineVisibleDurationMs,
+            screenMessage = screenMessage,
             onPlay = { vm.onPlayPressed() },
             onStop = { vm.onStopPressed() },
             onRecord = { startRecordingIfPermitted(newProjectName) },

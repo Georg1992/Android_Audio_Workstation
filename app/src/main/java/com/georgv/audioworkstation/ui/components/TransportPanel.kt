@@ -57,7 +57,7 @@ fun TransportPanel(
     isStopEnabled: Boolean,
     stopButtonShowsPause: Boolean,
     playheadPositionMs: Long,
-    timelineDurationMs: Long,
+    screenMessage: String? = null,
     onPlay: () -> Unit,
     onStop: () -> Unit,
     onRecord: () -> Unit,
@@ -115,6 +115,13 @@ fun TransportPanel(
                 }
             }
 
+            val messageScreen = remember { TransportMessageScreen() }
+            messageScreen.Show(
+                message = screenMessage,
+                visualizing = isPlaying || isRecording,
+                positionMs = playheadPositionMs,
+            )
+
             Spacer(modifier = Modifier.weight(1f))
 
             Row(
@@ -136,14 +143,6 @@ fun TransportPanel(
                 }
             }
         }
-        TransportScreen(
-            positionMs = playheadPositionMs,
-            durationMs = timelineDurationMs,
-            meterLive = isPlaying || isRecording,
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (inputLocked) AppOpacity.disabled else 1f),
-        )
         },
     )
 }
@@ -259,49 +258,6 @@ internal fun TransportPlayheadTimeDisplay(
             .padding(horizontal = Dimens.Gap)
             .semantics { contentDescription = clock.description },
     )
-}
-
-@Composable
-internal fun TransportScreen(
-    positionMs: Long,
-    durationMs: Long,
-    meterLive: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val fractal = remember { TransportFractalVisualizer() }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(Dimens.TransportButtonSize),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-    ) {
-        fractal.Screen(
-            positionMs = positionMs,
-            live = meterLive,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-        )
-        Text(
-            text = formatTransportScreenReadout(positionMs, durationMs),
-            color = AppColors.Line,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-            textAlign = TextAlign.End,
-            maxLines = 1,
-        )
-    }
-}
-
-internal fun formatTransportScreenReadout(positionMs: Long, durationMs: Long): String =
-    formatTransportScreenTime(positionMs) + "/" + formatTransportScreenTime(durationMs)
-
-private fun formatTransportScreenTime(timeMs: Long): String {
-    val plain = formatTimelineDuration(timeMs)
-    val minutes = plain.substringBefore(':').padStart(2, '0')
-    val seconds = plain.substringAfter(':')
-    return "$minutes:$seconds"
 }
 
 internal data class TransportButtonPaint(

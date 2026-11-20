@@ -449,6 +449,14 @@ private fun LibraryProjectContent(
                                 onStop = handlers.onStop,
                                 onScrubStarted = handlers.onScrubStarted,
                                 onSeek = handlers.onSeek,
+                                message = if (mixing) {
+                                    stringResource(
+                                        R.string.library_mixing_progress_percent,
+                                        (item.mixdown.progress * 100f).roundToInt(),
+                                    )
+                                } else {
+                                    null
+                                },
                             )
                         },
                     )

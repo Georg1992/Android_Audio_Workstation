@@ -323,15 +323,13 @@ private fun UnavailableMixTransport() {
                         modifier = Modifier.size(Dimens.TransportIconSize),
                     )
                 }
+                val messageScreen = remember { TransportMessageScreen() }
+                messageScreen.Show(
+                    message = stringResource(R.string.library_no_mix_yet),
+                    visualizing = false,
+                    positionMs = 0L,
+                )
             }
-            TransportScreen(
-                positionMs = 0L,
-                durationMs = 0L,
-                meterLive = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(AppOpacity.disabled),
-            )
         },
         timeline = {
             Box(
@@ -422,6 +420,7 @@ fun LibraryCardPlayback(
     onStop: () -> Unit,
     onScrubStarted: () -> Unit,
     onSeek: (Int) -> Unit,
+    message: String? = null,
 ) {
     CardPlaybackStrip(
         playing = playing,
@@ -431,6 +430,7 @@ fun LibraryCardPlayback(
         onStop = onStop,
         onScrubStarted = onScrubStarted,
         onSeek = onSeek,
+        message = message,
     )
 }
 
@@ -443,6 +443,7 @@ fun CommunityCardPlayback(
     onStop: () -> Unit,
     onScrubStarted: () -> Unit,
     onSeek: (Int) -> Unit,
+    message: String? = null,
 ) {
     CardPlaybackStrip(
         playing = playing,
@@ -452,6 +453,7 @@ fun CommunityCardPlayback(
         onStop = onStop,
         onScrubStarted = onScrubStarted,
         onSeek = onSeek,
+        message = message,
     )
 }
 
@@ -464,6 +466,7 @@ private fun CardPlaybackStrip(
     onStop: () -> Unit,
     onScrubStarted: (() -> Unit)?,
     onSeek: (Int) -> Unit,
+    message: String?,
 ) {
     var dragging by remember { mutableStateOf(false) }
     var heldMs by remember { mutableStateOf<Int?>(null) }
@@ -531,13 +534,13 @@ private fun CardPlaybackStrip(
                         modifier = Modifier.size(Dimens.TransportIconSize),
                     )
                 }
+                val messageScreen = remember { TransportMessageScreen() }
+                messageScreen.Show(
+                    message = message,
+                    visualizing = playing,
+                    positionMs = shownPositionMs.toLong(),
+                )
             }
-            TransportScreen(
-                positionMs = shownPositionMs.toLong(),
-                durationMs = durationMs.toLong(),
-                meterLive = playing,
-                modifier = Modifier.fillMaxWidth(),
-            )
         },
         timeline = {
             MixTransportTimeline(

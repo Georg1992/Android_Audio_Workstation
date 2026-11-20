@@ -140,6 +140,11 @@ fun CommunityHomeScreen(
                                         onStop = playback::stop,
                                         onScrubStarted = playback::hold,
                                         onSeek = playback::seek,
+                                        message = if (loading) {
+                                            stringResource(R.string.community_mix_loading)
+                                        } else {
+                                            null
+                                        },
                                     )
                                 },
                             )
