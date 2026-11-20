@@ -19,13 +19,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.roundToLong
+
+private const val PlayheadHaloAlpha = 0.22f
+private const val PlayheadHaloScale = 1.7f
+private const val PlayheadStemScale = 1.5f
+private const val PlayheadHaloStemScale = 3f
+private const val PlayheadEyeScale = 0.38f
 
 /**
  * Single source of truth for mapping timeline time to the shared waveform-column x axis.
@@ -185,20 +191,36 @@ fun TimelinePlayheadMarker(
             )
 
         if (showTopHandle) {
-            val handleApexY = handleHeightPx
-            val path =
-                Path().apply {
-                    moveTo(x - handleWidthPx / 2f, 0f)
-                    lineTo(x + handleWidthPx / 2f, 0f)
-                    lineTo(x, handleApexY)
-                    close()
-                }
-            drawPath(path, color = lineColor)
+            val headRadius = handleWidthPx / 2f
+            val headCenterY = handleHeightPx.coerceAtLeast(headRadius * PlayheadHaloScale)
+            drawCircle(
+                color = lineColor.copy(alpha = PlayheadHaloAlpha),
+                radius = headRadius * PlayheadHaloScale,
+                center = Offset(x, headCenterY),
+            )
+            drawLine(
+                color = lineColor.copy(alpha = PlayheadHaloAlpha),
+                start = Offset(x, headCenterY),
+                end = Offset(x, size.height),
+                strokeWidth = lineWidthPx * PlayheadHaloStemScale,
+                cap = StrokeCap.Round,
+            )
             drawLine(
                 color = lineColor,
-                start = Offset(x, handleApexY),
+                start = Offset(x, headCenterY),
                 end = Offset(x, size.height),
-                strokeWidth = lineWidthPx,
+                strokeWidth = lineWidthPx * PlayheadStemScale,
+                cap = StrokeCap.Round,
+            )
+            drawCircle(
+                color = lineColor,
+                radius = headRadius,
+                center = Offset(x, headCenterY),
+            )
+            drawCircle(
+                color = AppColors.SurfaceRaised,
+                radius = headRadius * PlayheadEyeScale,
+                center = Offset(x, headCenterY),
             )
         } else {
             drawLine(
@@ -206,6 +228,7 @@ fun TimelinePlayheadMarker(
                 start = Offset(x, 0f),
                 end = Offset(x, size.height),
                 strokeWidth = lineWidthPx,
+                cap = StrokeCap.Round,
             )
         }
     }

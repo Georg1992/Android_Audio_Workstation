@@ -76,7 +76,7 @@ fun SampleRateMismatchImportDialog(
                     )
                     ImportDialogChoiceButton(
                         text = stringResource(R.string.action_cancel),
-                        fillColor = AppColors.SurfacePressed,
+                        fillColor = AppColors.YellowSoft,
                         onClick = onCancel,
                     )
                 }

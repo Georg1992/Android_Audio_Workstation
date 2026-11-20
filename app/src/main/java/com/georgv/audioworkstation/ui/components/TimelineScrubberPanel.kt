@@ -177,12 +177,8 @@ internal fun MixTransportTimeline(
     inputLocked: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(Dimens.TileRadius)
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(Dimens.PanelPlaceholderHeight)
-            .background(AppColors.Bg, shape),
+        modifier = modifier.fillMaxSize(),
     ) {
         val metrics = rememberTimelinePlayheadWaveformMetrics(
             waveformAreaWidth = maxWidth,
@@ -216,12 +212,8 @@ internal fun TransportTimeline(
     inputLocked: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(Dimens.SmallRadius)
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(Dimens.PanelPlaceholderHeight)
-            .background(AppColors.Bg, shape),
+        modifier = modifier.fillMaxSize(),
     ) {
         val metrics = rememberTimelinePlayheadWaveformMetrics(
             waveformAreaWidth = maxWidth,

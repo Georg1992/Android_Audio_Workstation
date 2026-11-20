@@ -455,7 +455,7 @@ fun TrackCard(
                             accentColor = AppColors.Accent,
                             backgroundOverride =
                                 if (!dragPreview && trackActionsEnabled && isMenuOpen) {
-                                    AppColors.SurfacePressed
+                                    AppColors.Accent
                                 } else {
                                     null
                                 },

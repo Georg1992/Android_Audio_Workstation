@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import com.georgv.audioworkstation.ui.theme.AppOpacity
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 private const val TrackActionIconIdleAlpha = 0.38f
+private const val TrackActionIdleMix = 0.34f
 private const val TrackActionIconGlowIntensity = 0.42f
 private const val TrackActionPressedScale = 0.95f
 
@@ -46,7 +48,6 @@ fun TrackActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     size: Dp = Dimens.TrackHeaderButtonSize,
-    surfaceColor: Color = AppColors.SurfacePressed,
     backgroundOverride: Color? = null,
     activeBackgroundColor: Color? = null,
     activeIconColor: Color? = null,
@@ -74,7 +75,7 @@ fun TrackActionButton(
         when {
             backgroundOverride != null -> backgroundOverride
             active && activeBackgroundColor != null -> activeBackgroundColor
-            else -> surfaceColor
+            else -> lerp(AppColors.SurfaceRaised, accentColor, TrackActionIdleMix)
         }
     val iconTint =
         when {

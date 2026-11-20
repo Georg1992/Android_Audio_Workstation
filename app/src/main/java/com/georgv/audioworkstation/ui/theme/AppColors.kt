@@ -29,6 +29,15 @@ object AppColors {
     /** Record, error, and the playhead. */
     val Red = Color(0xFFFF2E4A)
 
+    /** Resting play and primary controls. Light of [Green]. */
+    val GreenSoft = lerp(SurfaceRaised, Green, 0.42f)
+    /** Resting accent controls. Light of [Yellow]. */
+    val YellowSoft = lerp(SurfaceRaised, Yellow, 0.40f)
+    /** Resting import controls. Light of [Cyan]. */
+    val CyanSoft = lerp(SurfaceRaised, Cyan, 0.38f)
+    /** Resting record and error controls. Light of [Red]. */
+    val RedSoft = lerp(SurfaceRaised, Red, 0.30f)
+
     /** Loop region overlay tint on the timeline waveform. */
     val LoopRegionFill = Green.copy(alpha = AppOpacity.loopRegionFill)
     /** Opaque loop tint for header buttons — matches [LoopRegionFill] on [SurfacePanel]. */

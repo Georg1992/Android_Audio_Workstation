@@ -391,14 +391,20 @@ private fun LibraryProjectContent(
                             onOpen = { handlers.onOpen(item.project.id) },
                         ),
                         actions = {
-                            CardActionButton(onClick = { handlers.onDelete(item) }) {
+                            CardActionButton(
+                                onClick = { handlers.onDelete(item) },
+                                fill = AppColors.RedSoft,
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
                                     contentDescription = stringResource(R.string.action_delete),
                                     tint = AppColors.Red,
                                 )
                             }
-                            CardActionButton(onClick = { handlers.onCustomize(item.project.id) }) {
+                            CardActionButton(
+                                onClick = { handlers.onCustomize(item.project.id) },
+                                fill = AppColors.YellowSoft,
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Settings,
                                     contentDescription = stringResource(R.string.cd_customize_card),
@@ -414,6 +420,7 @@ private fun LibraryProjectContent(
                                 )
                                 CardActionButton(
                                     onClick = { handlers.onShare(item) },
+                                    fill = if (shared) AppColors.GreenSoft else AppColors.Pink,
                                     enabled = !sharing,
                                 ) {
                                     if (sharing) {

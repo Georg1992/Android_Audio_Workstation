@@ -86,7 +86,7 @@ fun LibraryCardScreen(
             }
             CommunityAction(
                 text = stringResource(R.string.library_card_choose_image),
-                fillColor = AppColors.SurfacePressed,
+                fillColor = AppColors.YellowSoft,
                 enabled = enabled,
                 onClick = { picker.launch("image/*") },
             )

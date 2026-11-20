@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -39,12 +38,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.georgv.audioworkstation.R
@@ -214,8 +212,8 @@ private fun OpenedProjectCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = Dimens.TightGap),
-                        color = AppColors.Line,
-                        trackColor = AppColors.iconMuted,
+                        color = AppColors.Pink,
+                        trackColor = AppColors.SurfacePanel,
                     )
                 } else if (progress != null) {
                     LinearProgressIndicator(
@@ -223,31 +221,33 @@ private fun OpenedProjectCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = Dimens.TightGap),
-                        color = AppColors.Line,
-                        trackColor = AppColors.iconMuted,
+                        color = AppColors.Cyan,
+                        trackColor = AppColors.SurfacePanel,
                     )
                 }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CardActionButton(onClick = opening.onOpen) {
-                Icon(
-                    imageVector = Icons.Filled.FolderOpen,
-                    contentDescription = stringResource(R.string.cd_open_project),
-                    tint = AppColors.Line,
-                )
-            }
-            actions()
-            CardActionButton(onClick = opening.onToggle) {
-                Icon(
-                    imageVector = Icons.Filled.ExpandLess,
-                    contentDescription = stringResource(R.string.cd_close_card),
-                    tint = AppColors.Line,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Dimens.Gap),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.Gap, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CardActionButton(onClick = opening.onOpen, fill = AppColors.GreenSoft) {
+                        Icon(
+                            imageVector = Icons.Filled.FolderOpen,
+                            contentDescription = stringResource(R.string.cd_open_project),
+                            tint = AppColors.Line,
+                        )
+                    }
+                    actions()
+                    CardActionButton(onClick = opening.onToggle, fill = AppColors.Bg) {
+                        Icon(
+                            imageVector = Icons.Filled.ExpandLess,
+                            contentDescription = stringResource(R.string.cd_close_card),
+                            tint = AppColors.Line,
+                        )
+                    }
+                }
             }
         }
         if (opening.mixAvailable) {
@@ -265,8 +265,9 @@ private fun CardArt(
     Box(
         modifier = Modifier
             .size(size)
+            .shadow(elevation = Dimens.ControlElevation, shape = shape, clip = false)
             .clip(shape)
-            .background(AppColors.SurfacePressed),
+            .background(AppColors.SurfacePanel),
     ) {
         val image = bitmap
         if (image != null) {
@@ -285,7 +286,7 @@ private fun CardTag(tag: String) {
     val shape = RoundedCornerShape(Dimens.SmallRadius)
     Surface(
         shape = shape,
-        color = AppColors.SurfacePressed,
+        color = AppColors.YellowSoft,
     ) {
         Text(
             text = tag,
@@ -299,6 +300,7 @@ private fun CardTag(tag: String) {
 @Composable
 fun CardActionButton(
     onClick: () -> Unit,
+    fill: Color,
     enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
@@ -309,7 +311,7 @@ fun CardActionButton(
             .alpha(if (enabled) 1f else AppOpacity.disabled)
             .transportControlChrome(
                 shape = shape,
-                fill = AppColors.SurfacePressed,
+                fill = fill,
             )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -412,49 +414,41 @@ private fun CardPlaybackStrip(
         formatTimelineDuration(shownPositionMs.toLong()),
         formatTimelineDuration(durationMs.toLong()),
     )
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Dimens.PanelPadding),
-    ) {
-        TransportPanelSurface {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                verticalAlignment = Alignment.CenterVertically,
+    TransportCluster(
+        clock = TransportClock(
+            label = formatTimelineDuration(shownPositionMs.toLong()),
+            description = clock,
+        ),
+        buttons = {
+            TransportButton(
+                paint = TransportButtonPaint(AppColors.Green, AppColors.GreenSoft),
+                enabled = true,
+                isActive = playing,
+                onClick = onPlay,
             ) {
-                TransportButton(
-                    color = AppColors.Green,
-                    enabled = true,
-                    isActive = playing,
-                    onClick = onPlay,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(R.string.cd_play),
-                        tint = AppColors.Line,
-                        modifier = Modifier.size(Dimens.TransportIconSize),
-                    )
-                }
-                TransportButton(
-                    color = AppColors.Yellow,
-                    enabled = true,
-                    isActive = false,
-                    onClick = onStop,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Stop,
-                        contentDescription = stringResource(R.string.cd_stop),
-                        tint = AppColors.Line,
-                        modifier = Modifier.size(Dimens.TransportIconSize),
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(R.string.cd_play),
+                    tint = AppColors.Line,
+                    modifier = Modifier.size(Dimens.TransportIconSize),
+                )
             }
-            Spacer(modifier = Modifier.weight(1f))
-            TransportPlayheadTimeDisplay(
-                label = formatTimelineDuration(shownPositionMs.toLong()),
-                modifier = Modifier.semantics { contentDescription = clock },
-            )
-        }
-        MixTransportTimeline(
+            TransportButton(
+                paint = TransportButtonPaint(AppColors.Yellow, AppColors.YellowSoft),
+                enabled = true,
+                isActive = false,
+                onClick = onStop,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Stop,
+                    contentDescription = stringResource(R.string.cd_stop),
+                    tint = AppColors.Line,
+                    modifier = Modifier.size(Dimens.TransportIconSize),
+                )
+            }
+        },
+        timeline = {
+            MixTransportTimeline(
             playheadPositionMs = shownPositionMs.toLong(),
             timelineDurationMs = durationMs.toLong(),
             gestures = MixTimelineGestures(
@@ -481,6 +475,8 @@ private fun CardPlaybackStrip(
                 },
             ),
             inputLocked = durationMs <= 0,
+            modifier = Modifier.fillMaxSize(),
         )
-    }
+        },
+    )
 }
