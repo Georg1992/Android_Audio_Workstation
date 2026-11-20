@@ -88,22 +88,27 @@ fun ProjectCard(
                     stiffness = Spring.StiffnessMedium,
                 ),
             )
-            .shadow(elevation = Dimens.PanelElevation, shape = shape, clip = false)
-            .clip(shape),
+            .shadow(elevation = Dimens.PanelElevation, shape = shape, clip = true)
+            .clip(shape)
+            .background(AppColors.SurfaceRaised),
     ) {
         val picture = bitmap
         if (picture != null) {
             Image(
                 bitmap = picture,
                 contentDescription = null,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape),
                 contentScale = ContentScale.Crop,
             )
         } else {
             Image(
                 painter = painterResource(R.drawable.card_background),
                 contentDescription = null,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape),
                 contentScale = ContentScale.Crop,
             )
         }
@@ -111,6 +116,7 @@ fun ProjectCard(
         Box(
             modifier = Modifier
                 .matchParentSize()
+                .clip(shape)
                 .background(AppColors.SurfaceRaised.copy(alpha = scrimAlpha)),
         )
         ProjectCardFace(
