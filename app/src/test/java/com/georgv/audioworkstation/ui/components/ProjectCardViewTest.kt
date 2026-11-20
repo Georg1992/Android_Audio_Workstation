@@ -2,6 +2,7 @@ package com.georgv.audioworkstation.ui.components
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -200,6 +201,43 @@ class ProjectCardViewTest {
         compose.onNodeWithText("0:04").assertIsDisplayed()
         compose.onNodeWithText("1:30").assertIsDisplayed()
         save("community-opened")
+    }
+
+    @Test
+    fun openedCardKeepsTitleAndDescriptionOnADarkPicture() {
+        val picture = File.createTempFile("card-dark", ".png")
+        val dark = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+        dark.eraseColor(Color.BLACK)
+        picture.outputStream().use { stream ->
+            dark.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        }
+        compose.setContent {
+            CardHarness {
+                ProjectCard(
+                    card = ShownCard(
+                        title = "Voice note",
+                        tags = emptyList(),
+                        imagePath = picture.absolutePath,
+                        detail = "by Ada",
+                        description = "A quiet take",
+                    ),
+                    opening = ProjectCardOpening(
+                        opened = true,
+                        mixAvailable = false,
+                        onToggle = {},
+                        onOpen = {},
+                    ),
+                    actions = {},
+                    playback = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Voice note").assertIsDisplayed()
+        compose.onNodeWithText("A quiet take").assertIsDisplayed()
+        compose.onNodeWithText("by Ada").assertIsDisplayed()
+        compose.onNodeWithText("No mix has been made.").assertIsDisplayed()
+        save("library-opened-dark")
     }
 
     private fun save(name: String) {

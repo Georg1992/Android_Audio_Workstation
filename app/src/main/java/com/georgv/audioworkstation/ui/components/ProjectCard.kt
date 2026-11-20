@@ -158,24 +158,27 @@ private fun ProjectCardFace(
                     .weight(1f)
                     .fillMaxHeight()
                     .clickable(onClick = opening.onToggle),
+                verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = card.title,
-                    style = AppText.TileTitle,
-                    color = AppColors.Line,
-                    maxLines = if (opening.opened) 2 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val detail = card.detail
-                if (detail != null) {
+                Column(modifier = Modifier.readableOnPicture()) {
                     Text(
-                        text = detail,
-                        style = AppText.TileSubtitle,
-                        color = AppColors.iconMuted,
-                        maxLines = 1,
+                        text = card.title,
+                        style = AppText.TileTitle,
+                        color = AppColors.Line,
+                        maxLines = if (opening.opened) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = Dimens.TightGap),
                     )
+                    val detail = card.detail
+                    if (detail != null) {
+                        Text(
+                            text = detail,
+                            style = AppText.TileSubtitle,
+                            color = AppColors.iconMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = Dimens.TightGap),
+                        )
+                    }
                 }
             }
             if (opening.opened) {
@@ -203,11 +206,11 @@ private fun CardActions(
         modifier = Modifier
             .clip(plate)
             .background(AppColors.SurfacePressed.copy(alpha = AppOpacity.subtle))
-            .padding(Dimens.Gap),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+            .padding(Dimens.TightGap),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.TightGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CardActionButton(onClick = onOpen, fill = AppColors.SurfacePressed) {
+        CardActionButton(onClick = onOpen, fill = AppColors.SurfaceRaised) {
             Icon(
                 imageVector = Icons.Filled.FolderOpen,
                 contentDescription = stringResource(R.string.cd_open_project),
@@ -239,6 +242,7 @@ private fun OpenedCardDetails(
                 color = AppColors.Line,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.readableOnPicture(),
             )
         }
         if (card.tags.isNotEmpty()) {
@@ -273,13 +277,6 @@ private fun OpenedCardDetails(
                 modifier = Modifier.fillMaxWidth(),
                 color = AppColors.Line,
                 trackColor = AppColors.SurfacePanel,
-            )
-        }
-        if (!mixAvailable) {
-            Text(
-                text = stringResource(R.string.card_no_mix),
-                style = AppText.TileSubtitle,
-                color = AppColors.iconMuted,
             )
         }
     }
@@ -324,7 +321,19 @@ private fun UnavailableMixTransport() {
             }
         },
         timeline = {
-            Box(modifier = Modifier.fillMaxSize())
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = stringResource(R.string.card_no_mix),
+                    style = AppText.TileSubtitle,
+                    color = AppColors.iconMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = Dimens.Gap),
+                )
+            }
         },
     )
 }
@@ -366,6 +375,14 @@ fun CardActionButton(
     ) {
         content()
     }
+}
+
+private fun Modifier.readableOnPicture(): Modifier {
+    val shape = RoundedCornerShape(Dimens.SmallRadius)
+    return this
+        .clip(shape)
+        .background(AppColors.SurfaceRaised, shape)
+        .padding(Dimens.SmallRadius)
 }
 
 private const val PinArriveMs = 100

@@ -394,7 +394,7 @@ private fun LibraryProjectContent(
                         actions = {
                             CardActionButton(
                                 onClick = { handlers.onDelete(item) },
-                                fill = AppColors.SurfacePressed,
+                                fill = AppColors.SurfaceRaised,
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
@@ -404,7 +404,7 @@ private fun LibraryProjectContent(
                             }
                             CardActionButton(
                                 onClick = { handlers.onCustomize(item.project.id) },
-                                fill = AppColors.SurfacePressed,
+                                fill = AppColors.SurfaceRaised,
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Settings,
@@ -421,7 +421,7 @@ private fun LibraryProjectContent(
                                 )
                                 CardActionButton(
                                     onClick = { handlers.onShare(item) },
-                                    fill = AppColors.SurfacePressed,
+                                    fill = AppColors.SurfaceRaised,
                                     enabled = !sharing,
                                 ) {
                                     if (sharing) {
