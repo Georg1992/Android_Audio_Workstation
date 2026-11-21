@@ -187,6 +187,18 @@ private fun ShortcutCard(
                     modifier = Modifier.padding(top = Dimens.TightGap),
                 )
             }
+            val description = card.description
+            if (description.isNotBlank()) {
+                Text(
+                    text = description,
+                    style = AppText.TileSubtitle,
+                    color = AppColors.Line,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = Dimens.TightGap),
+                )
+            }
         }
     }
 }

@@ -65,7 +65,7 @@ class ProjectCardViewTest {
             }
         }
         compose.onNodeWithText("Voice note").assertIsDisplayed()
-        compose.onNodeWithText("A quiet take").assertDoesNotExist()
+        compose.onNodeWithText("A quiet take").assertIsDisplayed()
         compose.onNodeWithText("live").assertDoesNotExist()
         compose.onNodeWithText("Mixing… 40%").assertDoesNotExist()
         compose.onNodeWithText("TRANSPORT").assertDoesNotExist()
@@ -189,7 +189,7 @@ class ProjectCardViewTest {
         }
         compose.onNodeWithText("Night take").assertIsDisplayed()
         compose.onNodeWithText("by Ada").assertIsDisplayed()
-        compose.onNodeWithText("Late vocal").assertDoesNotExist()
+        compose.onNodeWithText("Late vocal").assertIsDisplayed()
         compose.onNodeWithText("vocal").assertDoesNotExist()
         compose.onNodeWithContentDescription("Play").assertDoesNotExist()
         compose.onNodeWithContentDescription("Open project").assertDoesNotExist()
