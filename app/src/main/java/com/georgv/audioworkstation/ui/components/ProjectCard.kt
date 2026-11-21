@@ -45,6 +45,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.R
@@ -205,55 +206,84 @@ private fun IdentityPlate(
     ) {
         val description = card.description
         val collapsedBesideDescription = !opened && description.isNotBlank()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (collapsedBesideDescription) {
-                Arrangement.spacedBy(Dimens.Gap, Alignment.CenterHorizontally)
-            } else {
-                Arrangement.spacedBy(Dimens.Gap)
-            },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = if (collapsedBesideDescription) {
-                    Modifier.weight(1f, fill = false)
-                } else {
-                    Modifier.weight(1f)
-                },
+        if (collapsedBesideDescription) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = card.title,
-                    style = AppText.TileTitle,
-                    color = AppColors.Line,
-                    maxLines = if (opened) 2 else 1,
-                    softWrap = opened,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val detail = card.detail
-                if (detail != null) {
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = card.title,
+                            style = AppText.TileTitle,
+                            color = AppColors.Line,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                        val detail = card.detail
+                        if (detail != null) {
+                            Text(
+                                text = detail,
+                                style = AppText.TileSubtitle,
+                                color = AppColors.iconMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = Dimens.TightGap),
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        text = detail,
-                        style = AppText.TileSubtitle,
-                        color = AppColors.iconMuted,
-                        maxLines = 1,
+                        text = description,
+                        style = CollapsedCardDescription,
+                        color = AppColors.Line,
+                        minLines = 4,
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = Dimens.TightGap),
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
-            if (collapsedBesideDescription) {
-                Text(
-                    text = description,
-                    style = CollapsedCardDescription,
-                    color = AppColors.Line,
-                    minLines = 4,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-            if (opened) {
-                CardActions(onOpen = onOpen, actions = actions)
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = card.title,
+                        style = AppText.TileTitle,
+                        color = AppColors.Line,
+                        maxLines = if (opened) 2 else 1,
+                        softWrap = opened,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val detail = card.detail
+                    if (detail != null) {
+                        Text(
+                            text = detail,
+                            style = AppText.TileSubtitle,
+                            color = AppColors.iconMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = Dimens.TightGap),
+                        )
+                    }
+                }
+                if (opened) {
+                    CardActions(onOpen = onOpen, actions = actions)
+                }
             }
         }
         if (card.tags.isNotEmpty()) {
