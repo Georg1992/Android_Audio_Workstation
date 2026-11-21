@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +43,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
@@ -153,45 +154,13 @@ private fun ProjectCardFace(
                 playback = playback,
             )
         } else {
-            ShortcutCard(card = card, onToggle = opening.onToggle)
-        }
-    }
-}
-
-@Composable
-private fun ShortcutCard(
-    card: ShownCard,
-    onToggle: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle),
-        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-    ) {
-        Column(modifier = Modifier.readableOnPicture()) {
-            Text(
-                text = card.title,
-                style = AppText.TileTitle,
-                color = AppColors.Line,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            IdentityPlate(
+                card = card,
+                onToggle = opening.onToggle,
+                onOpen = opening.onOpen,
+                actions = actions,
+                opened = false,
             )
-            val detail = card.detail
-            if (detail != null) {
-                Text(
-                    text = detail,
-                    style = AppText.TileSubtitle,
-                    color = AppColors.iconMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = Dimens.TightGap),
-                )
-            }
-        }
-        val description = card.description
-        if (description.isNotBlank()) {
-            DescriptionBlock(text = description, maxLines = 1, onToggle = onToggle)
         }
     }
 }
@@ -203,10 +172,33 @@ private fun OpenedCard(
     actions: @Composable RowScope.() -> Unit,
     playback: @Composable () -> Unit,
 ) {
+    IdentityPlate(
+        card = card,
+        onToggle = opening.onToggle,
+        onOpen = opening.onOpen,
+        actions = actions,
+        opened = true,
+    )
+    if (opening.mixAvailable) {
+        playback()
+    } else {
+        UnavailableMixTransport()
+    }
+}
+
+@Composable
+private fun IdentityPlate(
+    card: ShownCard,
+    onToggle: () -> Unit,
+    onOpen: () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+    opened: Boolean,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .cardPlate()
+            .clickable(onClick = onToggle)
             .padding(Dimens.Gap),
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
@@ -215,16 +207,12 @@ private fun OpenedCard(
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = opening.onToggle),
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = card.title,
                     style = AppText.TileTitle,
                     color = AppColors.Line,
-                    maxLines = 2,
+                    maxLines = if (opened) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val detail = card.detail
@@ -239,82 +227,62 @@ private fun OpenedCard(
                     )
                 }
             }
-            CardActions(onOpen = opening.onOpen, actions = actions)
+            CardActions(onOpen = onOpen, actions = actions)
         }
-        val hasCopy = card.tags.isNotEmpty() || card.status != null
-        val hasProgress = card.loading || card.progress != null
-        if (hasCopy || hasProgress) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = opening.onToggle),
-                verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
+        if (card.tags.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                verticalArrangement = Arrangement.spacedBy(Dimens.TightGap),
             ) {
-                if (card.tags.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                    ) {
-                        card.tags.forEach { tag ->
-                            CardTag(tag)
-                        }
-                    }
-                }
-                val status = card.status
-                if (status != null) {
+                card.tags.forEach { tag ->
                     Text(
-                        text = status,
+                        text = tag,
                         style = AppText.TileSubtitle,
                         color = AppColors.iconMuted,
-                    )
-                }
-                val progress = card.progress
-                if (card.loading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = AppColors.Line,
-                        trackColor = AppColors.SurfacePanel,
-                    )
-                } else if (progress != null) {
-                    LinearProgressIndicator(
-                        progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = AppColors.Line,
-                        trackColor = AppColors.SurfacePanel,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
         }
+        val description = card.description
+        if (description.isNotBlank()) {
+            Text(
+                text = description,
+                style = CardDescription,
+                color = AppColors.Line,
+                maxLines = if (opened) 4 else 1,
+                softWrap = opened,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (opened) {
+            val status = card.status
+            if (status != null) {
+                Text(
+                    text = status,
+                    style = AppText.TileSubtitle,
+                    color = AppColors.iconMuted,
+                )
+            }
+            val progress = card.progress
+            if (card.loading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = AppColors.Line,
+                    trackColor = AppColors.SurfacePanel,
+                )
+            } else if (progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = AppColors.Line,
+                    trackColor = AppColors.SurfacePanel,
+                )
+            }
+        }
     }
-    val description = card.description
-    if (description.isNotBlank()) {
-        DescriptionBlock(text = description, maxLines = 4, onToggle = opening.onToggle)
-    }
-    if (opening.mixAvailable) {
-        playback()
-    } else {
-        UnavailableMixTransport()
-    }
-}
-
-@Composable
-private fun DescriptionBlock(
-    text: String,
-    maxLines: Int,
-    onToggle: () -> Unit,
-) {
-    Text(
-        text = text,
-        style = AppText.TileSubtitle,
-        color = AppColors.Line,
-        maxLines = maxLines,
-        softWrap = maxLines > 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .clickable(onClick = onToggle)
-            .readableOnPicture(),
-    )
 }
 
 @Composable
@@ -403,22 +371,6 @@ private fun UnavailableMixTransport() {
 }
 
 @Composable
-private fun CardTag(tag: String) {
-    val shape = RoundedCornerShape(Dimens.SmallRadius)
-    Surface(
-        shape = shape,
-        color = AppColors.SurfacePressed,
-    ) {
-        Text(
-            text = tag,
-            style = AppText.TileSubtitle,
-            color = AppColors.Line,
-            modifier = Modifier.padding(horizontal = Dimens.Gap, vertical = Dimens.TightGap),
-        )
-    }
-}
-
-@Composable
 fun CardActionButton(
     onClick: () -> Unit,
     fill: Color,
@@ -441,14 +393,6 @@ fun CardActionButton(
     }
 }
 
-private fun Modifier.readableOnPicture(): Modifier {
-    val shape = RoundedCornerShape(Dimens.SmallRadius)
-    return this
-        .clip(shape)
-        .background(AppColors.SurfaceRaised, shape)
-        .padding(Dimens.SmallRadius)
-}
-
 private fun Modifier.cardPlate(): Modifier {
     val shape = RoundedCornerShape(Dimens.TileRadius)
     return this.clip(shape).background(AppColors.SurfaceRaised.copy(alpha = CardPlateAlpha), shape)
@@ -458,6 +402,11 @@ private const val PinArriveMs = 100
 private const val CardScrimAlpha = 0.28f
 private const val CardPhotoScrimAlpha = 0.58f
 private const val CardPlateAlpha = 0.5f
+
+private val CardDescription = AppText.TileSubtitle.copy(
+    fontWeight = FontWeight.Medium,
+    fontSize = 14.sp,
+)
 
 data class ShownCard(
     val title: String,

@@ -66,11 +66,12 @@ class ProjectCardViewTest {
         }
         compose.onNodeWithText("Voice note").assertIsDisplayed()
         compose.onNodeWithText("A quiet take").assertIsDisplayed()
-        compose.onNodeWithText("live").assertDoesNotExist()
+        compose.onNodeWithText("live").assertIsDisplayed()
+        compose.onNodeWithText("session").assertIsDisplayed()
         compose.onNodeWithText("Mixing… 40%").assertDoesNotExist()
         compose.onNodeWithText("TRANSPORT").assertDoesNotExist()
         compose.onNodeWithContentDescription("Play").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Open project").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open project").assertIsDisplayed()
         save("library-shortcut")
     }
 
@@ -190,9 +191,9 @@ class ProjectCardViewTest {
         compose.onNodeWithText("Night take").assertIsDisplayed()
         compose.onNodeWithText("by Ada").assertIsDisplayed()
         compose.onNodeWithText("Late vocal").assertIsDisplayed()
-        compose.onNodeWithText("vocal").assertDoesNotExist()
+        compose.onNodeWithText("vocal").assertIsDisplayed()
         compose.onNodeWithContentDescription("Play").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Open project").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open project").assertIsDisplayed()
         save("community-shortcut")
         compose.onNodeWithText("Night take").performClick()
         compose.waitForIdle()
