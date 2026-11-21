@@ -204,12 +204,16 @@ private fun IdentityPlate(
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
         val description = card.description
+        val collapsedBesideDescription = !opened && description.isNotBlank()
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+            horizontalArrangement = if (collapsedBesideDescription) {
+                Arrangement.spacedBy(Dimens.Gap, Alignment.CenterHorizontally)
+            } else {
+                Arrangement.spacedBy(Dimens.Gap)
+            },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val collapsedBesideDescription = !opened && description.isNotBlank()
             Column(
                 modifier = if (collapsedBesideDescription) {
                     Modifier.weight(1f, fill = false)
