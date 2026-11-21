@@ -207,11 +207,7 @@ private fun IdentityPlate(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            verticalAlignment = if (!opened && description.isNotBlank()) {
-                Alignment.Top
-            } else {
-                Alignment.CenterVertically
-            },
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
