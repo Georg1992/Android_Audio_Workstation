@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
@@ -206,15 +207,13 @@ private fun IdentityPlate(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = if (!opened && description.isNotBlank()) {
+                Alignment.Top
+            } else {
+                Alignment.CenterVertically
+            },
         ) {
-            Column(
-                modifier = if (opened || description.isBlank()) {
-                    Modifier.weight(1f)
-                } else {
-                    Modifier.weight(1f, fill = false)
-                },
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = card.title,
                     style = AppText.TileTitle,
@@ -238,12 +237,12 @@ private fun IdentityPlate(
             if (!opened && description.isNotBlank()) {
                 Text(
                     text = description,
-                    style = CardDescription,
+                    style = CollapsedCardDescription,
                     color = AppColors.Line,
-                    maxLines = 1,
-                    softWrap = false,
+                    minLines = 4,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f),
                 )
             }
             if (opened) {
@@ -425,6 +424,13 @@ private const val CardPlateAlpha = 0.5f
 private val CardDescription = AppText.TileSubtitle.copy(
     fontWeight = FontWeight.Medium,
     fontSize = 14.sp,
+)
+
+private val CollapsedCardDescription = AppText.TileSubtitle.copy(
+    fontWeight = FontWeight.Normal,
+    fontSize = 10.sp,
+    lineHeight = 12.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
 )
 
 data class ShownCard(

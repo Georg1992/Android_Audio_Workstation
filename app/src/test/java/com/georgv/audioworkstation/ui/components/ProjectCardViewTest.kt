@@ -51,7 +51,8 @@ class ProjectCardViewTest {
                         imagePath = null,
                         status = "Mixing… 40%",
                         progress = 0.4f,
-                        description = "A quiet take",
+                        description = "A quiet take from the hallway. Kept beside the name in small type, " +
+                            "and cut once four squeezed lines are full.",
                     ),
                     opening = ProjectCardOpening(
                         opened = false,
@@ -65,7 +66,10 @@ class ProjectCardViewTest {
             }
         }
         compose.onNodeWithText("Voice note").assertIsDisplayed()
-        compose.onNodeWithText("A quiet take").assertIsDisplayed()
+        compose.onNodeWithText(
+            "A quiet take from the hallway. Kept beside the name in small type, " +
+                "and cut once four squeezed lines are full.",
+        ).assertIsDisplayed()
         compose.onNodeWithText("live").assertIsDisplayed()
         compose.onNodeWithText("session").assertIsDisplayed()
         compose.onNodeWithText("Mixing… 40%").assertDoesNotExist()
