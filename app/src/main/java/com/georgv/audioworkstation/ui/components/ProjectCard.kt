@@ -163,10 +163,11 @@ private fun ShortcutCard(
     card: ShownCard,
     onToggle: () -> Unit,
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onToggle),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
         Column(modifier = Modifier.readableOnPicture()) {
             Text(
@@ -187,18 +188,10 @@ private fun ShortcutCard(
                     modifier = Modifier.padding(top = Dimens.TightGap),
                 )
             }
-            val description = card.description
-            if (description.isNotBlank()) {
-                Text(
-                    text = description,
-                    style = AppText.TileSubtitle,
-                    color = AppColors.Line,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = Dimens.TightGap),
-                )
-            }
+        }
+        val description = card.description
+        if (description.isNotBlank()) {
+            DescriptionBlock(text = description, maxLines = 1, onToggle = onToggle)
         }
     }
 }
@@ -248,8 +241,7 @@ private fun OpenedCard(
             }
             CardActions(onOpen = opening.onOpen, actions = actions)
         }
-        val description = card.description
-        val hasCopy = card.tags.isNotEmpty() || description.isNotBlank() || card.status != null
+        val hasCopy = card.tags.isNotEmpty() || card.status != null
         val hasProgress = card.loading || card.progress != null
         if (hasCopy || hasProgress) {
             Column(
@@ -268,15 +260,6 @@ private fun OpenedCard(
                             CardTag(tag)
                         }
                     }
-                }
-                if (description.isNotBlank()) {
-                    Text(
-                        text = description,
-                        style = AppText.TileSubtitle,
-                        color = AppColors.Line,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
                 val status = card.status
                 if (status != null) {
@@ -304,11 +287,34 @@ private fun OpenedCard(
             }
         }
     }
+    val description = card.description
+    if (description.isNotBlank()) {
+        DescriptionBlock(text = description, maxLines = 4, onToggle = opening.onToggle)
+    }
     if (opening.mixAvailable) {
         playback()
     } else {
         UnavailableMixTransport()
     }
+}
+
+@Composable
+private fun DescriptionBlock(
+    text: String,
+    maxLines: Int,
+    onToggle: () -> Unit,
+) {
+    Text(
+        text = text,
+        style = AppText.TileSubtitle,
+        color = AppColors.Line,
+        maxLines = maxLines,
+        softWrap = maxLines > 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .clickable(onClick = onToggle)
+            .readableOnPicture(),
+    )
 }
 
 @Composable

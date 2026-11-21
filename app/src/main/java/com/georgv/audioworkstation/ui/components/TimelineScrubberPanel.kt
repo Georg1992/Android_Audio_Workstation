@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -28,18 +30,25 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
 import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.AppOpacity
+import com.georgv.audioworkstation.ui.theme.AppText
 import com.georgv.audioworkstation.ui.theme.Dimens
 
 private val ScrubberPanelShape = RoundedCornerShape(Dimens.TileRadius)
 
 private const val TimelineTrackAlpha = 0.35f
 private const val TimelineTickAlpha = 0.72f
-private const val TimelineTickHalfFraction = 0.22f
+private const val TimelineTrackCenterFraction = 0.38f
+private const val TimelineTickHalfFraction = 0.16f
 private val TimelineTrackStroke = 1.dp
+private val TimelineMarkSize = 10.sp
 private val ScrubberUtilityZoneBackground = AppColors.SurfacePressed
 private val ScrubberUtilityZoneDividerWidth = 2.dp
 private val ScrubberUtilityZoneInsetShadowWidth = 3.dp
@@ -221,7 +230,7 @@ internal fun TransportTimeline(
 }
 
 /**
- * One track, a few major ticks, and the red playhead share the waveform column.
+ * One track, a few time marks, and the red playhead share the waveform column.
  * [TimelinePlayheadMarker] is the only playhead; X uses [timelineMsToX].
  */
 @Composable
@@ -238,10 +247,14 @@ private fun TimelineScrubberWaveformSlot(
     val ticks = remember(timelineDurationMs) {
         buildTimelineRulerTicks(timelineDurationMs)
     }
+    val marks = remember(ticks) { scrubberMajorTicksForLabels(ticks) }
+    val density = LocalDensity.current
+    val rulerWidth = with(density) { metrics.waveformTimelineWidthPx.toDp() }
+    val markStyle = AppText.TileSubtitle.copy(color = AppColors.Line, fontSize = TimelineMarkSize)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val trackY = size.height / 2f
+            val trackY = size.height * TimelineTrackCenterFraction
             val stroke = TimelineTrackStroke.toPx()
             drawLine(
                 color = AppColors.Line.copy(alpha = TimelineTrackAlpha),
@@ -251,10 +264,7 @@ private fun TimelineScrubberWaveformSlot(
                 cap = StrokeCap.Round,
             )
             val tickHalf = size.height * TimelineTickHalfFraction
-            ticks.forEach { tick ->
-                if (!tick.isMajor || tick.timeMs <= 0L || tick.timeMs >= timelineDurationMs) {
-                    return@forEach
-                }
+            marks.forEach { tick ->
                 val x = timelineMsToX(
                     timeMs = tick.timeMs,
                     timelineDurationMs = timelineDurationMs,
@@ -268,6 +278,18 @@ private fun TimelineScrubberWaveformSlot(
                     cap = StrokeCap.Round,
                 )
             }
+        }
+        marks.forEach { tick ->
+            Text(
+                text = formatTimelineDuration(tick.timeMs),
+                style = markStyle,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = timelineMarkOffset(tick.timeMs, timelineDurationMs, metrics, rulerWidth, density))
+                    .padding(bottom = Dimens.TightGap),
+            )
         }
 
         TimelinePlayheadScrubberWaveformArea(
@@ -287,4 +309,23 @@ private fun TimelineScrubberWaveformSlot(
             modifier = Modifier.fillMaxSize(),
         )
     }
+}
+
+private fun timelineMarkOffset(
+    timeMs: Long,
+    timelineDurationMs: Long,
+    metrics: TimelinePlayheadWaveformMetrics,
+    rulerWidth: Dp,
+    density: Density,
+): Dp {
+    val anchorPx = timelineMsToX(
+        timeMs = timeMs,
+        timelineDurationMs = timelineDurationMs,
+        contentWidthPx = metrics.waveformTimelineWidthPx,
+        contentStartPx = metrics.contentStartPx,
+    )
+    val anchor = with(density) { anchorPx.toDp() }
+    val labelWidth = TimelineRulerLabelMaxWidthDp.dp
+    val end = (rulerWidth - labelWidth).coerceAtLeast(0.dp)
+    return (anchor - labelWidth / 2).coerceIn(0.dp, end)
 }
