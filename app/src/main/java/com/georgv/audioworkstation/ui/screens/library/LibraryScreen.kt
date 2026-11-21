@@ -392,26 +392,6 @@ private fun LibraryProjectContent(
                             onOpen = { handlers.onOpen(item.project.id) },
                         ),
                         actions = {
-                            CardActionButton(
-                                onClick = { handlers.onDelete(item) },
-                                fill = AppColors.SurfaceRaised,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = stringResource(R.string.action_delete),
-                                    tint = AppColors.Line,
-                                )
-                            }
-                            CardActionButton(
-                                onClick = { handlers.onCustomize(item.project.id) },
-                                fill = AppColors.SurfaceRaised,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Settings,
-                                    contentDescription = stringResource(R.string.cd_customize_card),
-                                    tint = AppColors.Line,
-                                )
-                            }
                             if (handlers.shareEnabled) {
                                 val sharing = item.project.id in handlers.sharingProjectIds
                                 val shared = item.project.syncStatus == SyncStatus.SYNCED
@@ -438,6 +418,26 @@ private fun LibraryProjectContent(
                                         )
                                     }
                                 }
+                            }
+                            CardActionButton(
+                                onClick = { handlers.onCustomize(item.project.id) },
+                                fill = AppColors.SurfaceRaised,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = stringResource(R.string.cd_customize_card),
+                                    tint = AppColors.Line,
+                                )
+                            }
+                            CardActionButton(
+                                onClick = { handlers.onDelete(item) },
+                                fill = AppColors.SurfaceRaised,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.action_delete),
+                                    tint = AppColors.Line,
+                                )
                             }
                         },
                         playback = {

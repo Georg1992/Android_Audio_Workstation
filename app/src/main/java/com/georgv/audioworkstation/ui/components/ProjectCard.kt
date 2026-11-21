@@ -163,29 +163,30 @@ private fun ShortcutCard(
     card: ShownCard,
     onToggle: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .readableOnPicture(),
+            .clickable(onClick = onToggle),
     ) {
-        Text(
-            text = card.title,
-            style = AppText.TileTitle,
-            color = AppColors.Line,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val detail = card.detail
-        if (detail != null) {
+        Column(modifier = Modifier.readableOnPicture()) {
             Text(
-                text = detail,
-                style = AppText.TileSubtitle,
-                color = AppColors.iconMuted,
+                text = card.title,
+                style = AppText.TileTitle,
+                color = AppColors.Line,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = Dimens.TightGap),
             )
+            val detail = card.detail
+            if (detail != null) {
+                Text(
+                    text = detail,
+                    style = AppText.TileSubtitle,
+                    color = AppColors.iconMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = Dimens.TightGap),
+                )
+            }
         }
     }
 }
