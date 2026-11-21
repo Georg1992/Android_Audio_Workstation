@@ -321,7 +321,6 @@ private fun CardActions(
 @Composable
 private fun UnavailableMixTransport() {
     TransportCluster(
-        clock = TransportClock(label = "0:00", description = stringResource(R.string.card_no_mix)),
         modifier = Modifier.cardPlate(),
         inputLocked = true,
         buttons = {
@@ -331,7 +330,7 @@ private fun UnavailableMixTransport() {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TransportButton(
-                    paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                    paint = TransportButtonPaint(AppColors.SurfaceRaised, AppColors.SurfaceRaised),
                     enabled = false,
                     isActive = false,
                     onClick = {},
@@ -344,7 +343,7 @@ private fun UnavailableMixTransport() {
                     )
                 }
                 TransportButton(
-                    paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                    paint = TransportButtonPaint(AppColors.SurfaceRaised, AppColors.SurfaceRaised),
                     enabled = false,
                     isActive = false,
                     onClick = {},
@@ -534,16 +533,7 @@ private fun CardPlaybackStrip(
             heldMs = null
         }
     }
-    val clock = stringResource(
-        R.string.card_playback_clock,
-        formatTimelineDuration(shownPositionMs.toLong()),
-        formatTimelineDuration(durationMs.toLong()),
-    )
     TransportCluster(
-        clock = TransportClock(
-            label = formatTimelineDuration(shownPositionMs.toLong()),
-            description = clock,
-        ),
         modifier = Modifier.cardPlate(),
         buttons = {
             Row(
@@ -552,7 +542,7 @@ private fun CardPlaybackStrip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TransportButton(
-                    paint = TransportButtonPaint(AppColors.Green, AppColors.SurfacePressed),
+                    paint = TransportButtonPaint(AppColors.Green, AppColors.SurfaceRaised),
                     enabled = true,
                     isActive = playing,
                     onClick = onPlay,
@@ -565,7 +555,7 @@ private fun CardPlaybackStrip(
                     )
                 }
                 TransportButton(
-                    paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                    paint = TransportButtonPaint(AppColors.SurfaceRaised, AppColors.SurfaceRaised),
                     enabled = true,
                     isActive = false,
                     onClick = onStop,

@@ -48,9 +48,9 @@ class ProjectTransportPanelTest {
         compose.onNodeWithContentDescription("Record").assertIsDisplayed()
         compose.onNodeWithContentDescription("Import audio").assertIsDisplayed()
         compose.onNodeWithContentDescription("Mix and export project").assertIsDisplayed()
-        compose.onNodeWithText("0:12").assertIsDisplayed()
         compose.onNodeWithText("00:12/02:05").assertIsDisplayed()
-        compose.onNodeWithText("0:30").assertIsDisplayed()
+        compose.onNodeWithText("0:12").assertDoesNotExist()
+        compose.onNodeWithText("0:30").assertDoesNotExist()
         compose.waitForIdle()
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)

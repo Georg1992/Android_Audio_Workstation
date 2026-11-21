@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,10 +31,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.core.audio.MasterPeakIndicatorLevel
@@ -64,10 +59,8 @@ fun TransportPanel(
     inputLocked: Boolean = false,
     timeline: (@Composable () -> Unit)? = null,
 ) {
-    val playheadTimeLabel = formatTimelineDuration(playheadPositionMs)
     Box(modifier = modifier) {
         TransportCluster(
-            clock = TransportClock(playheadTimeLabel, playheadTimeLabel),
             modifier = Modifier.transportChrome(),
             inputLocked = inputLocked,
             timeline = { timeline?.invoke() },
@@ -78,7 +71,7 @@ fun TransportPanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TransportButton(
-                paint = TransportButtonPaint(AppColors.Green, AppColors.SurfacePressed),
+                paint = TransportButtonPaint(AppColors.Green, AppColors.SurfaceRaised),
                 enabled = isPlayEnabled && !inputLocked,
                 onClick = onPlay,
                 isActive = isPlaying,
@@ -92,7 +85,7 @@ fun TransportPanel(
             }
 
             TransportButton(
-                paint = TransportButtonPaint(AppColors.SurfacePressed, AppColors.SurfacePressed),
+                paint = TransportButtonPaint(AppColors.SurfaceRaised, AppColors.SurfaceRaised),
                 enabled = isStopEnabled && !inputLocked,
                 onClick = onStop,
                 isActive = false,
@@ -128,7 +121,7 @@ fun TransportPanel(
                 horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             ) {
                 TransportButton(
-                    paint = TransportButtonPaint(AppColors.Red, AppColors.SurfacePressed),
+                    paint = TransportButtonPaint(AppColors.Red, AppColors.SurfaceRaised),
                     enabled = isRecordEnabled && !inputLocked,
                     onClick = onRecord,
                     isActive = isRecording,
@@ -147,14 +140,8 @@ fun TransportPanel(
     }
 }
 
-internal data class TransportClock(
-    val label: String,
-    val description: String,
-)
-
 @Composable
 internal fun TransportCluster(
-    clock: TransportClock,
     timeline: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     inputLocked: Boolean = false,
@@ -174,21 +161,14 @@ internal fun TransportCluster(
             verticalArrangement = Arrangement.spacedBy(Dimens.Gap / 2),
             content = buttons,
         )
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(Dimens.TransportTimelineHeight)
                 .clip(well)
                 .background(AppColors.Bg),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                timeline()
-            }
-            TransportPlayheadTimeDisplay(
-                clock = clock,
-                modifier = Modifier.alpha(if (inputLocked) AppOpacity.disabled else 1f),
-            )
+            timeline()
         }
     }
 }
@@ -240,24 +220,6 @@ fun MasterOutputPeakIndicator(
             maxLines = 1,
         )
     }
-}
-
-@Composable
-internal fun TransportPlayheadTimeDisplay(
-    clock: TransportClock,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        text = clock.label,
-        color = AppColors.Line,
-        fontSize = 12.sp,
-        fontFamily = FontFamily.Monospace,
-        textAlign = TextAlign.End,
-        maxLines = 1,
-        modifier = modifier
-            .padding(horizontal = Dimens.Gap)
-            .semantics { contentDescription = clock.description },
-    )
 }
 
 internal data class TransportButtonPaint(
