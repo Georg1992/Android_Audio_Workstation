@@ -202,17 +202,25 @@ private fun IdentityPlate(
             .padding(Dimens.Gap),
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
+        val description = card.description
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = if (opened || description.isBlank()) {
+                    Modifier.weight(1f)
+                } else {
+                    Modifier.weight(1f, fill = false)
+                },
+            ) {
                 Text(
                     text = card.title,
                     style = AppText.TileTitle,
                     color = AppColors.Line,
                     maxLines = if (opened) 2 else 1,
+                    softWrap = opened,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val detail = card.detail
@@ -227,7 +235,20 @@ private fun IdentityPlate(
                     )
                 }
             }
-            CardActions(onOpen = onOpen, actions = actions)
+            if (!opened && description.isNotBlank()) {
+                Text(
+                    text = description,
+                    style = CardDescription,
+                    color = AppColors.Line,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            if (opened) {
+                CardActions(onOpen = onOpen, actions = actions)
+            }
         }
         if (card.tags.isNotEmpty()) {
             FlowRow(
@@ -246,14 +267,12 @@ private fun IdentityPlate(
                 }
             }
         }
-        val description = card.description
-        if (description.isNotBlank()) {
+        if (opened && description.isNotBlank()) {
             Text(
                 text = description,
                 style = CardDescription,
                 color = AppColors.Line,
-                maxLines = if (opened) 4 else 1,
-                softWrap = opened,
+                maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
             )
         }

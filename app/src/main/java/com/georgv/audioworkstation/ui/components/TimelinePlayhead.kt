@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -27,11 +28,7 @@ import com.georgv.audioworkstation.ui.theme.AppColors
 import com.georgv.audioworkstation.ui.theme.Dimens
 import kotlin.math.roundToLong
 
-private const val PlayheadHaloAlpha = 0.22f
-private const val PlayheadHaloScale = 1.7f
-private const val PlayheadStemScale = 1.5f
-private const val PlayheadHaloStemScale = 3f
-private const val PlayheadEyeScale = 0.38f
+private val ScrubberPlayheadCapRadius = 3.dp
 
 /**
  * Single source of truth for mapping timeline time to the shared waveform-column x axis.
@@ -170,14 +167,11 @@ fun TimelinePlayheadMarker(
     contentStartPx: Float = 0f,
     showTopHandle: Boolean = false,
     lineWidth: Dp = 1.dp,
-    handleWidth: Dp = 10.dp,
-    handleHeight: Dp = 8.dp,
 ) {
     val lineColor = AppColors.Red
     val density = LocalDensity.current
     val lineWidthPx = with(density) { lineWidth.toPx() }
-    val handleWidthPx = with(density) { handleWidth.toPx() }
-    val handleHeightPx = with(density) { handleHeight.toPx() }
+    val capRadiusPx = with(density) { ScrubberPlayheadCapRadius.toPx() }
 
     Canvas(modifier = modifier) {
         if (size.width <= 0f || size.height <= 0f) return@Canvas
@@ -191,45 +185,35 @@ fun TimelinePlayheadMarker(
             )
 
         if (showTopHandle) {
-            val headRadius = handleWidthPx / 2f
-            val headCenterY = handleHeightPx.coerceAtLeast(headRadius * PlayheadHaloScale)
-            drawCircle(
-                color = lineColor.copy(alpha = PlayheadHaloAlpha),
-                radius = headRadius * PlayheadHaloScale,
-                center = Offset(x, headCenterY),
-            )
-            drawLine(
-                color = lineColor.copy(alpha = PlayheadHaloAlpha),
-                start = Offset(x, headCenterY),
-                end = Offset(x, size.height),
-                strokeWidth = lineWidthPx * PlayheadHaloStemScale,
-                cap = StrokeCap.Round,
-            )
-            drawLine(
-                color = lineColor,
-                start = Offset(x, headCenterY),
-                end = Offset(x, size.height),
-                strokeWidth = lineWidthPx * PlayheadStemScale,
-                cap = StrokeCap.Round,
-            )
-            drawCircle(
-                color = lineColor,
-                radius = headRadius,
-                center = Offset(x, headCenterY),
-            )
-            drawCircle(
-                color = AppColors.SurfaceRaised,
-                radius = headRadius * PlayheadEyeScale,
-                center = Offset(x, headCenterY),
-            )
+            drawScrubberPlayhead(x = x, lineWidthPx = lineWidthPx, capRadiusPx = capRadiusPx)
         } else {
             drawLine(
                 color = lineColor,
                 start = Offset(x, 0f),
                 end = Offset(x, size.height),
                 strokeWidth = lineWidthPx,
-                cap = StrokeCap.Round,
+                cap = StrokeCap.Butt,
             )
         }
     }
+}
+
+internal fun DrawScope.drawScrubberPlayhead(
+    x: Float,
+    lineWidthPx: Float,
+    capRadiusPx: Float,
+) {
+    val capY = capRadiusPx
+    drawLine(
+        color = AppColors.Red,
+        start = Offset(x, capY),
+        end = Offset(x, size.height),
+        strokeWidth = lineWidthPx,
+        cap = StrokeCap.Butt,
+    )
+    drawCircle(
+        color = AppColors.Red,
+        radius = capRadiusPx,
+        center = Offset(x, capY),
+    )
 }

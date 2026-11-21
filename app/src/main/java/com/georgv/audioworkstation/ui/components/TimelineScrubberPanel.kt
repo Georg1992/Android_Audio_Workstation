@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -50,8 +51,9 @@ private const val TimelineTrackCenterFraction = 0.32f
 private const val TimelineTickHalfFraction = 0.1f
 private const val TimelineMinorTickHalfFraction = 0.05f
 private val TimelineTrackStroke = 1.dp
+private val TimelinePlayheadWidth = 1.dp
+private val TimelinePlayheadCapRadius = 3.dp
 private val TimelineMarkSize = 10.sp
-private const val TimelinePlayheadLayer = 1f
 private val ScrubberUtilityZoneBackground = AppColors.SurfacePressed
 private val ScrubberUtilityZoneDividerWidth = 2.dp
 private val ScrubberUtilityZoneInsetShadowWidth = 3.dp
@@ -254,8 +256,26 @@ private fun TimelineScrubberWaveformSlot(
     val density = LocalDensity.current
     val rulerWidth = with(density) { metrics.waveformTimelineWidthPx.toDp() }
     val markStyle = AppText.TileSubtitle.copy(color = AppColors.Line, fontSize = TimelineMarkSize)
+    val playheadWidthPx = with(density) { TimelinePlayheadWidth.toPx() }
+    val playheadCapRadiusPx = with(density) { TimelinePlayheadCapRadius.toPx() }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawWithContent {
+                drawContent()
+                val x = timelineMsToX(
+                    timeMs = playheadPositionMs,
+                    timelineDurationMs = timelineDurationMs,
+                    contentWidthPx = size.width,
+                )
+                drawScrubberPlayhead(
+                    x = x,
+                    lineWidthPx = playheadWidthPx,
+                    capRadiusPx = playheadCapRadiusPx,
+                )
+            },
+    ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val trackY = size.height * TimelineTrackCenterFraction
             val stroke = TimelineTrackStroke.toPx()
@@ -309,15 +329,6 @@ private fun TimelineScrubberWaveformSlot(
             onPlayheadPositionCommit = onPlayheadPositionCommit,
             inputLocked = inputLocked,
             modifier = Modifier.fillMaxSize(),
-        )
-
-        TimelinePlayheadMarker(
-            playheadPositionMs = playheadPositionMs,
-            timelineDurationMs = timelineDurationMs,
-            showTopHandle = true,
-            modifier = Modifier
-                .zIndex(TimelinePlayheadLayer)
-                .fillMaxSize(),
         )
     }
 }
