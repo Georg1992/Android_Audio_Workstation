@@ -89,6 +89,19 @@ class TimelineRulerTest {
     }
 
     @Test
+    fun `scrubber timeline adds major sections on the lane interval`() {
+        val laneMajors = buildTimelineRulerTicks(120_000L).count { it.isMajor }
+        val scrubber = buildScrubberRulerTicks(120_000L)
+
+        assertEquals(15_000L, scrubberRulerIntervals(120_000L)?.majorIntervalMs)
+        assertEquals(5_000L, scrubberRulerIntervals(120_000L)?.minorIntervalMs)
+        assertTrue(scrubber.count { it.isMajor } > laneMajors)
+        assertTrue(scrubber.any { !it.isMajor })
+        assertEquals(0L, scrubber.first().timeMs)
+        assertEquals(120_000L, scrubber.last().timeMs)
+    }
+
+    @Test
     fun `scrubber labels keep first and last major ticks`() {
         val ticks = buildTimelineRulerTicks(120_000L)
         val labeled = scrubberMajorTicksForLabels(ticks, minLabelSpacingFraction = 0.11f)

@@ -92,6 +92,23 @@ fun timelineRulerIntervals(timelineBaseDurationMs: Long): TimelineRulerIntervals
     return TimelineRulerIntervals(minorIntervalMs = minorMs, majorIntervalMs = majorMs)
 }
 
+/** Denser than the lane ruler: half the major interval when it still lands on a minor step. */
+fun scrubberRulerIntervals(timelineBaseDurationMs: Long): TimelineRulerIntervals? {
+    val base = timelineRulerIntervals(timelineBaseDurationMs) ?: return null
+    val halved = base.majorIntervalMs / 2
+    val major = if (halved >= base.minorIntervalMs && halved % base.minorIntervalMs == 0L) {
+        halved
+    } else {
+        base.majorIntervalMs
+    }
+    return TimelineRulerIntervals(minorIntervalMs = base.minorIntervalMs, majorIntervalMs = major)
+}
+
+fun buildScrubberRulerTicks(timelineBaseDurationMs: Long): List<TimelineRulerTick> {
+    val intervals = scrubberRulerIntervals(timelineBaseDurationMs) ?: return emptyList()
+    return rulerTicks(timelineBaseDurationMs, intervals)
+}
+
 /** Major ticks whose time labels fit on the scrubber panel without overlapping. */
 fun scrubberMajorTicksForLabels(
     ticks: List<TimelineRulerTick>,
@@ -121,6 +138,13 @@ fun scrubberMajorTicksForLabels(
 
 fun buildTimelineRulerTicks(timelineBaseDurationMs: Long): List<TimelineRulerTick> {
     val intervals = timelineRulerIntervals(timelineBaseDurationMs) ?: return emptyList()
+    return rulerTicks(timelineBaseDurationMs, intervals)
+}
+
+private fun rulerTicks(
+    timelineBaseDurationMs: Long,
+    intervals: TimelineRulerIntervals,
+): List<TimelineRulerTick> {
     if (timelineBaseDurationMs <= 0L) return emptyList()
 
     val ticks = ArrayList<TimelineRulerTick>()

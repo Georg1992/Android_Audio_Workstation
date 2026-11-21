@@ -45,10 +45,13 @@ private val ScrubberPanelShape = RoundedCornerShape(Dimens.TileRadius)
 
 private const val TimelineTrackAlpha = 0.35f
 private const val TimelineTickAlpha = 0.72f
-private const val TimelineTrackCenterFraction = 0.38f
-private const val TimelineTickHalfFraction = 0.16f
+private const val TimelineMinorTickAlpha = 0.4f
+private const val TimelineTrackCenterFraction = 0.32f
+private const val TimelineTickHalfFraction = 0.1f
+private const val TimelineMinorTickHalfFraction = 0.05f
 private val TimelineTrackStroke = 1.dp
 private val TimelineMarkSize = 10.sp
+private const val TimelinePlayheadLayer = 1f
 private val ScrubberUtilityZoneBackground = AppColors.SurfacePressed
 private val ScrubberUtilityZoneDividerWidth = 2.dp
 private val ScrubberUtilityZoneInsetShadowWidth = 3.dp
@@ -71,7 +74,7 @@ fun TimelinePlayheadScrubberPanel(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.TileInnerPadding, vertical = Dimens.PanelPadding)
-            .height(Dimens.PanelPlaceholderHeight)
+            .height(Dimens.TransportTimelineHeight)
             .shadow(elevation = Dimens.PanelElevation, shape = ScrubberPanelShape, clip = false)
             .background(AppColors.SurfaceRaised, ScrubberPanelShape),
     ) {
@@ -230,8 +233,8 @@ internal fun TransportTimeline(
 }
 
 /**
- * One track, a few time marks, and the red playhead share the waveform column.
- * [TimelinePlayheadMarker] is the only playhead; X uses [timelineMsToX].
+ * One thin track, time sections, and the red playhead share the waveform column.
+ * The playhead is the top layer. [TimelinePlayheadMarker] is the only playhead; X uses [timelineMsToX].
  */
 @Composable
 private fun TimelineScrubberWaveformSlot(
@@ -245,7 +248,7 @@ private fun TimelineScrubberWaveformSlot(
     inputLocked: Boolean,
 ) {
     val ticks = remember(timelineDurationMs) {
-        buildTimelineRulerTicks(timelineDurationMs)
+        buildScrubberRulerTicks(timelineDurationMs)
     }
     val marks = remember(ticks) { scrubberMajorTicksForLabels(ticks) }
     val density = LocalDensity.current
@@ -263,15 +266,21 @@ private fun TimelineScrubberWaveformSlot(
                 strokeWidth = stroke,
                 cap = StrokeCap.Round,
             )
-            val tickHalf = size.height * TimelineTickHalfFraction
-            marks.forEach { tick ->
+            ticks.forEach { tick ->
+                val tickHalf = size.height * if (tick.isMajor) {
+                    TimelineTickHalfFraction
+                } else {
+                    TimelineMinorTickHalfFraction
+                }
                 val x = timelineMsToX(
                     timeMs = tick.timeMs,
                     timelineDurationMs = timelineDurationMs,
                     contentWidthPx = size.width,
                 )
                 drawLine(
-                    color = AppColors.Line.copy(alpha = TimelineTickAlpha),
+                    color = AppColors.Line.copy(
+                        alpha = if (tick.isMajor) TimelineTickAlpha else TimelineMinorTickAlpha,
+                    ),
                     start = Offset(x, trackY - tickHalf),
                     end = Offset(x, trackY + tickHalf),
                     strokeWidth = stroke,
@@ -306,7 +315,9 @@ private fun TimelineScrubberWaveformSlot(
             playheadPositionMs = playheadPositionMs,
             timelineDurationMs = timelineDurationMs,
             showTopHandle = true,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .zIndex(TimelinePlayheadLayer)
+                .fillMaxSize(),
         )
     }
 }

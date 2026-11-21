@@ -45,7 +45,7 @@ object Dimens {
     val ControlElevation = 2.dp
     val TransportButtonSize = 48.dp
     val TransportIconSize = 24.dp
-    val TransportTimelineHeight = 44.dp
+    val TransportTimelineHeight = 30.dp
 
     // project screen (top placeholder strip)
     val PanelPlaceholderHeight = 36.dp
