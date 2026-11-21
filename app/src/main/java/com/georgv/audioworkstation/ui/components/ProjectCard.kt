@@ -209,7 +209,14 @@ private fun IdentityPlate(
             horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            val collapsedBesideDescription = !opened && description.isNotBlank()
+            Column(
+                modifier = if (collapsedBesideDescription) {
+                    Modifier.weight(1f, fill = false)
+                } else {
+                    Modifier.weight(1f)
+                },
+            ) {
                 Text(
                     text = card.title,
                     style = AppText.TileTitle,
@@ -230,7 +237,7 @@ private fun IdentityPlate(
                     )
                 }
             }
-            if (!opened && description.isNotBlank()) {
+            if (collapsedBesideDescription) {
                 Text(
                     text = description,
                     style = CollapsedCardDescription,
@@ -238,7 +245,7 @@ private fun IdentityPlate(
                     minLines = 4,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
             if (opened) {
