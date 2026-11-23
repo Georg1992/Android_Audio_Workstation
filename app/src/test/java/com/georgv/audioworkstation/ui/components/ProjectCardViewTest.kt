@@ -51,8 +51,8 @@ class ProjectCardViewTest {
                         imagePath = null,
                         status = "Mixing… 40%",
                         progress = 0.4f,
-                        description = "A quiet take from the hallway. Kept beside the name in small type, " +
-                            "and cut once four squeezed lines are full.",
+                        description = "A quiet take from the hallway. Kept under the name in small type, " +
+                            "and cut once three lines are full.",
                     ),
                     opening = ProjectCardOpening(
                         opened = false,
@@ -67,8 +67,8 @@ class ProjectCardViewTest {
         }
         compose.onNodeWithText("Voice note").assertIsDisplayed()
         compose.onNodeWithText(
-            "A quiet take from the hallway. Kept beside the name in small type, " +
-                "and cut once four squeezed lines are full.",
+            "A quiet take from the hallway. Kept under the name in small type, " +
+                "and cut once three lines are full.",
         ).assertIsDisplayed()
         compose.onNodeWithText("live").assertIsDisplayed()
         compose.onNodeWithText("session").assertIsDisplayed()

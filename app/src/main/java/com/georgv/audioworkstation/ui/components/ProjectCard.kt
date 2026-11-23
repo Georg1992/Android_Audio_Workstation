@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
@@ -45,8 +47,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.georgv.audioworkstation.R
 import com.georgv.audioworkstation.ui.theme.AppColors
@@ -196,6 +198,10 @@ private fun IdentityPlate(
     actions: @Composable RowScope.() -> Unit,
     opened: Boolean,
 ) {
+    if (!opened) {
+        CollapsedIdentityPlate(card = card, onToggle = onToggle)
+        return
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -204,87 +210,33 @@ private fun IdentityPlate(
             .padding(Dimens.Gap),
         verticalArrangement = Arrangement.spacedBy(Dimens.Gap),
     ) {
-        val description = card.description
-        val collapsedBesideDescription = !opened && description.isNotBlank()
-        if (collapsedBesideDescription) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = card.title,
-                            style = AppText.TileTitle,
-                            color = AppColors.Line,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                        )
-                        val detail = card.detail
-                        if (detail != null) {
-                            Text(
-                                text = detail,
-                                style = AppText.TileSubtitle,
-                                color = AppColors.iconMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(top = Dimens.TightGap),
-                            )
-                        }
-                    }
-                }
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = card.title,
+                    style = AppText.TileTitle,
+                    color = AppColors.Line,
+                    maxLines = 2,
+                    softWrap = true,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val detail = card.detail
+                if (detail != null) {
                     Text(
-                        text = description,
-                        style = CollapsedCardDescription,
-                        color = AppColors.Line,
-                        minLines = 4,
-                        maxLines = 4,
+                        text = detail,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = Dimens.TightGap),
                     )
                 }
             }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = card.title,
-                        style = AppText.TileTitle,
-                        color = AppColors.Line,
-                        maxLines = if (opened) 2 else 1,
-                        softWrap = opened,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val detail = card.detail
-                    if (detail != null) {
-                        Text(
-                            text = detail,
-                            style = AppText.TileSubtitle,
-                            color = AppColors.iconMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = Dimens.TightGap),
-                        )
-                    }
-                }
-                if (opened) {
-                    CardActions(onOpen = onOpen, actions = actions)
-                }
-            }
+            CardActions(onOpen = onOpen, actions = actions)
         }
         if (card.tags.isNotEmpty()) {
             FlowRow(
@@ -303,7 +255,8 @@ private fun IdentityPlate(
                 }
             }
         }
-        if (opened && description.isNotBlank()) {
+        val description = card.description
+        if (description.isNotBlank()) {
             Text(
                 text = description,
                 style = CardDescription,
@@ -312,29 +265,87 @@ private fun IdentityPlate(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (opened) {
-            val status = card.status
-            if (status != null) {
-                Text(
-                    text = status,
-                    style = AppText.TileSubtitle,
-                    color = AppColors.iconMuted,
-                )
-            }
-            val progress = card.progress
-            if (card.loading) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = AppColors.Line,
-                    trackColor = AppColors.SurfacePanel,
-                )
-            } else if (progress != null) {
-                LinearProgressIndicator(
-                    progress = { progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = AppColors.Line,
-                    trackColor = AppColors.SurfacePanel,
-                )
+        val status = card.status
+        if (status != null) {
+            Text(
+                text = status,
+                style = AppText.TileSubtitle,
+                color = AppColors.iconMuted,
+            )
+        }
+        val progress = card.progress
+        if (card.loading) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = AppColors.Line,
+                trackColor = AppColors.SurfacePanel,
+            )
+        } else if (progress != null) {
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = AppColors.Line,
+                trackColor = AppColors.SurfacePanel,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CollapsedIdentityPlate(
+    card: ShownCard,
+    onToggle: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .widthIn(max = CollapsedPlateMaxWidth)
+            .wrapContentWidth(align = Alignment.Start)
+            .cardPlate()
+            .clickable(onClick = onToggle)
+            .padding(Dimens.Gap),
+        verticalArrangement = Arrangement.spacedBy(Dimens.TightGap),
+    ) {
+        Text(
+            text = card.title,
+            style = AppText.TileTitle,
+            color = AppColors.Line,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val detail = card.detail
+        if (detail != null) {
+            Text(
+                text = detail,
+                style = AppText.TileSubtitle,
+                color = AppColors.iconMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        val description = card.description
+        if (description.isNotBlank()) {
+            Text(
+                text = description,
+                style = CollapsedCardDescription,
+                color = AppColors.Line,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (card.tags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Gap),
+                verticalArrangement = Arrangement.spacedBy(Dimens.TightGap),
+            ) {
+                card.tags.forEach { tag ->
+                    Text(
+                        text = tag,
+                        style = AppText.TileSubtitle,
+                        color = AppColors.iconMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -457,6 +468,7 @@ private const val PinArriveMs = 100
 private const val CardScrimAlpha = 0.28f
 private const val CardPhotoScrimAlpha = 0.58f
 private const val CardPlateAlpha = 0.5f
+private val CollapsedPlateMaxWidth = 220.dp
 
 private val CardDescription = AppText.TileSubtitle.copy(
     fontWeight = FontWeight.Medium,
@@ -465,8 +477,8 @@ private val CardDescription = AppText.TileSubtitle.copy(
 
 private val CollapsedCardDescription = AppText.TileSubtitle.copy(
     fontWeight = FontWeight.Normal,
-    fontSize = 10.sp,
-    lineHeight = 12.sp,
+    fontSize = 11.sp,
+    lineHeight = 14.sp,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
 )
 
