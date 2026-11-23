@@ -119,15 +119,6 @@ fun ProjectCard(
                 contentScale = ContentScale.Crop,
             )
         }
-        if (!opening.opened) {
-            val scrimAlpha = if (picture != null) CardPhotoScrimAlpha else CardScrimAlpha
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(shape)
-                    .background(AppColors.SurfaceRaised.copy(alpha = scrimAlpha)),
-            )
-        }
         ProjectCardFace(
             card = card,
             opening = opening,
@@ -465,8 +456,6 @@ private fun Modifier.cardPlate(): Modifier {
 }
 
 private const val PinArriveMs = 100
-private const val CardScrimAlpha = 0.28f
-private const val CardPhotoScrimAlpha = 0.58f
 private const val CardPlateAlpha = 0.5f
 private val CollapsedPlateMaxWidth = 220.dp
 
